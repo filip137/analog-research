@@ -79,16 +79,16 @@ of this worktree.
   output locations.
 - `examples/reram_program_verify/`: operational smoke, sizing, immutable
   production, cap-128, and focused HWA-prerequisite characterization configs.
-- `studies/`: tracked, predeclared study plans containing hypotheses, arms,
-  completion criteria, and analysis plans.
-- `campaigns/`: subprocess-only orchestration of exact configs and explicit
-  input artifacts, including local and Akib campaign manifests.
+- `studies/`: historical/optional strict JSON study plans; new pilot specifications
+  live in their single Markdown note.
+- `campaigns/`: question-led notes and the existing subprocess-only orchestrator
+  of exact configs and explicit inputs.
 - `data/`: ignored staging area for measured synapse data. Its required file,
   digest, and placement are defined in `docs/synapse_data.md`.
 - `results/`: ignored raw run directories and generated study analyses. One
   prepared study owns one `results/<study-id>/` root.
-- `docs/`: scientific contracts, current synthesis, run ledger, and finalized
-  evidence. Protocol documents are authoritative over result summaries.
+- `docs/`: scientific contracts and historical provenance. New execution handoffs
+  and conclusions belong to their campaign/pilot records.
 - `tests/`: strict config, numerical parity, provenance, lifecycle, measured
   update, and study-workflow tests.
 - `labs/`: focused reference harnesses for direct perfect-diode and AIHWKit
@@ -136,22 +136,33 @@ of this worktree.
 - Never discover or substitute the newest checkpoint. Record explicit input
   paths and content hashes.
 
-## Experimental workflow
+## Experimental workflow and authority
 
-- Follow [`docs/experiment_workflow.md`](docs/experiment_workflow.md).
-- Declare the hypothesis, arms, completion criteria, and analysis before
-  launching native runs.
-- Keep workflow-managed raw runs under the prepared
-  `results/<study-id>/runs/<arm-id>/` roots and preserve failed attempts.
-- Separate measured results from interpretation. Claim that on-chip training
-  is needed only when the predeclared HWA-only control underperforms and a
-  matched on-chip arm closes the specified gap.
-- Do not stop at a result summary when a workflow-managed study reaches a
-  terminal scientific conclusion. Run the artifact-verified study summary and
-  follow the review/finalize procedure in `docs/experiment_workflow.md`; use
-  the `ebl-study-closeout` skill when it is available.
-- A concluded study must either be finalized into
-  `docs/experimental_manifest.md` or be handed off with the exact reason that
-  scientific review or finalization remains pending. The manifest contains
-  one entry per study, not one entry per seed, run, shard, or subprocess. Do
-  not finalize active, incomplete, or ad hoc smoke runs as finished evidence.
+Use the [experiment-loop skill](.agents/skills/experiment-loop/SKILL.md) and
+[execution policy](docs/experiment_workflow.md). They supersede the former mandatory
+study/manifest lifecycle and external closeout-skill instructions that conflict.
+Start from the question and decision. Small pilots use one evolving note in
+`campaigns/pilots/`; sustained work uses campaign experiment/result notes. Ideas,
+explorations and hypotheses are useful relationships, not obligatory paperwork stages.
+
+Assigned execution authorizes implementation, proportional smoke/readiness checks,
+launch, monitoring, collection, interpretation and understood retries within scope and
+budget. Planning alone does not authorize launch. Make cases, target, budget, expected
+duration and result paths visible before substantial execution. Escalate material
+scientific choices, missing access, unrelated effects or scope/budget changes.
+This migration does not expand remote, shared-GPU or overnight permissions.
+
+Use the existing public ebl CLI, exact configs/inputs and native run bundles. Keep one
+real monitoring owner per running case. Preserve failed/partial evidence and distinguish
+process completion, artifact validity, coverage and scientific review. Review can conclude
+negative or inconclusive; partial coverage must remain labelled partial. A full execution
+assignment continues through interpretation. Claim on-chip training is needed only when
+a predeclared HWA-only control underperforms and matched recovery closes the specified gap.
+
+Experiment/pilot notes own specifications, current handoffs and output paths;
+result/pilot notes own measurements and interpretation. Generated campaign ledgers
+provide navigation only. `docs/current_simulations.md` and
+`docs/experimental_manifest.md` are historical snapshots: do not refresh or append.
+Keep historical records as provenance without their old update requirements.
+Do not edit human `docs/current_state.md` without explicit permission, or read/edit
+`docs/my_notes.md` unless asked. Keep small records versioned and large artifacts ignored.

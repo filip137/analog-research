@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "experiment_id": "small_drn.v1",
+  "runtime": {
+    "seed": 7,
+    "data_seed": 11,
+    "device": "cpu",
+    "dtype": "float32"
+  },
+  "data": {
+    "dataset": "moons",
+    "batch_size": 4,
+    "num_points": 64,
+    "shuffle": true
+  },
+  "model": {
+    "dims": [
+      4,
+      8,
+      2
+    ],
+    "input_gain": 10.0,
+    "weight_gains": [
+      1.0,
+      0.5
+    ],
+    "weight_min": 1e-07,
+    "weight_max": 1.0,
+    "voltage_amp": 1.0,
+    "current_amp": 1.0,
+    "non_linearity": {
+      "type": "perfect_diode",
+      "quadratic_diode_param": {},
+      "exponential_diode_param": {},
+      "hard_sigmoid_param": {},
+      "iv_data_path": null
+    },
+    "adapter": {
+      "type": "none",
+      "parameters": {}
+    }
+  },
+  "solver": {
+    "inference_iterations": 8,
+    "training_iterations": 8,
+    "minimizer_impl": "custom",
+    "minimizer_mode": "asynchronous",
+    "adaptive_equilibrium": false,
+    "random_initialization": false,
+    "updaters": {
+      "double_diode": null,
+      "single_diode": null
+    },
+    "tolerances": {
+      "relative": 1e-05,
+      "voltage": 1e-06,
+      "residual_current": null
+    },
+    "polish": {
+      "enabled": false,
+      "dynamic": false,
+      "max_newton_iterations": 32,
+      "z_threshold": 10000000000.0,
+      "exponential_clip": 100000.0
+    },
+    "anderson": {
+      "memory": 8,
+      "omega": 1.0,
+      "tolerance_floor": 0.005,
+      "regularization": 1e-08
+    },
+    "overrelaxation": {
+      "factor": 1.0,
+      "reject_steps": false,
+      "reject_max_tries": 3,
+      "reject_shrink": 0.5,
+      "reject_epsilon": 0.0
+    },
+    "experimental_exponential": {
+      "damping": 0.5,
+      "newton_max_steps": 100,
+      "progressive_tolerance": true,
+      "tolerance_start": 1e-05,
+      "tolerance_end": 1e-05,
+      "tolerance_switch_high": 0.01,
+      "tolerance_switch_low": 0.0005
+    }
+  },
+  "modes": {
+    "train": {
+      "num_epochs": 2,
+      "algorithm": "ep",
+      "learning_rates": [
+        0.01,
+        0.02
+      ],
+      "bias_learning_rates": [
+        0.0
+      ],
+      "nudging": 0.05,
+      "log_every": 1,
+      "max_batches": 2,
+      "max_validation_batches": 2,
+      "weight_modifier": {
+        "type": "none",
+        "parameters": {}
+      },
+      "update_backend": {
+        "type": "direct",
+        "parameters": {}
+      }
+    },
+    "linspace": {
+      "minimum": -1.0,
+      "maximum": 1.0,
+      "samples": 21,
+      "record_states": true
+    },
+    "validate": {
+      "split": "test",
+      "sample_limit": null,
+      "record_states": false
+    }
+  }
+}

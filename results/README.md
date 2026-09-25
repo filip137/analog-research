@@ -1,3 +1,7 @@
+> Workflow migration (2026-09-25): the [question-led policy](../docs/experiment_workflow.md)
+> supersedes the legacy planning/global-manifest requirements below. Existing study
+> formats remain supported; new pilots use one note and native run bundles.
+
 # Raw LoRA/HWA Results
 
 The repository-root `results/` directory is the canonical home for new raw

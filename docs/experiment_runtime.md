@@ -264,3 +264,13 @@ For a new experiment:
 For a new extension, prefer one protocol over a conditional in the engine.
 Test its lifecycle/order separately, then add a numerical acceptance case for
 each combination exposed by `describe --json`.
+
+
+## Question-led run inspection
+
+New pilots use one [question-led record](experiment_workflow.md#records), exact
+configs and native bundles; no separate JSON study is mandatory. Inspect explicit
+paths with `python -m ebl runs inspect RUN_DIR --json`. Add `--verify-artifacts`
+for hash validation and `--require-complete` to fail on unfinished/failed cases.
+Inspection does not modify bundles or documents and does not infer scientific
+coverage or conclusions. Legacy study finalization writes only a local receipt.

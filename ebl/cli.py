@@ -405,7 +405,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     study_finalize = study_commands.add_parser(
         "finalize",
-        help="record a reviewed closeout in the experimental manifest",
+        help="write a local receipt for a reviewed complete legacy study",
     )
     study_finalize.add_argument(
         "--study-dir",
@@ -425,14 +425,21 @@ def build_parser() -> argparse.ArgumentParser:
     study_finalize.add_argument(
         "--manifest",
         type=Path,
-        default=Path("docs/experimental_manifest.md"),
-        help="concluded-study Markdown index",
+        default=None,
+        help="deprecated and ignored; historical manifests are never modified",
     )
     study_finalize.add_argument(
         "--verify-artifacts",
         action="store_true",
         help="hash every declared artifact before finalizing",
     )
+    runs = commands.add_parser("runs", help="read-only native run-bundle inspection")
+    run_commands = runs.add_subparsers(dest="runs_command", required=True)
+    inspect = run_commands.add_parser("inspect", help="check explicit bundles; no study plan required")
+    inspect.add_argument("run_dirs", type=Path, nargs="+")
+    inspect.add_argument("--verify-artifacts", action="store_true", help="also hash declared artifacts")
+    inspect.add_argument("--require-complete", action="store_true", help="also fail for failed/running cases")
+    inspect.add_argument("--json", action="store_true", help="emit evidence records including terminal metrics")
     return parser
 
 
@@ -653,6 +660,11 @@ def _protocol_payload(
                     "--fail-fast",
                     "--continue-on-error",
                 ],
+            },
+            "runs inspect": {
+                "available": True,
+                "positional_arguments": ["RUN_DIR", "..."],
+                "optional_flags": ["--verify-artifacts", "--require-complete", "--json"],
             },
             "study prepare": {
                 "available": True,
@@ -912,6 +924,7 @@ def _dispatch(
     handlers: CommandHandlers,
     command: Tuple[str, ...],
     stdout: TextIO,
+    stderr: TextIO,
 ) -> int:
     if args.command_name == "describe":
         return _describe(
@@ -1046,6 +1059,26 @@ def _dispatch(
             request,
         )
 
+    if args.command_name == "runs":
+        from experiments.study_workflow import inspect_run
+
+        records = []
+        for path in args.run_dirs:
+            try:
+                records.append(inspect_run(path, verify_artifacts=args.verify_artifacts))
+            except (OSError, ValueError) as error:
+                records.append({"path": str(path), "status": "invalid", "valid": False,
+                                "process_complete": False, "errors": [str(error)]})
+        if args.json:
+            json.dump(records, stdout, indent=2, sort_keys=True)
+            stdout.write("\n")
+        else:
+            for record in records:
+                stdout.write(f"{record['path']}: {record['status']} valid={record['valid']}\n")
+                for error in record["errors"]:
+                    stdout.write(f"  {error}\n")
+        return 0 if all(r["valid"] and (not args.require_complete or r["process_complete"]) for r in records) else 1
+
     if args.command_name == "study":
         from experiments.study_workflow import (
             finalize_study,
@@ -1074,6 +1107,8 @@ def _dispatch(
                     )
                 return 0
             if args.study_command == "finalize":
+                if args.manifest is not None:
+                    stderr.write("--manifest is deprecated and ignored; writing a local receipt only.\n")
                 final_path = finalize_study(
                     args.study_dir,
                     review_path=args.review,
@@ -1121,6 +1156,7 @@ def main(
             ),
             command=("ebl",) + raw_argv,
             stdout=output,
+            stderr=errors,
         )
     except (CliUsageError, ConfigError) as error:
         errors.write(f"error: {error}\n")
