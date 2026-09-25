@@ -1,166 +1,146 @@
-# Experiment workflow
+# Question-led experimental workflow
 
-This is the lightweight lifecycle for new exploratory studies. The existing
-`python -m ebl` runners remain the only scientific execution surface. The
-study workflow freezes the question before execution, indexes native results
-without loading large tensors, and makes the final human interpretation
-durable.
+This policy supersedes the former study/manifest lifecycle. Historical plans remain
+provenance; scientific contracts in AGENTS.md and explicitly assigned protocols still
+govern the computation. See the [experiment-loop skill](../.agents/skills/experiment-loop/SKILL.md).
 
-## The lifecycle
+## Authority and scope
 
-```text
-tracked study plan
-      ↓
-prepared results/<study-id>/
-      ↓
-native ebl runs under runs/<arm-id>/
-      ↓
-metadata-first study summary
-      ↓
-human scientific review
-      ↓
-final entry in experimental_manifest.md
-      ↓
-human synthesis in current_state.md
-```
+Planning, setup or review alone does not authorize experiments. An assigned execution
+task authorizes ordinary implementation, local setup, proportional readiness checks,
+launch, monitoring, collection, interpretation and understood operational retries within
+its declared scope and budget. Make cases, target, budget, expected duration and output
+location visible before substantial execution. Choose lean routine engineering defaults;
+escalate material missing scientific choices, unavailable access, effects on unrelated
+work or anything outside the assignment. Retries consume the same allowance.
 
-The workflow has no scheduler, database, experiment catalog, or hidden config
-generation. Campaigns remain available when a comparison genuinely needs
-cross-worktree dependencies. An ordinary study should use direct `ebl`
-commands.
+Use local CPU for tiny tests when scientifically appropriate. Existing explicitly
+authorized targets remain usable within their assigned scope; a target appearing in an
+old manifest is not standing authorization. This migration grants no new remote-host,
+GPU-sharing or overnight permission. Verify live resources and preserve unrelated jobs,
+priorities, MPS and GPU settings. Record host/environment and measured throughput when
+estimating budgets. Remote use requires an explicit target, compatible environment,
+source/config/input staging and collection paths; never import code from another
+worktree into a controller. Invoke each worktree's CLI as a subprocess.
 
-## 1. Declare the hypothesis
+## Records
 
-Create a tracked strict JSON plan under `studies/`. Start from
-[`studies/example-exploratory.json`](../studies/example-exploratory.json).
-The plan records:
+Start with what we want to learn and which decision the answer informs. A campaign
+organizes sustained work; ideas, explorations, hypotheses and experiments are related
+records, not mandatory sequential stages. Explorations need not have hypotheses.
 
-- one initial hypothesis and its motivation;
-- the evidence class;
-- every arm, experiment ID, mode, and exact config file;
-- completion criteria; and
-- the analysis that will be performed after coverage is complete.
+A small pilot uses one evolving `campaigns/pilots/<name>.md` with question, expected
+outcome, comparison, decision rule, budget, handoff, evidence and interpretation. No
+separate JSON study, result report or ledger is required. Configs remain strict JSON.
+For sustained campaigns use [the artifact conventions](../.agents/skills/experiment-loop/references/artifacts.md).
+The campaign README is a short overview and links. Experiment notes own specifications,
+the current handoff and run locations; result notes own measurements and interpretation.
+The generated ledger displays recorded judgments; it neither launches nor concludes.
 
-Config source files are byte-hashed when the plan is prepared; the native run
-also records its usual canonical hash of the fully resolved config. A
-workflow-managed run fails before creating a run directory when its
-experiment, mode, arm, or source-config hash was not declared.
+`campaigns/runner.py`, `schema.py` and `manifests/` remain the optional subprocess
+orchestrator. Their executable manifests are distinct from research campaign notes.
+Existing `studies/*.json` plans still prepare and enforce their exact config contracts.
+New pilots can run directly through `python -m ebl` into named results roots without
+preparing a JSON study. Never put a new pilot inside an unrelated legacy study root.
 
-## 2. Prepare the result directory
+`docs/current_simulations.md` and `docs/experimental_manifest.md` are frozen historical
+snapshots: no refresh or append. This overrides older documents and external skills,
+including mandatory global-manifest/human-closeout instructions in ebl-study-closeout.
+Do not replace them with another manually maintained global list. Protect personal
+notes: do not edit `docs/current_state.md` without explicit permission; do not read or
+edit `docs/my_notes.md` unless asked. Historical workflow: [archive](archive/experiment_workflow-pre-question-led.md).
 
-```bash
-python -m ebl study prepare \
-  --plan studies/my-study-v1.json \
-  --results-root results
-```
+## Readiness, integrity and scientific investigation
 
-This creates:
+Use `python -m ebl describe --experiment ID` to discover the actual runtime contract.
+Check that the declared computation executes, reads correct inputs/configuration,
+produces meaningful artifacts and detects invalid numerical execution. Preserve exact
+checkpoint identities, input data/cohorts, held apparent-state forwards and declared
+resume capabilities. Full-state restore checks apply when resuming stateful training.
 
-```text
-results/<study-id>/
-├── study.json                 # materialized plan and initial hypothesis
-├── README.md                  # human-readable plan
-├── runs/
-│   └── <arm-id>/
-└── analysis/
-```
+Scientific diagnostics follow the question or its governing contract. Do not add
+historical qualification sweeps, calibration or repeated reference comparisons by
+default. Skipped checks are untested, not passed. A tiny bounded real run can also be
+its readiness smoke; use a separate smoke before substantial or risky computation.
+Reuse validation of unchanged evidence unless inputs change, a failure occurs or a
+specific concern warrants repetition. Metadata inspection is not full artifact hashing
+or numerical/physical validation; state which checks actually ran.
 
-Preparation is idempotent only while the tracked source-plan hash is
-unchanged. Change the study ID when the scientific contract changes.
+## Launch and status
 
-## 3. Run the declared arms
+Use the existing `python -m ebl train`, `validate` or `characterize` command appropriate
+to the experiment. Keep commands/configs in the assigned note and actual execution
+identity in the native bundle. Every independently executable case gets its own run.
+Preserve failed and superseded attempts; retries are not independent replicates.
 
-Pass the arm directory as the normal `--output-dir`:
+One owner monitors each running case. The current handoff names cases, exact handles,
+output/log/status paths, expected artifact progress, cadence, last observation, next
+check, deadline/remaining budget, recovery boundaries and escalation destination.
+The executing agent can own short runs directly. For delegation the new owner must
+acknowledge handles/deadline and begin observing before the old owner relinquishes it.
+Detached processes and future timestamps alone do not establish supervision.
 
-```bash
-python -m ebl train \
-  --config examples/small_drn/base.json \
-  --output-dir results/<study-id>/runs/<arm-id>
-```
+Check compact status, artifact growth and bounded logs against process/scheduler state.
+A live process does not prove useful progress; a stale observation does not prove
+failure. Use cadence appropriate to expected progress and deadline, not duplicate
+polling. Escalate unexpected exits, invalid artifacts, nonfinite values, stalls or
+budget risks to the Codifier, while observing unaffected work. The Codifier handles
+understood operational retries without changing the scientific contract. Material
+scientific changes return to Explorer/user. If supervision must end without a real
+supported continuation, report the unmonitored gap and next required action honestly.
 
-Device-characterization studies use the same lifecycle with the dedicated
-mode:
+## Collection and review
 
-```bash
-python -m ebl characterize \
-  --config examples/reram_program_verify/production_om_continuous.json \
-  --output-dir results/<study-id>/runs/<arm-id>
-```
-
-The numerical runtime still creates one exclusive native run directory. When
-the output path has the canonical study shape, `manifest.json` automatically
-records the study ID, arm ID, evidence class, study hash, plan hash, and source
-config hash. Runs elsewhere remain ordinary standalone `ebl` runs.
-
-Failed attempts are retained. Do not reuse a native run directory or delete a
-failed attempt merely to make coverage look clean.
-
-## 4. Summarize efficiently
+Inspect explicit bundle paths, without preparing a study or updating documents:
 
 ```bash
-python -m ebl study summarize \
-  --study-dir results/<study-id>
+python -m ebl runs inspect RUN_DIR [ANOTHER_RUN_DIR] --json
+python -m ebl runs inspect RUN_DIR --verify-artifacts --require-complete
 ```
 
-The default pass reads only `study.json` and each run's small control files:
-`manifest.json`, `status.json`, `config.resolved.json`, and `result.json`. It
-copies the compact terminal metrics from `result.json`, but does not parse
-`metrics.jsonl`, load checkpoints, or hash tensor artifacts. It checks
-artifact paths and sizes and writes:
+The first command reports integrity separately from process state. A structurally
+valid failed/running attempt is not completed evidence. `--require-complete` also
+fails for unfinished/failed processes. The inspector checks bundle identity, resolved
+config digest, terminal records and artifact locations/sizes; `--verify-artifacts`
+also checks declared artifact hashes. Independently reconcile assigned case coverage,
+correct scientific inputs, selected metrics and domain-specific validity checks.
 
-```text
-analysis/summary.json
-analysis/report.md
-```
+Review against the predeclared decision rule in the same pilot/result note. State
+observations, inference, uncertainty/confounds, exclusions and next decision. Partial
+or negative evidence is reviewable; do not label it complete coverage. Label
+retrospective hypotheses. An assigned experiment finishes through interpretation,
+not merely launch or collection. Further runs need scope/budget authorization.
 
-Use `--verify-artifacts` for a one-time collection or archival audit. That
-option hashes every artifact and is intentionally slower.
+Legacy `ebl study prepare/summarize` remain available. `study finalize` is an optional
+compatibility command for complete legacy studies: it writes only their local
+`analysis/final.json` receipt; `--manifest` is a deprecated ignored argument. It does
+not write the historical manifest or gate new pilot/result-note reviews. Existing
+v1/v2 records remain readable in the branches that supported them.
 
-Coverage is ready for review only when each declared config has exactly one
-valid completed run, no run remains active, no undeclared completed config is
-present, and no bundle is invalid. Retained well-formed failed attempts are
-reported but do not hide a valid replacement.
+## Evidence and storage
 
-## 5. Review and finalize
+Keep small configs, source, notes and summaries versioned; keep raw results, datasets,
+checkpoints and logs outside Git. Each case retains resolved config, source identity
+(including relevant dirty changes), input identities, command/runtime, progress,
+metrics, errors and output artifacts. A hash identifies content but does not preserve
+it: retain relevant source changes or a snapshot when the checkout may change.
 
-Copy [`studies/review.template.json`](../studies/review.template.json) into the
-study's `analysis/` directory and write the scientific conclusion yourself.
-It must state the outcome, final interpretation, limitations, and next steps.
+Declare a storage budget and checkpoint retention before launch. Keep final and
+scientifically required checkpoints and necessary resume state; per-epoch checkpoints
+are not automatically required. Preserve failed/partial attempt evidence. Pruning
+requires the declared policy or explicit authorization and an audit of removals;
+never rewrite original manifests to pretend removed evidence still exists. These
+workflow changes do not silently change scientific runner checkpoint behavior.
 
-```bash
-python -m ebl study finalize \
-  --study-dir results/<study-id> \
-  --review results/<study-id>/analysis/review.json \
-  --manifest docs/experimental_manifest.md
-```
+## Overhead and acceptance
 
-Finalization reruns the coverage checks, writes `analysis/final.json`, and
-adds an idempotent per-study block to `experimental_manifest.md`. The entry
-contains both the initial hypothesis and the final interpretation, so the
-reasoning remains visible even when the result was negative or inconclusive.
-Changing a finalized study or review hash fails closed; use a new study ID for
-a materially different contract.
+Read the assigned record first; load contracts only as needed. Pass paths and compact
+evidence, update the current handoff in place, and avoid raw dumps, redundant checks
+and routine tool-call narration. Create plots/reports only when useful. Centralize
+bounded delegation; use available inexpensive monitoring appropriate to the task,
+without hard-coded model names or a mandatory four-agent arrangement.
 
-## 6. Maintain the repository picture
-
-`experimental_manifest.md` is the evidence ledger: exact study conclusions,
-limitations, and artifact locations belong there.
-
-[`current_state.md`](current_state.md) is the human-readable synthesis. After
-a reviewed study changes the direction of the repository, update its **Big
-picture**, **Current evidence**, and **Next steps** sections. Do not turn it
-into a run log or copy every metric into it. Operational activity remains in
-[`current_simulations.md`](current_simulations.md).
-
-## Study states
-
-The generated summary uses these study-level states:
-
-| State | Meaning |
-|---|---|
-| `planned` | The hypothesis is frozen but no native run is present. |
-| `running` | At least one declared run is active. |
-| `incomplete` | Some terminal evidence exists, but declared coverage is missing or duplicated. |
-| `invalid` | A bundle, arm, provenance link, or artifact contract is invalid. |
-| `ready_for_review` | Exact declared coverage is present and valid. |
-| `reviewed` | `analysis/final.json` exists for otherwise review-ready evidence. |
+Validate changes with a tiny real question-led pilot through execution and review.
+Record execution versus preparation/reading/validation/handoff time and token usage
+where available (otherwise unknown). Another agent must recover the question, what
+ran, evidence locations, outcome and next decision from records without chat history.

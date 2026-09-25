@@ -351,9 +351,10 @@ def _study_readme(study: Mapping[str, Any]) -> str:
         f"{analysis}\n\n"
         "## Workflow\n\n"
         "Write each native run below `runs/<arm-id>/` using `python -m ebl`. "
-        "Then run `python -m ebl study summarize --study-dir .`. After human "
-        "review, finalize with a review JSON file so the interpretation is "
-        "recorded in `docs/experimental_manifest.md`.\n"
+        "Then run `python -m ebl study summarize --study-dir .`. Review in "
+        "the owning pilot/result note. The optional legacy `study finalize` "
+        "command writes only `analysis/final.json`; historical global "
+        "documents are not updated.\n"
     )
 
 
@@ -679,10 +680,10 @@ def _read_bundle_object(path: Path, errors: list[str], label: str) -> dict[str, 
 def _bundle_record(
     run_dir: Path,
     *,
-    study: Mapping[str, Any],
-    arm: Mapping[str, Any],
-    study_sha256: str,
-    verify_artifacts: bool,
+    study: Mapping[str, Any] | None = None,
+    arm: Mapping[str, Any] | None = None,
+    study_sha256: str | None = None,
+    verify_artifacts: bool = False,
 ) -> dict[str, Any]:
     errors: list[str] = []
     manifest = _read_bundle_object(run_dir / "manifest.json", errors, "run manifest.json")
@@ -705,38 +706,43 @@ def _bundle_record(
         if manifest.get("run_id") != run_id:
             errors.append("Expected manifest run_id to equal the run directory name.")
         experiment_id = manifest.get("experiment_id")
-        if experiment_id != arm["experiment_id"]:
+        if not isinstance(experiment_id, str) or not experiment_id:
+            errors.append("Expected manifest experiment_id to be nonempty text.")
+        elif arm is not None and experiment_id != arm["experiment_id"]:
             errors.append("Expected manifest experiment_id to match the declared arm.")
         command = manifest.get("command")
-        if not isinstance(command, list) or _command_mode(command) != arm["mode"]:
+        if not isinstance(command, list) or not command or not all(isinstance(part, str) for part in command):
+            errors.append("Expected manifest command to be a nonempty list of strings.")
+        elif arm is not None and _command_mode(command) != arm["mode"]:
             errors.append("Expected manifest command mode to match the declared arm.")
-        context = manifest.get("study")
-        expected_context = {
-            "study_id": study["study_id"],
-            "arm_id": arm["arm_id"],
-            "evidence_class": study["evidence_class"],
-            "study_sha256": study_sha256,
-            "source_plan_sha256": study["source_plan"]["sha256"],
-        }
-        if not isinstance(context, dict):
-            errors.append("Expected manifest.json to contain workflow study provenance.")
-        else:
-            for key, expected in expected_context.items():
-                if context.get(key) != expected:
-                    errors.append(f"Expected manifest study.{key} to match study.json.")
-            config_sha = context.get("source_config_sha256")
-            if not isinstance(config_sha, str) or _SHA256.fullmatch(config_sha) is None:
-                errors.append(
-                    "Expected manifest study.source_config_sha256 to be a "
-                    "lowercase SHA-256 digest."
-                )
-            elif config_sha not in {
-                config["sha256"] for config in arm["configs"]
-            }:
-                errors.append(
-                    "Expected manifest study.source_config_sha256 to match a "
-                    "config declared by the arm."
-                )
+        if study is not None and arm is not None:
+            context = manifest.get("study")
+            expected_context = {
+                "study_id": study["study_id"],
+                "arm_id": arm["arm_id"],
+                "evidence_class": study["evidence_class"],
+                "study_sha256": study_sha256,
+                "source_plan_sha256": study["source_plan"]["sha256"],
+            }
+            if not isinstance(context, dict):
+                errors.append("Expected manifest.json to contain workflow study provenance.")
+            else:
+                for key, expected in expected_context.items():
+                    if context.get(key) != expected:
+                        errors.append(f"Expected manifest study.{key} to match study.json.")
+                config_sha = context.get("source_config_sha256")
+                if not isinstance(config_sha, str) or _SHA256.fullmatch(config_sha) is None:
+                    errors.append(
+                        "Expected manifest study.source_config_sha256 to be a "
+                        "lowercase SHA-256 digest."
+                    )
+                elif config_sha not in {
+                    config["sha256"] for config in arm["configs"]
+                }:
+                    errors.append(
+                        "Expected manifest study.source_config_sha256 to match a "
+                        "config declared by the arm."
+                    )
         config_record = manifest.get("config")
         if isinstance(config_record, dict):
             configured_path = config_record.get("path")
@@ -780,7 +786,7 @@ def _bundle_record(
         ):
             errors.append("Expected status.json to use ebl.run schema version 1.")
         state = status.get("status", "invalid")
-        if state not in {"running", "complete", "failed"}:
+        if not isinstance(state, str) or state not in {"running", "complete", "failed"}:
             errors.append("Expected status.json status to be running, complete, or failed.")
         if status.get("run_id") != run_id:
             errors.append("Expected status run_id to equal the run directory name.")
@@ -798,9 +804,9 @@ def _bundle_record(
                 errors.append("Expected result.json to use ebl.run schema version 1.")
             if result.get("status") != "complete" or result.get("run_id") != run_id:
                 errors.append("Expected result.json to describe this completed run.")
-            if result.get("experiment_id") != arm["experiment_id"]:
+            if result.get("experiment_id") != experiment_id:
                 errors.append(
-                    "Expected result.json experiment_id to match the declared arm."
+                    "Expected result.json experiment_id to match manifest.json."
                 )
             metrics = result.get("metrics")
             if not isinstance(metrics, dict):
@@ -879,9 +885,9 @@ def _bundle_record(
         errors.append("Expected non-complete run states not to contain result.json.")
 
     return {
-        "arm_id": arm["arm_id"],
+        "arm_id": arm["arm_id"] if arm is not None else None,
         "run_id": run_id,
-        "path": run_dir.relative_to(run_dir.parents[2]).as_posix(),
+        "path": run_dir.relative_to(run_dir.parents[2]).as_posix() if study is not None else str(run_dir.resolve()),
         "status": state,
         "valid": not errors,
         "errors": errors,
@@ -891,6 +897,31 @@ def _bundle_record(
         "artifact_count": artifact_count,
         "metrics": terminal_metrics,
     }
+
+
+def inspect_run(
+    run_dir: Path | str, *, verify_artifacts: bool = False,
+) -> dict[str, Any]:
+    """Inspect one native bundle without a study plan or documentation writes.
+
+    Validity is structural integrity, not completion, assigned case coverage or a
+    scientific verdict. Existing prepared studies retain their provenance checks.
+    """
+    root = Path(run_dir).expanduser().resolve()
+    kwargs: dict[str, Any] = {}
+    if len(root.parents) >= 3 and root.parent.parent.name == "runs":
+        study_root = root.parents[2]
+        if (study_root / "study.json").is_file():
+            study = load_study_record(study_root)
+            arms = [arm for arm in study["arms"] if arm["arm_id"] == root.parent.name]
+            if len(arms) != 1:
+                raise StudyWorkflowError("Expected run to belong to a declared study arm.")
+            kwargs = dict(study=study, arm=arms[0], study_sha256=_sha256_file(study_root / "study.json"))
+    record = _bundle_record(root, verify_artifacts=verify_artifacts, **kwargs)
+    record["path"] = str(root)
+    record["process_complete"] = record["status"] == "complete"
+    record["validation_mode"] = "full_artifact_hashes" if verify_artifacts else "metadata_only"
+    return record
 
 
 def _summary_report(summary: Mapping[str, Any]) -> str:
@@ -1130,151 +1161,51 @@ def load_review(path: Path | str) -> dict[str, Any]:
     }
 
 
-def _indent(value: str) -> str:
-    return value.replace("\n", "\n  ")
-
-
-def _manifest_entry(
-    *,
-    study: Mapping[str, Any],
-    summary: Mapping[str, Any],
-    review: Mapping[str, Any],
-    finalized_at: str,
-    display_root: str,
-) -> str:
-    criteria = "\n".join(f"  - {item}" for item in study["completion_criteria"])
-    next_steps = "\n".join(f"  - {item}" for item in review["next_steps"])
-    completed = sum(arm["complete"] for arm in summary["arms"])
-    failed = sum(arm["failed"] for arm in summary["arms"])
-    study_id = study["study_id"]
-    return (
-        f"<!-- BEGIN EBL STUDY {study_id} -->\n"
-        f"### {study_id}\n\n"
-        f"**{study['title']}**\n\n"
-        f"- **Finished:** {finalized_at[:10]}\n"
-        f"- **Evidence class:** `{study['evidence_class']}`\n"
-        f"- **Outcome:** {review['outcome']}\n"
-        f"- **Initial hypothesis:** {_indent(study['hypothesis'])}\n"
-        f"- **Completion criteria:**\n{criteria}\n"
-        f"- **Coverage:** {completed} declared run(s) completed; {failed} failed "
-        "attempt(s) retained.\n"
-        f"- **Final interpretation:** {_indent(review['final_interpretation'])}\n"
-        f"- **Main limitations:** {_indent(review['limitations'])}\n"
-        f"- **Next steps:**\n{next_steps}\n"
-        f"- **Raw artifacts:** `{display_root}/`\n"
-        f"- **Workflow summary:** `{display_root}/analysis/summary.json`\n"
-        f"<!-- END EBL STUDY {study_id} -->"
-    )
-
-
-def _insert_manifest_entry(document: str, *, study_id: str, entry: str) -> str:
-    begin = f"<!-- BEGIN EBL STUDY {study_id} -->"
-    end = f"<!-- END EBL STUDY {study_id} -->"
-    begin_index = document.find(begin)
-    end_index = document.find(end)
-    if begin_index >= 0 or end_index >= 0:
-        if begin_index < 0 or end_index < begin_index:
-            raise StudyWorkflowError(
-                "Expected existing experimental-manifest study markers to be "
-                f"paired. Provided value: study_id={study_id!r}."
-            )
-        end_index += len(end)
-        return document[:begin_index] + entry + document[end_index:]
-    if re.search(rf"^###\s+`?{re.escape(study_id)}`?\s*$", document, re.MULTILINE):
-        raise StudyWorkflowError(
-            "Expected a workflow-managed study ID not to collide with an "
-            f"unmanaged manifest heading. Provided value: {study_id!r}."
-        )
-    anchors = ["\n## Shared validity notes", "\n## Related documents"]
-    position = next(
-        (
-            document.find(anchor)
-            for anchor in anchors
-            if document.find(anchor) >= 0
-        ),
-        len(document),
-    )
-    prefix = document[:position].rstrip()
-    suffix = document[position:].lstrip("\n")
-    return prefix + "\n\n" + entry + "\n\n" + suffix
-
-
 def finalize_study(
     study_dir: Path | str,
     *,
     review_path: Path | str,
-    manifest_path: Path | str,
+    manifest_path: Path | str | None = None,
     verify_artifacts: bool = False,
 ) -> Path:
-    """Finalize complete coverage and record interpretation in the manifest."""
+    """Write a local compatibility receipt for a complete legacy study.
 
+    manifest_path is accepted but ignored for old callers. Historical documents
+    are never read or written. New pilots/results are reviewed in their notes and
+    do not need this complete-coverage legacy command, including partial reviews.
+    """
     root = Path(study_dir).expanduser().resolve()
     study = load_study_record(root)
     summary = summarize_study(root, verify_artifacts=verify_artifacts)
     if not summary["ready_for_review"]:
         raise StudyWorkflowError(
             "Expected study coverage to be complete and valid before "
-            f"finalization. Provided value: state={summary['state']!r}."
+            f"finalization. Provided value: state={summary['state']!r}. "
+            "Review partial evidence in the owning pilot/result note."
         )
     review = load_review(review_path)
-    manifest = Path(manifest_path).expanduser().resolve()
-    try:
-        document = manifest.read_text(encoding="utf-8")
-    except OSError as error:
-        raise StudyWorkflowError(
-            "Expected --manifest to name the finished-study Markdown ledger. "
-            f"Provided value: {str(manifest)!r}. {error}"
-        ) from error
-
     final_path = root / "analysis" / "final.json"
-    existing = (
-        _load_json_object(final_path, label="existing final.json")
-        if final_path.exists()
-        else None
-    )
     study_sha = _sha256_file(root / "study.json")
     review_sha = review["source"]["sha256"]
-    if existing is not None:
-        if (
-            existing.get("study_sha256") != study_sha
-            or existing.get("review_sha256") != review_sha
-        ):
-            raise StudyWorkflowError(
-                "Expected a finalized study to retain the same study and review "
-                f"hashes. Provided value: {str(final_path)!r}."
-            )
-        finalized_at = existing["finalized_at"]
-    else:
-        finalized_at = datetime.now(timezone.utc).isoformat()
-
-    repo_root = manifest.parent.parent
-    try:
-        display_root = root.relative_to(repo_root).as_posix()
-    except ValueError:
-        display_root = str(root)
-    entry = _manifest_entry(
-        study=study,
-        summary=summary,
-        review=review,
-        finalized_at=finalized_at,
-        display_root=display_root,
-    )
-    updated = _insert_manifest_entry(document, study_id=study["study_id"], entry=entry)
-    _atomic_write_text(manifest, updated)
+    if final_path.exists():
+        existing = _load_json_object(final_path, label="existing final.json")
+        if existing.get("schema") != FINAL_SCHEMA or type(existing.get("schema_version")) is not int or existing["schema_version"] not in {1, 2}:
+            raise StudyWorkflowError("Expected a supported ebl.study.final receipt.")
+        if existing.get("study_sha256") != study_sha or existing.get("review_sha256") != review_sha:
+            raise StudyWorkflowError("Expected a finalized study to retain the same study and review hashes.")
+        return final_path
     final = {
         "schema": FINAL_SCHEMA,
         "schema_version": 1,
         "study_id": study["study_id"],
-        "finalized_at": finalized_at,
+        "finalized_at": datetime.now(timezone.utc).isoformat(),
         "study_sha256": study_sha,
-        "summary_sha256": _sha256_file(root / "analysis" / "summary.json"),
+        "review_ready_summary_sha256": _sha256_file(root / "analysis" / "summary.json"),
         "review_sha256": review_sha,
         "outcome": review["outcome"],
         "final_interpretation": review["final_interpretation"],
         "limitations": review["limitations"],
         "next_steps": review["next_steps"],
-        "manifest": str(manifest),
-        "manifest_entry_sha256": sha256(entry.encode("utf-8")).hexdigest(),
         "validation_mode": summary["validation_mode"],
     }
     _atomic_write_json(final_path, final)
@@ -1284,6 +1215,7 @@ def finalize_study(
 __all__ = [
     "StudyWorkflowError",
     "finalize_study",
+    "inspect_run",
     "load_review",
     "load_study_plan",
     "load_study_record",

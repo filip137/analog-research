@@ -198,24 +198,6 @@ class RunStore:
         self._repo_root = repo_root
         self._finished = False
 
-    def _refresh_current_simulations(self) -> None:
-        """Refresh the optional live ledger without affecting the run."""
-
-        if os.environ.get("EBL_DEFER_CURRENT_SIMULATIONS") == "1":
-            return
-        try:
-            from experiments.current_simulations import (
-                refresh_current_simulations_for_run,
-            )
-
-            refresh_current_simulations_for_run(
-                repo_root=self._repo_root,
-                run_dir=self.run_dir,
-            )
-        except Exception:
-            # The index is a convenience view, never part of run correctness.
-            pass
-
     @classmethod
     def create(
         cls,
@@ -333,7 +315,6 @@ class RunStore:
             started_monotonic=time.monotonic(),
             repo_root=repo_path,
         )
-        store._refresh_current_simulations()
         return store
 
     def append_metric(self, record: Mapping[str, Any]) -> None:
@@ -420,7 +401,6 @@ class RunStore:
             },
         )
         self._finished = True
-        self._refresh_current_simulations()
         return result_path
 
     def fail(self, error: BaseException | Mapping[str, Any]) -> Path:
@@ -450,5 +430,4 @@ class RunStore:
         path = self.run_dir / "status.json"
         atomic_write_json(path, status)
         self._finished = True
-        self._refresh_current_simulations()
         return path

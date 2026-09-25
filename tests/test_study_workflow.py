@@ -120,6 +120,10 @@ def test_prepare_links_native_run_and_summarizes_metadata(tmp_path: Path) -> Non
     study = json.loads((root / "study.json").read_text(encoding="utf-8"))
     assert study["hypothesis"].startswith("The declared treatment")
     assert (root / "runs" / "baseline").is_dir()
+    readme = (root / "README.md").read_text()
+    assert "historical global" in readme
+    assert "experimental_manifest.md" not in readme
+    assert "After human" not in readme
 
     run_dir = _complete_run(root, config)
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
@@ -238,12 +242,13 @@ def test_finalize_records_interpretation_and_is_idempotent(tmp_path: Path) -> No
     first_document = manifest.read_text(encoding="utf-8")
     final = json.loads(final_path.read_text(encoding="utf-8"))
     assert final["outcome"] == "supported"
-    assert "Initial hypothesis" in first_document
-    assert "Final interpretation" in first_document
-    assert "The result supports the initial hypothesis" in first_document
-    assert first_document.index("workflow-smoke-v1") < first_document.index(
-        "## Shared validity notes"
+    assert first_document == (
+        "# Finished studies\n\n## Finished simulations\n\n"
+        "## Shared validity notes\n\nKeep existing notes.\n"
     )
+    final_before = final_path.read_bytes()
+    assert "manifest" not in final
+    assert summarize_study(root)["state"] == "reviewed"
 
     assert (
         finalize_study(root, review_path=review, manifest_path=manifest)
@@ -293,3 +298,30 @@ def test_study_prepare_is_available_from_public_cli(tmp_path: Path) -> None:
     )
     assert code == 0, stderr.getvalue()
     assert json.loads(stdout.getvalue())["state"] == "planned"
+
+
+def test_inspector_preserves_prepared_study_provenance_checks(tmp_path: Path) -> None:
+    from experiments.study_workflow import inspect_run
+    root, _, config = _prepare(tmp_path)
+    run = _complete_run(root, config)
+    assert inspect_run(run, verify_artifacts=True)["valid"]
+    path = run / "manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest["study"]["source_config_sha256"] = "0" * 64
+    _write_json(path, manifest)
+    assert not inspect_run(run)["valid"]
+
+
+def test_finalize_without_global_document(tmp_path: Path) -> None:
+    root, _, config = _prepare(tmp_path)
+    _complete_run(root, config)
+    review = root / "analysis/review.json"
+    value = {"schema_version": 1, "outcome": "mixed",
+             "final_interpretation": "The tiny comparison is inconclusive.",
+             "limitations": "One case.", "next_steps": ["Retain evidence."]}
+
+    _write_json(review, value)
+    out, err = StringIO(), StringIO()
+    assert main(["study", "finalize", "--study-dir", str(root), "--review", str(review)], stdout=out, stderr=err) == 0, err.getvalue()
+    assert Path(out.getvalue().strip()).is_file()
+    assert not (tmp_path / "docs").exists()

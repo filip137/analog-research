@@ -232,37 +232,12 @@ def refresh_current_simulations_for_run(
     repo_root: Path | str,
     run_dir: Path | str,
 ) -> bool:
-    """Refresh the generated view when ``run_dir`` is in canonical results.
+    """Compatibility no-op: global simulation documents are historical snapshots.
 
-    Returns ``True`` when the managed Markdown content changed.  Runs outside
-    ``<repo>/results/<study-id>/`` are deliberately ignored.
+    Use discover_active_runs/render_active_section for read-only legacy inspection.
+    Monitoring and current handoffs belong to the owning pilot/experiment note.
     """
-
-    repository = Path(repo_root).expanduser().resolve()
-    results_root = (repository / RESULTS_PATH).resolve()
-    candidate = Path(run_dir).expanduser().resolve()
-    try:
-        relative = candidate.relative_to(results_root)
-    except ValueError:
-        return False
-    if len(relative.parts) < 2:
-        return False
-
-    destination = repository / CURRENT_SIMULATIONS_PATH
-    active_runs = discover_active_runs(repository)
-    try:
-        current = destination.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        current = None
-        rendered = _default_document(active_runs)
-    else:
-        rendered = _replace_active_section(current, active_runs)
-        if rendered is None:
-            return False
-    if current == rendered:
-        return False
-    _atomic_write_text(destination, rendered)
-    return True
+    return False
 
 
 __all__ = [

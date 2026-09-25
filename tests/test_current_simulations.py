@@ -123,40 +123,12 @@ def test_discover_active_runs_groups_only_running_native_statuses(
     assert "**Active native runs:** `2`" in rendered
 
 
-def test_refresh_replaces_only_automatic_active_section(
-    tmp_path: Path,
-) -> None:
+def test_refresh_preserves_historical_document(tmp_path: Path) -> None:
     ledger = _write_ledger(tmp_path)
-    run_dir = _write_native_run(
-        tmp_path,
-        study_id="study-a",
-        arm="lora",
-        run_id="run-001",
-        status="running",
-    )
-
-    assert refresh_current_simulations_for_run(
-        repo_root=tmp_path,
-        run_dir=run_dir,
-    )
-    running = ledger.read_text(encoding="utf-8")
-    assert "study-a/runs/lora/run-001" in running
-    assert "**Active native runs:** `1`" in running
-    assert "Keep this manual study." in running
-
-    status_path = run_dir / "status.json"
-    terminal = json.loads(status_path.read_text(encoding="utf-8"))
-    terminal["status"] = "complete"
-    status_path.write_text(json.dumps(terminal), encoding="utf-8")
-
-    assert refresh_current_simulations_for_run(
-        repo_root=tmp_path,
-        run_dir=run_dir,
-    )
-    complete = ledger.read_text(encoding="utf-8")
-    assert "No simulations currently running." in complete
-    assert "study-a/runs/lora/run-001" not in complete
-    assert "Keep this manual study." in complete
+    original = ledger.read_bytes()
+    run_dir = _write_native_run(tmp_path, study_id="study-a", arm="lora", run_id="run-001", status="running")
+    assert not refresh_current_simulations_for_run(repo_root=tmp_path, run_dir=run_dir)
+    assert ledger.read_bytes() == original
 
 
 def test_refresh_ignores_runs_outside_canonical_results(
@@ -193,10 +165,11 @@ def test_refresh_preserves_unmarked_manual_document(
     assert ledger.read_text(encoding="utf-8") == "# User-owned document\n"
 
 
-def test_run_store_refreshes_on_create_and_completion(
+def test_run_store_preserves_history_on_create_and_completion(
     tmp_path: Path,
 ) -> None:
     ledger = _write_ledger(tmp_path)
+    original = ledger.read_text(encoding="utf-8")
     store = RunStore.create(
         output_root=tmp_path / "results" / "study-a" / "runs" / "base",
         experiment_id="small_drn.v1",
@@ -207,20 +180,21 @@ def test_run_store_refreshes_on_create_and_completion(
     )
 
     active = ledger.read_text(encoding="utf-8")
-    assert "study-a/runs/base/run-001" in active
+    assert active == original
     assert "Keep this manual study." in active
 
     store.complete(metrics={})
 
     terminal = ledger.read_text(encoding="utf-8")
-    assert "No simulations currently running." in terminal
+    assert terminal == original
     assert "Keep this manual study." in terminal
 
 
-def test_run_store_refreshes_on_failure(
+def test_run_store_preserves_history_on_failure(
     tmp_path: Path,
 ) -> None:
     ledger = _write_ledger(tmp_path)
+    original = ledger.read_text(encoding="utf-8")
     store = RunStore.create(
         output_root=tmp_path / "results" / "study-a" / "runs" / "base",
         experiment_id="small_drn.v1",
@@ -229,12 +203,12 @@ def test_run_store_refreshes_on_failure(
         repo_root=tmp_path,
         run_id="run-001",
     )
-    assert "study-a/runs/base/run-001" in ledger.read_text(encoding="utf-8")
+    assert ledger.read_text(encoding="utf-8") == original
 
     store.fail(RuntimeError("numerical failure"))
 
     terminal = ledger.read_text(encoding="utf-8")
-    assert "No simulations currently running." in terminal
+    assert terminal == original
     assert "Keep this manual study." in terminal
 
 
