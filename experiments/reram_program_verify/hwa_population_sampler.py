@@ -12,7 +12,7 @@ from typing import Any
 import torch
 
 from experiments.artifacts import atomic_write_json, sha256_file
-import training.ibm_reram_hwa as population_module
+import training.ibm_om.sampling as population_module
 from training.ibm_reram_hwa import (
     _ARRAY_SAMPLING_RECEIPT_SCHEMA,
     _ARRAY_SAMPLING_RECEIPT_SCHEMA_VERSION,

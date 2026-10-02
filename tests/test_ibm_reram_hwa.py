@@ -1069,7 +1069,7 @@ def test_repaired_assignment_changes_only_published_corrupt_sites(
         }
 
     monkeypatch.setattr(
-        "training.ibm_reram_hwa._sample_tile_hidden",
+        "training.ibm_om.sampling._sample_tile_hidden",
         sample_hidden,
     )
     published = sample_om_array_population(
@@ -1862,7 +1862,7 @@ def test_om_array_population_npz_round_trip_and_fingerprint_gate(
         }
 
     monkeypatch.setattr(
-        "training.ibm_reram_hwa._sample_tile_hidden",
+        "training.ibm_om.sampling._sample_tile_hidden",
         sample_hidden,
     )
     population = sample_om_array_population(
