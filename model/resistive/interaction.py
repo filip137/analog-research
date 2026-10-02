@@ -5,11 +5,15 @@ import torch
 import torch.nn.functional as F
 
 from model.function.interaction import QFunction
-from model.variable.layer import LinearLayer
+from model.variable.layer import LinearLayer, layer_index
 
 
 class DenseResistive(QFunction):
-    """Dense resistive interaction between two layers
+    """Dense edge with energy 0.5 * D * g * (alpha * v_pre - v_post)^2.
+
+    D = (current_amp / voltage_amp)^pre_index, and alpha is one at the
+    clamped input and voltage_amp elsewhere. All coefficients and parameter
+    gradients use this same energy convention.
 
     Attributes
     ----------
@@ -44,17 +48,23 @@ class DenseResistive(QFunction):
         self._voltage_amp = voltage_amp
         self._current_amp = current_amp
         self._logical_pre_index = (
-            int(self._layer_pre._name.rsplit("_", 1)[-1])
+            layer_index(self._layer_pre)
             if logical_pre_index is None
             else int(logical_pre_index)
         )
         self._logical_post_index = (
-            int(self._layer_post._name.rsplit("_", 1)[-1])
+            layer_index(self._layer_post)
             if logical_post_index is None
             else int(logical_post_index)
         )
 
         QFunction.__init__(self, [layer_pre, layer_post], [dense_weight])
+
+    def _amp_factor(self):
+        return (self._current_amp / self._voltage_amp) ** self._logical_pre_index
+
+    def _pre_scale(self):
+        return 1.0 if self._logical_pre_index == 0 else self._voltage_amp
 
     def eval(self):
         """Computes the energy term corresponding to this weight tensor.
@@ -73,8 +83,7 @@ class DenseResistive(QFunction):
         for _ in range(dims_post): layer_pre = layer_pre.unsqueeze(-1)  # broadcast layer_pre to (batch_size, shape_pre, shape_post)
         for _ in range(dims_pre): layer_post = layer_post.unsqueeze(1)  # broadcast layer_post to (batch_size, shape_pre, shape_post)
         weight = self._weight.get().unsqueeze(0)  # broadcast weight to (batch_size, shape_pre, shape_post)
-        return 0.5 * ((layer_pre - self._current_amp*layer_post)**2).mul(weight).flatten(start_dim=1).sum(dim=1) * (self._current_amp/self._voltage_amp) ** self._logical_pre_index
-        #return 0.5 * ((layer_pre - layer_post)**2).mul(weight).flatten(start_dim=1).sum(dim=1)
+        return 0.5 * ((layer_pre - layer_post)**2).mul(weight).flatten(start_dim=1).sum(dim=1) * self._amp_factor()
 
     def a_coef_fn(self, layer):
         """Overrides the default implementation of QFunction"""
@@ -111,7 +120,7 @@ class DenseResistive(QFunction):
         dim_weight = len(weight.shape)
         permutation = tuple(range(dims_pre, dim_weight)) + tuple(range(dims_pre))
         b_coef = - torch.tensordot(layer_post, weight.permute(permutation), dims=dims_post)
-        b_coef = b_coef * self._current_amp
+        b_coef = b_coef * self._amp_factor() * self._pre_scale()
         return b_coef
 
     def _a_coef_layer_pre(self):
@@ -124,8 +133,7 @@ class DenseResistive(QFunction):
         dims_pre = len(self._layer_pre.shape)
         a_coef = 0.5 * self._weight.get().flatten(start_dim=dims_pre).sum(dim=-1).unsqueeze(0)
 
-        #if not isinstance(self._layer_post, LinearLayer):
-        a_coef = a_coef * self._voltage_amp * self._current_amp
+        a_coef = a_coef * self._amp_factor() * self._pre_scale() ** 2
 
         return a_coef
 
@@ -139,9 +147,7 @@ class DenseResistive(QFunction):
         layer_pre = self._layer_pre.state
         dims_pre = len(self._layer_pre.shape)  # number of dimensions involved in the tensor product
         b_coef = - torch.tensordot(layer_pre, self._weight.get(), dims=dims_pre)
-        if self._logical_post_index != 1:
-            b_coef = b_coef * self._voltage_amp
-        return b_coef
+        return b_coef * self._amp_factor() * self._pre_scale()
 
     def _a_coef_layer_post(self):
         """Returns the interaction's quadratic influence on the post-synaptic layer.
@@ -153,7 +159,7 @@ class DenseResistive(QFunction):
         dims = len(self._layer_pre.shape) - 1
         a_coef = 0.5 * self._weight.get().flatten(end_dim=dims).sum(dim=0).unsqueeze(0)
 
-        return a_coef
+        return a_coef * self._amp_factor()
 
     def _grad_weight(self):
         """Returns the interaction's gradient wrt the weight
@@ -171,9 +177,7 @@ class DenseResistive(QFunction):
         dims_post = len(self._layer_post.shape)
         for _ in range(dims_post): layer_pre = layer_pre.unsqueeze(-1)
         for _ in range(dims_pre): layer_post = layer_post.unsqueeze(1)
-        amp = (self._current_amp/self._voltage_amp) ** self._logical_pre_index
-        grad_weight = 0.5 * ((layer_pre - self._current_amp*layer_post)**2).mean(dim=0) * amp
-        #grad_weight = 0.5 * ((layer_pre - layer_post)**2).mean(dim=0)
+        grad_weight = 0.5 * ((layer_pre - layer_post)**2).mean(dim=0) * self._amp_factor()
         return grad_weight
 
 
@@ -516,6 +520,12 @@ class ConvResistive(QFunction):
         self._voltage_amp = voltage_amp
         self._current_amp = current_amp
 
+    def _amp_factor(self):
+        return (self._current_amp / self._voltage_amp) ** layer_index(self._layer_pre)
+
+    def _pre_scale(self):
+        return 1.0 if layer_index(self._layer_pre) == 0 else self._voltage_amp
+
     def _conv_geometry(self):
         weight = self._weight.get()
         C_out, C_in, Kh, Kw = weight.shape
@@ -530,11 +540,8 @@ class ConvResistive(QFunction):
     def eval(self, per_sample=True):
         weight, C_out, C_in, Kh, Kw, *_ = self._conv_geometry()
 
-        layer_pre = self._layer_pre.state.clone()
-        if self._layer_pre.name != 'Layer_0':
-            layer_pre = layer_pre * self._voltage_amp
-        layer_post = self._layer_post.state  # / self._layer_post.gain
-        layer_post_scaled = layer_post * self._current_amp
+        layer_pre = self._layer_pre.state * self._pre_scale()
+        layer_post_scaled = self._layer_post.state
 
 
         cols = F.unfold(layer_pre, (Kh, Kw), padding=self._P, stride=self._S, dilation=self._D)
@@ -548,7 +555,7 @@ class ConvResistive(QFunction):
 
         diff2 = (patches - targets).pow(2)
         weighted = diff2 * kernels
-        E_per = 0.5 * weighted.sum(dim=(1, 2, 3))
+        E_per = 0.5 * weighted.sum(dim=(1, 2, 3)) * self._amp_factor()
         return E_per if per_sample else E_per.sum()
 
     def im2col(self):
@@ -623,31 +630,26 @@ class ConvResistive(QFunction):
 
     def _b_coef_layer_pre(self):
         b_coef = -self.col2im()
-        b_coef = b_coef * self._current_amp
+        b_coef = b_coef * self._amp_factor() * self._pre_scale()
         return b_coef
 
     def _b_coef_layer_post(self):
         b_coef = -self.im2col()
-        if self._layer_post.name != 'Layer_1':
-            b_coef = b_coef * self._voltage_amp
-        return b_coef
+        return b_coef * self._amp_factor() * self._pre_scale()
 
     def _a_coef_layer_pre(self):
         a_map = self.a_col2im()
-        a_coef = a_map * self._voltage_amp * self._current_amp
+        a_coef = a_map * self._amp_factor() * self._pre_scale() ** 2
         return 0.5 * a_coef
 
     def _a_coef_layer_post(self):
         a_map = self.a_im2col()
-        return 0.5 * a_map
+        return 0.5 * a_map * self._amp_factor()
 
     def _grad_weight(self):
         weight, C_out, C_in, Kh, Kw, *_ = self._conv_geometry()
-        x = self._layer_pre.state.clone()
-        if self._layer_pre.name != 'Layer_0':
-            x = x * self._voltage_amp
+        x = self._layer_pre.state * self._pre_scale()
         y = self._layer_post.state.clone()
-        y_rescaled = y * self._current_amp
 
         cols = F.unfold(x, (Kh, Kw), padding=self._P, stride=self._S, dilation=self._D)
         N, C_out, H_out, W_out = y.shape
@@ -655,13 +657,11 @@ class ConvResistive(QFunction):
         L = H_out * W_out
 
         patches = cols.transpose(1, 2).unsqueeze(2)
-        targets = y_rescaled.reshape(N, C_out, L).transpose(1, 2).unsqueeze(-1)
+        targets = y.reshape(N, C_out, L).transpose(1, 2).unsqueeze(-1)
         diff2 = (patches - targets).pow(2)
         grad_weight = 0.5 * diff2.sum(dim=1).mean(dim=0)
 
-        layer_pre_index = int(self._layer_pre._name[-1])
-        amp = (self._current_amp / self._voltage_amp) ** layer_pre_index
-        return grad_weight.view(C_out, C_in, Kh, Kw) * amp
+        return grad_weight.view(C_out, C_in, Kh, Kw) * self._amp_factor()
 
     def grad_param_fn(self, param):
         dictionary = {self._weight: self._grad_weight}
@@ -680,6 +680,12 @@ class BasePoolResistive(QFunction, ABC):
         self._S = stride       
         self._P = 0
         self._D = 1
+
+    def _amp_factor(self):
+        return (self._current_amp / self._voltage_amp) ** layer_index(self._layer_pre)
+
+    def _pre_scale(self):
+        return 1.0 if layer_index(self._layer_pre) == 0 else self._voltage_amp
 
 
     def _pool_geometry(self):
@@ -737,23 +743,21 @@ class BasePoolResistive(QFunction, ABC):
 
     def _b_coef_layer_pre(self):
         b_coef = -self.col2im()
-        b_coef = b_coef * self._current_amp
+        b_coef = b_coef * self._amp_factor() * self._pre_scale()
         return b_coef
 
     def _b_coef_layer_post(self):
         b_coef = -self.im2col()
-        if self._layer_post.name != 'Layer_1':
-            b_coef = b_coef * self._voltage_amp
-        return b_coef
+        return b_coef * self._amp_factor() * self._pre_scale()
 
     def _a_coef_layer_pre(self):
         a_map = self.a_col2im()
-        a_coef = a_map * self._voltage_amp * self._current_amp
+        a_coef = a_map * self._amp_factor() * self._pre_scale() ** 2
         return 0.5 * a_coef
 
     def _a_coef_layer_post(self):
         a_map = self.a_im2col()
-        return 0.5 * a_map
+        return 0.5 * a_map * self._amp_factor()
 
     def _grad_weight(self):
         weight, C_out, C_in, Kh, Kw, *_ = self._pool_geometry()
@@ -772,11 +776,8 @@ class AveragePoolResistive(BasePoolResistive):
     def eval(self, per_sample=True):
         weight, C_out, C_in, Kh, Kw, *_ = self._pool_geometry()
 
-        layer_pre = self._layer_pre.state.clone()
-        if self._layer_pre.name != 'Layer_0':
-            layer_pre = layer_pre * self._voltage_amp
-        layer_post = self._layer_post.state  # / self._layer_post.gain
-        layer_post_scaled = layer_post * self._current_amp
+        layer_pre = self._layer_pre.state * self._pre_scale()
+        layer_post_scaled = self._layer_post.state
 
 
         cols = F.unfold(layer_pre, (Kh, Kw), padding=self._P, stride=self._S, dilation=self._D)
@@ -790,7 +791,7 @@ class AveragePoolResistive(BasePoolResistive):
 
         diff2 = (patches - targets).pow(2)
         weighted = diff2 * kernels
-        E_per = 0.5 * weighted.sum(dim=(1, 2, 3))
+        E_per = 0.5 * weighted.sum(dim=(1, 2, 3)) * self._amp_factor()
         return E_per if per_sample else E_per.sum()
 
     def im2col(self):
@@ -862,12 +863,8 @@ class MaxPoolResistive(BasePoolResistive):
     def eval(self, per_sample=True):
         weight, C_out, C_in, Kh, Kw, H_in, W_in, H_out, W_out = self._pool_geometry()
 
-        # Scale states exactly like BasePoolResistive.eval does
-        x = self._layer_pre.state
-        if self._layer_pre.name != "Layer_0":
-            x = x * self._voltage_amp
-
-        y = self._layer_post.state * self._current_amp  # shape (N, C_out, H_out, W_out)
+        x = self._layer_pre.state * self._pre_scale()
+        y = self._layer_post.state
 
         N = x.shape[0]
 
@@ -907,7 +904,7 @@ class MaxPoolResistive(BasePoolResistive):
 
         # Energy: 1/2 * g * (x_win - y)^2
         diff2 = (x_win - y).pow(2)
-        E_per = 0.5 * (diff2 * g).sum(dim=(1, 2, 3))
+        E_per = 0.5 * (diff2 * g).sum(dim=(1, 2, 3)) * self._amp_factor()
 
         return E_per if per_sample else E_per.sum()
 
@@ -974,7 +971,7 @@ class MaxPoolResistive(BasePoolResistive):
         #this makes sense if the weight I consider is alwazs self.gain
         #this is independent of the winners
         weight, C_out, C_in, Kh, Kw, _, _, H_out, W_out = self._pool_geometry()
-        a_per_ch = torch.ones(1, C_out, H_out, W_out, device = weight.device) * self.gain
+        a_per_ch = weight.new_ones(1, C_out, H_out, W_out) * self.gain
         return a_per_ch.expand(1, C_out, H_out, W_out)
 
     def a_col2im(self):
