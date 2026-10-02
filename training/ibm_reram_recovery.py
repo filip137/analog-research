@@ -12,11 +12,18 @@ from typing import Any, Iterator
 import torch
 
 from model.resistive.builders import ParameterBinding
-from training.ibm_reram_hwa import (
+from training.ibm_om.plants import IbmReramPulsePlant
+from training.ibm_om.population import (
     IbmReramArrayPopulation,
-    IbmReramPulsePlant,
-    _artifact as load_ibm_reram_hwa_artifact,
     _selected_array_population,
+)
+from training.ibm_om.programming.controller import (
+    adaptive_controller_settings,
+    step_estimator,
+    step_ratio_tolerance,
+)
+from training.ibm_om.sampling import (
+    _artifact as load_ibm_reram_hwa_artifact,
     sample_om_array_population_layout_external,
 )
 from training.ibm_reram_program_verify import (
@@ -272,8 +279,10 @@ class IbmOmDeployedRecovery:
             device=self.device,
         )
         self.slow_generator.set_state(generator_state_after_programming.detach().cpu())
-        self.slow_plant.persistent.copy_(2.0 * self.source_persistent - 1.0)
-        self.slow_plant.apparent.copy_(2.0 * self.source_raw_apparent - 1.0)
+        self.slow_plant.load_state(
+            persistent=2.0 * self.source_persistent - 1.0,
+            apparent=2.0 * self.source_raw_apparent - 1.0,
+        )
         self.selection_generator = torch.Generator(device=self.device)
         self.selection_generator.manual_seed(int(self.parameters["update_seed"]))
         self.slow_ledger = _RecoveryLedger(self.size, device=self.device)
@@ -782,17 +791,10 @@ class IbmOmDeployedRecovery:
         return plus, minus
 
     def _controller_settings(self) -> tuple[ControllerSettings, PopulationStepEstimator]:
-        adaptive = self.device_model["programming"]["adaptive"]
-        settings = ControllerSettings(
-            kind="adaptive",
-            eta=float(adaptive["eta"]),
-            maximum_batch=int(adaptive["maximum_batch"]),
-            epsilon=float(adaptive["epsilon"]),
-            force_one_within_steps=float(adaptive["force_one_within_steps"]),
-        )
-        estimator = PopulationStepEstimator.from_mapping(
-            self.device_model["step_estimators"]["continuous"]
-        )
+        # Physical fast rails are always sampled without published
+        # corruption, so they use the continuous calibration branch.
+        settings = adaptive_controller_settings(self.device_model)
+        estimator = step_estimator(self.device_model, "continuous")
         return settings, estimator
 
     def _initialize_physical_fast(self) -> None:
@@ -836,7 +838,7 @@ class IbmOmDeployedRecovery:
         result = run_program_verify(
             self.fast_plant.controller_port(),
             targets=baseline,
-            tolerance=0.5 * population.nominal_dw_min / 2.0,
+            tolerance=step_ratio_tolerance(0.5, population.nominal_dw_min),
             maximum_pulses=128,
             settings=settings,
             estimator=estimator,
@@ -913,6 +915,11 @@ class IbmOmDeployedRecovery:
         assert self.fast_population is not None
         assert self.fast_baseline is not None
         assert self.fast_ledger is not None
+        if indices.numel() > 1 and not bool(torch.all(indices[1:] > indices[:-1])):
+            raise RuntimeError(
+                "Expected strictly ascending fast-rail reset indices; the "
+                "selected subpopulation is ordered by cell index."
+            )
         selection = torch.zeros(self.fast_plant.size, dtype=torch.bool, device=self.device)
         selection[indices] = True
         population = _selected_array_population(self.fast_population, selection)
@@ -929,20 +936,23 @@ class IbmOmDeployedRecovery:
             generator=generator,
             device=self.device,
         )
-        subplant.persistent.copy_(self.fast_plant.persistent[indices])
-        subplant.apparent.copy_(self.fast_plant.apparent[indices])
+        persistent, apparent = self.fast_plant.read_cells(indices)
+        subplant.load_state(persistent=persistent, apparent=apparent)
         settings, estimator = self._controller_settings()
         result = run_program_verify(
             subplant.controller_port(),
             targets=self.fast_baseline[indices],
-            tolerance=0.5 * population.nominal_dw_min / 2.0,
+            tolerance=step_ratio_tolerance(0.5, population.nominal_dw_min),
             maximum_pulses=128,
             settings=settings,
             estimator=estimator,
         )
         before = self.fast_plant.persistent[indices].clone()
-        self.fast_plant.persistent[indices] = subplant.persistent
-        self.fast_plant.apparent[indices] = subplant.apparent
+        self.fast_plant.write_cells(
+            indices,
+            persistent=subplant.persistent,
+            apparent=subplant.apparent,
+        )
         physical = subplant.persistent + population.reference
         raw = (subplant.apparent + 1.0) / 2.0
         # Record every individual controller pulse, including reversals.
@@ -1801,6 +1811,7 @@ class IbmOmDeployedRecovery:
         step_index = state.get("step_index")
         if isinstance(step_index, bool) or not isinstance(step_index, int) or not 0 <= step_index <= self.total_steps:
             raise ValueError("Expected a valid saved recovery step index.")
+        saved_slow = {}
         for name, current in (
             ("slow_persistent", self.slow_plant.persistent),
             ("slow_apparent", self.slow_plant.apparent),
@@ -1808,7 +1819,11 @@ class IbmOmDeployedRecovery:
             value = state.get(name)
             if not isinstance(value, torch.Tensor) or value.shape != current.shape:
                 raise ValueError(f"Expected saved recovery tensor {name!r}.")
-            current.copy_(value.to(current.device))
+            saved_slow[name] = value.to(current.device)
+        self.slow_plant.load_state(
+            persistent=saved_slow["slow_persistent"],
+            apparent=saved_slow["slow_apparent"],
+        )
         self.slow_generator.set_state(state["slow_generator_state"].detach().cpu())
         self.selection_generator.set_state(state["selection_generator_state"].detach().cpu())
         self.slow_ledger.load_state_dict(state["slow_ledger"])
@@ -1923,8 +1938,10 @@ class IbmOmDeployedRecovery:
         if self.fast_plant is not None:
             if state.get("fast_population_fingerprint") != self.fast_population.fingerprint:
                 raise ValueError("Expected the saved physical fast population fingerprint.")
-            self.fast_plant.persistent.copy_(state["fast_persistent"].to(self.device))
-            self.fast_plant.apparent.copy_(state["fast_apparent"].to(self.device))
+            self.fast_plant.load_state(
+                persistent=state["fast_persistent"].to(self.device),
+                apparent=state["fast_apparent"].to(self.device),
+            )
             assert self.fast_generator is not None and self.fast_baseline is not None
             self.fast_generator.set_state(state["fast_generator_state"].detach().cpu())
             self.fast_baseline.copy_(state["fast_baseline"].to(self.device))
