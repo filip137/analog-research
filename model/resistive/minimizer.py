@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from model.minimizer.minimizer import LayerUpdater, Minimizer
 from model.resistive.layer import NonlinearResistiveLayer, ConvLayer
+from model.variable.layer import layer_index
 import torch
 
 _HOSTNAME = socket.gethostname()
@@ -48,15 +49,18 @@ def _scale_diode_strength_for_layer(
     """
 
     scaled = dict(params)
-    try:
-        scale_power = int(layer.name.rsplit("_", 1)[1]) - 1
-    except (AttributeError, IndexError, ValueError) as exc:
-        raise ValueError(
-            "Expected a layer name ending in an integer index; "
-            f"got {getattr(layer, 'name', None)!r}."
-        ) from exc
+    scale_power = layer_index(layer) - 1
     scale = float(current_amp / voltage_amp) ** scale_power
     scaled[strength_key] = scaled[strength_key] * scale
+    return scaled
+
+
+def _scale_hard_sigmoid_params_for_layer(params, layer, voltage_amp, current_amp):
+    scaled = dict(params)
+    scale = float(current_amp / voltage_amp) ** (layer_index(layer) - 1)
+    for key in ("g_on", "g_off"):
+        if key in scaled and scaled[key] is not None:
+            scaled[key] *= scale
     return scaled
 
 
@@ -195,7 +199,9 @@ class AdaptiveQuadraticUpdater(QuadraticUpdater):
 
                 # Recalculate pre_activate with penalized a and b
                 penalized_preamp = -b_penalized / (2. * a_penalized)
-                return self.voltage_amp * penalized_preamp
+                # The state is before the amplifier; adjacent edges already
+                # account for voltage_amp in their coefficients.
+                return penalized_preamp
 
             return preamp_voltage
             
@@ -846,7 +852,8 @@ class HardSigmoidUpdater(QuadraticUpdater):
             return -b / (2.0 * a)
 
         # Unconstrained minimizer (no diode conduction)
-        a_off = a + self.g_off
+        # The off-region energy is 0.5 * g_off * v**2.
+        a_off = a + 0.5 * self.g_off
         v_free = -b / (2.0 * a_off)
 
         # Masks for violations
@@ -970,7 +977,15 @@ class QuadraticMinimizer(Minimizer):
                 for layer in free_layers
             ]
         elif non_linearity == 'hard_sigmoid':
-            updaters = [HardSigmoidUpdater(layer, fn, hard_sigmoid_params) for layer in free_layers]
+            updaters = [
+                HardSigmoidUpdater(
+                    layer, fn,
+                    _scale_hard_sigmoid_params_for_layer(
+                        hard_sigmoid_params, layer, voltage_amp, current_amp,
+                    ),
+                )
+                for layer in free_layers
+            ]
         elif non_linearity == 'linear':
             updaters = [QuadraticUpdater(layer, fn) for layer in free_layers]
         else:

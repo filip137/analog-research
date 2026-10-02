@@ -3,6 +3,8 @@ import copy
 import torch
 import torch.nn.functional as F
 
+from model.variable.layer import layer_index
+
 
 
 class Function(ABC):
@@ -463,7 +465,7 @@ class ResistiveBiasInteraction(QFunction):
 
 def _logical_layer_index(layer, logical_layer_index):
     return (
-        int(layer._name.rsplit("_", 1)[-1])
+        layer_index(layer)
         if logical_layer_index is None
         else int(logical_layer_index)
     )

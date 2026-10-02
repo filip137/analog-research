@@ -51,7 +51,11 @@ from model.function.interaction import (
     Function,
     QFunction,
 )
-from model.resistive.interaction import AveragePoolResistive, DenseResistive, MaxPoolResistive
+from model.resistive.interaction import (
+    AveragePoolResistive, DenseResistive, MaxPoolResistive,
+    ConvResistive as CoreConvResistive,
+)
+from model.resistive.network import DeepResistiveEnergy
 from model.resistive.layer import NonlinearResistiveLayer, PoolLayer
 from model.variable.layer import InputLayer, LinearLayer
 from model.variable.parameter import Bias, ConvWeight, DenseWeight, PoolWeight
@@ -345,6 +349,9 @@ class FlexibleDeepResistiveEnergy(DetailedSumSeparableFunction):
         ]
         output_layer = LinearLayer(output_shape, device=None)
         layers = [input_layer] + convpool_layers + hidden_layers + [output_layer]
+        self._logical_layer_indices = {layer: index for index, layer in enumerate(layers)}
+        for layer, index in self._logical_layer_indices.items():
+            layer._logical_index = index
         free_layers = [
             layer for layer, mode in zip(convpool_layers, convpool_modes) if mode != "pooling"
         ] + hidden_layers
@@ -524,6 +531,9 @@ class FlexibleDeepResistiveEnergy(DetailedSumSeparableFunction):
 
         DetailedSumSeparableFunction.__init__(self, layers, self._all_params, interactions)
 
+    _layer_energy_scale_at = DeepResistiveEnergy._layer_energy_scale_at
+    layer_energy_scale = DeepResistiveEnergy.layer_energy_scale
+
     def set_input_mode(self, mode: str) -> None:
         input_layer = self.layers()[0]
         if isinstance(input_layer, FlexibleResistiveInputLayer):
@@ -574,168 +584,6 @@ class FlexibleConvWeight(ConvWeight):
         self._clamp_min = clamp_min
         self._clamp_max = clamp_max
 
-class ConvResistive(QFunction):
-    """Convolutional resistive interaction mirroring DenseResistive logic in conv form."""
-
-    def __init__(self, layer_pre, layer_post, conv_weight, padding, stride, dilation, voltage_amp, current_amp):
-        self._layer_pre = layer_pre
-        self._layer_post = layer_post
-        self._weight = conv_weight
-        QFunction.__init__(self, [layer_pre, layer_post], [conv_weight])
-        self._P = padding
-        self._S = stride
-        self._D = dilation
-        self._voltage_amp = voltage_amp
-        self._current_amp = current_amp
-
-    def _conv_geometry(self):
-        weight = self._weight.get()
-        C_out, C_in, Kh, Kw = weight.shape
-        x = self._layer_pre.state
-        _, _, H_in, W_in = x.shape
-
-        H_out = (H_in + 2 * self._P - self._D * (Kh - 1) - 1) // self._S + 1
-        W_out = (W_in + 2 * self._P - self._D * (Kw - 1) - 1) // self._S + 1
-
-        return weight, C_out, C_in, Kh, Kw, H_in, W_in, H_out, W_out
-
-    def eval(self, per_sample=True):
-        weight, C_out, C_in, Kh, Kw, *_ = self._conv_geometry()
-
-        layer_pre = self._layer_pre.state.clone()
-        if self._layer_pre.name != 'Layer_0':
-            layer_pre = layer_pre * self._voltage_amp
-        layer_post = self._layer_post.state  # / self._layer_post.gain
-        layer_post_scaled = layer_post * self._current_amp
-
-
-        cols = F.unfold(layer_pre, (Kh, Kw), padding=self._P, stride=self._S, dilation=self._D)
-        N, C_out, H_out, W_out = layer_post_scaled.shape
-        K = C_in * Kh * Kw
-        L = H_out * W_out
-
-        patches = cols.transpose(1, 2).unsqueeze(2)
-        kernels = weight.view(1, 1, C_out, K)
-        targets = layer_post_scaled.view(N, C_out, L).transpose(1, 2).unsqueeze(-1)
-
-        diff2 = (patches - targets).pow(2)
-        weighted = diff2 * kernels
-        E_per = 0.5 * weighted.sum(dim=(1, 2, 3))
-        return E_per if per_sample else E_per.sum()
-
-    def im2col(self):
-        x = self._layer_pre.state
-        N = x.shape[0]
-        weight, C_out, _, Kh, Kw, _, _, H_out, W_out = self._conv_geometry()
-
-        cols = F.unfold(x, (Kh, Kw), padding=self._P, stride=self._S, dilation=self._D)
-        Wflat = weight.view(C_out, -1)
-        y = torch.matmul(cols.transpose(1, 2), Wflat.t())
-        y = y.transpose(1, 2).reshape(N, C_out, H_out, W_out)
-        return y
-
-    def col2im(self):
-        weight, C_out, C_in, Kh, Kw, H_in, W_in, H_out, W_out = self._conv_geometry()
-        y = self._layer_post.state
-        N = y.shape[0]
-
-        L = H_out * W_out
-        y_cols = y.reshape(N, C_out, L)
-        Wflat = weight.view(C_out, -1)
-        cols_pre = torch.matmul(Wflat.t().unsqueeze(0), y_cols)
-
-        x_pre = F.fold(
-            cols_pre,
-            output_size=(H_in, W_in),
-            kernel_size=(Kh, Kw),
-            padding=self._P,
-            stride=self._S,
-            dilation=self._D,
-        )
-        return x_pre
-
-    def a_im2col(self):
-        weight, C_out, C_in, Kh, Kw, _, _, H_out, W_out = self._conv_geometry()
-        a_per_ch = weight.view(C_out, -1).sum(dim=1).view(1, C_out, 1, 1)
-        return a_per_ch.expand(1, C_out, H_out, W_out)
-
-    def a_col2im(self):
-        weight, C_out, C_in, Kh, Kw, H_in, W_in, H_out, W_out = self._conv_geometry()
-        y = self._layer_post.state
-        y_ones = torch.ones_like(y)
-        N = y_ones.shape[0]
-
-        L = H_out * W_out
-        y_cols = y_ones.reshape(N, C_out, L)
-        Wflat = weight.view(C_out, -1)
-        cols_pre = torch.matmul(Wflat.t().unsqueeze(0), y_cols)
-        x_pre = F.fold(
-            cols_pre,
-            output_size=(H_in, W_in),
-            kernel_size=(Kh, Kw),
-            padding=self._P,
-            stride=self._S,
-            dilation=self._D,
-        )
-        return x_pre
-
-    def a_coef_fn(self, layer):
-        dictionary = {
-            self._layer_pre: self._a_coef_layer_pre,
-            self._layer_post: self._a_coef_layer_post,
-        }
-        return dictionary[layer]
-
-    def b_coef_fn(self, layer):
-        dictionary = {
-            self._layer_pre: self._b_coef_layer_pre,
-            self._layer_post: self._b_coef_layer_post,
-        }
-        return dictionary[layer]
-
-    def _b_coef_layer_pre(self):
-        b_coef = -self.col2im()
-        b_coef = b_coef * self._current_amp
-        return b_coef
-
-    def _b_coef_layer_post(self):
-        b_coef = -self.im2col()
-        if self._layer_post.name != 'Layer_1':
-            b_coef = b_coef * self._voltage_amp
-        return b_coef
-
-    def _a_coef_layer_pre(self):
-        a_map = self.a_col2im()
-        a_coef = a_map * self._voltage_amp * self._current_amp
-        return 0.5 * a_coef
-
-    def _a_coef_layer_post(self):
-        a_map = self.a_im2col()
-        return 0.5 * a_map
-
-    def _grad_weight(self):
-        weight, C_out, C_in, Kh, Kw, *_ = self._conv_geometry()
-        x = self._layer_pre.state
-        if self._layer_pre.name != 'Layer_0':
-            x = x * self._voltage_amp
-        y = self._layer_post.state.clone()
-        y_rescaled = y * self._current_amp
-
-        cols = F.unfold(x, (Kh, Kw), padding=self._P, stride=self._S, dilation=self._D)
-        N, C_out, H_out, W_out = y.shape
-        K = C_in * Kh * Kw
-        L = H_out * W_out
-
-        patches = cols.transpose(1, 2).unsqueeze(2)
-        targets = y_rescaled.reshape(N, C_out, L).transpose(1, 2).unsqueeze(-1)
-        diff2 = (patches - targets).pow(2)
-        grad_weight = 0.5 * diff2.sum(dim=1).mean(dim=0)
-
-        layer_pre_index = int(self._layer_pre._name[-1])
-        amp = (self._current_amp / self._voltage_amp) ** layer_pre_index
-        return grad_weight.view(C_out, C_in, Kh, Kw) * amp
-
-    def grad_param_fn(self, param):
-        dictionary = {self._weight: self._grad_weight}
-        return dictionary[param]
+class ConvResistive(CoreConvResistive):
+    """Compatibility name for the shared amplified convolution equations."""
     

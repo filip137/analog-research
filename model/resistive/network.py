@@ -7,7 +7,7 @@ from torch.nn import Hardsigmoid
 
 from model.function.interaction import HardSigmoidNonLinearInteraction, SumSeparableFunction
 from model.resistive.layer import PoolLayer, ResistiveInputLayer, NonlinearResistiveLayer, ConvLayer
-from model.variable.layer import LinearLayer
+from model.variable.layer import LinearLayer, layer_index
 from model.variable.parameter import Bias, DenseWeight, ConvWeight, PoolWeight
 # from model.resistive.parameter import TiedDenseWeight as DenseWeight
 from model.function.interaction import BiasInteraction
@@ -308,8 +308,9 @@ class DeepResistiveEnergy(SumSeparableFunction):
         ]  # hidden layers
         output_layer = LinearLayer(output_shape, device=None)  # output layer
         layers = [input_layer] + convpool_layers + hidden_layers + [output_layer]
-
-
+        if not self._legacy_process_index_amplification:
+            for index, layer in enumerate(layers):
+                layer._logical_index = index
 
         ### CONV / POOLING PARAMETERS
         conv_specs = []
@@ -653,16 +654,17 @@ class DeepResistiveEnergy(SumSeparableFunction):
     def layer_energy_scale(self, layer):
         """Return the energy-gradient metric multiplying physical KCL."""
 
-        if not self._differential_dense_edges:
+        # Passive parallel adapters do not have a single chain-depth metric.
+        if not hasattr(self, "_logical_layer_indices"):
             return 1.0
         logical_index = self._logical_layer_indices.get(layer)
         if logical_index is None:
             raise ValueError(
-                "Expected layer to belong to this differential resistive "
+                "Expected layer to belong to this resistive "
                 f"energy. Provided value: {layer!r}."
             )
         return self._layer_energy_scale_at(
-            logical_index,
+            layer_index(layer),
             dtype=layer.state.dtype,
         )
 

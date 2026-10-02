@@ -5,7 +5,10 @@ from model.variable.variable import Variable
 
 
 def layer_index(layer):
-    """Return the integer suffix from standard layer names like ``Layer_3``."""
+    """Return circuit depth, falling back to the index in ``Layer_<int>``."""
+    logical_index = getattr(layer, "_logical_index", None)
+    if logical_index is not None:
+        return int(logical_index)
     name = getattr(layer, "name", getattr(layer, "_name", None))
     try:
         prefix, index = str(name).rsplit("_", 1)
