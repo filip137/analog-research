@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-
 import torch
 
 from training.ibm_om.programming.base import (
+    ProgramRequest,
     ProgrammingContext,
     ProgrammingResult,
-    ProgramRequest,
 )
 
 

@@ -1678,6 +1678,7 @@ def run_decomposition(
     from experiments.mnist_shared import build_mnist_loaders
     from experiments.schema import RunMode, to_plain_data
     from training.checkpoint import load_named_weights
+    from training.ibm_om.spec import backfill_weight_modifier_metadata
 
     config_path = _require_file(config_path, label="--config")
     deployment_config_path = (
@@ -1782,8 +1783,11 @@ def run_decomposition(
         ),
     }
     if (
-        loaded.metadata.get("weight_modifier") != expected_weight_modifier
-        or loaded.metadata.get("selection_weight_modifier")
+        backfill_weight_modifier_metadata(loaded.metadata.get("weight_modifier"))
+        != expected_weight_modifier
+        or backfill_weight_modifier_metadata(
+            loaded.metadata.get("selection_weight_modifier")
+        )
         != expected_selection_modifier
     ):
         raise ValueError(

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 
-_STATE_VERSION = 2
+_STATE_VERSION = 3
+# Version 2 states predate the explicit layer fields and are back-filled.
+_LOADABLE_STATE_VERSIONS = (2, 3)
 _EXECUTIONS = ("mapped_target", "compact_endpoint", "pulse_resolved")
 _CORRUPTION_POLICIES = ("counterfactual_repaired", "published")
 _TARGET_MAPPINGS = (

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 import torch
 
 from training.ibm_om.constants import (
@@ -13,15 +12,14 @@ from training.ibm_om.constants import (
     IBM_OM_RAW_ACTIVE_CONDITIONING_QUIET_STEPS,
     IBM_OM_RAW_ACTIVE_COORDINATE_VERSION,
     IBM_OM_RAW_ACTIVE_SCALE,
-    IBM_OM_RAW_ACTIVE_TOLERANCE,
     IBM_RERAM_ENDPOINT_APPLICATION_POLICY,
 )
-from training.ibm_om.coordinates import LOGICAL, RAW_ACTIVE, RAW_ACTIVE_V1
+from training.ibm_om.coordinates import LOGICAL, RAW_ACTIVE
 from training.ibm_om.population import _tensor_summary
 from training.ibm_om.programming.base import (
+    ProgramRequest,
     ProgrammingContext,
     ProgrammingResult,
-    ProgramRequest,
     _result_mapping,
 )
 from training.ibm_om.programming.controller import (
@@ -39,7 +37,7 @@ def program_pulse_resolved(
 ) -> ProgrammingResult:
     """Program every cell from its RESET start with the declared controller."""
 
-    if context.coordinate.name == RAW_ACTIVE_V1:
+    if context.initial_state == "conditioned_lower_boundary":
         return _program_raw_active(request, context, generator=generator)
     return _program_logical(request, context, generator=generator)
 
@@ -59,6 +57,7 @@ def _program_raw_active(
             generator=generator,
             program_mask=request.program_mask,
             maximum_program_pulses=context.maximum_program_pulses,
+            verify_tolerance=context.verify_tolerance_absolute,
         )
     )
     lower = masks["lower"]
@@ -76,12 +75,12 @@ def _program_raw_active(
     below = targets < lower
     above = targets > upper
     acceptance_window_intersects_exact_support = (
-        (targets + IBM_OM_RAW_ACTIVE_TOLERANCE >= lower)
-        & (targets - IBM_OM_RAW_ACTIVE_TOLERANCE <= upper)
+        (targets + context.verify_tolerance_absolute >= lower)
+        & (targets - context.verify_tolerance_absolute <= upper)
     )
     persistent_within_tolerance = (
         torch.abs(persistent_endpoint - targets)
-        <= IBM_OM_RAW_ACTIVE_TOLERANCE
+        <= context.verify_tolerance_absolute
     )
     accepted_persistent_within_tolerance = (
         result.accepted & persistent_within_tolerance
@@ -129,7 +128,7 @@ def _program_raw_active(
         "coordinate_a_min": IBM_OM_RAW_ACTIVE_A_MIN,
         "coordinate_a_max": IBM_OM_RAW_ACTIVE_A_MAX,
         "coordinate_scale": IBM_OM_RAW_ACTIVE_SCALE,
-        "tolerance": IBM_OM_RAW_ACTIVE_TOLERANCE,
+        "tolerance": context.verify_tolerance_absolute,
         "corrupt": int(population.corrupt.sum().item()),
         "published_corrupt": int(
             population.published_corrupt.sum().item()

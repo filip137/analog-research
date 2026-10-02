@@ -266,3 +266,32 @@ def commission_ibm_reram_reset_relative_baselines(
         baseline=baseline,
         report=report,
     )
+
+
+def characterize(
+    kind: str,
+    population: IbmReramArrayPopulation,
+    *,
+    dual_rail_layout_by_parameter: (
+        Mapping[str, str] | Sequence[Sequence[str]] | None
+    ),
+    read_samples: int | None,
+    guard_standard_errors: float | None,
+) -> IbmReramResetCommissioning | None:
+    """Run the characterization stage named by the config, if any."""
+
+    if kind == "none":
+        return None
+    if kind != "reset_reads":
+        raise ValueError(
+            "Expected characterization to be 'none' or 'reset_reads'. "
+            f"Provided value: {kind!r}."
+        )
+    assert read_samples is not None
+    assert guard_standard_errors is not None
+    return commission_ibm_reram_reset_relative_baselines(
+        population,
+        dual_rail_layout_by_parameter=dual_rail_layout_by_parameter or (),
+        read_samples=read_samples,
+        guard_standard_errors=guard_standard_errors,
+    )

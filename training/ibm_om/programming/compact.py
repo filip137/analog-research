@@ -16,9 +16,9 @@ from training.ibm_om.coordinates import LOGICAL
 from training.ibm_om.plants import _ArrayPlant
 from training.ibm_om.population import _selected_array_population
 from training.ibm_om.programming.base import (
+    ProgramRequest,
     ProgrammingContext,
     ProgrammingResult,
-    ProgramRequest,
     _result_mapping,
 )
 from training.ibm_om.programming.controller import run_exact_programming

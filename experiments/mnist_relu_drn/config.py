@@ -26,6 +26,7 @@ from model.resistive.device_config import (
     device_programming_to_mapping,
     parse_device_programming_config,
 )
+from training.ibm_om.spec import EXPLICIT_LAYER_FIELDS, legacy_explicit_defaults
 
 
 EXPERIMENT_ID = "mnist_relu_drn_kd.v1"
@@ -619,6 +620,40 @@ def _parse_measured(
     return freeze_json(normalized, path=path)
 
 
+def _normalize_explicit_layer_fields(
+    parameters: dict[str, Any],
+    *,
+    target_mapping: str,
+    path: str,
+) -> None:
+    """Declare the coordinate, start, tolerance, clamp and characterization.
+
+    Absent fields take the value ``target_mapping`` supports; declared
+    fields must equal it, because no other combination is implemented.
+    """
+
+    supported = legacy_explicit_defaults(target_mapping)
+    for name in EXPLICIT_LAYER_FIELDS:
+        value = parameters.get(name)
+        if value is None:
+            value = supported[name]
+        elif name == "clamp_to_parameter_bounds":
+            if not isinstance(value, bool):
+                raise config_error(f"{path}.{name}", "to be a boolean", value)
+        elif name == "verify_tolerance_absolute":
+            value = _number(value, f"{path}.{name}")
+        elif not isinstance(value, str):
+            raise config_error(f"{path}.{name}", "to be a string", value)
+        if value != supported[name]:
+            raise config_error(
+                f"{path}.{name}",
+                f"to equal {supported[name]!r} for target_mapping "
+                f"{target_mapping!r}",
+                value,
+            )
+        parameters[name] = value
+
+
 def _parse_weight_modifier(value: Any, path: str) -> UpdateBackendSettings:
     raw = _object(value, path)
     _keys(raw, path, {"type", "parameters"})
@@ -667,7 +702,8 @@ def _parse_weight_modifier(value: Any, path: str) -> UpdateBackendSettings:
             mapping_fields
             | reset_relative_fields
             | raw_active_fields
-            | {"forward_logit_gain"},
+            | {"forward_logit_gain"}
+            | set(EXPLICIT_LAYER_FIELDS),
         )
         provided_mapping_fields = mapping_fields & set(parameters)
         if provided_mapping_fields and provided_mapping_fields != mapping_fields:
@@ -940,6 +976,11 @@ def _parse_weight_modifier(value: Any, path: str) -> UpdateBackendSettings:
                 "to be a boolean",
                 normalized_parameters["noisy_evaluation"],
             )
+        _normalize_explicit_layer_fields(
+            normalized_parameters,
+            target_mapping=target_mapping,
+            path=parameters_path,
+        )
         return UpdateBackendSettings(
             type=modifier_type,
             parameters=freeze_json(

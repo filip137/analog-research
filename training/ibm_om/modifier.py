@@ -22,16 +22,18 @@ from experiments.artifacts import sha256_file
 from model.resistive.builders import ParameterBinding
 from training.ibm_om.characterization import (
     IbmReramResetCommissioning,
-    commission_ibm_reram_reset_relative_baselines,
+    characterize,
 )
 from training.ibm_om.constants import (
+    IBM_RERAM_ENDPOINT_APPLICATION_POLICY,
     _EVALUATION_STREAM_XOR,
+    _LOADABLE_STATE_VERSIONS,
     _STATE_VERSION,
     _STREAMS,
-    IBM_RERAM_ENDPOINT_APPLICATION_POLICY,
 )
-from training.ibm_om.coordinates import LOGICAL, RAW_ACTIVE
+from training.ibm_om.coordinates import RAW_ACTIVE_V1, coordinate_for
 from training.ibm_om.mappings import (
+    MAPPINGS,
     map_ibm_reram_array_targets,
     run_mapping,
     validate_ibm_reram_target_mapping_preflight,
@@ -39,7 +41,7 @@ from training.ibm_om.mappings import (
 from training.ibm_om.mappings.base import MappingResult
 from training.ibm_om.population import IbmReramArrayPopulation
 from training.ibm_om.programming import PROGRAMMERS
-from training.ibm_om.programming.base import ProgrammingContext, ProgramRequest
+from training.ibm_om.programming.base import ProgramRequest, ProgrammingContext
 from training.ibm_om.readback import (
     fractions_from_bindings,
     restore,
@@ -50,11 +52,7 @@ from training.ibm_om.sampling import (
     sample_om_array_population,
     sample_om_array_population_external,
 )
-from training.ibm_om.spec import IbmReramHwaConfig
-from training.ibm_om.topology import (
-    _canonical_differential_pair_layout,
-    _validate_differential_pair_bindings,
-)
+from training.ibm_om.spec import IbmReramHwaConfig, backfill_config_dict
 
 
 class IbmReramHwaParameterModifier:
@@ -79,25 +77,20 @@ class IbmReramHwaParameterModifier:
         ) or not conductance_min < conductance_max:
             raise ValueError("Expected finite increasing DRN conductance bounds.")
         self._config = config
-        # Legacy derivations, replaced by declared config fields later: the
-        # raw-active mapping implies the raw-active coordinate, and the
-        # corruption policy selects the calibrated programming branch.
-        self._coordinate = (
-            RAW_ACTIVE
-            if config.target_mapping == "raw_active_p90_quad"
-            else LOGICAL
-        )
+        # Every layer is selected from the declared config.
+        self._mapping = MAPPINGS[config.target_mapping]
+        self._coordinate = coordinate_for(config.device_coordinate)
+        self._clamp_to_parameter_bounds = config.clamp_to_parameter_bounds
+        # The controller and compact endpoint model were calibrated separately
+        # for repaired and published-corruption populations.
         self._calibration_branch = (
             "continuous"
             if config.corruption_policy == "counterfactual_repaired"
             else "published_corruption"
         )
-        self._clamp_to_parameter_bounds = (
-            config.target_mapping != "raw_active_p90_quad"
-        )
         self._conductance_min = float(conductance_min)
         self._conductance_max = float(conductance_max)
-        if config.target_mapping == "raw_active_p90_quad" and (
+        if config.device_coordinate == RAW_ACTIVE_V1 and (
             self._conductance_min != 0.0 or self._conductance_max != 1.0
         ):
             raise ValueError(
@@ -105,11 +98,7 @@ class IbmReramHwaParameterModifier:
                 "directly as model conductance bounds [0, 1], without a "
                 "second affine rescaling."
             )
-        differential_binding_pairs = ()
-        if config.target_mapping == "differential_pair_common_window":
-            differential_binding_pairs = _validate_differential_pair_bindings(
-                self._bindings
-            )
+        binding_state = self._mapping.validate_bindings(self._bindings)
         self._artifact, self._artifact_sha256 = _artifact(device_model_path)
         if (population_path is None) != (population_receipt_path is None):
             raise ValueError(
@@ -145,18 +134,11 @@ class IbmReramHwaParameterModifier:
                 population_path.expanduser().resolve(),
                 population_receipt_path.expanduser().resolve(),
             )
-        if config.target_mapping == "differential_pair_common_window":
-            population_pairs = _canonical_differential_pair_layout(
-                self._population.binding_keys,
-                self._population.binding_shapes,
-            )
-            if population_pairs != differential_binding_pairs:
-                raise ValueError(
-                    "Expected the fixed IBM OM population to preserve the "
-                    "canonical differential-pair binding keys and shapes. "
-                    f"Provided population={population_pairs!r}, "
-                    f"bindings={differential_binding_pairs!r}."
-                )
+        self._mapping.validate_population(
+            self._population,
+            layouts=config.dual_rail_layout_by_parameter,
+            binding_state=binding_state,
+        )
         self._population_cache: dict[str, IbmReramArrayPopulation] = {
             "cpu": self._population
         }
@@ -172,52 +154,18 @@ class IbmReramHwaParameterModifier:
                 f"sampling. Provided value: model={model_step}, "
                 f"sampled={self._population.nominal_dw_min}."
             )
-        if config.target_mapping in {
-            "dual_rail_quad_common_window",
-            "shared_reset_relative_quad",
-            "raw_active_p90_quad",
-        }:
-            expected_layout_keys = set(self._population.binding_keys)
-            provided_layout_keys = set(
-                dict(config.dual_rail_layout_by_parameter or ())
-            )
-            if provided_layout_keys != expected_layout_keys:
-                raise ValueError(
-                    "Expected dual_rail_layout_by_parameter keys to equal the "
-                    "fixed IBM OM population binding keys. Provided value: "
-                    f"expected={sorted(expected_layout_keys)!r}, "
-                    f"provided={sorted(provided_layout_keys)!r}."
-                )
-            invalid_shapes = {
-                key: shape
-                for key, shape in zip(
-                    self._population.binding_keys,
-                    self._population.binding_shapes,
-                )
-                if len(shape) != 2 or shape[0] % 2 or shape[1] % 2
-            }
-            if invalid_shapes:
-                raise ValueError(
-                    "Expected four-cell dual-rail bindings to be even-by-even "
-                    f"rank-2 tensors. Provided value: {invalid_shapes!r}."
-                )
-        self._reset_commissioning: IbmReramResetCommissioning | None = None
         self._reset_commissioning_artifact_paths: tuple[Path, Path] | None = None
-        if config.target_mapping == "shared_reset_relative_quad":
-            assert config.reset_read_samples is not None
-            assert config.reset_guard_standard_errors is not None
-            self._reset_commissioning = (
-                commission_ibm_reram_reset_relative_baselines(
-                    self._population,
-                    dual_rail_layout_by_parameter=(
-                        config.dual_rail_layout_by_parameter or ()
-                    ),
-                    read_samples=config.reset_read_samples,
-                    guard_standard_errors=(
-                        config.reset_guard_standard_errors
-                    ),
-                )
+        self._reset_commissioning: IbmReramResetCommissioning | None = (
+            characterize(
+                config.characterization,
+                self._population,
+                dual_rail_layout_by_parameter=(
+                    config.dual_rail_layout_by_parameter
+                ),
+                read_samples=config.reset_read_samples,
+                guard_standard_errors=config.reset_guard_standard_errors,
             )
+        )
         self._generators: dict[str, dict[str, torch.Generator]] = {
             stream: {} for stream in _STREAMS
         }
@@ -350,6 +298,7 @@ class IbmReramHwaParameterModifier:
             raw_active_unsupported_quad_policy=(
                 self._config.raw_active_unsupported_quad_policy
             ),
+            device_coordinate=self._config.device_coordinate,
         )
         validate_ibm_reram_target_mapping_preflight(report)
         return mapped.detach().clone(), report
@@ -382,6 +331,7 @@ class IbmReramHwaParameterModifier:
             raw_active_unsupported_quad_policy=(
                 self._config.raw_active_unsupported_quad_policy
             ),
+            device_coordinate=self._config.device_coordinate,
         )
         return global_targets, layout, mapping
 
@@ -397,6 +347,8 @@ class IbmReramHwaParameterModifier:
             maximum_program_pulses=self._config.maximum_program_pulses,
             target_out_of_support=self._config.target_out_of_support,
             endpoint_policy=self._config.endpoint_policy,
+            initial_state=self._config.initial_state,
+            verify_tolerance_absolute=self._config.verify_tolerance_absolute,
         )
 
     def _write_endpoints(
@@ -561,6 +513,8 @@ class IbmReramHwaParameterModifier:
         saved_config = state_dict["config"]
         if isinstance(saved_config, Mapping):
             saved_config = dict(saved_config)
+            # Version-2 states predate the explicit layer fields.
+            saved_config = backfill_config_dict(saved_config)
             saved_config.setdefault("target_mapping", "literal_global")
             saved_config.setdefault("dual_rail_layout_by_parameter", None)
             saved_config.setdefault("common_window_margin_fraction", 0.0)
@@ -573,7 +527,7 @@ class IbmReramHwaParameterModifier:
                 "raw_active_unsupported_quad_policy", None
             )
             saved_config.setdefault("forward_logit_gain", None)
-        if state_dict["version"] != _STATE_VERSION or saved_config != asdict(
+        if state_dict["version"] not in _LOADABLE_STATE_VERSIONS or saved_config != asdict(
             self._config
         ):
             raise ValueError("Expected saved IBM OM HWA version and config to match.")

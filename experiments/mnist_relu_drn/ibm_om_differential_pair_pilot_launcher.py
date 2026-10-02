@@ -27,6 +27,7 @@ from experiments.artifacts import atomic_write_json, sha256_file
 from experiments.current_simulations import refresh_current_simulations_for_run
 from experiments.definitions import resolve_experiment_config
 from experiments.study_workflow import load_study_record
+from training.ibm_om.spec import backfill_config_dict
 
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -253,30 +254,38 @@ def _validate_input_file(
         )
 
 
+def _backfilled_parameters(value: Any) -> Any:
+    """Complete stored modifier parameters that predate the layer fields."""
+
+    return backfill_config_dict(value) if isinstance(value, Mapping) else value
+
+
 def _expected_modifier_parameters(*, execution: str) -> dict[str, Any]:
     if execution not in {"compact_endpoint", "pulse_resolved"}:
         raise ValueError(f"Unexpected execution {execution!r}.")
-    return {
-        "execution": execution,
-        "assignment_seed": ASSIGNMENT_SEED,
-        "endpoint_seed": (
-            TRAINING_ENDPOINT_SEED
-            if execution == "compact_endpoint"
-            else SELECTION_ENDPOINT_SEED
-        ),
-        "corruption_policy": CORRUPTION_POLICY,
-        "noisy_evaluation": execution == "pulse_resolved",
-        "endpoint_policy": "clip_0_1",
-        "target_out_of_support": "error",
-        "preset": "reram_array_om",
-        "controller": "adaptive",
-        "start_protocol": "lower_to_target",
-        "tolerance_step_ratio": 0.5,
-        "maximum_program_pulses": 128,
-        "target_mapping": TARGET_MAPPING,
-        "dual_rail_layout_by_parameter": None,
-        "common_window_margin_fraction": COMMON_WINDOW_MARGIN_FRACTION,
-    }
+    return backfill_config_dict(
+        {
+            "execution": execution,
+            "assignment_seed": ASSIGNMENT_SEED,
+            "endpoint_seed": (
+                TRAINING_ENDPOINT_SEED
+                if execution == "compact_endpoint"
+                else SELECTION_ENDPOINT_SEED
+            ),
+            "corruption_policy": CORRUPTION_POLICY,
+            "noisy_evaluation": execution == "pulse_resolved",
+            "endpoint_policy": "clip_0_1",
+            "target_out_of_support": "error",
+            "preset": "reram_array_om",
+            "controller": "adaptive",
+            "start_protocol": "lower_to_target",
+            "tolerance_step_ratio": 0.5,
+            "maximum_program_pulses": 128,
+            "target_mapping": TARGET_MAPPING,
+            "dual_rail_layout_by_parameter": None,
+            "common_window_margin_fraction": COMMON_WINDOW_MARGIN_FRACTION,
+        }
+    )
 
 
 def _validate_config_contracts() -> None:
@@ -1746,9 +1755,9 @@ def _validate_preflight_report(report: Mapping[str, Any]) -> tuple[str, str, str
         ):
             raise RuntimeError("Expected both exact prepared config hashes.")
     if (
-        report.get("selection_modifier_parameters")
+        _backfilled_parameters(report.get("selection_modifier_parameters"))
         != _expected_modifier_parameters(execution="pulse_resolved")
-        or report.get("training_modifier_parameters")
+        or _backfilled_parameters(report.get("training_modifier_parameters"))
         != _expected_modifier_parameters(execution="compact_endpoint")
         or report.get("endpoint_application_policy")
         != ENDPOINT_APPLICATION_POLICY

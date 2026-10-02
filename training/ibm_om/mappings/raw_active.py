@@ -8,29 +8,31 @@ from typing import Any
 
 import torch
 
+from model.resistive.builders import ParameterBinding
 from training.ibm_om.constants import (
-    _RAW_ACTIVE_MODES,
     IBM_OM_RAW_ACTIVE_A_MAX,
     IBM_OM_RAW_ACTIVE_A_MIN,
     IBM_OM_RAW_ACTIVE_COORDINATE_VERSION,
     IBM_OM_RAW_ACTIVE_D90,
     IBM_OM_RAW_ACTIVE_QUANTIZED_LEVELS,
     IBM_OM_RAW_ACTIVE_SCALE,
+    _RAW_ACTIVE_MODES,
 )
 from training.ibm_om.coordinates import RAW_ACTIVE
 from training.ibm_om.mappings.base import (
     MappingArguments,
     MappingInputs,
-    reject_out_of_support,
     _round_half_away_from_zero,
+    reject_out_of_support,
     validate_quad_layout,
+    validate_quad_population,
 )
-from training.ibm_om.programming.base import OutOfSupportContract
 from training.ibm_om.population import (
     IbmReramArrayPopulation,
     _tensor_sha256,
     _tensor_summary,
 )
+from training.ibm_om.programming.base import OutOfSupportContract
 from training.ibm_om.topology import _normalize_dual_rail_layouts, _quad_axes
 
 
@@ -528,3 +530,20 @@ def programming_contract(
         device=arguments.global_targets.device,
     )
     return structural, reject_out_of_support()
+
+
+def validate_bindings(bindings: Sequence[ParameterBinding]) -> Any:
+    """This mapping places no requirement on the DRN bindings."""
+
+    return None
+
+
+def validate_population(
+    population: IbmReramArrayPopulation,
+    *,
+    layouts: tuple[tuple[str, str], ...] | None,
+    binding_state: Any,
+) -> None:
+    """Every population tensor must be a declared even-by-even quad tensor."""
+
+    validate_quad_population(population, layouts)

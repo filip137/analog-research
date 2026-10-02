@@ -2,21 +2,25 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 import math
 from typing import Any
 
 import torch
 
+from model.resistive.builders import ParameterBinding
 from training.ibm_om.mappings.base import (
-    empty_group_fallback,
     MappingArguments,
     MappingInputs,
+    empty_group_fallback,
 )
+from training.ibm_om.population import IbmReramArrayPopulation, _tensor_summary
 from training.ibm_om.programming.base import OutOfSupportContract
-from training.ibm_om.population import _tensor_summary
-from training.ibm_om.topology import _canonical_differential_pair_layout
+from training.ibm_om.topology import (
+    _canonical_differential_pair_layout,
+    _validate_differential_pair_bindings,
+)
 
 
 NAME = "differential_pair_common_window"
@@ -395,3 +399,31 @@ def programming_contract(
             "compact_covered_exact_out_of_bound_empty_pair_fallback"
         ),
     )
+
+
+def validate_bindings(bindings: Sequence[ParameterBinding]) -> Any:
+    """Return the canonical adjacent G+/G- pairs of the DRN bindings."""
+
+    return _validate_differential_pair_bindings(bindings)
+
+
+def validate_population(
+    population: IbmReramArrayPopulation,
+    *,
+    layouts: tuple[tuple[str, str], ...] | None,
+    binding_state: Any,
+) -> None:
+    """The sampled population must preserve the bindings' pair catalog."""
+
+    differential_binding_pairs = binding_state
+    population_pairs = _canonical_differential_pair_layout(
+        population.binding_keys,
+        population.binding_shapes,
+    )
+    if population_pairs != differential_binding_pairs:
+        raise ValueError(
+            "Expected the fixed IBM OM population to preserve the "
+            "canonical differential-pair binding keys and shapes. "
+            f"Provided population={population_pairs!r}, "
+            f"bindings={differential_binding_pairs!r}."
+        )

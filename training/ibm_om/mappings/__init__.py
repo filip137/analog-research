@@ -18,6 +18,7 @@ from training.ibm_om.constants import (
     _MAX_EMPTY_COMMON_WINDOW_QUADS,
     _TARGET_MAPPINGS,
 )
+from training.ibm_om.coordinates import coordinate_for
 from training.ibm_om.mappings import (
     literal,
     pair_window,
@@ -31,6 +32,7 @@ from training.ibm_om.mappings.base import (
     prepare_inputs,
 )
 from training.ibm_om.population import IbmReramArrayPopulation
+from training.ibm_om.spec import legacy_explicit_defaults
 from training.ibm_om.topology import _normalize_dual_rail_layouts
 
 
@@ -54,6 +56,7 @@ def _validated_arguments(
     reset_relative_contrast_step: float | None = None,
     raw_active_mode: str | None = None,
     raw_active_unsupported_quad_policy: str | None = None,
+    device_coordinate: str | None = None,
 ) -> MappingArguments:
     """Run the shared and the mapping-specific argument checks."""
 
@@ -90,6 +93,17 @@ def _validated_arguments(
     differential_pairs: tuple[
         tuple[int, str, str, tuple[int, int]], ...
     ] = ()
+    supported_coordinate = legacy_explicit_defaults(target_mapping)[
+        "device_coordinate"
+    ]
+    if device_coordinate is None:
+        device_coordinate = supported_coordinate
+    if device_coordinate != supported_coordinate:
+        raise ValueError(
+            f"Expected target_mapping {target_mapping!r} to use device "
+            f"coordinate {supported_coordinate!r}. Provided value: "
+            f"{device_coordinate!r}."
+        )
     return MAPPINGS[target_mapping].validate_arguments(
         MappingArguments(
             global_targets=global_targets,
@@ -103,6 +117,7 @@ def _validated_arguments(
             raw_active_mode=raw_active_mode,
             raw_active_unsupported_quad_policy=raw_active_unsupported_quad_policy,
             differential_pairs=differential_pairs,
+            coordinate=coordinate_for(device_coordinate),
         )
     )
 
@@ -121,6 +136,7 @@ def map_ibm_reram_array_targets(
     reset_relative_contrast_step: float | None = None,
     raw_active_mode: str | None = None,
     raw_active_unsupported_quad_policy: str | None = None,
+    device_coordinate: str | None = None,
 ) -> tuple[torch.Tensor, dict[str, Any]]:
     """Map clean global fractions onto one fixed IBM OM array assignment.
 
@@ -142,6 +158,7 @@ def map_ibm_reram_array_targets(
         reset_relative_contrast_step=reset_relative_contrast_step,
         raw_active_mode=raw_active_mode,
         raw_active_unsupported_quad_policy=raw_active_unsupported_quad_policy,
+        device_coordinate=device_coordinate,
     )
     return MAPPINGS[arguments.target_mapping].map_targets(
         prepare_inputs(arguments)
@@ -185,6 +202,7 @@ def run_mapping(
     reset_relative_contrast_step: float | None = None,
     raw_active_mode: str | None = None,
     raw_active_unsupported_quad_policy: str | None = None,
+    device_coordinate: str | None = None,
 ) -> MappingResult:
     """Map, preflight and hand programming its request contract."""
 
@@ -199,6 +217,7 @@ def run_mapping(
         reset_relative_contrast_step=reset_relative_contrast_step,
         raw_active_mode=raw_active_mode,
         raw_active_unsupported_quad_policy=raw_active_unsupported_quad_policy,
+        device_coordinate=device_coordinate,
     )
     strategy = MAPPINGS[arguments.target_mapping]
     targets, report = strategy.map_targets(prepare_inputs(arguments))

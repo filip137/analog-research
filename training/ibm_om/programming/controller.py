@@ -7,7 +7,6 @@ from typing import Any
 
 import torch
 
-from training.ibm_om.constants import IBM_OM_RAW_ACTIVE_TOLERANCE
 from training.ibm_om.coordinates import RAW_ACTIVE
 from training.ibm_om.plants import _ArrayPlant, _RawActiveArrayPlant
 from training.ibm_om.population import IbmReramArrayPopulation
@@ -99,6 +98,7 @@ def run_raw_active_programming(
     generator: torch.Generator,
     program_mask: torch.Tensor,
     maximum_program_pulses: int,
+    verify_tolerance: float,
 ) -> tuple[
     ProgramVerifyResult,
     _RawActiveArrayPlant,
@@ -141,7 +141,7 @@ def run_raw_active_programming(
     result = run_program_verify(
         plant.controller_port(),
         targets=targets,
-        tolerance=IBM_OM_RAW_ACTIVE_TOLERANCE,
+        tolerance=verify_tolerance,
         maximum_pulses=maximum_program_pulses,
         settings=ControllerSettings(kind="one_pulse"),
         estimator=None,

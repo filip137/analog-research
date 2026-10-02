@@ -48,6 +48,7 @@ from training.measured_trace import (
     MeasuredCohortBOptimizer,
     MeasuredTraceOptimizer,
 )
+from training.ibm_om.spec import backfill_weight_modifier_metadata
 from training.ibm_reram_hwa import (
     IbmReramHwaConfig,
     IbmReramHwaParameterModifier,
@@ -860,6 +861,14 @@ def _validate_resume_backend_metadata(
                 ),
             }
         )
+    provided = {
+        name: (
+            backfill_weight_modifier_metadata(value)
+            if name in {"weight_modifier", "selection_weight_modifier"}
+            else value
+        )
+        for name, value in provided.items()
+    }
     mismatches = {
         name: {"expected": value, "provided": provided.get(name)}
         for name, value in expected.items()

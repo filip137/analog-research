@@ -9,7 +9,7 @@ from typing import Any
 import torch
 
 from training.ibm_om.characterization import IbmReramResetCommissioning
-from training.ibm_om.coordinates import LOGICAL, RAW_ACTIVE, DeviceCoordinate
+from training.ibm_om.coordinates import DeviceCoordinate
 from training.ibm_om.population import IbmReramArrayPopulation
 from training.ibm_om.programming.base import OutOfSupportContract
 
@@ -29,6 +29,7 @@ class MappingArguments:
     raw_active_mode: str | None
     raw_active_unsupported_quad_policy: str | None
     differential_pairs: tuple[tuple[int, str, str, tuple[int, int]], ...]
+    coordinate: DeviceCoordinate
 
 
 @dataclass(frozen=True)
@@ -37,7 +38,6 @@ class MappingInputs(MappingArguments):
 
     device: torch.device
     dtype: torch.dtype
-    coordinate: DeviceCoordinate
     lower: torch.Tensor
     upper: torch.Tensor
     corrupt: torch.Tensor
@@ -164,9 +164,7 @@ def prepare_inputs(arguments: MappingArguments) -> MappingInputs:
     margin = arguments.margin
     device = global_targets.device
     dtype = global_targets.dtype
-    coordinate = (
-        RAW_ACTIVE if target_mapping == "raw_active_p90_quad" else LOGICAL
-    )
+    coordinate = arguments.coordinate
     lower, upper = coordinate.cell_bounds(population, device=device, dtype=dtype)
     corrupt = population.corrupt.to(device=device)
     published_corrupt = population.published_corrupt.to(device=device)
@@ -212,7 +210,7 @@ def prepare_inputs(arguments: MappingArguments) -> MappingInputs:
         differential_pairs=arguments.differential_pairs,
         device=device,
         dtype=dtype,
-        coordinate=coordinate,
+        coordinate=arguments.coordinate,
         lower=lower,
         upper=upper,
         corrupt=corrupt,
@@ -222,3 +220,35 @@ def prepare_inputs(arguments: MappingArguments) -> MappingInputs:
         global_support=global_support,
         report=report,
     )
+
+
+def validate_quad_population(
+    population: IbmReramArrayPopulation,
+    layouts: tuple[tuple[str, str], ...] | None,
+) -> None:
+    """Modifier-time checks shared by the three four-cell quad mappings."""
+
+    expected_layout_keys = set(population.binding_keys)
+    provided_layout_keys = set(
+        dict(layouts or ())
+    )
+    if provided_layout_keys != expected_layout_keys:
+        raise ValueError(
+            "Expected dual_rail_layout_by_parameter keys to equal the "
+            "fixed IBM OM population binding keys. Provided value: "
+            f"expected={sorted(expected_layout_keys)!r}, "
+            f"provided={sorted(provided_layout_keys)!r}."
+        )
+    invalid_shapes = {
+        key: shape
+        for key, shape in zip(
+            population.binding_keys,
+            population.binding_shapes,
+        )
+        if len(shape) != 2 or shape[0] % 2 or shape[1] % 2
+    }
+    if invalid_shapes:
+        raise ValueError(
+            "Expected four-cell dual-rail bindings to be even-by-even "
+            f"rank-2 tensors. Provided value: {invalid_shapes!r}."
+        )

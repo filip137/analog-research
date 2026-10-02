@@ -51,10 +51,39 @@ SOURCE_HASH_KEYS = frozenset(
     {"sampler_source_sha256", "population_implementation_sha256"}
 )
 
-# Explicit, stored config fields introduced by the layering refactor.  Empty
-# until those fields exist; then a config-like dict on either side is compared
-# without them and their values are asserted separately.
-NEW_CONFIG_KEYS: tuple[str, ...] = ()
+# Explicit, stored config fields introduced by the layering refactor.  A
+# config-like dict on either side is compared without them; where present
+# their values must equal what the dict's target_mapping implies.
+NEW_CONFIG_KEYS: tuple[str, ...] = (
+    "device_coordinate",
+    "initial_state",
+    "verify_tolerance_absolute",
+    "clamp_to_parameter_bounds",
+    "characterization",
+)
+
+# Modifier checkpoint states moved from version 2 to 3 when the stored config
+# gained the explicit layer fields.
+STATE_VERSION_UPGRADES = {2: 3}
+
+
+def _assert_explicit_fields(value: dict, path: str) -> None:
+    from training.ibm_om.spec import legacy_explicit_defaults
+
+    mapping = value.get("target_mapping")
+    try:
+        expected = legacy_explicit_defaults(str(mapping))
+    except Exception:  # noqa: BLE001 - invalid mappings carry no defaults
+        return
+    for key in NEW_CONFIG_KEYS:
+        if key in value:
+            assert value[key] == expected[key], (
+                f"{path}.{key}: {value[key]!r} != implied {expected[key]!r}"
+            )
+
+
+def _modifier_state_like(value: dict) -> bool:
+    return {"version", "endpoint_application_policy", "generator_states"} <= set(value)
 
 OM_NOMINAL_DW_MIN = 0.0949
 OM_DW_MIN_STD = 0.3
@@ -1251,6 +1280,7 @@ def assert_same(expected: Any, actual: Any, path: str = "root") -> None:
         right_keys = set(actual) - SOURCE_HASH_KEYS
         if NEW_CONFIG_KEYS and _config_like(actual):
             right_keys -= set(NEW_CONFIG_KEYS)
+            _assert_explicit_fields(actual, path)
         if NEW_CONFIG_KEYS and _config_like(expected):
             left_keys -= set(NEW_CONFIG_KEYS)
         assert left_keys == right_keys, (
@@ -1258,8 +1288,13 @@ def assert_same(expected: Any, actual: Any, path: str = "root") -> None:
             f"extra={sorted(map(str, right_keys - left_keys))}"
         )
         for key in expected:
-            if key in left_keys:
-                assert_same(expected[key], actual[key], f"{path}.{key}")
+            if key not in left_keys:
+                continue
+            if key == "version" and _modifier_state_like(expected):
+                upgraded = STATE_VERSION_UPGRADES.get(expected[key], expected[key])
+                assert actual[key] == upgraded, f"{path}.version: {actual[key]!r} != {upgraded!r}"
+                continue
+            assert_same(expected[key], actual[key], f"{path}.{key}")
         return
     if isinstance(expected, (list, tuple)):
         assert len(expected) == len(actual), f"{path}: length {len(expected)} != {len(actual)}"

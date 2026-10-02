@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import torch
 
+from model.resistive.builders import ParameterBinding
 from training.ibm_om.mappings.base import (
     MappingArguments,
     MappingInputs,
     reject_out_of_support,
 )
+from training.ibm_om.population import IbmReramArrayPopulation
 from training.ibm_om.programming.base import OutOfSupportContract
 
 
@@ -82,3 +84,18 @@ def programming_contract(
     """Literal targets are programmed as-is; compact sampling fails closed."""
 
     return None, reject_out_of_support()
+
+
+def validate_bindings(bindings: Sequence[ParameterBinding]) -> Any:
+    """This mapping places no requirement on the DRN bindings."""
+
+    return None
+
+
+def validate_population(
+    population: IbmReramArrayPopulation,
+    *,
+    layouts: tuple[tuple[str, str], ...] | None,
+    binding_state: Any,
+) -> None:
+    """This mapping places no requirement on the population layout."""

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 import math
 from typing import Any
 
 import torch
 
+from model.resistive.builders import ParameterBinding
 from training.ibm_om.characterization import IbmReramResetCommissioning
 from training.ibm_om.constants import _RESET_RELATIVE_MODES
 from training.ibm_om.mappings.base import (
@@ -16,9 +17,10 @@ from training.ibm_om.mappings.base import (
     MappingInputs,
     _round_half_away_from_zero,
     validate_quad_layout,
+    validate_quad_population,
 )
+from training.ibm_om.population import IbmReramArrayPopulation, _tensor_summary
 from training.ibm_om.programming.base import OutOfSupportContract
-from training.ibm_om.population import _tensor_summary
 from training.ibm_om.topology import _quad_axes
 
 
@@ -432,3 +434,20 @@ def programming_contract(
             "compact_covered_exact_out_of_bound_reset_relative_fallback"
         ),
     )
+
+
+def validate_bindings(bindings: Sequence[ParameterBinding]) -> Any:
+    """This mapping places no requirement on the DRN bindings."""
+
+    return None
+
+
+def validate_population(
+    population: IbmReramArrayPopulation,
+    *,
+    layouts: tuple[tuple[str, str], ...] | None,
+    binding_state: Any,
+) -> None:
+    """Every population tensor must be a declared even-by-even quad tensor."""
+
+    validate_quad_population(population, layouts)

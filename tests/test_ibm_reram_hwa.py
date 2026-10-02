@@ -28,6 +28,7 @@ from training.ibm_reram_hwa import (
     save_om_array_population,
     validate_ibm_reram_target_mapping_preflight,
 )
+from training.ibm_om.spec import EXPLICIT_LAYER_FIELDS
 from training.ibm_reram_program_verify import (
     ControllerSettings,
     PopulationStepEstimator,
@@ -1114,7 +1115,7 @@ def test_compact_modifier_restores_clean_master_and_rng_exactly(
     )
     clean = binding.state.clone()
     snapshot = modifier.state_dict()
-    assert snapshot["version"] == 2
+    assert snapshot["version"] == 3
     assert (
         snapshot["endpoint_application_policy"]
         == IBM_RERAM_ENDPOINT_APPLICATION_POLICY
@@ -1133,6 +1134,20 @@ def test_compact_modifier_restores_clean_master_and_rng_exactly(
     wrong_policy["endpoint_application_policy"] = "persistent_forward"
     with pytest.raises(ValueError, match="endpoint application policy"):
         modifier.load_state_dict(wrong_policy)
+
+    # A version-2 checkpoint predates the explicit layer fields; it loads by
+    # back-filling them from target_mapping and replays bit-exactly.
+    legacy = dict(snapshot)
+    legacy["version"] = 2
+    legacy["config"] = {
+        key: value
+        for key, value in snapshot["config"].items()
+        if key not in EXPLICIT_LAYER_FIELDS
+    }
+    modifier.load_state_dict(legacy)
+    with modifier.training_context():
+        legacy_replay = binding.state.clone()
+    assert torch.equal(first, legacy_replay)
 
 
 def test_reset_relative_quantized_modifier_commissions_maps_and_restores(

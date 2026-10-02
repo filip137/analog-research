@@ -1,19 +1,82 @@
-"""IBM OM HWA configuration: the stored flat config and its validation."""
+"""IBM OM HWA configuration: the stored flat config and its validation.
+
+The flat ``IbmReramHwaConfig`` is the canonical stored form.  Besides the
+historical fields it declares the device coordinate, the programming start
+state and verify tolerance, the readback clamp and the characterization
+stage explicitly, so each layer is selected from the config rather than
+inferred from another layer.  Configs and artifacts written before these
+fields existed are completed with ``legacy_explicit_defaults``, the single
+place where the old inference from ``target_mapping`` survives.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 import math
+from typing import Any
 
 from training.ibm_om.constants import (
+    IBM_OM_RAW_ACTIVE_TOLERANCE,
     _CORRUPTION_POLICIES,
     _EXECUTIONS,
     _RAW_ACTIVE_MODES,
     _RESET_RELATIVE_MODES,
     _TARGET_MAPPINGS,
 )
+from training.ibm_om.coordinates import (
+    DEVICE_COORDINATES,
+    LOGICAL_REFERENCE_SUBTRACTED,
+    RAW_ACTIVE_V1,
+)
 from training.ibm_om.topology import _normalize_dual_rail_layouts
 from training.ibm_reram_program_verify import OM_PRESET
+
+
+INITIAL_STATES = ("exact_reset_bound", "conditioned_lower_boundary")
+CHARACTERIZATIONS = ("none", "reset_reads")
+EXPLICIT_LAYER_FIELDS = (
+    "device_coordinate",
+    "initial_state",
+    "verify_tolerance_absolute",
+    "clamp_to_parameter_bounds",
+    "characterization",
+)
+
+
+def legacy_explicit_defaults(target_mapping: str) -> dict[str, Any]:
+    """Return the layer settings that ``target_mapping`` used to imply."""
+
+    raw_active = target_mapping == "raw_active_p90_quad"
+    return {
+        "device_coordinate": (
+            RAW_ACTIVE_V1 if raw_active else LOGICAL_REFERENCE_SUBTRACTED
+        ),
+        "initial_state": (
+            "conditioned_lower_boundary" if raw_active else "exact_reset_bound"
+        ),
+        "verify_tolerance_absolute": (
+            IBM_OM_RAW_ACTIVE_TOLERANCE if raw_active else None
+        ),
+        "clamp_to_parameter_bounds": not raw_active,
+        "characterization": (
+            "reset_reads"
+            if target_mapping == "shared_reset_relative_quad"
+            else "none"
+        ),
+    }
+
+
+def backfill_config_dict(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Complete a stored flat config dict that predates the explicit fields."""
+
+    completed = dict(value)
+    defaults = legacy_explicit_defaults(
+        str(completed.get("target_mapping", "literal_global"))
+    )
+    for name in EXPLICIT_LAYER_FIELDS:
+        completed.setdefault(name, defaults[name])
+    return completed
 
 
 @dataclass(frozen=True)
@@ -42,6 +105,11 @@ class IbmReramHwaConfig:
     raw_active_mode: str | None = None
     raw_active_unsupported_quad_policy: str | None = None
     forward_logit_gain: float | None = None
+    device_coordinate: str | None = None
+    initial_state: str | None = None
+    verify_tolerance_absolute: float | None = None
+    clamp_to_parameter_bounds: bool | None = None
+    characterization: str | None = None
 
     def __post_init__(self) -> None:
         if self.execution not in _EXECUTIONS:
@@ -255,3 +323,79 @@ class IbmReramHwaConfig:
                 "dual_rail_layout_by_parameter and zero "
                 "common_window_margin_fraction."
             )
+        self._resolve_explicit_layer_fields()
+
+    def _resolve_explicit_layer_fields(self) -> None:
+        """Fill absent layer fields and keep the declared combination valid.
+
+        Only the combinations the code supports are accepted: each explicit
+        field must equal what ``target_mapping`` implies.
+        """
+
+        defaults = legacy_explicit_defaults(self.target_mapping)
+        for name in EXPLICIT_LAYER_FIELDS:
+            if getattr(self, name) is None and defaults[name] is not None:
+                object.__setattr__(self, name, defaults[name])
+        if self.device_coordinate not in DEVICE_COORDINATES:
+            raise ValueError(
+                "Expected device_coordinate to be one of "
+                f"{DEVICE_COORDINATES!r}. Provided value: "
+                f"{self.device_coordinate!r}."
+            )
+        if self.initial_state not in INITIAL_STATES:
+            raise ValueError(
+                f"Expected initial_state to be one of {INITIAL_STATES!r}. "
+                f"Provided value: {self.initial_state!r}."
+            )
+        tolerance = self.verify_tolerance_absolute
+        if tolerance is not None:
+            if (
+                isinstance(tolerance, bool)
+                or not isinstance(tolerance, (int, float))
+                or not math.isfinite(float(tolerance))
+                or float(tolerance) <= 0.0
+            ):
+                raise ValueError(
+                    "Expected verify_tolerance_absolute to be null or a "
+                    f"positive finite number. Provided value: {tolerance!r}."
+                )
+            object.__setattr__(self, "verify_tolerance_absolute", float(tolerance))
+        if not isinstance(self.clamp_to_parameter_bounds, bool):
+            raise ValueError(
+                "Expected clamp_to_parameter_bounds to be a boolean. Provided "
+                f"value: {self.clamp_to_parameter_bounds!r}."
+            )
+        if self.characterization not in CHARACTERIZATIONS:
+            raise ValueError(
+                f"Expected characterization to be one of {CHARACTERIZATIONS!r}. "
+                f"Provided value: {self.characterization!r}."
+            )
+        mismatches = {
+            name: {"declared": getattr(self, name), "supported": defaults[name]}
+            for name in EXPLICIT_LAYER_FIELDS
+            if getattr(self, name) != defaults[name]
+        }
+        if mismatches:
+            raise ValueError(
+                "Expected the declared device coordinate, programming start, "
+                "verify tolerance, readback clamp and characterization to be "
+                f"the supported combination for target_mapping "
+                f"{self.target_mapping!r}. Provided value: {mismatches!r}."
+            )
+
+
+def backfill_weight_modifier_metadata(value: Any) -> Any:
+    """Back-fill saved ``{"type", "parameters"}`` modifier provenance.
+
+    Checkpoint metadata written before the explicit layer fields existed
+    stores IBM OM parameters without them; completing them makes it compare
+    equal to the current normalized config.  Other values pass through.
+    """
+
+    if (
+        isinstance(value, Mapping)
+        and value.get("type") == "ibm_reram_om_program_verify"
+        and isinstance(value.get("parameters"), Mapping)
+    ):
+        return {**value, "parameters": backfill_config_dict(value["parameters"])}
+    return value

@@ -85,6 +85,8 @@ class ProgrammingContext:
     maximum_program_pulses: int
     target_out_of_support: str
     endpoint_policy: str
+    initial_state: str
+    verify_tolerance_absolute: float | None
 
 
 class ProgrammingResult(NamedTuple):
