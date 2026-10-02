@@ -26,7 +26,13 @@ from model.resistive.device_config import (
     device_programming_to_mapping,
     parse_device_programming_config,
 )
-from training.ibm_om.spec import EXPLICIT_LAYER_FIELDS, legacy_explicit_defaults
+from training.ibm_om.spec import (
+    EXPLICIT_LAYER_FIELDS,
+    NestedConfigError,
+    flatten_nested,
+    is_nested_config,
+    legacy_explicit_defaults,
+)
 
 
 EXPERIMENT_ID = "mnist_relu_drn_kd.v1"
@@ -666,6 +672,17 @@ def _parse_weight_modifier(value: Any, path: str) -> UpdateBackendSettings:
             parameters=_empty_object(parameters, parameters_path),
         )
     if modifier_type == "ibm_reram_om_program_verify":
+        if is_nested_config(parameters):
+            # Nested sections are an input format; everything downstream
+            # (metadata, checkpoints, bundles) sees the canonical flat dict.
+            try:
+                parameters = flatten_nested(parameters)
+            except NestedConfigError as error:
+                raise config_error(
+                    f"{parameters_path}.{error.location}",
+                    error.expectation,
+                    error.value,
+                ) from error
         required = {
             "execution",
             "assignment_seed",

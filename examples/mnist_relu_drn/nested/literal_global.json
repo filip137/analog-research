@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "experiment_id": "mnist_relu_drn_kd.v1",
+  "runtime": {
+    "seed": 17,
+    "data_seed": 17,
+    "device": "cuda",
+    "dtype": "float32"
+  },
+  "data": {
+    "batch_size": 16,
+    "validation_points": 5000,
+    "num_points": null,
+    "shuffle": true
+  },
+  "model": {
+    "dims": [
+      1568,
+      100,
+      20
+    ],
+    "input_gain": 100,
+    "conductance_min": 0.1020408197973068,
+    "conductance_max": 1,
+    "voltage_amp": 4,
+    "current_amp": 0.25,
+    "encoding": "single",
+    "include_biases": false,
+    "non_linearity": {
+      "type": "perfect_diode",
+      "quadratic_diode_param": {},
+      "exponential_diode_param": {},
+      "hard_sigmoid_param": {}
+    }
+  },
+  "solver": {
+    "inference_iterations": 4,
+    "training_iterations": 4,
+    "mode": "asynchronous",
+    "overrelaxation_factor": 1.1
+  },
+  "mapping": {
+    "scale_fractions": [
+      1
+    ],
+    "scale_fraction_pairs": null,
+    "range_placement": "lower",
+    "calibration_examples": 1024,
+    "calibration_batch_size": 128,
+    "logit_gain_min": 0.1,
+    "logit_gain_max": 10,
+    "logit_gain_steps": 81
+  },
+  "modes": {
+    "train": {
+      "num_epochs": 10,
+      "learning_rates": [
+        0.01735537190082645,
+        4.710743801652893e-05
+      ],
+      "temperature": 1,
+      "log_every": 1,
+      "max_batches": null,
+      "max_validation_batches": null,
+      "minimum_relative_kl_improvement": 0,
+      "weight_modifier": {
+        "type": "ibm_reram_om_program_verify",
+        "parameters": {
+          "assignment": {
+            "preset": "reram_array_om",
+            "assignment_seed": 83001,
+            "corruption_policy": "published"
+          },
+          "topology": {
+            "dual_rail_layout_by_parameter": null
+          },
+          "device_coordinate": "logical_reference_subtracted",
+          "characterization": {
+            "type": "none"
+          },
+          "mapping": {
+            "type": "literal_global",
+            "common_window_margin_fraction": 0.0
+          },
+          "programming": {
+            "execution": "compact_endpoint",
+            "controller": "adaptive",
+            "start_protocol": "lower_to_target",
+            "initial_state": "exact_reset_bound",
+            "tolerance_step_ratio": 0.5,
+            "verify_tolerance_absolute": null,
+            "maximum_program_pulses": 128,
+            "target_out_of_support": "error",
+            "endpoint_policy": "clip_0_1"
+          },
+          "readback": {
+            "clamp_to_parameter_bounds": true
+          },
+          "streams": {
+            "endpoint_seed": 83002,
+            "noisy_evaluation": false
+          }
+        }
+      },
+      "update_backend": {
+        "type": "ideal",
+        "parameters": {}
+      },
+      "selection_evaluation": "modifier",
+      "selection_noise_repeats": 1,
+      "selection_weight_modifier": {
+        "type": "ibm_reram_om_program_verify",
+        "parameters": {
+          "assignment": {
+            "preset": "reram_array_om",
+            "assignment_seed": 83003,
+            "corruption_policy": "published"
+          },
+          "topology": {
+            "dual_rail_layout_by_parameter": null
+          },
+          "device_coordinate": "logical_reference_subtracted",
+          "characterization": {
+            "type": "none"
+          },
+          "mapping": {
+            "type": "literal_global",
+            "common_window_margin_fraction": 0.0
+          },
+          "programming": {
+            "execution": "pulse_resolved",
+            "controller": "adaptive",
+            "start_protocol": "lower_to_target",
+            "initial_state": "exact_reset_bound",
+            "tolerance_step_ratio": 0.5,
+            "verify_tolerance_absolute": null,
+            "maximum_program_pulses": 128,
+            "target_out_of_support": "error",
+            "endpoint_policy": "clip_0_1"
+          },
+          "readback": {
+            "clamp_to_parameter_bounds": true
+          },
+          "streams": {
+            "endpoint_seed": 83003,
+            "noisy_evaluation": true
+          }
+        }
+      }
+    },
+    "validate": {
+      "split": "test",
+      "sample_limit": null
+    }
+  },
+  "teacher": {
+    "type": "bounded_drn",
+    "initialization": "literal_named_weight_copy",
+    "conductance_bounds": [
+      0.1020408197973068,
+      1
+    ]
+  }
+}

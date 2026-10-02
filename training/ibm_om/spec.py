@@ -399,3 +399,121 @@ def backfill_weight_modifier_metadata(value: Any) -> Any:
     ):
         return {**value, "parameters": backfill_config_dict(value["parameters"])}
     return value
+
+
+# Nested config sections (input format only).  Each section lists the flat
+# keys it holds; ``type`` keys are renamed.  Every section and key is
+# required except the mapping-specific ones, so a nested config declares
+# each layer's selection explicitly.
+NESTED_SECTIONS: dict[str, dict[str, Any]] = {
+    "assignment": {
+        "required": ("preset", "assignment_seed", "corruption_policy"),
+        "optional": (),
+    },
+    "topology": {
+        "required": ("dual_rail_layout_by_parameter",),
+        "optional": (),
+    },
+    "characterization": {
+        "required": ("type",),
+        "optional": ("reset_read_samples", "reset_guard_standard_errors"),
+        "type": "characterization",
+    },
+    "mapping": {
+        "required": ("type", "common_window_margin_fraction"),
+        "optional": (
+            "reset_relative_mode",
+            "reset_relative_contrast_step",
+            "raw_active_mode",
+            "raw_active_unsupported_quad_policy",
+        ),
+        "type": "target_mapping",
+    },
+    "programming": {
+        "required": (
+            "execution",
+            "controller",
+            "start_protocol",
+            "initial_state",
+            "tolerance_step_ratio",
+            "verify_tolerance_absolute",
+            "maximum_program_pulses",
+            "target_out_of_support",
+            "endpoint_policy",
+        ),
+        "optional": (),
+    },
+    "readback": {
+        "required": ("clamp_to_parameter_bounds",),
+        "optional": (),
+    },
+    "streams": {
+        "required": ("endpoint_seed", "noisy_evaluation"),
+        "optional": (),
+    },
+}
+NESTED_SCALARS = {"device_coordinate": True, "forward_logit_gain": False}
+
+
+class NestedConfigError(ValueError):
+    """A nested-config violation located at ``location`` below the root."""
+
+    def __init__(self, location: str, expectation: str, value: Any) -> None:
+        super().__init__(f"Expected {location} {expectation}. Provided value: {value!r}.")
+        self.location = location
+        self.expectation = expectation
+        self.value = value
+
+
+def is_nested_config(parameters: Mapping[str, Any]) -> bool:
+    """Return whether IBM OM modifier parameters use nested sections.
+
+    ``characterization`` is also a flat key (a string); only an object there
+    marks the nested form.  No other section name is a flat key.
+    """
+
+    return isinstance(parameters.get("characterization"), Mapping) or any(
+        name in parameters
+        for name in NESTED_SECTIONS
+        if name != "characterization"
+    )
+
+
+def flatten_nested(parameters: Mapping[str, Any]) -> dict[str, Any]:
+    """Flatten nested IBM OM parameters into the canonical flat config dict."""
+
+    allowed = set(NESTED_SECTIONS) | set(NESTED_SCALARS)
+    unknown = sorted(set(parameters) - allowed)
+    if unknown:
+        raise NestedConfigError(
+            "the nested IBM OM parameters",
+            f"to contain only the sections {sorted(allowed)!r}, not flat keys",
+            unknown,
+        )
+    flat: dict[str, Any] = {}
+    for section, rule in NESTED_SECTIONS.items():
+        if section not in parameters:
+            raise NestedConfigError(section, "to be present", None)
+        body = parameters[section]
+        if not isinstance(body, Mapping):
+            raise NestedConfigError(section, "to be an object", body)
+        missing = sorted(set(rule["required"]) - set(body))
+        extra = sorted(set(body) - set(rule["required"]) - set(rule["optional"]))
+        if missing or extra:
+            raise NestedConfigError(
+                section,
+                f"to contain {sorted(rule['required'])!r} plus optionally "
+                f"{sorted(rule['optional'])!r}",
+                sorted(body),
+            )
+        for key, value in body.items():
+            flat_key = rule["type"] if key == "type" else key
+            if flat_key in flat:
+                raise NestedConfigError(f"{section}.{key}", "to be declared once", value)
+            flat[flat_key] = value
+    for name, required in NESTED_SCALARS.items():
+        if name in parameters:
+            flat[name] = parameters[name]
+        elif required:
+            raise NestedConfigError(name, "to be present", None)
+    return flat

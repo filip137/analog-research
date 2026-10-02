@@ -822,7 +822,13 @@ def _example_configs() -> list[Path]:
         text=True,
         check=False,
     ).stdout.split()
-    return sorted(ROOT / item for item in output)
+    # The nested examples postdate the reference capture; they are checked
+    # against their flat sources in tests/test_ibm_om_nested_config.py.
+    return sorted(
+        ROOT / item
+        for item in output
+        if not item.startswith("examples/mnist_relu_drn/nested/")
+    )
 
 
 def run_config_corpus() -> dict[str, Any]:
