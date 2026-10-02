@@ -54,6 +54,9 @@ IBM OM deployment is specified in
 [`docs/ibm_om_reset_relative_on_chip_recovery.md`](docs/ibm_om_reset_relative_on_chip_recovery.md).
 The fixed p90/p95/p99 follow-up for direct deployed-array pulses is specified
 in [`docs/ibm_om_reset_relative_direct_gradient_thresholds.md`](docs/ibm_om_reset_relative_direct_gradient_thresholds.md).
+The IBM OM device integration (assignment, topology, characterization,
+mapping, programming and readback layers, each selected from the config) is
+described in [`docs/ibm_om_layers.md`](docs/ibm_om_layers.md).
 
 ## LoRA/HWA result tracking
 

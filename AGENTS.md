@@ -116,6 +116,11 @@ of this worktree.
   conditioning/programming seeds. Do not replace the explicit pulse plant with
   a native CPU tile unless its cycle-to-cycle RNG becomes serializable and an
   exact-replay test is added.
+- IBM OM code lives in the `training/ibm_om/` layers
+  ([`docs/ibm_om_layers.md`](docs/ibm_om_layers.md)); `training/ibm_reram_hwa.py`
+  is a re-export facade. Select each layer from the config, never from another
+  layer, and keep `tests/test_ibm_om_golden.py` bit-exact unless a numerical
+  change is intended and its goldens are deliberately re-captured.
 
 ## Synapse data
 

@@ -63,27 +63,15 @@ def run_exact_programming(
     """Run the declared controller on exactly the supplied identities."""
 
     plant = _ArrayPlant(population, generator=generator, device=targets.device)
-    branch = context.calibration_branch
-    estimator = PopulationStepEstimator.from_mapping(
-        context.device_model["step_estimators"][branch]
-    )
-    adaptive = context.device_model["programming"]["adaptive"]
-    settings = ControllerSettings(
-        kind="adaptive",
-        eta=float(adaptive["eta"]),
-        maximum_batch=int(adaptive["maximum_batch"]),
-        epsilon=float(adaptive["epsilon"]),
-        force_one_within_steps=float(adaptive["force_one_within_steps"]),
-    )
-    tolerance = (
-        context.tolerance_step_ratio
-        * population.nominal_dw_min
-        / 2.0
-    )
+    estimator = step_estimator(context.device_model, context.calibration_branch)
+    settings = adaptive_controller_settings(context.device_model)
     result = run_program_verify(
         plant.controller_port(),
         targets=targets,
-        tolerance=tolerance,
+        tolerance=step_ratio_tolerance(
+            context.tolerance_step_ratio,
+            population.nominal_dw_min,
+        ),
         maximum_pulses=context.maximum_program_pulses,
         settings=settings,
         estimator=estimator,
