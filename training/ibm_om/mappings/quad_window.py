@@ -9,10 +9,12 @@ from typing import Any
 import torch
 
 from training.ibm_om.mappings.base import (
+    empty_group_fallback,
     MappingArguments,
     MappingInputs,
     validate_quad_layout,
 )
+from training.ibm_om.programming.base import OutOfSupportContract
 from training.ibm_om.population import _tensor_summary
 from training.ibm_om.topology import _quad_axes
 
@@ -291,3 +293,19 @@ def check_preflight(
         )
     return
 
+
+def programming_contract(
+    arguments: MappingArguments,
+    report: dict[str, Any],
+) -> tuple[torch.Tensor | None, OutOfSupportContract]:
+    """Empty quad windows are the only budgeted out-of-support cells."""
+
+    return None, empty_group_fallback(
+        report,
+        "quad",
+        fallback_policy="pulse_resolved_noncorrupt_out_of_bound_empty_quad_only",
+        execution_detail="compact_endpoint_with_exact_empty_quad_fallback",
+        endpoint_generation_policy=(
+            "compact_covered_exact_out_of_bound_empty_quad_fallback"
+        ),
+    )

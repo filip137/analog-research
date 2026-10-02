@@ -11,6 +11,7 @@ import torch
 from training.ibm_om.characterization import IbmReramResetCommissioning
 from training.ibm_om.coordinates import LOGICAL, RAW_ACTIVE, DeviceCoordinate
 from training.ibm_om.population import IbmReramArrayPopulation
+from training.ibm_om.programming.base import OutOfSupportContract
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,83 @@ class MappingInputs(MappingArguments):
     support_counts: Callable[..., dict[str, int]]
     global_support: dict[str, int]
     report: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class MappingResult:
+    """Per-cell targets plus what programming needs from the mapping."""
+
+    targets: torch.Tensor
+    report: dict[str, Any]
+    program_mask: torch.Tensor | None
+    out_of_support: OutOfSupportContract
+
+
+# Historical compact-endpoint labels for mappings without an exact fallback.
+# They name the quad fallback because that branch was the default; the
+# fallback itself never runs for these mappings.
+DEFAULT_FALLBACK_POLICY = "pulse_resolved_noncorrupt_out_of_bound_empty_quad_only"
+DEFAULT_FALLBACK_EXECUTION_DETAIL = "compact_endpoint_with_exact_empty_quad_fallback"
+DEFAULT_ENDPOINT_GENERATION_POLICY = (
+    "compact_covered_exact_out_of_bound_empty_quad_fallback"
+)
+
+
+def reject_out_of_support() -> OutOfSupportContract:
+    """No exact fallback: out-of-support targets follow the sampler policy."""
+
+    return OutOfSupportContract(
+        mode="reject",
+        expected_below=None,
+        expected_above=None,
+        expected_nonempty_below=None,
+        expected_nonempty_above=None,
+        require_nonempty_zero=False,
+        missing_audit_message=None,
+        mismatch_message="",
+        fallback_policy=DEFAULT_FALLBACK_POLICY,
+        execution_detail=DEFAULT_FALLBACK_EXECUTION_DETAIL,
+        endpoint_generation_policy=DEFAULT_ENDPOINT_GENERATION_POLICY,
+    )
+
+
+def empty_group_fallback(
+    report: dict[str, Any],
+    group_suffix: str,
+    *,
+    fallback_policy: str,
+    execution_detail: str,
+    endpoint_generation_policy: str,
+) -> OutOfSupportContract:
+    """Exact fallback for out-of-support cells of empty common windows."""
+
+    return OutOfSupportContract(
+        mode="pulse_fallback",
+        expected_below=report.get(
+            f"mapped_target_below_lower_bound_empty_{group_suffix}"
+        ),
+        expected_above=report.get(
+            f"mapped_target_above_upper_bound_empty_{group_suffix}"
+        ),
+        expected_nonempty_below=report.get(
+            "mapped_target_below_lower_bound_nonempty_"
+            f"{group_suffix}"
+        ),
+        expected_nonempty_above=report.get(
+            "mapped_target_above_upper_bound_nonempty_"
+            f"{group_suffix}"
+        ),
+        require_nonempty_zero=True,
+        missing_audit_message=None,
+        mismatch_message=(
+            "Expected compact exact-fallback cells to equal the "
+            "preflighted out-of-bound cells from empty "
+            f"{group_suffix} windows."
+        ),
+        fallback_policy=fallback_policy,
+        execution_detail=execution_detail,
+        endpoint_generation_policy=endpoint_generation_policy,
+    )
 
 
 def _round_half_away_from_zero(value: torch.Tensor) -> torch.Tensor:

@@ -9,7 +9,12 @@ from typing import Any
 
 import torch
 
-from training.ibm_om.mappings.base import MappingArguments, MappingInputs
+from training.ibm_om.mappings.base import (
+    empty_group_fallback,
+    MappingArguments,
+    MappingInputs,
+)
+from training.ibm_om.programming.base import OutOfSupportContract
 from training.ibm_om.population import _tensor_summary
 from training.ibm_om.topology import _canonical_differential_pair_layout
 
@@ -375,3 +380,18 @@ def check_preflight(
         )
 
 
+def programming_contract(
+    arguments: MappingArguments,
+    report: dict[str, Any],
+) -> tuple[torch.Tensor | None, OutOfSupportContract]:
+    """Empty differential-pair windows are the only budgeted failures."""
+
+    return None, empty_group_fallback(
+        report,
+        "pair",
+        fallback_policy="pulse_resolved_noncorrupt_out_of_bound_empty_pair_only",
+        execution_detail="compact_endpoint_with_exact_empty_pair_fallback",
+        endpoint_generation_policy=(
+            "compact_covered_exact_out_of_bound_empty_pair_fallback"
+        ),
+    )

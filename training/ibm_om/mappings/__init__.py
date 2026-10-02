@@ -25,7 +25,11 @@ from training.ibm_om.mappings import (
     raw_active,
     reset_relative,
 )
-from training.ibm_om.mappings.base import MappingArguments, prepare_inputs
+from training.ibm_om.mappings.base import (
+    MappingArguments,
+    MappingResult,
+    prepare_inputs,
+)
 from training.ibm_om.population import IbmReramArrayPopulation
 from training.ibm_om.topology import _normalize_dual_rail_layouts
 
@@ -36,7 +40,7 @@ MAPPINGS = {
 }
 
 
-def map_ibm_reram_array_targets(
+def _validated_arguments(
     global_targets: torch.Tensor,
     population: IbmReramArrayPopulation,
     *,
@@ -50,15 +54,8 @@ def map_ibm_reram_array_targets(
     reset_relative_contrast_step: float | None = None,
     raw_active_mode: str | None = None,
     raw_active_unsupported_quad_policy: str | None = None,
-) -> tuple[torch.Tensor, dict[str, Any]]:
-    """Map clean global fractions onto one fixed IBM OM array assignment.
-
-    The quad mapping uses the exact four physical identities assigned to the
-    Cartesian product of a logical synapse's two source and two destination
-    rails.  Corrupt identities are deliberately retained in the intersection;
-    the published arm therefore keeps its collapsed/stuck-cell semantics,
-    while the repaired arm naturally uses its sampled donor bounds.
-    """
+) -> MappingArguments:
+    """Run the shared and the mapping-specific argument checks."""
 
     if (
         not isinstance(global_targets, torch.Tensor)
@@ -93,8 +90,7 @@ def map_ibm_reram_array_targets(
     differential_pairs: tuple[
         tuple[int, str, str, tuple[int, int]], ...
     ] = ()
-    strategy = MAPPINGS[target_mapping]
-    arguments = strategy.validate_arguments(
+    return MAPPINGS[target_mapping].validate_arguments(
         MappingArguments(
             global_targets=global_targets,
             population=population,
@@ -109,7 +105,47 @@ def map_ibm_reram_array_targets(
             differential_pairs=differential_pairs,
         )
     )
-    return strategy.map_targets(prepare_inputs(arguments))
+
+
+def map_ibm_reram_array_targets(
+    global_targets: torch.Tensor,
+    population: IbmReramArrayPopulation,
+    *,
+    target_mapping: str,
+    dual_rail_layout_by_parameter: (
+        Mapping[str, str] | Sequence[Sequence[str]] | None
+    ),
+    common_window_margin_fraction: float,
+    reset_commissioning: IbmReramResetCommissioning | None = None,
+    reset_relative_mode: str | None = None,
+    reset_relative_contrast_step: float | None = None,
+    raw_active_mode: str | None = None,
+    raw_active_unsupported_quad_policy: str | None = None,
+) -> tuple[torch.Tensor, dict[str, Any]]:
+    """Map clean global fractions onto one fixed IBM OM array assignment.
+
+    The quad mapping uses the exact four physical identities assigned to the
+    Cartesian product of a logical synapse's two source and two destination
+    rails.  Corrupt identities are deliberately retained in the intersection;
+    the published arm therefore keeps its collapsed/stuck-cell semantics,
+    while the repaired arm naturally uses its sampled donor bounds.
+    """
+
+    arguments = _validated_arguments(
+        global_targets,
+        population,
+        target_mapping=target_mapping,
+        dual_rail_layout_by_parameter=dual_rail_layout_by_parameter,
+        common_window_margin_fraction=common_window_margin_fraction,
+        reset_commissioning=reset_commissioning,
+        reset_relative_mode=reset_relative_mode,
+        reset_relative_contrast_step=reset_relative_contrast_step,
+        raw_active_mode=raw_active_mode,
+        raw_active_unsupported_quad_policy=raw_active_unsupported_quad_policy,
+    )
+    return MAPPINGS[arguments.target_mapping].map_targets(
+        prepare_inputs(arguments)
+    )
 
 
 def validate_ibm_reram_target_mapping_preflight(
@@ -132,4 +168,48 @@ def validate_ibm_reram_target_mapping_preflight(
         report,
         maximum_empty_quads=maximum_empty_quads,
         maximum_empty_pairs=maximum_empty_pairs,
+    )
+
+
+def run_mapping(
+    global_targets: torch.Tensor,
+    population: IbmReramArrayPopulation,
+    *,
+    target_mapping: str,
+    dual_rail_layout_by_parameter: (
+        Mapping[str, str] | Sequence[Sequence[str]] | None
+    ),
+    common_window_margin_fraction: float,
+    reset_commissioning: IbmReramResetCommissioning | None = None,
+    reset_relative_mode: str | None = None,
+    reset_relative_contrast_step: float | None = None,
+    raw_active_mode: str | None = None,
+    raw_active_unsupported_quad_policy: str | None = None,
+) -> MappingResult:
+    """Map, preflight and hand programming its request contract."""
+
+    arguments = _validated_arguments(
+        global_targets,
+        population,
+        target_mapping=target_mapping,
+        dual_rail_layout_by_parameter=dual_rail_layout_by_parameter,
+        common_window_margin_fraction=common_window_margin_fraction,
+        reset_commissioning=reset_commissioning,
+        reset_relative_mode=reset_relative_mode,
+        reset_relative_contrast_step=reset_relative_contrast_step,
+        raw_active_mode=raw_active_mode,
+        raw_active_unsupported_quad_policy=raw_active_unsupported_quad_policy,
+    )
+    strategy = MAPPINGS[arguments.target_mapping]
+    targets, report = strategy.map_targets(prepare_inputs(arguments))
+    validate_ibm_reram_target_mapping_preflight(report)
+    program_mask, out_of_support = strategy.programming_contract(
+        arguments,
+        report,
+    )
+    return MappingResult(
+        targets=targets,
+        report=report,
+        program_mask=program_mask,
+        out_of_support=out_of_support,
     )

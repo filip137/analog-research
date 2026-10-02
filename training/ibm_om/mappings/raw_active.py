@@ -21,9 +21,11 @@ from training.ibm_om.coordinates import RAW_ACTIVE
 from training.ibm_om.mappings.base import (
     MappingArguments,
     MappingInputs,
+    reject_out_of_support,
     _round_half_away_from_zero,
     validate_quad_layout,
 )
+from training.ibm_om.programming.base import OutOfSupportContract
 from training.ibm_om.population import (
     IbmReramArrayPopulation,
     _tensor_sha256,
@@ -512,3 +514,17 @@ def check_preflight(
             "inside its exact per-cell support."
         )
     return
+
+
+def programming_contract(
+    arguments: MappingArguments,
+    report: dict[str, Any],
+) -> tuple[torch.Tensor | None, OutOfSupportContract]:
+    """Only structurally eligible quads may be programmed."""
+
+    structural, _lower, _upper = _raw_active_structural_cell_mask(
+        arguments.population,
+        arguments.layouts or (),
+        device=arguments.global_targets.device,
+    )
+    return structural, reject_out_of_support()

@@ -7,7 +7,12 @@ from typing import Any
 
 import torch
 
-from training.ibm_om.mappings.base import MappingArguments, MappingInputs
+from training.ibm_om.mappings.base import (
+    MappingArguments,
+    MappingInputs,
+    reject_out_of_support,
+)
+from training.ibm_om.programming.base import OutOfSupportContract
 
 
 NAME = "literal_global"
@@ -68,3 +73,12 @@ def check_preflight(
     maximum_empty_pairs: int,
 ) -> None:
     """Literal mapping has no preflight contract."""
+
+
+def programming_contract(
+    arguments: MappingArguments,
+    report: dict[str, Any],
+) -> tuple[torch.Tensor | None, OutOfSupportContract]:
+    """Literal targets are programmed as-is; compact sampling fails closed."""
+
+    return None, reject_out_of_support()
