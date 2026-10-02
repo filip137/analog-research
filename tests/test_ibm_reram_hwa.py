@@ -1098,7 +1098,7 @@ def test_compact_modifier_restores_clean_master_and_rng_exactly(
     binding.state.copy_(torch.tensor([[0.2, 0.4], [0.6, 0.8]]))
     population = _population(binding, corruption_policy="published")
     monkeypatch.setattr(
-        "training.ibm_reram_hwa.sample_om_array_population",
+        "training.ibm_om.modifier.sample_om_array_population",
         lambda *args, **kwargs: population,
     )
     modifier = IbmReramHwaParameterModifier(
@@ -1146,7 +1146,7 @@ def test_reset_relative_quantized_modifier_commissions_maps_and_restores(
         corruption_policy="counterfactual_repaired",
     )
     monkeypatch.setattr(
-        "training.ibm_reram_hwa.sample_om_array_population",
+        "training.ibm_om.modifier.sample_om_array_population",
         lambda *args, **kwargs: population,
     )
     modifier = IbmReramHwaParameterModifier(
@@ -1216,7 +1216,7 @@ def test_raw_active_modifier_programs_each_cell_after_boundary_conditioning(
         reference=torch.tensor([0.4, -0.6, 0.2, -0.3]),
     )
     monkeypatch.setattr(
-        "training.ibm_reram_hwa.sample_om_array_population",
+        "training.ibm_om.modifier.sample_om_array_population",
         lambda *args, **kwargs: population,
     )
     config = IbmReramHwaConfig(
@@ -1299,7 +1299,7 @@ def test_reset_relative_compact_execution_exactly_falls_back_outside_support(
         corruption_policy="counterfactual_repaired",
     )
     monkeypatch.setattr(
-        "training.ibm_reram_hwa.sample_om_array_population",
+        "training.ibm_om.modifier.sample_om_array_population",
         lambda *args, **kwargs: population,
     )
     modifier = IbmReramHwaParameterModifier(
@@ -1360,7 +1360,7 @@ def test_compact_forward_applies_apparent_and_retains_persistent_endpoint(
         corruption_policy="counterfactual_repaired",
     )
     monkeypatch.setattr(
-        "training.ibm_reram_hwa.sample_om_array_population",
+        "training.ibm_om.modifier.sample_om_array_population",
         lambda *args, **kwargs: population,
     )
     modifier = IbmReramHwaParameterModifier(
@@ -1402,7 +1402,7 @@ def test_modifier_preflight_and_compact_context_share_quad_mapping(
     binding.state.copy_(torch.tensor([[0.1, 0.325], [0.775, 1.0]]))
     population = _population(binding, corruption_policy="published")
     monkeypatch.setattr(
-        "training.ibm_reram_hwa.sample_om_array_population",
+        "training.ibm_om.modifier.sample_om_array_population",
         lambda *args, **kwargs: population,
     )
     modifier = IbmReramHwaParameterModifier(
@@ -1452,7 +1452,7 @@ def test_compact_quad_mapping_uses_exact_fallback_for_unsupported_empty_window_c
         corruption_policy="counterfactual_repaired",
     )
     monkeypatch.setattr(
-        "training.ibm_reram_hwa.sample_om_array_population",
+        "training.ibm_om.modifier.sample_om_array_population",
         lambda *args, **kwargs: population,
     )
 
@@ -1587,7 +1587,7 @@ def test_compact_differential_pair_mapping_replays_exact_16_cell_fallback(
         (plus_upper, minus_upper),
     )
     monkeypatch.setattr(
-        "training.ibm_reram_hwa.sample_om_array_population",
+        "training.ibm_om.modifier.sample_om_array_population",
         lambda *args, **kwargs: population,
     )
 
@@ -1797,7 +1797,7 @@ def test_pulse_resolved_modifier_exports_persistent_state(
     binding.state.reshape(-1)[1] = 0.55
     population = _population(binding, corruption_policy="published")
     monkeypatch.setattr(
-        "training.ibm_reram_hwa.sample_om_array_population",
+        "training.ibm_om.modifier.sample_om_array_population",
         lambda *args, **kwargs: population,
     )
     modifier = IbmReramHwaParameterModifier(

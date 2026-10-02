@@ -43,7 +43,7 @@ GOLDEN_DIR = ROOT / "tests" / "golden" / "ibm_om"
 # The module attribute through which the HWA modifier obtains its population.
 # Golden replays patch exactly this lookup site; it is the only line to update
 # when the modifier moves.
-POPULATION_LOOKUP_SITE = ("training.ibm_reram_hwa", "sample_om_array_population")
+POPULATION_LOOKUP_SITE = ("training.ibm_om.modifier", "sample_om_array_population")
 
 # Keys whose values hash implementation source files and therefore change with
 # any edit by design.  They are excluded from comparison everywhere.
