@@ -27,7 +27,6 @@ import torch
 from experiments.artifacts import sha256_file
 from experiments.reram_program_verify.hwa_model import CONDITION_KEY
 from model.resistive.builders import ParameterBinding
-from model.variable.parameter import DenseWeight
 # Moved to training.ibm_om.constants; facade re-export keeps historical import paths.
 from training.ibm_om.constants import (
     _ARRAY_POPULATION_SCHEMA,
@@ -57,6 +56,7 @@ from training.ibm_om.constants import (
     _STREAMS,
     _TARGET_MAPPINGS,
 )
+from training.ibm_om.coordinates import LOGICAL, RAW_ACTIVE
 # Moved to training.ibm_om.population; facade re-export keeps historical import paths.
 from training.ibm_om.population import (
     _ARRAY_POPULATION_FIELDS,
@@ -89,6 +89,13 @@ from training.ibm_om.sampling import (
     sample_om_array_population_layout_external,
     _sample_tile_hidden,
 )
+# Moved to training.ibm_om.topology; facade re-export keeps historical import paths.
+from training.ibm_om.topology import (
+    _canonical_differential_pair_layout,
+    _normalize_dual_rail_layouts,
+    _quad_axes,
+    _validate_differential_pair_bindings,
+)
 from training.ibm_reram_endpoint_model import sample_ibm_reram_endpoints
 from training.ibm_reram_program_verify import (
     ControllerSettings,
@@ -98,32 +105,6 @@ from training.ibm_reram_program_verify import (
     derive_seed,
     run_program_verify,
 )
-
-
-def _normalize_dual_rail_layouts(
-    value: Mapping[str, str] | Sequence[Sequence[str]] | None,
-) -> tuple[tuple[str, str], ...] | None:
-    if value is None:
-        return None
-    items = value.items() if isinstance(value, Mapping) else value
-    try:
-        normalized = tuple(sorted((str(item[0]), str(item[1])) for item in items))
-    except (IndexError, TypeError, ValueError) as error:
-        raise ValueError(
-            "Expected dual_rail_layout_by_parameter to be null or a mapping "
-            "from stable parameter keys to 'halves' or 'paired'."
-        ) from error
-    if (
-        not normalized
-        or len({key for key, _layout in normalized}) != len(normalized)
-        or any(not key or layout not in {"halves", "paired"} for key, layout in normalized)
-    ):
-        raise ValueError(
-            "Expected dual_rail_layout_by_parameter to map unique non-empty "
-            "parameter keys to 'halves' or 'paired'. Provided value: "
-            f"{normalized!r}."
-        )
-    return normalized
 
 
 @dataclass(frozen=True)
@@ -451,35 +432,6 @@ class IbmReramResetCommissioning:
         }
 
 
-def _quad_axes(
-    shape: tuple[int, ...],
-    layout: str,
-    *,
-    device: torch.device,
-) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-    if len(shape) != 2 or shape[0] % 2 or shape[1] % 2:
-        raise ValueError(
-            "Expected four-cell dual-rail bindings to be even-by-even "
-            f"rank-2 tensors. Provided shape: {shape!r}."
-        )
-    if layout not in {"halves", "paired"}:
-        raise ValueError(
-            "Expected a four-cell dual-rail layout of 'halves' or 'paired'. "
-            f"Provided value: {layout!r}."
-        )
-    input_count = shape[0] // 2
-    output_count = shape[1] // 2
-    plus_rows = torch.arange(input_count, device=device)
-    minus_rows = plus_rows + input_count
-    if layout == "halves":
-        plus_columns = torch.arange(output_count, device=device)
-        minus_columns = plus_columns + output_count
-    else:
-        plus_columns = torch.arange(output_count, device=device) * 2
-        minus_columns = plus_columns + 1
-    return (plus_rows, minus_rows), (plus_columns, minus_columns)
-
-
 def _round_half_away_from_zero(value: torch.Tensor) -> torch.Tensor:
     return torch.sign(value) * torch.floor(torch.abs(value) + 0.5)
 
@@ -499,12 +451,7 @@ def _raw_active_structural_cell_mask(
         raise ValueError(
             "Expected raw-active layouts to match the population bindings."
         )
-    lower = (
-        population.min_bound.to(device=device) - IBM_OM_RAW_ACTIVE_A_MIN
-    ) / IBM_OM_RAW_ACTIVE_SCALE
-    upper = (
-        population.max_bound.to(device=device) - IBM_OM_RAW_ACTIVE_A_MIN
-    ) / IBM_OM_RAW_ACTIVE_SCALE
+    lower, upper = RAW_ACTIVE.cell_bounds(population, device=device)
     corrupt = population.corrupt.to(device=device)
     eligible_cells = torch.zeros(
         population.size, dtype=torch.bool, device=device
@@ -554,123 +501,6 @@ def _raw_active_structural_cell_mask(
             "Expected raw-active structural mask to cover every cell."
         )
     return eligible_cells, lower, upper
-
-
-def _canonical_differential_pair_layout(
-    binding_keys: Sequence[str],
-    binding_shapes: Sequence[tuple[int, ...]],
-) -> tuple[tuple[int, str, str, tuple[int, int]], ...]:
-    """Validate the canonical adjacent G+/G- catalog and return its pairs."""
-
-    keys = tuple(binding_keys)
-    shapes = tuple(tuple(shape) for shape in binding_shapes)
-    if not keys or len(keys) != len(shapes) or len(keys) % 2:
-        raise ValueError(
-            "Expected differential-pair common-window bindings to be a "
-            "non-empty even-length canonical adjacent plus/minus catalog. "
-            f"Provided value: keys={keys!r}, shapes={shapes!r}."
-        )
-    pairs = []
-    for pair_index in range(len(keys) // 2):
-        plus_position = 2 * pair_index
-        minus_position = plus_position + 1
-        plus_key = keys[plus_position]
-        minus_key = keys[minus_position]
-        expected_plus = f"base.conductance_plus.{pair_index}"
-        expected_minus = f"base.conductance_minus.{pair_index}"
-        plus_shape = shapes[plus_position]
-        minus_shape = shapes[minus_position]
-        if plus_key != expected_plus or minus_key != expected_minus:
-            raise ValueError(
-                "Expected differential-pair common-window bindings in "
-                "canonical adjacent plus/minus key and suffix order. "
-                f"Provided pair {pair_index}: keys="
-                f"({plus_key!r}, {minus_key!r}); expected="
-                f"({expected_plus!r}, {expected_minus!r})."
-            )
-        if (
-            len(plus_shape) != 2
-            or any(value < 1 for value in plus_shape)
-            or minus_shape != plus_shape
-        ):
-            raise ValueError(
-                "Expected each canonical differential plus/minus pair to "
-                "have identical non-empty rank-2 shapes. Provided pair "
-                f"{pair_index}: plus_shape={plus_shape!r}, "
-                f"minus_shape={minus_shape!r}."
-            )
-        pairs.append(
-            (
-                pair_index,
-                plus_key,
-                minus_key,
-                (int(plus_shape[0]), int(plus_shape[1])),
-            )
-        )
-    return tuple(pairs)
-
-
-def _validate_differential_pair_bindings(
-    bindings: Sequence[ParameterBinding],
-) -> tuple[tuple[int, str, str, tuple[int, int]], ...]:
-    """Validate roles and tensors in addition to the stable catalog layout."""
-
-    selected = tuple(bindings)
-    pairs = _canonical_differential_pair_layout(
-        tuple(binding.key for binding in selected),
-        tuple(tuple(binding.state.shape) for binding in selected),
-    )
-    for pair_index, _plus_key, _minus_key, _shape in pairs:
-        plus = selected[2 * pair_index]
-        minus = selected[2 * pair_index + 1]
-        if (
-            plus.role != "conductance_plus"
-            or minus.role != "conductance_minus"
-            or not isinstance(plus.parameter, DenseWeight)
-            or not isinstance(minus.parameter, DenseWeight)
-        ):
-            raise ValueError(
-                "Expected canonical differential-pair bindings to expose "
-                "DenseWeight conductance_plus/conductance_minus roles. "
-                f"Provided pair {pair_index}: plus_role={plus.role!r}, "
-                f"minus_role={minus.role!r}, "
-                f"plus_type={type(plus.parameter).__name__!r}, "
-                f"minus_type={type(minus.parameter).__name__!r}."
-            )
-        raw_bounds = (
-            plus.parameter.min_cond,
-            plus.parameter.max_cond,
-            minus.parameter.min_cond,
-            minus.parameter.max_cond,
-        )
-        try:
-            plus_min, plus_max, minus_min, minus_max = tuple(
-                float(value) for value in raw_bounds
-            )
-        except (TypeError, ValueError) as error:
-            raise ValueError(
-                "Expected each canonical differential plus/minus pair to "
-                "have finite, increasing, exactly matching conductance "
-                f"bounds. Provided pair {pair_index}: bounds={raw_bounds!r}."
-            ) from error
-        if (
-            not all(
-                math.isfinite(value)
-                for value in (plus_min, plus_max, minus_min, minus_max)
-            )
-            or not plus_min < plus_max
-            or not minus_min < minus_max
-            or plus_min != minus_min
-            or plus_max != minus_max
-        ):
-            raise ValueError(
-                "Expected each canonical differential plus/minus pair to "
-                "have finite, increasing, exactly matching conductance "
-                f"bounds. Provided pair {pair_index}: "
-                f"plus_bounds=({plus_min!r}, {plus_max!r}), "
-                f"minus_bounds=({minus_min!r}, {minus_max!r})."
-            )
-    return pairs
 
 
 def map_ibm_reram_array_targets(
@@ -853,22 +683,10 @@ def map_ibm_reram_array_targets(
 
     device = global_targets.device
     dtype = global_targets.dtype
-    if target_mapping == "raw_active_p90_quad":
-        lower = (
-            population.min_bound.to(device=device, dtype=dtype)
-            - IBM_OM_RAW_ACTIVE_A_MIN
-        ) / IBM_OM_RAW_ACTIVE_SCALE
-        upper = (
-            population.max_bound.to(device=device, dtype=dtype)
-            - IBM_OM_RAW_ACTIVE_A_MIN
-        ) / IBM_OM_RAW_ACTIVE_SCALE
-    else:
-        lower = (
-            population.logical_min.to(device=device, dtype=dtype) + 1.0
-        ) / 2.0
-        upper = (
-            population.logical_max.to(device=device, dtype=dtype) + 1.0
-        ) / 2.0
+    coordinate = (
+        RAW_ACTIVE if target_mapping == "raw_active_p90_quad" else LOGICAL
+    )
+    lower, upper = coordinate.cell_bounds(population, device=device, dtype=dtype)
     corrupt = population.corrupt.to(device=device)
     published_corrupt = population.published_corrupt.to(device=device)
     noncorrupt = ~corrupt
@@ -1736,18 +1554,11 @@ def map_ibm_reram_array_targets(
         cell_published_corrupt = published_corrupt[
             offset : offset + count
         ].reshape(shape)
-        input_count = shape[0] // 2
-        output_count = shape[1] // 2
-        plus_rows = torch.arange(input_count, device=device)
-        minus_rows = plus_rows + input_count
-        if layout_by_key[key] == "halves":
-            plus_columns = torch.arange(output_count, device=device)
-            minus_columns = plus_columns + output_count
-        else:
-            plus_columns = torch.arange(output_count, device=device) * 2
-            minus_columns = plus_columns + 1
-        row_groups = (plus_rows, minus_rows)
-        column_groups = (plus_columns, minus_columns)
+        row_groups, column_groups = _quad_axes(
+            shape,
+            layout_by_key[key],
+            device=device,
+        )
 
         group_lower = torch.stack(
             tuple(
@@ -2895,8 +2706,7 @@ class IbmReramHwaParameterModifier:
             else "published_corruption"
         )
         model = self._artifact["endpoint_models"][branch]
-        lower = (population.logical_min + 1.0) / 2.0
-        upper = (population.logical_max + 1.0) / 2.0
+        lower, upper = LOGICAL.cell_bounds(population)
         noncorrupt = ~population.corrupt
         below = noncorrupt & (targets < lower)
         above = noncorrupt & (targets > upper)
@@ -2961,7 +2771,7 @@ class IbmReramHwaParameterModifier:
             pulse_fallback_mask = outside_fixed_support
         compact_mask = ~pulse_fallback_mask
 
-        stuck = (population.logical_min + 1.0) / 2.0
+        stuck = LOGICAL.from_state(population.logical_min)
         write_sigma = (
             population.write_noise_std * population.nominal_dw_min / 2.0
         )
@@ -3012,7 +2822,7 @@ class IbmReramHwaParameterModifier:
             )
             fallback_raw = fallback_result.apparent_endpoint
             fallback_endpoint = fallback_raw.clamp(0.0, 1.0)
-            fallback_persistent = (fallback_plant.persistent + 1.0) / 2.0
+            fallback_persistent = LOGICAL.from_state(fallback_plant.persistent)
             raw_endpoint[pulse_fallback_mask] = fallback_raw
             endpoint[pulse_fallback_mask] = fallback_endpoint
             persistent_endpoint[pulse_fallback_mask] = fallback_persistent
@@ -3267,15 +3077,11 @@ class IbmReramHwaParameterModifier:
         programming_eligible = masks["programming_eligible"]
         conditioning_success = conditioning["success"]
         apparent_endpoint = result.apparent_endpoint
-        persistent_endpoint = (
-            plant.persistent_a - IBM_OM_RAW_ACTIVE_A_MIN
-        ) / IBM_OM_RAW_ACTIVE_SCALE
-        conditioned_persistent = (
-            conditioning["persistent_a"] - IBM_OM_RAW_ACTIVE_A_MIN
-        ) / IBM_OM_RAW_ACTIVE_SCALE
-        conditioned_apparent = (
-            conditioning["apparent_a"] - IBM_OM_RAW_ACTIVE_A_MIN
-        ) / IBM_OM_RAW_ACTIVE_SCALE
+        persistent_endpoint = RAW_ACTIVE.from_state(plant.persistent_a)
+        conditioned_persistent = RAW_ACTIVE.from_state(
+            conditioning["persistent_a"]
+        )
+        conditioned_apparent = RAW_ACTIVE.from_state(conditioning["apparent_a"])
         below = targets < lower
         above = targets > upper
         acceptance_window_intersects_exact_support = (
@@ -3522,8 +3328,7 @@ class IbmReramHwaParameterModifier:
         )
         raw_endpoint = result.apparent_endpoint
         endpoint = raw_endpoint.clamp(0.0, 1.0)
-        lower = (population.logical_min + 1.0) / 2.0
-        upper = (population.logical_max + 1.0) / 2.0
+        lower, upper = LOGICAL.cell_bounds(population)
         noncorrupt = ~population.corrupt
         below = noncorrupt & (targets < lower)
         above = noncorrupt & (targets > upper)
@@ -3531,7 +3336,7 @@ class IbmReramHwaParameterModifier:
         window_reachable = noncorrupt & (
             (targets + tolerance >= lower) & (targets - tolerance <= upper)
         )
-        persistent_endpoint = (plant.persistent + 1.0) / 2.0
+        persistent_endpoint = LOGICAL.from_state(plant.persistent)
         accepted_noncorrupt = result.accepted & noncorrupt
         apparent_residual = raw_endpoint - targets
         persistent_residual = persistent_endpoint - targets
