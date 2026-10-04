@@ -17,8 +17,8 @@ from model.resistive.digital_low_rank_config import Wan2022ProgrammingConfig
 from training.device_programming import (
     program_wan2022_base_conductances,
 )
-from training.sgd import AugmentedFunction, EquilibriumProp
-from training.optimizers import build_optimizer
+from training.core.sgd import AugmentedFunction, EquilibriumProp
+from training.core.optimizers import build_optimizer
 
 
 _DIODE = {

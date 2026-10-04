@@ -4,14 +4,15 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from training.diagnostics import BetaSize, FiniteGradientGuard, GradientUpdateObserver
-from training.engine import (
+from training.core.engine import (
     AfterUpdateEvent, BeforeUpdateEvent, EvaluationComponents, ExperimentComponents,
     FreePhaseEvent, GradientsReadyEvent, train_epoch,
 )
-from training.epoch import Evaluator, Trainer
-from training.optimizers import SGDOptimizer
-from training.sgd import AugmentedFunction, Backprop, EquilibriumProp
+from training.core.guards import FiniteGradientGuard
+from training.core.optimizers import SGDOptimizer
+from training.core.sgd import AugmentedFunction, Backprop, EquilibriumProp
+from training.lab.diagnostics import BetaSize, GradientUpdateObserver
+from training.lab.epoch import Evaluator, Trainer
 
 from test_small_network_numerical_parity import (
     _build_stack, _inputs, _labels, _load_oracle, _minimizer,
@@ -102,7 +103,7 @@ def test_backprop_restores_parameter_flags_even_when_solver_fails(requires_grad,
 
 
 @pytest.mark.parametrize("field,bad_value", [
-    ("nudging", 0), ("nudging", -0.1), ("nudging", float("inf")),
+    ("nudging", 0), ("nudging", float("inf")),
     ("nudging", float("nan")), ("nudging", True), ("nudging", "0.1"),
     ("variant", "unknown"), ("use_alternative_formula", 1),
 ])
@@ -115,6 +116,14 @@ def test_ep_constructor_and_setters_share_validation(field, bad_value):
     with pytest.raises(ValueError):
         setattr(estimator, field, bad_value)
     assert getattr(estimator, field) == previous
+
+
+def test_ep_accepts_negative_nudging_like_the_config_parser():
+    args = ([], [], object(), object(), object())
+    estimator = EquilibriumProp(*args, nudging=-0.1, variant="positive")
+    assert (estimator._first_nudging, estimator._second_nudging) == (0.0, -0.1)
+    estimator.nudging = -0.2
+    assert estimator.nudging == -0.2
 
 
 class _Parameter:

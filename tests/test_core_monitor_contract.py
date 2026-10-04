@@ -3,10 +3,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from training.engine import EvaluationComponents, ExperimentComponents
-from training.epoch import Trainer, Evaluator
-from training.monitor import Monitor
-from training.statistics import add_standard_statistics
+from training.core.engine import EvaluationComponents, ExperimentComponents
+from training.lab.epoch import Trainer, Evaluator
+from training.lab.monitor import Monitor
+from training.lab.statistics import add_standard_statistics
 from test_small_network_numerical_parity import _build_stack, _load_oracle
 
 
@@ -66,7 +66,7 @@ def test_monitor_preserves_series_units_order_and_strict_selection(tmp_path):
 def test_monitor_closes_writer_on_completion_or_failure(tmp_path, monkeypatch, fail):
     closed = []
     writer = SimpleNamespace(add_scalar=lambda *args: None, close=lambda: closed.append(True))
-    monkeypatch.setattr("training.monitor._create_summary_writer", lambda _: writer)
+    monkeypatch.setattr("training.lab.monitor._create_summary_writer", lambda _: writer)
     trainer, evaluator, scheduler, _ = _monitor_parts([20.0], fail=fail)
     monitor = Monitor(trainer=trainer, evaluator=evaluator, scheduler=scheduler,
                       save_model=lambda _: None, path=tmp_path)
@@ -90,7 +90,7 @@ def test_monitor_can_run_incrementally_with_fresh_writers(tmp_path, monkeypatch)
         writers.append(writer)
         return writer
 
-    monkeypatch.setattr("training.monitor._create_summary_writer", create_writer)
+    monkeypatch.setattr("training.lab.monitor._create_summary_writer", create_writer)
     trainer, evaluator, scheduler, _ = _monitor_parts([40.0, 20.0])
     monitor = Monitor(trainer=trainer, evaluator=evaluator, scheduler=scheduler,
                       save_model=lambda _: None, path=tmp_path)
@@ -132,7 +132,7 @@ def test_standard_statistics_have_one_owner_and_no_duplicate_measurements(tmp_pa
 def test_monitor_preserves_interleaved_weight_distribution_format(tmp_path, monkeypatch):
     """Historical plotters depend on shared tags and the six-value order."""
     import torch
-    from training.statistics import WeightDistributionStat
+    from training.lab.statistics import WeightDistributionStat
 
     trainer, evaluator, scheduler, _ = _monitor_parts([20.0])
     weight = SimpleNamespace(name="DenseWeight_0", state=torch.tensor([[1.0, 2.0], [4.0, 8.0]]))
@@ -143,7 +143,7 @@ def test_monitor_preserves_interleaved_weight_distribution_format(tmp_path, monk
     trainer.statistics = (*trainer.statistics, *statistics)
     writes = []
     writer = SimpleNamespace(add_scalar=lambda *args: writes.append(args), close=lambda: None)
-    monkeypatch.setattr("training.monitor._create_summary_writer", lambda _: writer)
+    monkeypatch.setattr("training.lab.monitor._create_summary_writer", lambda _: writer)
     Monitor(trainer=trainer, evaluator=evaluator, scheduler=scheduler,
             save_model=lambda _: None, path=tmp_path).run(1, verbose=False)
     tag = "WeightDist/train_DenseWeight_0"

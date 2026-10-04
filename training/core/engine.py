@@ -1,7 +1,7 @@
 """Protocol-driven training and evaluation loops.
 
 This module is intentionally independent of experiment configuration,
-hardware-aware policies, persistence, and the ``training.epoch`` runners.
+hardware-aware policies, persistence, and the ``training.lab.epoch`` runners.
 It defines the ordering contract that those higher-level layers can reuse.
 """
 
@@ -17,9 +17,9 @@ from typing import (
     Union,
 )
 
-from training.batch import Batch, RawBatch, as_batch
-from training.modifier import ParameterModifier, modifier_or_default
-from training.probes import EvaluationProbe, ProbeResult
+from training.core.batch import Batch, RawBatch, as_batch
+from training.core.modifier import ParameterModifier, modifier_or_default
+from training.core.probes import EvaluationProbe, ProbeResult
 
 
 DEFAULT_TRAIN_RESET_INPUT = False

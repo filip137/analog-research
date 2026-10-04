@@ -1,3 +1,5 @@
+"""Per-batch statistics registered on lab runners and recorded by the monitor."""
+
 from abc import ABC, abstractmethod
 import torch
 
@@ -87,69 +89,6 @@ class Counter(Statistic):
         string = 'Example {:5d}/{}'.format(self._num_examples, self._dataset_size)
         return string
         
-
-class ErrorFinder(Statistic):
-    """
-    Class used to find the examples in a dataset that a given network misclassifies
-
-    Attributes
-    ----------
-    name (str): the name of the statistic
-    _network (SumSeparableFunction): the model to evaluate
-    _list_indices (list of int): list of indices of misclassified images in the dataset
-    display (bool): whether or not this statistic is displayed in the summeary logs of each epoch  # FIXME
-
-    Methods
-    -------
-    do_measurement()
-        Measures the statistics and adds it to the sum
-    get()
-        Returns the list of indices
-    reset()
-        Resets the list of indices to an empty list
-    """
-
-    display = False
-    name = None  # 'Error_finder'
-    option = None
-    display_name = None
-
-    def __init__(self, network, evaluator):
-        """Initializes an instance of ErrorFinder
-
-        Args:
-            network (SumSeparableFunction): the network used to classify the examples of the dataset
-            evaluator (Evaluator): the evaluator of the network
-        """
-
-        self._network = network
-        self._evaluator = evaluator
-
-        self._list_indices = []
-
-    def do_measurement(self):
-        """Returns the indices of the misclassified images in idx"""
-
-        idx = self._evaluator.idx
-        mask = self._network.error_fn()
-        indices = idx[mask].numpy()
-
-        self._list_indices.extend(indices)
-
-    def get(self):
-        """Returns the list of indices"""
-        return self._list_indices
-
-    def reset(self):
-        """Resets the list of indices to an empty list"""
-        self._list_indices = []
-
-    def __str__(self):
-        num_mistakes = len(self._list_indices)
-        return 'Number of mistakes = {}'.format(num_mistakes)
-
-
-
 
 class MeanStat(Statistic, ABC):
     """
@@ -336,34 +275,6 @@ class TopFiveErrorStat(MeanStat):
         return self._cost_fn.top_five_error_fn().type(torch.float)
 
 
-class ViolationStat(MeanStat):
-    """
-    Class used to measure the mean violation of the equilibrium condition (at the end of the relaxation phase to equilibrium) over the dataset.
-    """
-
-    def __init__(self, layer):
-        """Creates and instance of ViolationStat
-
-        Args:
-            layer (Layer): the layer whose equilibrium condition's violation we want to track
-        """
-
-        self._layer = layer
-        self.option = layer.name
-
-        display_name = 'Violation_{}'.format(layer.name)
-        name = 'Violation'
-        precision = 5
-        percentage = False
-        display = False
-
-        MeanStat.__init__(self, display_name, name, precision, percentage, display)
-
-    def _measure_fn(self):
-        """Violation function"""
-        return self._layer.violation()
-
-
 class SaturationStat(MeanStat):
     """
     Class used to measure the mean saturation over the dataset.
@@ -477,36 +388,6 @@ class GradientStat(MeanStat):
         """Gradient function"""
         return torch.abs(self._variable.state.grad)
 
-    def get_variable(self):
-        self._variable
-
-
-class NumIterationsStat(MeanStat):
-    """
-    Class used to count the mean number of iterations to converge to equilibrium during a relaxation phase
-    """
-    
-    option = None
-
-    def __init__(self, epoch_processor):
-        """Creates an instance of NumIterationsStat
-
-        Args:
-            epoch_processor (Epoch): the trainer or evaluator
-        """
-
-        self._epoch_processor = epoch_processor
-        display_name = 'Num_iterations'
-        name = 'Num_iterations'
-        precision = 1
-        percentage = False
-        display = True
-
-        MeanStat.__init__(self, display_name, name, precision, percentage, display)
-
-    def _measure_fn(self):
-        """Number of Iterations function"""
-        return torch.tensor([self._epoch_processor.num_iterations])
 
 class WeightRowSumStat(MeanStat):
     """

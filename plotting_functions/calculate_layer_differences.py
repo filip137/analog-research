@@ -9,7 +9,7 @@ import numpy as np
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from model.resistive.network import DeepResistiveEnergy
-from training.sgd import EquilibriumProp, AugmentedFunction
+from training.core.sgd import EquilibriumProp, AugmentedFunction
 from model.function.cost import SquaredError, SquaredErrorPairedOutputs
 from datasets import load_dataloaders
 

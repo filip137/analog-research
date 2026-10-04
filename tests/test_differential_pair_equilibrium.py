@@ -14,7 +14,7 @@ from model.resistive.layer import NonlinearResistiveLayer
 from model.resistive.network import DeepResistiveEnergy
 from model.variable.layer import LinearLayer
 from model.function.cost import SquaredError
-from training.sgd import AugmentedFunction
+from training.core.sgd import AugmentedFunction
 
 
 DTYPE = torch.float64

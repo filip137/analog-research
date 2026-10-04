@@ -19,12 +19,12 @@ from model.function.network import Network
 from model.function.cost import SquaredError, SquaredErrorPairedOutputs
 from model.variable.parameter import DenseWeight
 from labs.custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer
-from training.sgd import EquilibriumProp, Backprop, AugmentedFunction
-from training.epoch import Trainer, Evaluator
-from training.engine import ExperimentComponents, EvaluationComponents
-from training.statistics import add_standard_statistics
-from training.optimizers import SGDOptimizer
-from training.monitor import Monitor
+from training.core.sgd import EquilibriumProp, Backprop, AugmentedFunction
+from training.lab.epoch import Trainer, Evaluator
+from training.core.engine import ExperimentComponents, EvaluationComponents
+from training.lab.statistics import add_standard_statistics
+from training.core.optimizers import SGDOptimizer
+from training.lab.monitor import Monitor
 
 
 def _load_project_datasets_module():

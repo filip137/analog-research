@@ -34,7 +34,7 @@ def trace_events_path():
     print(f"   # path = '{path}'")
     
     # 4. SummaryWriter creation in Monitor.__init__
-    print(f"\n4. SummaryWriter creation in training/monitor.py:")
+    print(f"\n4. SummaryWriter creation in training/lab/monitor.py:")
     print(f"   self._writer = SummaryWriter(self._path)")
     print(f"   # self._path = '{path}'")
     

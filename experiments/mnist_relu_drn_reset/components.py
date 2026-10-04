@@ -14,7 +14,7 @@ from experiments.mnist_relu_drn.components import (
     paired_scores,
 )
 from model.function.interaction import Function
-from training.sgd import Backprop
+from training.core.sgd import Backprop
 
 
 class PairedSupervision(Function):

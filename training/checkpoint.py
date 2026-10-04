@@ -23,7 +23,7 @@ import numpy as np
 import torch
 
 from model.resistive.builders import ParameterBinding, ParameterCatalog
-from training.modifier import ParameterModifier
+from training.core.modifier import ParameterModifier
 
 
 NAMED_WEIGHTS_SCHEMA = "drn.named-weights"

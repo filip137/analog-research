@@ -19,7 +19,7 @@ from model.resistive.minimizer import QuadraticMinimizer
 from model.resistive.network import DeepResistiveEnergy
 from model.variable.layer import LinearLayer
 from model.variable.parameter import Bias, ConvWeight, DenseWeight, PoolWeight
-from training.sgd import AugmentedFunction
+from training.core.sgd import AugmentedFunction
 
 
 DTYPE = torch.float64

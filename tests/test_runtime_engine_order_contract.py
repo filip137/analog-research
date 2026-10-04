@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from training.engine import (
+from training.core.engine import (
     ExperimentComponents,
     FreePhaseEvent,
     GradientsReadyEvent,

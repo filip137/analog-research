@@ -17,13 +17,13 @@ from labs.datasets import MoonsDataset  # noqa: E402
 from model.resistive.network import DeepResistiveEnergy  # noqa: E402
 from model.function.network import Network  # noqa: E402
 from labs.custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer  # noqa: E402
-from training.engine import ExperimentComponents  # noqa: E402
-from training.epoch import Trainer  # noqa: E402
-from training.optimizers import SGDOptimizer  # noqa: E402
-from training.sgd import AugmentedFunction, EquilibriumProp  # noqa: E402
+from training.core.engine import ExperimentComponents  # noqa: E402
+from training.lab.epoch import Trainer  # noqa: E402
+from training.core.optimizers import SGDOptimizer  # noqa: E402
+from training.core.sgd import AugmentedFunction, EquilibriumProp  # noqa: E402
 from model.function.cost import SquaredError, SquaredErrorPairedOutputs  # noqa: E402
 from model.variable.parameter import Bias  # noqa: E402
-from training.statistics import (  # noqa: E402
+from training.lab.statistics import (  # noqa: E402
     Counter,
     CostStat,
     EnergyStat,

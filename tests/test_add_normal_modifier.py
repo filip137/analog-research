@@ -10,7 +10,7 @@ from training.add_normal import (
     AddNormalParameterModifier,
     build_add_normal_modifier,
 )
-from training.modifier import ParameterModifier
+from training.core.modifier import ParameterModifier
 
 
 def _dense(

@@ -42,8 +42,8 @@ from custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer, Min
 from model.function.cost import SquaredError, SquaredErrorPairedOutputs  # noqa: E402
 from model.function.network import Network  # noqa: E402
 from model.variable.parameter import ConvWeight  # noqa: E402
-from training.sgd import AugmentedFunction, EquilibriumProp  # noqa: E402
-from training.optimizers import build_optimizer  # noqa: E402
+from training.core.sgd import AugmentedFunction, EquilibriumProp  # noqa: E402
+from training.core.optimizers import build_optimizer  # noqa: E402
 
 
 def _default_quadratic_params():

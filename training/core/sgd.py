@@ -1,7 +1,7 @@
 """Core minibatch gradient estimators and EP nudging functions.
 
-Optimizer updates and accumulation live outside this module. Optional historical
-algorithms and trajectory inspection live in training.research_gradients.
+Optimizer updates and accumulation live in training.core.optimizers and the
+update backends; this module only computes gradients.
 """
 
 from abc import ABC, abstractmethod
@@ -246,13 +246,15 @@ class AugmentedFunction(SumSeparableFunction):
 
 
 def _validated_nudging(value):
+    # Matches the small_drn.v1 config rule: any finite non-zero nudging,
+    # including negative values, is a valid EP estimator.
     if (
         isinstance(value, bool)
         or not isinstance(value, Real)
         or not math.isfinite(value)
-        or value <= 0.0
+        or value == 0.0
     ):
-        raise ValueError(f"Expected finite positive nudging, got {value!r}.")
+        raise ValueError(f"Expected finite non-zero nudging, got {value!r}.")
     return value
 
 
@@ -571,3 +573,19 @@ class Backprop(GradientEstimator):
 
     def __str__(self):
         return 'Backpropagation'
+
+
+class DirectReadoutGradient:
+    """Differentiate the settled-batch cost directly with respect to readout parameters."""
+
+    def __init__(self, cost_fn) -> None:
+        self._cost_fn = cost_fn
+
+    def compute_gradient(self):
+        return [
+            self._cost_fn._grad(parameter, mean=True)
+            for parameter in self._cost_fn.params()
+        ]
+
+    def __str__(self) -> str:
+        return "Direct digital-readout gradient"

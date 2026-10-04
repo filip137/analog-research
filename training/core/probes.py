@@ -26,7 +26,7 @@ import numpy as np
 import torch
 
 if TYPE_CHECKING:
-    from training.engine import EvaluationBatchEvent
+    from training.core.engine import EvaluationBatchEvent
 
 
 ResultT = TypeVar("ResultT")

@@ -53,6 +53,11 @@ of this worktree.
 - `training/`: reusable training mechanisms. The worktree-relevant modules
   include HWA modifiers, measured-trace programming and update backends,
   Tiki-Taka accumulation, parameter catalogs, probes, and checkpoint codecs.
+- `training/core/`: the per-step engine, gradient estimators, digital
+  optimizer, modifier seam, probes and finite-gradient guard that every
+  workflow-managed run executes. `training/lab/`: the epoch runners,
+  statistics, monitor and diagnostics used only by `labs/`. Core never
+  imports lab.
 - `training/ibm_reram_program_verify.py`: explicit-RNG transcription of the
   AIHWKit 1.1.0 `SoftBoundsReferenceDevice` pulse equation, capability-limited
   controller port, one-pulse/adaptive controllers, and identity partitions.

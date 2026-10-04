@@ -5,8 +5,8 @@ from model.function.network import Network
 from model.resistive.minimizer import QuadraticMinimizer
 from model.resistive.network import DeepResistiveEnergy
 from model.variable.parameter import Bias, DenseWeight
-from training.sgd import AugmentedFunction, EquilibriumProp
-from training.optimizers import build_optimizer
+from training.core.sgd import AugmentedFunction, EquilibriumProp
+from training.core.optimizers import build_optimizer
 from training.tiki_taka import TikiTakaOptimizer
 
 

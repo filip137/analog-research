@@ -21,14 +21,14 @@ DEFAULT_OUTPUT_ROOT = Path("/home/filip/server_code/simulation_results/experimen
 for path in (LABS_DIR, PROJECT_ROOT):
     if str(path) not in sys.path:
         sys.path.append(str(path))
-from training.diagnostics import BetaSize
-from training.batch import Batch
-from training.engine import EvaluationComponents
+from training.lab.diagnostics import BetaSize
+from training.core.batch import Batch
+from training.core.engine import EvaluationComponents
 from model.resistive.network import DeepResistiveEnergy  # noqa: E402
 from model.function.network import Network  # noqa: E402
 from labs.custom_minimizer import CustomQuadraticMinimizer, MinimizerSettings  # noqa: E402
 from model.resistive.minimizer import QuadraticMinimizer  # noqa: E402
-from training.sgd import AugmentedFunction, EquilibriumProp  # noqa: E402
+from training.core.sgd import AugmentedFunction, EquilibriumProp  # noqa: E402
 from model.function.cost import SquaredError, SquaredErrorPairedOutputs  # noqa: E402
 from labs.common import (
     MnistParts,

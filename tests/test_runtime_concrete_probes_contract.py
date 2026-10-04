@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 import torch
 
-from training.engine import EvaluationComponents, evaluate
-from training.probes import (
+from training.core.engine import EvaluationComponents, evaluate
+from training.core.probes import (
     MeanCostProbe,
     MeanErrorProbe,
     ResidualInfinityNormProbe,

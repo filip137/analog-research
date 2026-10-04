@@ -11,7 +11,7 @@
 - `DISTUTILS_USE_SDK` (used in: py309/lib/python3.9/site-packages/setuptools/_distutils/_msvccompiler.py)
 - `DRN_B_CLAMP` (used in: labs/custom_minimizer.py)
 - `DRN_DEBUG_BREAK_ON_ERROR` (used in: labs/custom_minimizer.py, model/resistive/minimizer.py)
-- `DRN_DEBUG_DIODE` (used in: labs/common.py, labs/custom_minimizer.py, model/resistive/minimizer.py, training/epoch.py)
+- `DRN_DEBUG_DIODE` (used in: labs/common.py, labs/custom_minimizer.py, model/resistive/minimizer.py)
 - `DRN_DEBUG_STATE_MAX_ABS` (used in: labs/custom_minimizer.py)
 - `HOME` (used in: py309/lib/python3.9/site-packages/setuptools/command/easy_install.py)
 - `LABS_IV_CURVE_PATH` (used in: labs/custom_minimizer.py)

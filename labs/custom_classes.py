@@ -59,7 +59,7 @@ from model.resistive.network import DeepResistiveEnergy
 from model.resistive.layer import NonlinearResistiveLayer, PoolLayer
 from model.variable.layer import InputLayer, LinearLayer
 from model.variable.parameter import Bias, ConvWeight, DenseWeight, PoolWeight
-from training.sgd import Nudging
+from training.core.sgd import Nudging
 
 import torch
 import torch.nn.functional as F

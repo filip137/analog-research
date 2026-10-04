@@ -30,7 +30,7 @@ from model.resistive.interaction import DenseResistive
 from model.resistive.layer import NonlinearResistiveLayer
 from model.variable.layer import InputLayer, LinearLayer
 from model.variable.parameter import Bias, DenseWeight
-from training.sgd import AugmentedFunction, Nudging
+from training.core.sgd import AugmentedFunction, Nudging
 
 
 

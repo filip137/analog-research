@@ -1,6 +1,6 @@
 """Loader and statistic bindings for the shared numerical engine."""
 
-from training.engine import (
+from training.core.engine import (
     AfterUpdateEvent,
     EvaluationComponents,
     ExperimentComponents,

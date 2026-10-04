@@ -2,8 +2,8 @@ from contextlib import nullcontext
 
 import pytest
 
-from training.batch import Batch, as_batch
-from training.modifier import (
+from training.core.batch import Batch, as_batch
+from training.core.modifier import (
     NO_OP_PARAMETER_MODIFIER,
     ParameterModifier,
 )

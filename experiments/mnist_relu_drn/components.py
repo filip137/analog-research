@@ -27,7 +27,7 @@ from training.measured_trace import (
     MeasuredCohortBOptimizer,
 )
 from training.program_verify import ProgramVerifyOptimizer
-from training.sgd import Backprop
+from training.core.sgd import Backprop
 from training.sign_sgd import SignSGD
 
 

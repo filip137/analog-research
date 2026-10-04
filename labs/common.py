@@ -6,10 +6,11 @@ from typing import Optional
 
 import torch
 
-from training.epoch import Trainer, Evaluator
-from training.engine import EvaluationComponents, FreePhaseEvent
-from training.diagnostics import FiniteGradientGuard, GradientUpdateObserver, LayerMeasurements
-from training.statistics import add_standard_statistics
+from training.core.engine import EvaluationComponents, FreePhaseEvent
+from training.core.guards import FiniteGradientGuard
+from training.lab.diagnostics import GradientUpdateObserver, LayerMeasurements
+from training.lab.epoch import Trainer, Evaluator
+from training.lab.statistics import add_standard_statistics
 
 
 @dataclass

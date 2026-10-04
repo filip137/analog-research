@@ -1,7 +1,7 @@
 """Optional observers and phase diagnostics for the training core.
 
 Observers consume engine events. They never advance an optimizer or perform a
-training solve. BetaSize is a separate diagnostic pass that restores voltages
+training solve. The production FiniteGradientGuard lives in training.core.guards. BetaSize is a separate diagnostic pass that restores voltages
 and the nudging state after inspecting free and perturbed equilibria.
 """
 
@@ -10,28 +10,14 @@ import math
 
 import torch
 
-from training.batch import as_batch
-from training.engine import (
+from training.core.batch import as_batch
+from training.core.engine import (
     AfterUpdateEvent,
     BeforeUpdateEvent,
     EvaluationBatchEvent,
     FreePhaseEvent,
     GradientsReadyEvent,
 )
-
-
-class FiniteGradientGuard:
-    """Reject invalid gradients before an engine reaches the update backend."""
-
-    def __call__(self, event):
-        if not isinstance(event, GradientsReadyEvent):
-            return
-        for index, gradient in enumerate(event.gradients):
-            if not isinstance(gradient, torch.Tensor) or not torch.isfinite(gradient).all():
-                raise FloatingPointError(
-                    "Expected every computed gradient to be a finite tensor. "
-                    f"Provided value: gradient index {index}, type={type(gradient).__name__}."
-                )
 
 
 class LayerMeasurements:

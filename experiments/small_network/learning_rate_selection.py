@@ -15,8 +15,8 @@ import torch
 
 from experiments.small_network.config import TrainSpec
 from model.variable.parameter import Bias, DenseWeight, PoolWeight
-from training.batch import as_batch
-from training.engine import (
+from training.core.batch import as_batch
+from training.core.engine import (
     FreePhaseEvent,
     GradientsReadyEvent,
     evaluate,
@@ -24,7 +24,7 @@ from training.engine import (
 )
 from training.checkpoint import load_named_weights
 from training.measured_trace import MeasuredTraceOptimizer
-from training.probes import MeanCostProbe, MeanErrorProbe
+from training.core.probes import MeanCostProbe, MeanErrorProbe
 
 
 class LearningRateSafetyError(FloatingPointError):

@@ -24,7 +24,7 @@ from experiments.mnist_relu_drn.runtime import (
 from experiments.schema import ConfigError, RunMode
 from experiments.study_workflow import load_study_plan
 from training.ibm_reram_hwa import IbmReramHwaParameterModifier
-from training.modifier import SplitParameterModifier
+from training.core.modifier import SplitParameterModifier
 
 
 _ROOT = Path(__file__).resolve().parents[1]

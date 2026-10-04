@@ -67,18 +67,18 @@ from training.checkpoint import (
     save_epoch_boundary_checkpoint,
     save_named_weights,
 )
-from training.diagnostics import FiniteGradientGuard
-from training.engine import (
+from training.core.engine import (
     FreePhaseEvent,
     evaluate,
     train_epoch,
 )
+from training.core.guards import FiniteGradientGuard
 from training.device_programming import (
     program_device_base_conductances,
     program_wan2022_base_conductance,
     program_wan2022_base_conductances,
 )
-from training.probes import (
+from training.core.probes import (
     MeanCostProbe,
     MeanErrorProbe,
     ResidualInfinityNormProbe,

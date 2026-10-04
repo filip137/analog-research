@@ -13,9 +13,9 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from model.resistive.network import DeepResistiveEnergy
 from labs.custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer
-from training.sgd import EquilibriumProp, AugmentedFunction
+from training.core.sgd import EquilibriumProp, AugmentedFunction
 from model.function.cost import SquaredError, SquaredErrorPairedOutputs
-from training.optimizers import build_optimizer
+from training.core.optimizers import build_optimizer
 from datasets import load_dataloaders
 
 def load_config(config_path="config.json"):

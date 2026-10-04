@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from model.variable.parameter import Bias, DenseWeight, PoolWeight
-from training.optimizers import SGDOptimizer, build_optimizer
+from training.core.optimizers import SGDOptimizer, build_optimizer
 from training.tiki_taka import TikiTakaConfig, TikiTakaOptimizer, parse_update_pipeline
 
 

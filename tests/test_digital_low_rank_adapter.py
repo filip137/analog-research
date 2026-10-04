@@ -13,7 +13,7 @@ from model.resistive.digital_low_rank import (
 )
 from model.resistive.digital_low_rank_config import Wan2022ProgrammingConfig
 from training.device_programming import program_wan2022_base_conductance
-from training.direct_readout import DirectReadoutGradient
+from training.core.sgd import DirectReadoutGradient
 
 
 def _bundle():

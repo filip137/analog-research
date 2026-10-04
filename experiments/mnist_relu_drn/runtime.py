@@ -54,7 +54,7 @@ from training.ibm_reram_hwa import (
     IbmReramHwaParameterModifier,
     build_ibm_reram_hwa_modifier,
 )
-from training.modifier import SplitParameterModifier, modifier_or_default
+from training.core.modifier import SplitParameterModifier, modifier_or_default
 from training.program_verify import ProgramVerifyOptimizer
 
 if TYPE_CHECKING:

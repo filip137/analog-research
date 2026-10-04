@@ -82,6 +82,12 @@ will reproduce the fitted next state.
 
 ## Core training interfaces
 
+`training/core` is the per-step code that workflow-managed runs execute:
+`engine`, `sgd` (EP, backprop and `DirectReadoutGradient`), `optimizers`,
+`modifier`, `batch`, `probes` and `guards`. `training/lab` is the interactive
+harness used only by `labs/`: `epoch`, `statistics`, `monitor` and
+`diagnostics`. Core never imports lab.
+
 Experiment setup constructs the model, cost, free-phase minimizer, gradient
 estimator, update backend, and parameter modifier. `ExperimentComponents`
 groups the network, cost, minimizer, parameters, estimator, and optimizer.
@@ -90,14 +96,14 @@ The modifier is passed separately to the runner or engine.
 For unlabelled diagnostics, evaluation
 accepts `cost_fn=None` with `Batch(inputs, targets=None)`.
 
-`training.engine.train_epoch` owns the minibatch order: set input, settle,
+`training.core.engine.train_epoch` owns the minibatch order: set input, settle,
 set target, measure the free phase, compute and assign gradients, restore the
 modifier, update once, and clamp. Gradient computation and measurements stay
 inside the modifier context. `evaluate` holds its modifier context across
 the whole loader. Gradient accumulation and device writes belong to the
 update backend's `step()` implementation.
 
-`training.epoch.Trainer(components, loader, reset_input=...)` and
+`training.lab.epoch.Trainer(components, loader, reset_input=...)` and
 `Evaluator(components, loader, reset_input=...)` bind loaders and statistics
 to these shared loops. Training requires an explicit reset policy: existing
 ordinary lab trainers reset, while custom lab trainers and `small_drn.v1`
@@ -107,24 +113,25 @@ statistic-list indices are no longer accepted.
 
 Observers consume `FreePhaseEvent`, `GradientsReadyEvent`,
 `BeforeUpdateEvent` (after modifier restoration), and `AfterUpdateEvent`
-(after clamping). `training.diagnostics.GradientUpdateObserver` snapshots
+(after clamping). `training.lab.diagnostics.GradientUpdateObserver` snapshots
 parameters only when explicitly attached and reports the actual clamped
-update. `FiniteGradientGuard` and `LayerMeasurements` are reusable observers.
+update. `LayerMeasurements` is a reusable lab observer, and
+`training.core.guards.FiniteGradientGuard` rejects non-finite gradients before
+the update in both `small_drn.v1` and the lab trainers.
 Lab layer measurements retain raw energy-gradient infinity norms over all
 layers; the solver's projected-current residual probe is a separate metric.
 `BetaSize` is a separate diagnostic pass: it compares mean absolute
 displacements against a nonzero nudged phase and restores voltages and
 nudging, including on failure.
 
-`training.optimizers` exports `SGDOptimizer` and `build_optimizer`; these
+`training.core.optimizers` exports `SGDOptimizer` and `build_optimizer`; these
 are no longer exported from `monitor` or `tiki_taka`. Core EP and backprop
-remain in `training.sgd`. Historical recurrent/contrastive algorithms and
-the `detailed_gradients(estimator, cumulative=True)` dispatcher live in
-`training.research_gradients`. Those research algorithms retain their
-historical solver requirements and are not part of the supported core API.
+remain in `training.core.sgd`. The unused recurrent-backprop and contrastive
+estimators and the `detailed_gradients` trajectory dispatcher were removed;
+recover them from git history if a study needs them.
 
 Lab setup registers standard statistics once with
-`training.statistics.add_standard_statistics`. The monitor consumes those
+`training.lab.statistics.add_standard_statistics`. The monitor consumes those
 registrations through `Monitor(trainer=..., evaluator=..., scheduler=...,
 save_model=..., path=...)`; it does not construct statistics or optimizers.
 Existing series names and units are retained. In particular, the six weight
@@ -312,7 +319,7 @@ For a new experiment:
 1. Add `experiments/<name>/config.py` with a versioned immutable schema.
 2. Register a stable ID explicitly in `experiments/definitions.py`.
 3. Build numerical objects in the experiment package.
-4. Reuse `training.engine`, probes, named checkpoints, and `RunStore`.
+4. Reuse `training.core.engine`, probes, named checkpoints, and `RunStore`.
 5. Add a small nested example and CLI smoke test.
 
 For a new extension, prefer one protocol over a conditional in the engine.

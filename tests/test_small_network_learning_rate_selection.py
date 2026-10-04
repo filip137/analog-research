@@ -11,7 +11,7 @@ import torch
 from experiments.small_network import learning_rate_selection as selection
 from experiments.small_network import runtime as small_runtime
 from model.variable.parameter import DenseWeight
-from training.engine import FreePhaseEvent, GradientsReadyEvent
+from training.core.engine import FreePhaseEvent, GradientsReadyEvent
 
 
 class _StateCodec:

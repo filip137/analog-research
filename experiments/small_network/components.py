@@ -33,18 +33,22 @@ from model.resistive.device_config import parse_device_programming_config
 from model.variable.parameter import Bias
 from training.add_normal import AddNormalConfig, build_add_normal_modifier
 from training.adam import AdamOptimizer
-from training.direct_readout import DirectReadoutGradient
-from training.engine import EvaluationComponents, ExperimentComponents
+from training.core.engine import EvaluationComponents, ExperimentComponents
+from training.core.modifier import ParameterModifier
+from training.core.optimizers import build_optimizer
+from training.core.sgd import (
+    AugmentedFunction,
+    Backprop,
+    DirectReadoutGradient,
+    EquilibriumProp,
+)
 from training.ibm_om_fp32_bounds import IbmOmFp32BoundsOptimizer
 from training.measured_trace import (
     MeasuredCohortAOptimizer,
     MeasuredCohortBOptimizer,
     MeasuredCohortBLoRAOptimizer,
 )
-from training.modifier import ParameterModifier
 from training.program_verify import ProgramVerifyOptimizer
-from training.sgd import AugmentedFunction, Backprop, EquilibriumProp
-from training.optimizers import build_optimizer
 from training.tiki_taka import parse_update_pipeline
 
 

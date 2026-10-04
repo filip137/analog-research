@@ -9,8 +9,8 @@ import torch
 from experiments.small_network.components import build_model_stack, seed_runtime
 from experiments.small_network.config import parse_small_drn_config
 from model.resistive.minimizer import QuadraticMinimizer
-from training.optimizers import SGDOptimizer, build_optimizer
-from training.sgd import AugmentedFunction, EquilibriumProp
+from training.core.optimizers import SGDOptimizer, build_optimizer
+from training.core.sgd import AugmentedFunction, EquilibriumProp
 
 
 _ROOT = Path(__file__).parents[1]

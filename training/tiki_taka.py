@@ -410,7 +410,7 @@ class TikiTakaOptimizer(torch.optim.Optimizer):
 
     Dense and convolutional weights use the auxiliary crossbar.  Biases use
     direct digital SGD unless ``accumulate_biases`` is enabled.  Pooling
-    weights remain frozen, matching :class:`training.optimizers.SGDOptimizer`.
+    weights remain frozen, matching :class:`training.core.optimizers.SGDOptimizer`.
 
     The auxiliary state and its per-parameter transfer counters/cursors live in
     the standard PyTorch optimizer state, so ``state_dict()`` preserves them.

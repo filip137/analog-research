@@ -4,11 +4,11 @@ from typing import Optional
 
 import torch
 
-from training.monitor import Monitor
-from training.engine import ExperimentComponents
-from training.statistics import add_standard_statistics
-from training.sgd import AugmentedFunction, EquilibriumProp
-from training.optimizers import build_optimizer
+from training.lab.monitor import Monitor
+from training.core.engine import ExperimentComponents
+from training.lab.statistics import add_standard_statistics
+from training.core.sgd import AugmentedFunction, EquilibriumProp
+from training.core.optimizers import build_optimizer
 from labs.common import MnistParts, CustomTrainer, build_evaluator
 
 
@@ -64,7 +64,7 @@ def track_training_statistics(
                 "`model_cfg['learning_rates']` (or `learning_rates_biases` + `learning_rates_weights`)."
             )
 
-    # `training.optimizers.SGDOptimizer` filters out `PoolWeight` parameters (kept frozen), but configs may still provide
+    # `training.core.optimizers.SGDOptimizer` filters out `PoolWeight` parameters (kept frozen), but configs may still provide
     # a learning-rate for them. If so, drop those entries to keep alignment with the optimizer's parameter list.
     from model.variable.parameter import PoolWeight
 

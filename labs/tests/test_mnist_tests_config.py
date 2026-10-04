@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from labs import mnist_tests
-from training.batch import Batch
+from training.core.batch import Batch
 
 
 def test_build_minimizer_uses_top_level_config_and_base_energy_amplification(monkeypatch):
