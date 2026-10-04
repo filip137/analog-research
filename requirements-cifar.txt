@@ -1,0 +1,9 @@
+# Tested analysis/training stack: Python 3.12.12.
+# Select a CUDA wheel build compatible with the target GPU when training.
+# AIHWKit 1.1.0 runs in a separate interpreter, selected by EBL_AIHWKIT_PYTHON.
+torch==2.5.1
+torchvision==0.20.1
+numpy==2.0.1
+scipy==1.16.2
+matplotlib==3.10.6
+pytest==8.4.2

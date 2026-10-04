@@ -1,0 +1,51 @@
+{
+  "array_seed": 101001,
+  "batch_size": 64,
+  "calibration_lr": 0.0003,
+  "cpu_threads": 4,
+  "data_seed": 20260917,
+  "dataset": "cifar10",
+  "decay_after": [
+    1
+  ],
+  "decay_factor": 0.3,
+  "device": "cuda:0",
+  "disable_cudnn": false,
+  "endpoint_seed": 111001,
+  "epochs": 2,
+  "experiment_id": "cifar_pcm_recovery_epochs.v1",
+  "fault_kinds": [
+    "gmax"
+  ],
+  "fault_rates_ppm": [
+    0,
+    10000
+  ],
+  "learning_rate": 0.0001,
+  "max_examples": 128,
+  "methods": [
+    "none",
+    "calibration",
+    "rewrite",
+    "onchip_weights",
+    "onchip_calibration"
+  ],
+  "milestones": [
+    1,
+    2
+  ],
+  "noise_scale": 1.0,
+  "recovery_images": 5000,
+  "recovery_model": "gaussian_endpoint_reprogramming",
+  "schedules": [
+    "constant",
+    "step_decay"
+  ],
+  "schema_version": 1,
+  "seed": 41,
+  "stage": "tune",
+  "suffix": "last_two_blocks",
+  "tile_size": 512,
+  "tuning_arrays": 1,
+  "validation_images": 1000
+}

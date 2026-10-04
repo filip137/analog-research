@@ -25,10 +25,19 @@ STUDY_SCHEMA_VERSION = 1
 SUMMARY_SCHEMA = "ebl.study.summary"
 FINAL_SCHEMA = "ebl.study.final"
 RUN_SCHEMA = "ebl.run"
+FEDERATED_COLLECTION_SCHEMA = "ebl.study.federated_collection"
+FEDERATED_COLLECTION_SCHEMA_VERSION = 1
 _MODES = {"train", "linspace", "validate", "characterize"}
 _OUTCOMES = {"supported", "refuted", "mixed", "inconclusive"}
 _IDENTIFIER = re.compile(r"[a-z0-9][a-z0-9._-]*\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_FEDERATED_CONTROL_FILES = (
+    "config.resolved.json",
+    "manifest.json",
+    "metrics.jsonl",
+    "result.json",
+    "status.json",
+)
 
 
 class StudyWorkflowError(ValueError):
@@ -453,7 +462,11 @@ def prepare_study(plan_path: Path | str, results_root: Path | str) -> Path:
     return root
 
 
-def load_study_record(study_dir: Path | str) -> dict[str, Any]:
+def _load_study_record(
+    study_dir: Path | str,
+    *,
+    require_directory_name: bool,
+) -> dict[str, Any]:
     root = Path(study_dir).expanduser().resolve()
     path = root / "study.json"
     value = _load_json_object(path, label="study.json")
@@ -483,7 +496,7 @@ def load_study_record(study_dir: Path | str) -> dict[str, Any]:
             f"version={value['schema_version']!r}."
         )
     _identifier(value["study_id"], label="study.json study_id")
-    if root.name != value["study_id"]:
+    if require_directory_name and root.name != value["study_id"]:
         raise StudyWorkflowError(
             "Expected the study directory name to equal study_id. "
             f"Provided value: directory={root.name!r}, study_id={value['study_id']!r}."
@@ -575,6 +588,12 @@ def load_study_record(study_dir: Path | str) -> dict[str, Any]:
                 )
             hashes.add(digest)
     return value
+
+
+def load_study_record(study_dir: Path | str) -> dict[str, Any]:
+    """Load a prepared study from its canonical ``<study-id>`` directory."""
+
+    return _load_study_record(study_dir, require_directory_name=True)
 
 
 def _command_mode(command: Sequence[Any]) -> str | None:
@@ -924,6 +943,445 @@ def inspect_run(
     return record
 
 
+def _study_contract_sha256(study: Mapping[str, Any]) -> str:
+    return sha256(_canonical_json_bytes(_materialized_contract(study))).hexdigest()
+
+
+def _run_relative_path(study_root: Path, run_dir: Path, *, label: str) -> str:
+    root = study_root.expanduser().resolve()
+    run = run_dir.expanduser().resolve()
+    try:
+        relative = run.relative_to(root)
+    except ValueError as error:
+        raise StudyWorkflowError(
+            f"Expected {label} to remain inside its study directory. "
+            f"Provided value: {str(run)!r}."
+        ) from error
+    if len(relative.parts) != 3 or relative.parts[0] != "runs":
+        raise StudyWorkflowError(
+            f"Expected {label} to be runs/<arm-id>/<run-id>. "
+            f"Provided value: {relative.as_posix()!r}."
+        )
+    return relative.as_posix()
+
+
+def _control_sha256(run_dir: Path) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for filename in _FEDERATED_CONTROL_FILES:
+        path = run_dir / filename
+        if not path.is_file():
+            raise StudyWorkflowError(
+                "Expected every federated completed run to retain its control "
+                f"file. Provided value: {str(path)!r}."
+            )
+        result[filename] = _sha256_file(path)
+    return result
+
+
+def register_federated_runs(
+    canonical_study_dir: Path | str,
+    source_study_dir: Path | str,
+    *,
+    run_pairs: Sequence[tuple[Path | str, Path | str]],
+) -> Path:
+    """Register immutable copied runs from an equivalent prepared study.
+
+    ``prepare`` intentionally records checkout-local paths and a preparation
+    timestamp, so independently prepared copies of one tracked plan do not
+    have byte-identical ``study.json`` files.  A native run correctly binds to
+    the exact source bytes it saw.  This receipt preserves those bytes and
+    proves that the source and canonical materialized scientific contracts are
+    identical without rewriting a completed run manifest.
+    """
+
+    canonical_root = Path(canonical_study_dir).expanduser().resolve()
+    source_root = Path(source_study_dir).expanduser().resolve()
+    if canonical_root == source_root:
+        raise StudyWorkflowError(
+            "Expected canonical and source studies to be distinct directories."
+        )
+    canonical = load_study_record(canonical_root)
+    # A transferred source study may be unpacked beneath an arbitrary staging
+    # basename (for example ``local-study``).  Its exact study.json bytes and
+    # materialized contract remain authoritative; only the canonical target is
+    # required to occupy a directory named after its study ID.
+    source = _load_study_record(source_root, require_directory_name=False)
+    if _materialized_contract(canonical) != _materialized_contract(source):
+        raise StudyWorkflowError(
+            "Expected federated source and canonical studies to have the same "
+            "materialized scientific contract."
+        )
+    canonical_sha = _sha256_file(canonical_root / "study.json")
+    source_path = source_root / "study.json"
+    source_bytes = source_path.read_bytes()
+    source_sha = sha256(source_bytes).hexdigest()
+    contract_sha = _study_contract_sha256(canonical)
+    archive_relative = PurePosixPath(
+        "analysis",
+        "federated_sources",
+        source_sha,
+        canonical["study_id"],
+        "study.json",
+    )
+    archive_path = canonical_root.joinpath(*archive_relative.parts)
+    if archive_path.exists():
+        if not archive_path.is_file() or _sha256_file(archive_path) != source_sha:
+            raise StudyWorkflowError(
+                "Expected an existing federated source-study archive to retain "
+                f"the exact source bytes. Provided value: {str(archive_path)!r}."
+            )
+    else:
+        _atomic_write_bytes(archive_path, source_bytes)
+
+    arms = {arm["arm_id"]: arm for arm in canonical["arms"]}
+    registered: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    if not run_pairs:
+        raise StudyWorkflowError("Expected at least one federated run pair.")
+    for pair_index, pair in enumerate(run_pairs):
+        if not isinstance(pair, tuple) or len(pair) != 2:
+            raise StudyWorkflowError(
+                "Expected each federated run pair to contain source and canonical paths. "
+                f"Provided value at index {pair_index}: {pair!r}."
+            )
+        source_run = Path(pair[0]).expanduser().resolve()
+        canonical_run = Path(pair[1]).expanduser().resolve()
+        source_relative = _run_relative_path(
+            source_root, source_run, label="federated source run"
+        )
+        canonical_relative = _run_relative_path(
+            canonical_root, canonical_run, label="federated canonical run"
+        )
+        if source_relative != canonical_relative:
+            raise StudyWorkflowError(
+                "Expected source and canonical federated runs to have the same "
+                f"study-relative path. Provided value: source={source_relative!r}, "
+                f"canonical={canonical_relative!r}."
+            )
+        if canonical_relative in seen_paths:
+            raise StudyWorkflowError(
+                f"Expected federated run paths to be unique: {canonical_relative!r}."
+            )
+        seen_paths.add(canonical_relative)
+        _runs, arm_id, run_id = PurePosixPath(canonical_relative).parts
+        arm = arms.get(arm_id)
+        if arm is None:
+            raise StudyWorkflowError(
+                f"Expected federated run arm to be declared: {arm_id!r}."
+            )
+        source_record = _bundle_record(
+            source_run,
+            study=source,
+            arm=arm,
+            study_sha256=source_sha,
+            verify_artifacts=True,
+        )
+        target_record = _bundle_record(
+            canonical_run,
+            study=source,
+            arm=arm,
+            study_sha256=source_sha,
+            verify_artifacts=True,
+        )
+        for label, record in (("source", source_record), ("canonical", target_record)):
+            if not record["valid"] or record["status"] != "complete":
+                raise StudyWorkflowError(
+                    f"Expected {label} federated run to be a valid completed bundle. "
+                    f"Provided value: path={canonical_relative!r}, "
+                    f"errors={record['errors']!r}."
+                )
+        source_controls = _control_sha256(source_run)
+        canonical_controls = _control_sha256(canonical_run)
+        if source_controls != canonical_controls:
+            raise StudyWorkflowError(
+                "Expected copied federated run control files to remain byte-identical. "
+                f"Provided value: {canonical_relative!r}."
+            )
+        registered.append(
+            {
+                "arm_id": arm_id,
+                "run_id": run_id,
+                "path": canonical_relative,
+                "control_sha256": canonical_controls,
+            }
+        )
+
+    receipt = {
+        "schema": FEDERATED_COLLECTION_SCHEMA,
+        "schema_version": FEDERATED_COLLECTION_SCHEMA_VERSION,
+        "study_id": canonical["study_id"],
+        "canonical_study_sha256": canonical_sha,
+        "source_study": {
+            "archive_path": archive_relative.as_posix(),
+            "sha256": source_sha,
+            "source_plan_sha256": source["source_plan"]["sha256"],
+            "materialized_contract_sha256": contract_sha,
+        },
+        "runs": sorted(registered, key=lambda item: item["path"]),
+    }
+    registration_sha = sha256(
+        _canonical_json_bytes(
+            {
+                "source_study_sha256": source_sha,
+                "runs": receipt["runs"],
+            }
+        )
+    ).hexdigest()
+    receipt_path = (
+        canonical_root
+        / "analysis"
+        / "federated_collections"
+        / f"{source_sha}-{registration_sha[:16]}.json"
+    )
+    if receipt_path.exists():
+        existing = _load_json_object(
+            receipt_path, label="existing federated collection receipt"
+        )
+        if existing != receipt:
+            raise StudyWorkflowError(
+                "Expected an existing federated collection receipt to remain "
+                f"immutable. Provided value: {str(receipt_path)!r}."
+            )
+    else:
+        _atomic_write_json(receipt_path, receipt)
+    return receipt_path
+
+
+def _federated_run_contexts(
+    study_root: Path,
+    *,
+    study: Mapping[str, Any],
+    canonical_study_sha256: str,
+    verify_artifacts: bool,
+) -> tuple[dict[str, dict[str, str]], list[dict[str, Any]], list[str]]:
+    directory = study_root / "analysis" / "federated_collections"
+    if not directory.exists():
+        return {}, [], []
+    if not directory.is_dir():
+        return {}, [], [
+            "Expected analysis/federated_collections to be a directory."
+        ]
+    contexts: dict[str, dict[str, str]] = {}
+    collections: list[dict[str, Any]] = []
+    errors: list[str] = []
+    expected_contract_sha = _study_contract_sha256(study)
+    expected_plan_sha = study["source_plan"]["sha256"]
+    for receipt_path in sorted(directory.iterdir()):
+        receipt_relative = receipt_path.relative_to(study_root).as_posix()
+        try:
+            if not receipt_path.is_file() or receipt_path.suffix != ".json":
+                raise StudyWorkflowError(
+                    "Expected every federated collection entry to be a JSON file."
+                )
+            receipt = _load_json_object(
+                receipt_path, label="federated collection receipt"
+            )
+            _exact_keys(
+                receipt,
+                label="federated collection receipt",
+                required={
+                    "schema",
+                    "schema_version",
+                    "study_id",
+                    "canonical_study_sha256",
+                    "source_study",
+                    "runs",
+                },
+            )
+            if (
+                receipt["schema"] != FEDERATED_COLLECTION_SCHEMA
+                or isinstance(receipt["schema_version"], bool)
+                or receipt["schema_version"] != FEDERATED_COLLECTION_SCHEMA_VERSION
+            ):
+                raise StudyWorkflowError(
+                    "Expected federated collection schema version 1."
+                )
+            if receipt["study_id"] != study["study_id"]:
+                raise StudyWorkflowError(
+                    "Expected federated collection study_id to match study.json."
+                )
+            if (
+                _digest(
+                    receipt["canonical_study_sha256"],
+                    label="federated canonical study hash",
+                )
+                != canonical_study_sha256
+            ):
+                raise StudyWorkflowError(
+                    "Expected federated canonical study hash to match study.json."
+                )
+            source_record = receipt["source_study"]
+            if not isinstance(source_record, dict):
+                raise StudyWorkflowError(
+                    "Expected federated source_study to be an object."
+                )
+            _exact_keys(
+                source_record,
+                label="federated source_study",
+                required={
+                    "archive_path",
+                    "sha256",
+                    "source_plan_sha256",
+                    "materialized_contract_sha256",
+                },
+            )
+            source_sha = _digest(
+                source_record["sha256"], label="federated source study hash"
+            )
+            archive_relative = PurePosixPath(
+                "analysis",
+                "federated_sources",
+                source_sha,
+                study["study_id"],
+                "study.json",
+            ).as_posix()
+            if source_record["archive_path"] != archive_relative:
+                raise StudyWorkflowError(
+                    "Expected federated source archive path to be hash-addressed."
+                )
+            archive_path = study_root.joinpath(*PurePosixPath(archive_relative).parts)
+            if not archive_path.is_file() or _sha256_file(archive_path) != source_sha:
+                raise StudyWorkflowError(
+                    "Expected federated source archive bytes to match their hash."
+                )
+            source_study = load_study_record(archive_path.parent)
+            if _materialized_contract(source_study) != _materialized_contract(study):
+                raise StudyWorkflowError(
+                    "Expected archived source and canonical materialized contracts to match."
+                )
+            if (
+                _digest(
+                    source_record["source_plan_sha256"],
+                    label="federated source-plan hash",
+                )
+                != expected_plan_sha
+                or source_study["source_plan"]["sha256"] != expected_plan_sha
+            ):
+                raise StudyWorkflowError(
+                    "Expected federated source-plan hashes to match study.json."
+                )
+            if (
+                _digest(
+                    source_record["materialized_contract_sha256"],
+                    label="federated materialized-contract hash",
+                )
+                != expected_contract_sha
+            ):
+                raise StudyWorkflowError(
+                    "Expected federated materialized-contract hash to match study.json."
+                )
+            run_records = receipt["runs"]
+            if not isinstance(run_records, list) or not run_records:
+                raise StudyWorkflowError(
+                    "Expected federated collection runs to be a non-empty list."
+                )
+            receipt_contexts: dict[str, dict[str, str]] = {}
+            for index, run_record in enumerate(run_records):
+                if not isinstance(run_record, dict):
+                    raise StudyWorkflowError(
+                        f"Expected federated runs[{index}] to be an object."
+                    )
+                _exact_keys(
+                    run_record,
+                    label=f"federated runs[{index}]",
+                    required={
+                        "arm_id",
+                        "run_id",
+                        "path",
+                        "control_sha256",
+                    },
+                )
+                arm_id = _identifier(
+                    run_record["arm_id"], label=f"federated runs[{index}].arm_id"
+                )
+                run_id = _text(
+                    run_record["run_id"], label=f"federated runs[{index}].run_id"
+                )
+                if run_id in {".", ".."} or "/" in run_id or "\\" in run_id:
+                    raise StudyWorkflowError(
+                        f"Expected federated runs[{index}] run_id to be one safe "
+                        "path component."
+                    )
+                expected_path = PurePosixPath("runs", arm_id, run_id).as_posix()
+                if run_record["path"] != expected_path:
+                    raise StudyWorkflowError(
+                        f"Expected federated runs[{index}] path to match arm/run IDs."
+                    )
+                if arm_id not in {arm["arm_id"] for arm in study["arms"]}:
+                    raise StudyWorkflowError(
+                        f"Expected federated runs[{index}] arm to be declared."
+                    )
+                controls = run_record["control_sha256"]
+                if not isinstance(controls, dict):
+                    raise StudyWorkflowError(
+                        f"Expected federated runs[{index}] control hashes to be an object."
+                    )
+                _exact_keys(
+                    controls,
+                    label=f"federated runs[{index}] control hashes",
+                    required=set(_FEDERATED_CONTROL_FILES),
+                )
+                run_dir = study_root.joinpath(*PurePosixPath(expected_path).parts)
+                try:
+                    run_dir.resolve().relative_to(study_root.resolve())
+                except ValueError as error:
+                    raise StudyWorkflowError(
+                        f"Expected federated runs[{index}] to remain inside study root."
+                    ) from error
+                for filename in _FEDERATED_CONTROL_FILES:
+                    expected_sha = _digest(
+                        controls[filename],
+                        label=f"federated runs[{index}] {filename} hash",
+                    )
+                    control_path = run_dir / filename
+                    if not control_path.is_file() or (
+                        (filename != "metrics.jsonl" or verify_artifacts)
+                        and _sha256_file(control_path) != expected_sha
+                    ):
+                        raise StudyWorkflowError(
+                            f"Expected federated runs[{index}] {filename} bytes "
+                            "to match the collection receipt."
+                        )
+                manifest = _load_json_object(
+                    run_dir / "manifest.json",
+                    label=f"federated runs[{index}] manifest",
+                )
+                context = manifest.get("study")
+                if (
+                    not isinstance(context, dict)
+                    or context.get("study_sha256") != source_sha
+                    or context.get("source_plan_sha256") != expected_plan_sha
+                ):
+                    raise StudyWorkflowError(
+                        f"Expected federated runs[{index}] to bind the archived "
+                        "source study and tracked plan."
+                    )
+                if expected_path in receipt_contexts or expected_path in contexts:
+                    raise StudyWorkflowError(
+                        f"Expected one federated receipt per run: {expected_path!r}."
+                    )
+                receipt_contexts[expected_path] = {
+                    "study_sha256": source_sha,
+                    "receipt_path": receipt_relative,
+                }
+            contexts.update(receipt_contexts)
+            collections.append(
+                {
+                    "receipt_path": receipt_relative,
+                    "receipt_sha256": _sha256_file(receipt_path),
+                    "source_study_sha256": source_sha,
+                    "source_study_archive_path": archive_relative,
+                    "source_plan_sha256": expected_plan_sha,
+                    "materialized_contract_sha256": expected_contract_sha,
+                    "run_count": len(receipt_contexts),
+                    "runs": sorted(receipt_contexts),
+                }
+            )
+        except (OSError, StudyWorkflowError) as error:
+            errors.append(f"{receipt_relative}: {error}")
+    return contexts, collections, errors
+
+
 def _summary_report(summary: Mapping[str, Any]) -> str:
     rows = []
     for arm in summary["arms"]:
@@ -956,6 +1414,10 @@ def _summary_report(summary: Mapping[str, Any]) -> str:
         f"- `analysis/final.json`: {error}"
         for error in summary["finalization_errors"]
     )
+    problems.extend(
+        f"- Federated collection: {error}"
+        for error in summary.get("federated_collection_errors", [])
+    )
     if not problems:
         problems = ["- None."]
     return (
@@ -986,6 +1448,14 @@ def summarize_study(
     root = Path(study_dir).expanduser().resolve()
     study = load_study_record(root)
     study_sha = _sha256_file(root / "study.json")
+    federated_contexts, federated_collections, federated_errors = (
+        _federated_run_contexts(
+            root,
+            study=study,
+            canonical_study_sha256=study_sha,
+            verify_artifacts=verify_artifacts,
+        )
+    )
     runs_root = root / "runs"
     if not runs_root.is_dir():
         raise StudyWorkflowError(
@@ -1005,19 +1475,30 @@ def summarize_study(
     arms_summary: list[dict[str, Any]] = []
     for arm_id, arm in declared.items():
         arm_root = runs_root / arm_id
-        arm_records = [
-            _bundle_record(
+        arm_records: list[dict[str, Any]] = []
+        for path in (
+            sorted(arm_root.iterdir()) if arm_root.is_dir() else []
+        ):
+            if not path.is_dir():
+                continue
+            relative = path.relative_to(root).as_posix()
+            federated = federated_contexts.get(relative)
+            record = _bundle_record(
                 path,
                 study=study,
                 arm=arm,
-                study_sha256=study_sha,
+                study_sha256=(
+                    federated["study_sha256"] if federated is not None else study_sha
+                ),
                 verify_artifacts=verify_artifacts,
             )
-            for path in (
-                sorted(arm_root.iterdir()) if arm_root.is_dir() else []
+            record["study_sha256"] = (
+                federated["study_sha256"] if federated is not None else study_sha
             )
-            if path.is_dir()
-        ]
+            record["federated_collection_receipt"] = (
+                federated["receipt_path"] if federated is not None else None
+            )
+            arm_records.append(record)
         records.extend(arm_records)
         counts = Counter(record["status"] for record in arm_records if record["valid"])
         invalid = sum(not record["valid"] for record in arm_records) + int(
@@ -1081,6 +1562,7 @@ def summarize_study(
         sum(arm["invalid"] for arm in arms_summary)
         + len(unknown_arm_dirs)
         + int(bool(finalization_errors))
+        + len(federated_errors)
     )
     ready = (
         all(arm["coverage_complete"] for arm in arms_summary)
@@ -1113,6 +1595,8 @@ def summarize_study(
         "state": state,
         "ready_for_review": ready,
         "finalization_errors": finalization_errors,
+        "federated_collections": federated_collections,
+        "federated_collection_errors": federated_errors,
         "missing_arm_directories": missing_arm_dirs,
         "unknown_arm_directories": unknown_arm_dirs,
         "arms": arms_summary,
@@ -1220,6 +1704,7 @@ __all__ = [
     "load_study_plan",
     "load_study_record",
     "prepare_study",
+    "register_federated_runs",
     "study_context_for_run",
     "summarize_study",
 ]

@@ -100,3 +100,6 @@ labs/figures_for_paper_digits/**/model*.pt
 # Timing run bundles are large generated/input archives. Keep top-level summaries
 # visible, and force-add selected bundle files only when they are intended.
 labs/figures_for_paper_digits/timings/*/
+
+# Migrated immutable CIFAR inputs, result galleries and source snapshots.
+/artifacts/

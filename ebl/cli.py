@@ -66,6 +66,8 @@ class TrainRequest:
     device_data: Optional[Path] = None
     device_model: Optional[Path] = None
     teacher_weights: Optional[Path] = None
+    device_state: Optional[Path] = None
+    selection_receipt: Optional[Path] = None
 
 
 @dataclass(frozen=True)
@@ -208,6 +210,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--teacher-weights",
         type=Path,
         help="explicit named ReLU teacher checkpoint for distillation",
+    )
+    train.add_argument(
+        "--device-state",
+        type=Path,
+        help=(
+            "explicit deployed or faulted physical-device state bundle for "
+            "a staged experiment"
+        ),
+    )
+    train.add_argument(
+        "--selection-receipt",
+        type=Path,
+        help=(
+            "explicit frozen hyperparameter-selection receipt for a staged "
+            "experiment"
+        ),
     )
 
     linspace = commands.add_parser(
@@ -482,7 +500,20 @@ def _protocol_payload(
         for combination in definition.combinations
     ]
     supports_ibm_device_model = any(
-        definition.experiment_id == "mnist_relu_drn_kd.v1"
+        definition.experiment_id in {
+            "mnist_relu_drn_kd.v1", "cifar_resnet_suffix_recovery.v1",
+            "cifar_pcm_fault_recovery.v1", "cifar_pcm_hwa_comparison.v1",
+            "cifar_pcm_recovery_epochs.v1", "cifar_crossbar_full_epochs.v1", "cifar_crossbar_fault_sweep.v1", "cifar_om_open_loop.v1", "cifar_om_closed_loop_lr.v1"
+        }
+        for definition in definitions
+    )
+    supports_staged_crossbar_inputs = any(
+        definition.experiment_id in {
+            "cifar10_ibm_om_crossbar.v1",
+            "mnist_ibm_om_crossbar_relu.v2", "cifar_resnet_suffix_recovery.v1",
+            "cifar_pcm_fault_recovery.v1", "cifar_pcm_hwa_comparison.v1",
+            "cifar_pcm_recovery_epochs.v1", "cifar_crossbar_full_epochs.v1", "cifar_crossbar_fault_sweep.v1", "cifar_om_open_loop.v1", "cifar_om_closed_loop_lr.v1"
+        }
         for definition in definitions
     )
     return {
@@ -581,6 +612,11 @@ def _protocol_payload(
                             else []
                         ),
                         "--teacher-weights",
+                        *(
+                            ["--device-state", "--selection-receipt"]
+                            if supports_staged_crossbar_inputs
+                            else []
+                        ),
                     ]
                 ),
             },
@@ -765,12 +801,33 @@ def _handler_result(handler: Handler, request: Any) -> int:
 
 
 def _default_train_handler(request: TrainRequest) -> Optional[int]:
-    if request.definition.experiment_id == "small_drn.v1":
+    if request.definition.experiment_id == "cifar10_ibm_om_crossbar.v1":
+        from experiments.cifar10_crossbar.runtime import run_train
+        return run_train(request)
+    if request.definition.experiment_id == "cifar_om_closed_loop_lr.v1":
+        from experiments.cifar_crossbar.closed_loop_lr_runtime import run_train
+    elif request.definition.experiment_id == "cifar_om_open_loop.v1":
+        from experiments.cifar_crossbar.om_open_loop_runtime import run_train
+    elif request.definition.experiment_id == "cifar_crossbar_fault_sweep.v1":
+        from experiments.cifar_crossbar.sweep_runtime import run_train
+    elif request.definition.experiment_id == "cifar_crossbar_full_epochs.v1":
+        from experiments.cifar_crossbar.full_epoch_runtime import run_train
+    elif request.definition.experiment_id == "cifar_pcm_recovery_epochs.v1":
+        from experiments.cifar_crossbar.epoch_runtime import run_train
+    elif request.definition.experiment_id == "cifar_pcm_hwa_comparison.v1":
+        from experiments.cifar_crossbar.hwa_fault_runtime import run_train
+    elif request.definition.experiment_id == "cifar_pcm_fault_recovery.v1":
+        from experiments.cifar_crossbar.fault_runtime import run_train
+    elif request.definition.experiment_id == "cifar_resnet_suffix_recovery.v1":
+        from experiments.cifar_crossbar.runtime import run_train
+    elif request.definition.experiment_id == "small_drn.v1":
         from experiments.small_network.runtime import run_train
-    elif request.definition.experiment_id == "mnist_relu.v1":
+    elif request.definition.experiment_id in {"mnist_relu.v1", "mnist_relu.v2"}:
         from experiments.mnist_relu.runtime import run_train
     elif request.definition.experiment_id == "mnist_ibm_om_crossbar_relu.v1":
         from experiments.mnist_analog_relu.runtime import run_train
+    elif request.definition.experiment_id == "mnist_ibm_om_crossbar_relu.v2":
+        from experiments.mnist_analog_relu.staged_runtime import run_train
     elif request.definition.experiment_id == "mnist_relu_drn_kd.v1":
         from experiments.mnist_relu_drn.runtime import run_train
     elif request.definition.experiment_id == "mnist_ibm_om_winsorized_qat.v1":
@@ -852,7 +909,7 @@ def _default_validate_handler(request: ValidateRequest) -> Optional[int]:
         )
     elif request.definition.experiment_id == "small_drn.v1":
         from experiments.small_network.runtime import run_validate
-    elif request.definition.experiment_id == "mnist_relu.v1":
+    elif request.definition.experiment_id in {"mnist_relu.v1", "mnist_relu.v2"}:
         from experiments.mnist_relu.runtime import run_validate
     elif request.definition.experiment_id == "mnist_relu_drn_kd.v1":
         from experiments.mnist_relu_drn.runtime import run_validate
@@ -977,6 +1034,8 @@ def _dispatch(
             device_data=args.device_data,
             device_model=args.device_model,
             teacher_weights=args.teacher_weights,
+            device_state=args.device_state,
+            selection_receipt=args.selection_receipt,
         )
         return _handler_result(
             _require_handler(handlers.train, "train"),

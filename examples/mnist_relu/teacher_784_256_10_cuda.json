@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "experiment_id": "mnist_relu.v2",
+  "runtime": {
+    "seed": 42,
+    "data_seed": 42,
+    "device": "cuda",
+    "dtype": "float32"
+  },
+  "data": {
+    "batch_size": 16,
+    "validation_points": 5000,
+    "num_points": null,
+    "shuffle": true
+  },
+  "model": {
+    "dims": [784, 256, 10],
+    "bias": false
+  },
+  "modes": {
+    "train": {
+      "num_epochs": 30,
+      "optimizer": {
+        "type": "adam",
+        "learning_rate": 0.001,
+        "weight_decay": 0.0
+      },
+      "log_every": 1,
+      "max_batches": null,
+      "max_validation_batches": null,
+      "minimum_validation_accuracy": 0.97
+    },
+    "validate": {
+      "split": "test",
+      "sample_limit": null
+    }
+  }
+}

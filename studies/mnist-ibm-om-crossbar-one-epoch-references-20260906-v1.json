@@ -1,0 +1,92 @@
+{
+  "analysis_plan": [
+    "minimum held-apparent validation teacher KL, then higher accuracy, then earlier checkpoint; include P0",
+    "Freeze the best constant and best decaying schedule per architecture and condition; evaluate on two additional saved arrays, one write per array. Report per-array results.",
+    "If a screen winner is still improving near the 30-epoch boundary (best at epoch >=25 and >=1% KL improvement over the preceding five-epoch window), extend that schedule to 60 epochs with the same decay floor; report any unresolved boundary.",
+    "Plot KL versus epochs and cumulative physical pulses; report accuracy and persistent-state diagnostics separately."
+  ],
+  "arms": [
+    {
+      "arm_id": "healthy-tuned_within_one_epoch-array-2090501",
+      "configs": [
+        "../examples/mnist_analog_relu/one_epoch_references_20260906/healthy-tuned_within_one_epoch-array-2090501.json"
+      ],
+      "description": "Frozen tuned_within_one_epoch recovery from exact paired P0",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "healthy-tuned_within_one_epoch-array-2090502",
+      "configs": [
+        "../examples/mnist_analog_relu/one_epoch_references_20260906/healthy-tuned_within_one_epoch-array-2090502.json"
+      ],
+      "description": "Frozen tuned_within_one_epoch recovery from exact paired P0",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-tuned_within_one_epoch-array-2090501",
+      "configs": [
+        "../examples/mnist_analog_relu/one_epoch_references_20260906/faulted-tuned_within_one_epoch-array-2090501.json"
+      ],
+      "description": "Frozen tuned_within_one_epoch recovery from exact paired P0",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-tuned_within_one_epoch-array-2090502",
+      "configs": [
+        "../examples/mnist_analog_relu/one_epoch_references_20260906/faulted-tuned_within_one_epoch-array-2090502.json"
+      ],
+      "description": "Frozen tuned_within_one_epoch recovery from exact paired P0",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "healthy-previous_one_epoch-array-2090402",
+      "configs": [
+        "../examples/mnist_analog_relu/one_epoch_references_20260906/healthy-previous_one_epoch-array-2090402.json"
+      ],
+      "description": "Frozen previous_one_epoch recovery from exact paired P0",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "healthy-tuned_within_one_epoch-array-2090402",
+      "configs": [
+        "../examples/mnist_analog_relu/one_epoch_references_20260906/healthy-tuned_within_one_epoch-array-2090402.json"
+      ],
+      "description": "Frozen tuned_within_one_epoch recovery from exact paired P0",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-previous_one_epoch-array-2090402",
+      "configs": [
+        "../examples/mnist_analog_relu/one_epoch_references_20260906/faulted-previous_one_epoch-array-2090402.json"
+      ],
+      "description": "Frozen previous_one_epoch recovery from exact paired P0",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-tuned_within_one_epoch-array-2090402",
+      "configs": [
+        "../examples/mnist_analog_relu/one_epoch_references_20260906/faulted-tuned_within_one_epoch-array-2090402.json"
+      ],
+      "description": "Frozen tuned_within_one_epoch recovery from exact paired P0",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    }
+  ],
+  "completion_criteria": [
+    "All declared reference cases complete from their exact paired HWA P0 states.",
+    "One-epoch rates are frozen from development validation before any test replay."
+  ],
+  "evidence_class": "exploratory_model_based_exact_p0_schedule_screen",
+  "hypothesis": "A tuned one-epoch reference tests whether a longer horizon offers further KL improvement.",
+  "motivation": "Prior low-rate crossbar runs still improved at epoch 3, while DRN rates had been screened over only 8192 examples.",
+  "schema_version": 1,
+  "study_id": "mnist-ibm-om-crossbar-one-epoch-references-20260906-v1",
+  "title": "Frozen one-epoch recovery references"
+}

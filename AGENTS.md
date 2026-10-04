@@ -1,18 +1,24 @@
-# AGENTS — IBM OM standard-crossbar versus DRN
+# AGENTS — Crossbar HWA and on-chip learning
 
 ## Worktree scope
 
 These instructions apply to the `codex/revised-hwa-training`
 worktree. Its primary research question is:
 
-> How much on-chip recovery is required by an IBM-OM standard analog
-> crossbar--digital-ReLU--analog-crossbar network, and how does its deployment
-> loss, recovery, and fresh-array transfer compare with the matched DRN?
+> When does array-specific learning improve deployment beyond hardware-aware
+> training and matched digital calibration, and at what physical update cost?
+
+This tree owns standard-crossbar HWA, deployment, on-chip learning and fresh-array
+transfer, including MNIST controls, dense CIFAR-10 and ResNet-32 CIFAR-10/100
+suffix experiments. The CIFAR evidence and reproduction instructions are indexed
+in `campaigns/cifar-crossbar-hwa-recovery/README.md`. LoRA and general EP/DRN
+development belong to the sibling worktrees; retained DRN code supplies historical
+comparisons and shared dependencies, not the primary direction of this tree.
 
 Work in this tree must separate logical architecture, deterministic mapping,
 stochastic programming, off-chip adaptation, same-array on-chip recovery, and
-fresh-array transfer. The standard-crossbar comparator is an explicit
-architecture control; it does not replace the evaluated DRN. Do not infer a
+fresh-array transfer. In matched DRN studies, the standard-crossbar comparator is
+an explicit architecture control. Do not infer a
 general need for on-chip training from one favorable endpoint or one device
 assignment.
 
@@ -48,6 +54,12 @@ of this worktree.
 - `ebl/`: public command-line entry point. Workflow-managed training,
   validation, checkpoint handling, and study lifecycle commands enter through
   `python -m ebl`.
+- `experiments/cifar_crossbar/`: ResNet-32 suffix mapping, OM pulse updates,
+  PCM endpoint reprogramming, HWA/CDT, recovery and scientific reports.
+- `experiments/cifar10_crossbar/`: the separate dense 3072-256-10 CIFAR-10
+  experiment; do not pool its results with convolutional ResNet-32.
+- `experiments/mnist_analog_relu/`: standard-crossbar MNIST HWA/recovery and
+  shared population/programming helpers used by the dense CIFAR experiment.
 - `model/resistive/`: perfect-diode DRN construction and numerical equations,
   including the passive and digital low-rank adapter structures used by LoRA
   controls.
@@ -98,7 +110,16 @@ of this worktree.
 
 ## Architecture
 
-- The evaluated student architecture is a dissipative resistive network (DRN)
+- CIFAR ResNet experiments retain the full network, freeze the digital prefix,
+  and map the specified suffix plus classifier to crossbars. Four/eight analog
+  convolutions describe suffix depth, not whole-network analog mapping.
+- Distinguish OM incremental pulse updates, Gaussian PCM endpoint reprogramming,
+  and the separate legacy PCM pulse/inference controls. Gradients and optimizers
+  in these experiments are digital. Digital calibration alone is a no-weight-write
+  control, not on-chip weight learning.
+- The following MNIST architecture contracts apply to historical matched DRN
+  comparisons; their dimensions do not constrain the CIFAR families.
+- In those comparisons the evaluated student is a dissipative resistive network (DRN)
   using `perfect_diode` nonlinearities.
 - The explicit comparator has the same logical `784-50-10` dimensions and
   bias-free layer structure as the teacher-targeted DRN. It consists of a
@@ -151,8 +172,12 @@ of this worktree.
 
 ## Synapse data
 
-- Device-facing claims must use measured synaptic data. Synthetic noise models
-  and generic device presets may be included only as clearly labelled controls.
+- Distinguish measured-trace evidence from fitted device presets and synthetic
+  endpoint models. The imported CIFAR studies use AIHWKit 1.1.0 presets and
+  Gaussian PCM controls and must remain labelled exploratory and model-based;
+  do not describe them as measurements on fabricated hardware.
+- Claims about measured synaptic data must use that data. Synthetic noise models
+  and generic device presets must remain clearly labelled controls.
 - Use the dataset, placement, verification, cohort, and provenance rules in
   [`docs/synapse_data.md`](docs/synapse_data.md).
 - Do not silently replace the measured dataset, alter its preprocessing, or

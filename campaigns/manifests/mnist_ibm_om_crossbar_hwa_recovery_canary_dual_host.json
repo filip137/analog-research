@@ -1,0 +1,95 @@
+{
+  "canonical_collection_shard": "akib",
+  "collection_policy": "Copy a whole authenticated canonical arm directory into an empty target only; refuse overwrite, duplicate completion, undeclared config hashes, source-plan mismatch, artifact-hash mismatch, cross-host epoch-zero or ordered-stream mismatch, or fresh-pair RNG/noise mismatch",
+  "schema": "ebl.ibm_om_crossbar_hwa_recovery_canary_dual_host",
+  "schema_version": 1,
+  "shards": {
+    "akib": {
+      "arm_ids": [
+        "adam-faulted-ce-lr0",
+        "adam-faulted-kl-lr0",
+        "adam-healthy-ce-lr3em6",
+        "adam-healthy-kl-lr3em6",
+        "adam-faulted-ce-lr1em5",
+        "adam-faulted-kl-lr1em5",
+        "adam-healthy-ce-lr3em5",
+        "adam-healthy-kl-lr3em5",
+        "adam-faulted-ce-lr1em4",
+        "adam-faulted-kl-lr1em4",
+        "adam-healthy-ce-lr2em4",
+        "adam-healthy-kl-lr2em4",
+        "adam-faulted-ce-lr3em4",
+        "adam-faulted-kl-lr3em4"
+      ],
+      "config_sha256_by_arm": {
+        "adam-faulted-ce-lr0": "d8c2abf4dd75f9b681feb2886c9c2b80cc393c6ea4134413414d4e620812b580",
+        "adam-faulted-ce-lr1em4": "f84b540184f8f09fd137df008ae43d1fb0e076536d1bee043ddcbd7432442b34",
+        "adam-faulted-ce-lr1em5": "cad0550c29a88f152d9d0e7da54af1690e22a32b1814f07967b893e0189ed3da",
+        "adam-faulted-ce-lr3em4": "1c5891fbb220f0f78275c9d014054ee71f6ebddcf4d44af35665179d07f15746",
+        "adam-faulted-kl-lr0": "8f408d93711a38e05b964833d5253b7af27d4719f8ca46357a26339895c1d6b4",
+        "adam-faulted-kl-lr1em4": "6f0a6cb483818d77373a7ea3a4ec56ff460993c6b78fbcec562fad57856e9da8",
+        "adam-faulted-kl-lr1em5": "208d1996b25649ba1a92b2b58e61710d05299712eb2e97dd47d9e35867d60af4",
+        "adam-faulted-kl-lr3em4": "162b7502de0f1c073af57352290e22d0bf09969212258751c7db5cad5344f871",
+        "adam-healthy-ce-lr2em4": "326e652d9cf9af16fdb5bfb8406669d15a4aa077420acac325f9278c540196eb",
+        "adam-healthy-ce-lr3em5": "fadb3215beb520fc2359110defaffaa528829f8d059fb8d00aaced9367669039",
+        "adam-healthy-ce-lr3em6": "492802afdd1e8bf14c53278d123d31f57754d8e900f26b27504b5261f83875d4",
+        "adam-healthy-kl-lr2em4": "49cb1ef53dc2f89b94db4a090b5a79b9ce78b4c49f7dd54dd7e85226062a3053",
+        "adam-healthy-kl-lr3em5": "155670a5dfebe0803560440561b4f02f98c845500ae664a40698dbfa630f236d",
+        "adam-healthy-kl-lr3em6": "3cc47210908137666e0d4bff4138568bdec0051205b3d763e30d722166c4128f"
+      },
+      "expected_arms": 14,
+      "target": "integnano-akib"
+    },
+    "local": {
+      "arm_ids": [
+        "fresh-apparent-healthy",
+        "fresh-apparent-faulted",
+        "adam-healthy-ce-lr0",
+        "adam-healthy-kl-lr0",
+        "adam-faulted-ce-lr3em6",
+        "adam-faulted-kl-lr3em6",
+        "adam-healthy-ce-lr1em5",
+        "adam-healthy-kl-lr1em5",
+        "adam-faulted-ce-lr3em5",
+        "adam-faulted-kl-lr3em5",
+        "adam-healthy-ce-lr1em4",
+        "adam-healthy-kl-lr1em4",
+        "adam-faulted-ce-lr2em4",
+        "adam-faulted-kl-lr2em4",
+        "adam-healthy-ce-lr3em4",
+        "adam-healthy-kl-lr3em4"
+      ],
+      "config_sha256_by_arm": {
+        "adam-faulted-ce-lr2em4": "ae2f8e216fbc3da60443ac6cdf24dad4624a18e0617d120d78554f64469be05f",
+        "adam-faulted-ce-lr3em5": "9255c2ae078a27cd1637b8a603b8a8d00ac49a0bd902af2b252aa0cf84cbc8df",
+        "adam-faulted-ce-lr3em6": "e0869f03542fce2630090d7a1fc055a38c58226e624007116e8bbd2317ab0d87",
+        "adam-faulted-kl-lr2em4": "4ed650f7d402b69b34a7c8f8b7621912471bd76fafc95c1b7e46dd3499015f38",
+        "adam-faulted-kl-lr3em5": "9ccaefc8140d1624e1729623c19850f4f2a14385993f2b9b792eb10139c4a98f",
+        "adam-faulted-kl-lr3em6": "173a48e79827b12a19e40001f5cddc74bff316a01eee71659592ff942ed21c05",
+        "adam-healthy-ce-lr0": "ee02e1807501c616e7aceb907e33f8ce6714ede5a7e9d882a4dad44af1669eb2",
+        "adam-healthy-ce-lr1em4": "4a33ab4f784d27956edfce21ff4fd392f0508f702c1f1a793f05172ecdbeed34",
+        "adam-healthy-ce-lr1em5": "fa762ada96ba695c34fcee224076d716c0e99e882131ca73cfc9a5bba09da415",
+        "adam-healthy-ce-lr3em4": "018d1e4c392be87f5e82a5d1cf2f3ca624118a7d955ec387fecb5821d869c7c9",
+        "adam-healthy-kl-lr0": "90feb4821984a3303f872a1fb626cb9532c8b782a77bbd7b0ddb93a3388dd456",
+        "adam-healthy-kl-lr1em4": "ca0c8afcbdfd45ad52d308a240455bfd7f9ef82240c8c5f03f589a7001584888",
+        "adam-healthy-kl-lr1em5": "d5275bba931564e08bca6e08f498f00144e6284c1dc7e13ff942aadb2aca620a",
+        "adam-healthy-kl-lr3em4": "50e13f486e1c8c6b6889cfe7917a8d51e7129f4762564ace3407121a09f1c54d",
+        "fresh-apparent-faulted": "a4ffedaabcf43ce6674100991f8d29fe11a7b8ad259a73bf65b99637ac7e5ee5",
+        "fresh-apparent-healthy": "5a67252e87b9a08b5f177029c453c293c3ba51cdec36ffbb977315f9f0870432"
+      },
+      "expected_arms": 16,
+      "target": "local_cuda_host"
+    }
+  },
+  "source_reference": {
+    "path": "studies/references/mnist_ibm_om_crossbar_hwa_p0_1f4ef1b8_20260905.json",
+    "sha256": "faf6d36ca495722c38002a427b03d204fb855fc8caa100dc4e48b7999e867afd",
+    "source_commit": "1f4ef1b8d05b2b0613bf4e8bec4cce799c034cea"
+  },
+  "split_policy": "CE/KL objective pair for each state/LR cell remains on one host; state/rate parity compute-balances 14 Adam arms per host; rate ranking uses held-apparent accuracy first and within-run objective change second, with host retained as a blocking label",
+  "study_id": "mnist-ibm-om-crossbar-hwa-recovery-canary-20260905-v1",
+  "study_plan": {
+    "path": "studies/mnist-ibm-om-crossbar-hwa-recovery-canary-20260905-v1.json",
+    "sha256": "3412a1e261581a1a419ace1bdf1e65df097c2f6b06e0aebbadc834910ac82f33"
+  }
+}

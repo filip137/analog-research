@@ -1,15 +1,16 @@
-"""Pure, strict schema for ``mnist_relu.v1``."""
+"""Pure, strict schemas for the bias-free MNIST ReLU teachers."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from experiments.schema import RunMode, config_error
 
 
 EXPERIMENT_ID = "mnist_relu.v1"
+V2_EXPERIMENT_ID = "mnist_relu.v2"
 SCHEMA_VERSION = 1
 
 
@@ -153,7 +154,7 @@ def _parse_data(value: Any) -> DataSettings:
     )
 
 
-def _parse_model(value: Any) -> ModelSettings:
+def _parse_model_v1(value: Any) -> ModelSettings:
     path = "config.model"
     raw = _object(value, path)
     _keys(raw, path, {"dims", "bias"})
@@ -163,6 +164,32 @@ def _parse_model(value: Any) -> ModelSettings:
     if raw["bias"] is not False:
         raise config_error(f"{path}.bias", "to be false", raw["bias"])
     return ModelSettings(dims=(784, 50, 10), bias=False)
+
+
+def _parse_model_v2(value: Any) -> ModelSettings:
+    path = "config.model"
+    raw = _object(value, path)
+    _keys(raw, path, {"dims", "bias"})
+    dims = raw["dims"]
+    if not isinstance(dims, (list, tuple)) or len(dims) != 3:
+        raise config_error(
+            f"{path}.dims",
+            "to contain [784, positive_hidden_width, 10]",
+            dims,
+        )
+    normalized = tuple(
+        _integer(item, f"{path}.dims[{index}]", minimum=1)
+        for index, item in enumerate(dims)
+    )
+    if normalized[0] != 784 or normalized[2] != 10:
+        raise config_error(
+            f"{path}.dims",
+            "to contain [784, positive_hidden_width, 10]",
+            dims,
+        )
+    if raw["bias"] is not False:
+        raise config_error(f"{path}.bias", "to be false", raw["bias"])
+    return ModelSettings(dims=normalized, bias=False)
 
 
 def _parse_train(value: Any) -> TeacherTrainSettings:
@@ -213,13 +240,26 @@ def _parse_validate(value: Any) -> TeacherValidateSettings:
     )
 
 
-def parse_teacher_config(payload: Mapping[str, Any]) -> TeacherConfig:
+def _parse_teacher_config(
+    payload: Mapping[str, Any],
+    *,
+    experiment_id: str,
+    parse_model: Callable[[Any], ModelSettings],
+) -> TeacherConfig:
     raw = _object(payload, "config")
-    _keys(raw, "config", {"schema_version", "experiment_id", "runtime", "data", "model", "modes"})
+    _keys(
+        raw,
+        "config",
+        {"schema_version", "experiment_id", "runtime", "data", "model", "modes"},
+    )
     if raw["schema_version"] != SCHEMA_VERSION:
         raise config_error("config.schema_version", "to equal 1", raw["schema_version"])
-    if raw["experiment_id"] != EXPERIMENT_ID:
-        raise config_error("config.experiment_id", f"to equal {EXPERIMENT_ID!r}", raw["experiment_id"])
+    if raw["experiment_id"] != experiment_id:
+        raise config_error(
+            "config.experiment_id",
+            f"to equal {experiment_id!r}",
+            raw["experiment_id"],
+        )
     modes_raw = _object(raw["modes"], "config.modes")
     unknown = sorted(set(modes_raw) - {"train", "validate"})
     if unknown or not modes_raw:
@@ -231,11 +271,31 @@ def parse_teacher_config(payload: Mapping[str, Any]) -> TeacherConfig:
         modes["validate"] = _parse_validate(modes_raw["validate"])
     return TeacherConfig(
         schema_version=SCHEMA_VERSION,
-        experiment_id=EXPERIMENT_ID,
+        experiment_id=experiment_id,
         runtime=_parse_runtime(raw["runtime"]),
         data=_parse_data(raw["data"]),
-        model=_parse_model(raw["model"]),
+        model=parse_model(raw["model"]),
         modes=MappingProxyType(modes),
+    )
+
+
+def parse_teacher_config(payload: Mapping[str, Any]) -> TeacherConfig:
+    """Parse the original fixed ``784-50-10`` v1 contract."""
+
+    return _parse_teacher_config(
+        payload,
+        experiment_id=EXPERIMENT_ID,
+        parse_model=_parse_model_v1,
+    )
+
+
+def parse_teacher_v2_config(payload: Mapping[str, Any]) -> TeacherConfig:
+    """Parse the configurable bias-free ``784-H-10`` v2 contract."""
+
+    return _parse_teacher_config(
+        payload,
+        experiment_id=V2_EXPERIMENT_ID,
+        parse_model=_parse_model_v2,
     )
 
 
@@ -259,10 +319,12 @@ def resolve_teacher_spec(document: TeacherConfig, mode: RunMode) -> Any:
 
 __all__ = [
     "EXPERIMENT_ID",
+    "V2_EXPERIMENT_ID",
     "SCHEMA_VERSION",
     "TeacherConfig",
     "TeacherTrainSpec",
     "TeacherValidateSpec",
     "parse_teacher_config",
+    "parse_teacher_v2_config",
     "resolve_teacher_spec",
 ]

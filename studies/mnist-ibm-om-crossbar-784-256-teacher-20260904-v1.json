@@ -1,0 +1,38 @@
+{
+  "analysis_plan": [
+    "Verify the strict greater-than gate, checkpoint metadata, source hash, selected epoch, validation loss/accuracy, and full official test accuracy.",
+    "Treat failure of the gate as a failed prerequisite, not as evidence about crossbar deployment."
+  ],
+  "arms": [
+    {
+      "arm_id": "teacher",
+      "configs": [
+        "../examples/mnist_relu/teacher_784_256_10_cuda.json"
+      ],
+      "description": "Train and select the sole source teacher; reject accuracy at or below 97%.",
+      "experiment_id": "mnist_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "teacher-test",
+      "configs": [
+        "../examples/mnist_relu/teacher_784_256_10_cuda.json"
+      ],
+      "description": "Evaluate the accepted selected checkpoint once on the full official MNIST test set.",
+      "experiment_id": "mnist_relu.v2",
+      "mode": "validate"
+    }
+  ],
+  "completion_criteria": [
+    "The native CUDA run completes with artifact verification and a selected validation accuracy strictly greater than 0.97.",
+    "The selected checkpoint records bias-free dimensions 784-256-10, seed 42, the stratified 55,000/5,000 split, and minimum validation cross-entropy selection.",
+    "The accepted checkpoint is evaluated once on all 10,000 official test examples without using test performance for selection.",
+    "No crossbar stage starts from a different checkpoint or a newest-checkpoint lookup."
+  ],
+  "evidence_class": "digital_teacher_prerequisite_cuda",
+  "hypothesis": "A bias-free 784-256-10 ReLU network trained for 30 epochs with the predeclared Adam protocol will produce a minimum-validation-cross-entropy checkpoint whose validation accuracy is strictly above 97%.",
+  "motivation": "Every crossbar branch must start from one exact accepted teacher rather than a discovered or substituted checkpoint.",
+  "schema_version": 1,
+  "study_id": "mnist-ibm-om-crossbar-784-256-teacher-20260904-v1",
+  "title": "Accepted 784-256-10 bias-free MNIST ReLU teacher"
+}

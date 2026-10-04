@@ -1,0 +1,73 @@
+{
+  "nodes": [
+    {
+      "config": "configs/cifar10_cache.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_cache",
+      "inputs": {},
+      "sha256": "55f267a699e9b2811b56e51c5ec38318b648bf751e568c1c759f6af32daf0c02"
+    },
+    {
+      "config": "configs/cifar10_fit.json",
+      "dataset": "cifar10",
+      "depends": [
+        "cifar10_cache"
+      ],
+      "id": "cifar10_fit",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar10_cache"
+        }
+      },
+      "sha256": "6b11bc24a4eb372c774d96802d69b8ff36a738a2b5656bffdedf67ffb3ec8751"
+    },
+    {
+      "config": "configs/cifar10_tune.json",
+      "dataset": "cifar10",
+      "depends": [
+        "cifar10_cache",
+        "cifar10_fit"
+      ],
+      "id": "cifar10_tune",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar10_cache"
+        },
+        "weights": {
+          "artifact": "checkpoints/sources.pt",
+          "node": "cifar10_fit"
+        }
+      },
+      "sha256": "31ef8328ec673c2a583eebba9c417d9bd948118921355c0c648842751ca9cb5a"
+    },
+    {
+      "config": "configs/cifar10_screen1.json",
+      "dataset": "cifar10",
+      "depends": [
+        "cifar10_cache",
+        "cifar10_tune"
+      ],
+      "id": "cifar10_screen1",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar10_cache"
+        },
+        "weights": {
+          "artifact": "checkpoints/recovery.pt",
+          "node": "cifar10_tune"
+        }
+      },
+      "sha256": "55a2686f08d08273727b77711e19da20453ef6ea3c32f0de826fc04d4020df7c"
+    }
+  ],
+  "phase": "hwa_fault_comparison",
+  "plan": "study-plan.json",
+  "plan_sha256": "80ad97098754bd6ed281cf0af53966314136af53fcb5e4756bdf2ee948cca2e6",
+  "schema": "cifar_crossbar.campaign.v1",
+  "selection_inputs": {},
+  "study_id": "cifar10-pcm-hwa-cdt-canary-v1"
+}

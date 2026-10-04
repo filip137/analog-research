@@ -1,0 +1,59 @@
+{
+  "analysis_plan": [
+    "Primary metric: mean KL(p_teacher || p_student), natural logs, temperature 1; accuracy is secondary.",
+    "Report raw deployment, calibration, equally frequent frozen-target rewriting, weight-only recovery and recovery plus calibration.",
+    "Average three arrays and retain per-array outcomes; use paired reductions and mean/standard-deviation curves, without confirmatory p-values.",
+    "Use original pretrained digital checkpoints, no HWA adaptation; this is not evidence of superiority to converged HWA.",
+    "Immediate programming endpoints only; no drift, extra read noise, pulse/P&V loop, ADC/DAC or energy claim."
+  ],
+  "arms": [
+    {
+      "arm_id": "cifar100_cache",
+      "configs": [
+        "configs/cifar100_cache.json"
+      ],
+      "description": "cifar100_cache",
+      "experiment_id": "cifar_pcm_fault_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_array1",
+      "configs": [
+        "configs/cifar100_array1.json"
+      ],
+      "description": "cifar100_array1",
+      "experiment_id": "cifar_pcm_fault_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_array2",
+      "configs": [
+        "configs/cifar100_array2.json"
+      ],
+      "description": "cifar100_array2",
+      "experiment_id": "cifar_pcm_fault_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_array3",
+      "configs": [
+        "configs/cifar100_array3.json"
+      ],
+      "description": "cifar100_array3",
+      "experiment_id": "cifar_pcm_fault_recovery.v1",
+      "mode": "train"
+    }
+  ],
+  "completion_criteria": [
+    "One full digital/cache audit and three completed independent array screens.",
+    "Each array covers nominal plus all three failures at 100, 1000, 10000 ppm; five matched controls per case.",
+    "Exactly one epoch on 5000 balanced training images; evaluate all 10000 official test images without selecting checkpoints.",
+    "Permanent physical fault states and digital prefix remain unchanged; saved P0 restored for each control."
+  ],
+  "evidence_class": "exploratory",
+  "hypothesis": "One epoch adapting targets on a fixed failed array can lower teacher KL beyond calibration and equally frequent frozen-target rewrites.",
+  "motivation": "Study open, Gmax and random permanent failures inspired by Li et al. (2023), doi:10.1063/5.0131797, using Gaussian programming endpoints.",
+  "schema_version": 1,
+  "study_id": "cifar100-pcm-faults-one-epoch-v1",
+  "title": "cifar100: permanent PCM failures and one-epoch teacher-KL recovery"
+}

@@ -1,0 +1,221 @@
+{
+  "schema_version": 1,
+  "study_id": "cifar10-hwa-recovery-20260917-v1",
+  "title": "CIFAR-10 IBM OM crossbar HWA and matched physical recovery",
+  "hypothesis": "After selecting HWA by development validation KL, apparent-feedback recovery offers a larger incremental benefit on post-deployment faulted arrays than on healthy arrays.",
+  "motivation": "Test whether the recovery-versus-HWA pattern observed on MNIST transfers to a pretrained digital CIFAR-10 ReLU network.",
+  "evidence_class": "exploratory_model_based",
+  "arms": [
+    {
+      "arm_id": "hwa_n0",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/hwa_n0.json"
+      ],
+      "description": "hwa: hwa_n0; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "hwa_n025",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/hwa_n025.json"
+      ],
+      "description": "hwa: hwa_n025; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "hwa_n05",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/hwa_n05.json"
+      ],
+      "description": "hwa: hwa_n05; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "hwa_n1",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/hwa_n1.json"
+      ],
+      "description": "hwa: hwa_n1; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "direct_dev",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/direct_dev.json"
+      ],
+      "description": "deploy: direct_dev; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "hwa_dev",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/hwa_dev.json"
+      ],
+      "description": "deploy: hwa_dev; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "recover_dev_healthy_open_loop",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/recover_dev_healthy_open_loop.json"
+      ],
+      "description": "recover: recover_dev_healthy_open_loop; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "recover_dev_healthy_closed_loop_pv",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/recover_dev_healthy_closed_loop_pv.json"
+      ],
+      "description": "recover: recover_dev_healthy_closed_loop_pv; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "recover_dev_faulted_open_loop",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/recover_dev_faulted_open_loop.json"
+      ],
+      "description": "recover: recover_dev_faulted_open_loop; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "recover_dev_faulted_closed_loop_pv",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/recover_dev_faulted_closed_loop_pv.json"
+      ],
+      "description": "recover: recover_dev_faulted_closed_loop_pv; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "direct_a1",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/direct_a1.json"
+      ],
+      "description": "deploy: direct_a1; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "hwa_a1",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/hwa_a1.json"
+      ],
+      "description": "deploy: hwa_a1; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "recover_a1_healthy_open_loop",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/recover_a1_healthy_open_loop.json"
+      ],
+      "description": "recover: recover_a1_healthy_open_loop; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "recover_a1_healthy_closed_loop_pv",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/recover_a1_healthy_closed_loop_pv.json"
+      ],
+      "description": "recover: recover_a1_healthy_closed_loop_pv; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "recover_a1_faulted_open_loop",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/recover_a1_faulted_open_loop.json"
+      ],
+      "description": "recover: recover_a1_faulted_open_loop; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "recover_a1_faulted_closed_loop_pv",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/recover_a1_faulted_closed_loop_pv.json"
+      ],
+      "description": "recover: recover_a1_faulted_closed_loop_pv; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "direct_a2",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/direct_a2.json"
+      ],
+      "description": "deploy: direct_a2; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "hwa_a2",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/hwa_a2.json"
+      ],
+      "description": "deploy: hwa_a2; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "recover_a2_healthy_open_loop",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/recover_a2_healthy_open_loop.json"
+      ],
+      "description": "recover: recover_a2_healthy_open_loop; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "recover_a2_healthy_closed_loop_pv",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/recover_a2_healthy_closed_loop_pv.json"
+      ],
+      "description": "recover: recover_a2_healthy_closed_loop_pv; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "recover_a2_faulted_open_loop",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/recover_a2_faulted_open_loop.json"
+      ],
+      "description": "recover: recover_a2_faulted_open_loop; see docs/cifar10_crossbar_protocol.md."
+    },
+    {
+      "arm_id": "recover_a2_faulted_closed_loop_pv",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/recover_a2_faulted_closed_loop_pv.json"
+      ],
+      "description": "recover: recover_a2_faulted_closed_loop_pv; see docs/cifar10_crossbar_protocol.md."
+    }
+  ],
+  "completion_criteria": [
+    "Four complete HWA noise arms selected only by healthy development validation KL.",
+    "Direct and selected-HWA deployment on one development and two held-out physical assignments, each with healthy and matched post-deployment faulted states.",
+    "Twelve complete recovery arms: all three assignments x two conditions x two writers, restoring exact HWA P0.",
+    "Recovery selects by validation KL including epoch zero; held apparent state is the primary forward.",
+    "Native result and input/artifact hashes verified; paired initialization and minibatch-order hashes agree."
+  ],
+  "analysis_plan": [
+    "Report direct, HWA-only, open-loop and closed-loop selected test accuracy, teacher KL and agreement by assignment and condition.",
+    "Separate development from held-out assignment means and ranges; two held-out arrays are exploratory evidence, not a significance claim.",
+    "Report fixed-final recovery diagnostics, selected epochs, pulses per cell and verify reads.",
+    "Report persistent-state results separately from held apparent results; explain digital gradients/Adam and model-based preset limitations."
+  ]
+}

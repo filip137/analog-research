@@ -1,0 +1,486 @@
+{
+  "nodes": [
+    {
+      "config": "configs/cifar10_audit.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_audit",
+      "inputs": {},
+      "sha256": "a678d175cf4eacc015e78c40edd5f44a6d8ea8fa6b2b4986d1344a038ccb8a03"
+    },
+    {
+      "config": "configs/cifar10_om_nominal_s41_kernel.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_om_nominal_s41_kernel",
+      "inputs": {},
+      "sha256": "4e0a0344816a475d7a2584f26f337171f2411076afd3fafc3c7b134770ab39bb"
+    },
+    {
+      "config": "configs/cifar10_om_nominal_s41_hwa.json",
+      "dataset": "cifar10",
+      "depends": [
+        "cifar10_audit"
+      ],
+      "id": "cifar10_om_nominal_s41_hwa",
+      "inputs": {
+        "device-model": {
+          "artifact": "kernel.pt",
+          "node": "cifar10_om_nominal_s41_kernel"
+        }
+      },
+      "sha256": "ff33cb3e455f623df32e9a1640de14616b5f4a0e2a14f43f19b9c4491321b9d6"
+    },
+    {
+      "config": "configs/cifar10_om_nominal_s41_a0_population.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_om_nominal_s41_a0_population",
+      "inputs": {},
+      "sha256": "549502f2b45dbc7abade6db27fa8c6d2cf4f3ddc00f1b5a2834351852e5e72e7"
+    },
+    {
+      "config": "configs/cifar10_om_nominal_s41_a0_e0_deploy.json",
+      "dataset": "cifar10",
+      "depends": [
+        "cifar10_audit"
+      ],
+      "id": "cifar10_om_nominal_s41_a0_e0_deploy",
+      "inputs": {
+        "device-model": {
+          "artifact": "population.pt",
+          "node": "cifar10_om_nominal_s41_a0_population"
+        },
+        "weights": {
+          "artifact": "checkpoints/weights.pt",
+          "node": "cifar10_om_nominal_s41_hwa"
+        }
+      },
+      "sha256": "8b0599a0830e221e67415e150ab4ec01021e08f82849cb0bac6f26a29a6f0a05"
+    },
+    {
+      "config": "configs/cifar10_om_nominal_s41_a0_e0_none_n500_t0.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_om_nominal_s41_a0_e0_none_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar10_om_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "b222f1f7280c45ebb4606e52e7f374111d3bf6b558ce1b6eba26400af9206f8f"
+    },
+    {
+      "config": "configs/cifar10_om_nominal_s41_a0_e0_calibration_n500_t0.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_om_nominal_s41_a0_e0_calibration_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar10_om_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "3f79e4e6b19293eb2c5e9135e0fbf5844da321a33424214b46774ba90d7e5743"
+    },
+    {
+      "config": "configs/cifar10_om_nominal_s41_a0_e0_rewrite_n500_t0.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_om_nominal_s41_a0_e0_rewrite_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar10_om_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "31e07e111e029a58b80b1639a77da43e3049100acdb409b9fc68a51df3dcda5b"
+    },
+    {
+      "config": "configs/cifar10_om_nominal_s41_a0_e0_open_loop_n500_t0.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_om_nominal_s41_a0_e0_open_loop_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar10_om_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "6b8fb73393925ce7b379a8d31745ba6dedc284507c1301eeff9913e97559fbb9"
+    },
+    {
+      "config": "configs/cifar10_om_nominal_s41_a0_e0_closed_loop_n500_t0.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_om_nominal_s41_a0_e0_closed_loop_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar10_om_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "f784f299b6f9f70ba51c019310ef7794253c55e0298d7110876c463f42dc82d7"
+    },
+    {
+      "config": "configs/cifar10_pcm_nominal_s41_kernel.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_pcm_nominal_s41_kernel",
+      "inputs": {},
+      "sha256": "ee7e43ac55317978a9b6c865d5e7da4e378882e82911e2b1811f10a55a258354"
+    },
+    {
+      "config": "configs/cifar10_pcm_nominal_s41_hwa.json",
+      "dataset": "cifar10",
+      "depends": [
+        "cifar10_audit"
+      ],
+      "id": "cifar10_pcm_nominal_s41_hwa",
+      "inputs": {
+        "device-model": {
+          "artifact": "kernel.pt",
+          "node": "cifar10_pcm_nominal_s41_kernel"
+        }
+      },
+      "sha256": "f5f3e15b32c7f2c45fbb77912d516759cd06b4fe135df6579ae247804f48f907"
+    },
+    {
+      "config": "configs/cifar10_pcm_nominal_s41_a0_population.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_pcm_nominal_s41_a0_population",
+      "inputs": {},
+      "sha256": "97294d0e561ec9bf65d6821a8e482ad02d4181a08b17bbed3ba3f4fa93c8313a"
+    },
+    {
+      "config": "configs/cifar10_pcm_nominal_s41_a0_e0_deploy.json",
+      "dataset": "cifar10",
+      "depends": [
+        "cifar10_audit"
+      ],
+      "id": "cifar10_pcm_nominal_s41_a0_e0_deploy",
+      "inputs": {
+        "device-model": {
+          "artifact": "population.pt",
+          "node": "cifar10_pcm_nominal_s41_a0_population"
+        },
+        "weights": {
+          "artifact": "checkpoints/weights.pt",
+          "node": "cifar10_pcm_nominal_s41_hwa"
+        }
+      },
+      "sha256": "c16091d287d505225175f93d6801b7ba6ed3d7ecd505553f73f019d11ec0d334"
+    },
+    {
+      "config": "configs/cifar10_pcm_nominal_s41_a0_e0_none_n500_t0.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_pcm_nominal_s41_a0_e0_none_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar10_pcm_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "faa61aff9b826c982bcd1ab7c48020c66b60a1fba24f3eeeab7dd14959e07fe3"
+    },
+    {
+      "config": "configs/cifar10_pcm_nominal_s41_a0_e0_calibration_n500_t0.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_pcm_nominal_s41_a0_e0_calibration_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar10_pcm_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "0cf5c6582f78e7fb4879aa38dff9eb86841491a4a844ea214991216214afb601"
+    },
+    {
+      "config": "configs/cifar10_pcm_nominal_s41_a0_e0_rewrite_n500_t0.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_pcm_nominal_s41_a0_e0_rewrite_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar10_pcm_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "fc8605f7a32ab75fdc1a86f52dc2e8327e0ce2726896848e42613a7d7668d6f5"
+    },
+    {
+      "config": "configs/cifar10_pcm_nominal_s41_a0_e0_open_loop_n500_t0.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_pcm_nominal_s41_a0_e0_open_loop_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar10_pcm_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "5daca7b8516ce8f90c77c10ee249b40b66db668922c4f2560be364e5e7764004"
+    },
+    {
+      "config": "configs/cifar10_pcm_nominal_s41_a0_e0_closed_loop_n500_t0.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_pcm_nominal_s41_a0_e0_closed_loop_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar10_pcm_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "ed8a908bb60e0d546b326ef5160b21977de51226cd9a2818b020847e2a1afe04"
+    },
+    {
+      "config": "configs/cifar100_audit.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_audit",
+      "inputs": {},
+      "sha256": "641067fcbdfcd7ccce4926a0b6171a3b3a54a9de4c4a0efd1ea80d5475cfc6f1"
+    },
+    {
+      "config": "configs/cifar100_om_nominal_s41_kernel.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_om_nominal_s41_kernel",
+      "inputs": {},
+      "sha256": "9ddae58ee69ed19c0e9da29873e96496f1a61ce5a21b6cdbcf5ab0431fe24f9f"
+    },
+    {
+      "config": "configs/cifar100_om_nominal_s41_hwa.json",
+      "dataset": "cifar100",
+      "depends": [
+        "cifar100_audit"
+      ],
+      "id": "cifar100_om_nominal_s41_hwa",
+      "inputs": {
+        "device-model": {
+          "artifact": "kernel.pt",
+          "node": "cifar100_om_nominal_s41_kernel"
+        }
+      },
+      "sha256": "439ee2e8f2ab37000f2aee693b1e45db8b22b1dc49ba61d870382f2509250d49"
+    },
+    {
+      "config": "configs/cifar100_om_nominal_s41_a0_population.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_om_nominal_s41_a0_population",
+      "inputs": {},
+      "sha256": "8efe0765f6c59c0315b8a0a685c462a9d6e40b1081d855c19471f73294aad565"
+    },
+    {
+      "config": "configs/cifar100_om_nominal_s41_a0_e0_deploy.json",
+      "dataset": "cifar100",
+      "depends": [
+        "cifar100_audit"
+      ],
+      "id": "cifar100_om_nominal_s41_a0_e0_deploy",
+      "inputs": {
+        "device-model": {
+          "artifact": "population.pt",
+          "node": "cifar100_om_nominal_s41_a0_population"
+        },
+        "weights": {
+          "artifact": "checkpoints/weights.pt",
+          "node": "cifar100_om_nominal_s41_hwa"
+        }
+      },
+      "sha256": "f72f1d25a96c9fbf74f1972612c1a37c10a3d9a8921a5e59334ba1a8fec647b0"
+    },
+    {
+      "config": "configs/cifar100_om_nominal_s41_a0_e0_none_n500_t0.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_om_nominal_s41_a0_e0_none_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar100_om_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "48ac59493940e06be1c3a4203d0517090fb173cb180eba30a426b50da372ebf5"
+    },
+    {
+      "config": "configs/cifar100_om_nominal_s41_a0_e0_calibration_n500_t0.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_om_nominal_s41_a0_e0_calibration_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar100_om_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "e4b6da32c4be7989b98e36fe15196173bf1f1aac954067dcb45ec7c23c17d50d"
+    },
+    {
+      "config": "configs/cifar100_om_nominal_s41_a0_e0_rewrite_n500_t0.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_om_nominal_s41_a0_e0_rewrite_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar100_om_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "38300a9f8b6765fa8c1dac12484940d72a1f1ec4aedc38f4e11a516e0d2eb751"
+    },
+    {
+      "config": "configs/cifar100_om_nominal_s41_a0_e0_open_loop_n500_t0.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_om_nominal_s41_a0_e0_open_loop_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar100_om_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "1100d3693245e0c9ade06856d316988a9407966c9863ef817d09e87cedf2730c"
+    },
+    {
+      "config": "configs/cifar100_om_nominal_s41_a0_e0_closed_loop_n500_t0.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_om_nominal_s41_a0_e0_closed_loop_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar100_om_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "12fe5018baad7f2f1f79fb41f7beb48499517b069d7c74bb13d5c05fb44d9cfe"
+    },
+    {
+      "config": "configs/cifar100_pcm_nominal_s41_kernel.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_pcm_nominal_s41_kernel",
+      "inputs": {},
+      "sha256": "6f3d8e48d1548a7b439afc234b9caebf2e32dfd03a82fd80a71654af12bf9bf8"
+    },
+    {
+      "config": "configs/cifar100_pcm_nominal_s41_hwa.json",
+      "dataset": "cifar100",
+      "depends": [
+        "cifar100_audit"
+      ],
+      "id": "cifar100_pcm_nominal_s41_hwa",
+      "inputs": {
+        "device-model": {
+          "artifact": "kernel.pt",
+          "node": "cifar100_pcm_nominal_s41_kernel"
+        }
+      },
+      "sha256": "9f7f9ce3990833c1186004a62a842e0abac1fbfd18781e04f91892c29fcec22f"
+    },
+    {
+      "config": "configs/cifar100_pcm_nominal_s41_a0_population.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_pcm_nominal_s41_a0_population",
+      "inputs": {},
+      "sha256": "24ca50729377cc4d063335cbb2d84dff918bcb4fc23d3201aa2eaaf0ca0ca22b"
+    },
+    {
+      "config": "configs/cifar100_pcm_nominal_s41_a0_e0_deploy.json",
+      "dataset": "cifar100",
+      "depends": [
+        "cifar100_audit"
+      ],
+      "id": "cifar100_pcm_nominal_s41_a0_e0_deploy",
+      "inputs": {
+        "device-model": {
+          "artifact": "population.pt",
+          "node": "cifar100_pcm_nominal_s41_a0_population"
+        },
+        "weights": {
+          "artifact": "checkpoints/weights.pt",
+          "node": "cifar100_pcm_nominal_s41_hwa"
+        }
+      },
+      "sha256": "e50a57b3f1c19abfee2f9a7fbeb440499cfedca3954c452958875aaf807c4609"
+    },
+    {
+      "config": "configs/cifar100_pcm_nominal_s41_a0_e0_none_n500_t0.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_pcm_nominal_s41_a0_e0_none_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar100_pcm_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "d16f29039ed921e42e61f5e4826e61af7a549b29f13666e8af4c5c38bb957633"
+    },
+    {
+      "config": "configs/cifar100_pcm_nominal_s41_a0_e0_calibration_n500_t0.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_pcm_nominal_s41_a0_e0_calibration_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar100_pcm_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "630140c5a677d8b55d904cdc93af5173f526c2c735ffdfe029b241691546ba82"
+    },
+    {
+      "config": "configs/cifar100_pcm_nominal_s41_a0_e0_rewrite_n500_t0.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_pcm_nominal_s41_a0_e0_rewrite_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar100_pcm_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "c8098419c63d82cd108127c58fefd8f5d07f49fb799278a8abdbf9dab1467852"
+    },
+    {
+      "config": "configs/cifar100_pcm_nominal_s41_a0_e0_open_loop_n500_t0.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_pcm_nominal_s41_a0_e0_open_loop_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar100_pcm_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "97e2ca319e511fc1178661bd7b38eb064326e28ef27ac9bddf1680dccde7be10"
+    },
+    {
+      "config": "configs/cifar100_pcm_nominal_s41_a0_e0_closed_loop_n500_t0.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_pcm_nominal_s41_a0_e0_closed_loop_n500_t0",
+      "inputs": {
+        "device-state": {
+          "artifact": "checkpoints/p0.pt",
+          "node": "cifar100_pcm_nominal_s41_a0_e0_deploy"
+        }
+      },
+      "sha256": "988f98f0720c1c20640bc69969da7b1335a4ddfaadff609bc87edb0c257f9717"
+    }
+  ],
+  "phase": "pilot",
+  "plan": "study-plan.json",
+  "plan_sha256": "7e69236ae63b8f02f104729e675e0217ede90095bea4d8f410ed980d18ebdaac",
+  "schema": "cifar_crossbar.campaign.v1",
+  "selection_inputs": {},
+  "study_id": "cifar-suffix-pilot-v1"
+}

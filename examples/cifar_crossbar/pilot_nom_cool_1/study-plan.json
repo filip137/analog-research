@@ -1,0 +1,363 @@
+{
+  "analysis_plan": [
+    "Compare paired recovery gain against calibration and frozen-target rewrite.",
+    "Average endpoint replicas within arrays; retain negative and failed outcomes.",
+    "Confirm on fresh arrays using clustered intervals and Holm-adjusted paired tests.",
+    "Report accuracy, KL, deployment loss, image presentations, pulses and verify reads."
+  ],
+  "arms": [
+    {
+      "arm_id": "cifar10_audit",
+      "configs": [
+        "configs/cifar10_audit.json"
+      ],
+      "description": "cifar10_audit",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_om_nominal_s41_kernel",
+      "configs": [
+        "configs/cifar10_om_nominal_s41_kernel.json"
+      ],
+      "description": "cifar10_om_nominal_s41_kernel",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_om_nominal_s41_hwa",
+      "configs": [
+        "configs/cifar10_om_nominal_s41_hwa.json"
+      ],
+      "description": "cifar10_om_nominal_s41_hwa",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_om_nominal_s41_a0_population",
+      "configs": [
+        "configs/cifar10_om_nominal_s41_a0_population.json"
+      ],
+      "description": "cifar10_om_nominal_s41_a0_population",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_om_nominal_s41_a0_e0_deploy",
+      "configs": [
+        "configs/cifar10_om_nominal_s41_a0_e0_deploy.json"
+      ],
+      "description": "cifar10_om_nominal_s41_a0_e0_deploy",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_om_nominal_s41_a0_e0_none_n500_t0",
+      "configs": [
+        "configs/cifar10_om_nominal_s41_a0_e0_none_n500_t0.json"
+      ],
+      "description": "cifar10_om_nominal_s41_a0_e0_none_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_om_nominal_s41_a0_e0_calibration_n500_t0",
+      "configs": [
+        "configs/cifar10_om_nominal_s41_a0_e0_calibration_n500_t0.json"
+      ],
+      "description": "cifar10_om_nominal_s41_a0_e0_calibration_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_om_nominal_s41_a0_e0_rewrite_n500_t0",
+      "configs": [
+        "configs/cifar10_om_nominal_s41_a0_e0_rewrite_n500_t0.json"
+      ],
+      "description": "cifar10_om_nominal_s41_a0_e0_rewrite_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_om_nominal_s41_a0_e0_open_loop_n500_t0",
+      "configs": [
+        "configs/cifar10_om_nominal_s41_a0_e0_open_loop_n500_t0.json"
+      ],
+      "description": "cifar10_om_nominal_s41_a0_e0_open_loop_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_om_nominal_s41_a0_e0_closed_loop_n500_t0",
+      "configs": [
+        "configs/cifar10_om_nominal_s41_a0_e0_closed_loop_n500_t0.json"
+      ],
+      "description": "cifar10_om_nominal_s41_a0_e0_closed_loop_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_pcm_nominal_s41_kernel",
+      "configs": [
+        "configs/cifar10_pcm_nominal_s41_kernel.json"
+      ],
+      "description": "cifar10_pcm_nominal_s41_kernel",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_pcm_nominal_s41_hwa",
+      "configs": [
+        "configs/cifar10_pcm_nominal_s41_hwa.json"
+      ],
+      "description": "cifar10_pcm_nominal_s41_hwa",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_pcm_nominal_s41_a0_population",
+      "configs": [
+        "configs/cifar10_pcm_nominal_s41_a0_population.json"
+      ],
+      "description": "cifar10_pcm_nominal_s41_a0_population",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_pcm_nominal_s41_a0_e0_deploy",
+      "configs": [
+        "configs/cifar10_pcm_nominal_s41_a0_e0_deploy.json"
+      ],
+      "description": "cifar10_pcm_nominal_s41_a0_e0_deploy",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_pcm_nominal_s41_a0_e0_none_n500_t0",
+      "configs": [
+        "configs/cifar10_pcm_nominal_s41_a0_e0_none_n500_t0.json"
+      ],
+      "description": "cifar10_pcm_nominal_s41_a0_e0_none_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_pcm_nominal_s41_a0_e0_calibration_n500_t0",
+      "configs": [
+        "configs/cifar10_pcm_nominal_s41_a0_e0_calibration_n500_t0.json"
+      ],
+      "description": "cifar10_pcm_nominal_s41_a0_e0_calibration_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_pcm_nominal_s41_a0_e0_rewrite_n500_t0",
+      "configs": [
+        "configs/cifar10_pcm_nominal_s41_a0_e0_rewrite_n500_t0.json"
+      ],
+      "description": "cifar10_pcm_nominal_s41_a0_e0_rewrite_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_pcm_nominal_s41_a0_e0_open_loop_n500_t0",
+      "configs": [
+        "configs/cifar10_pcm_nominal_s41_a0_e0_open_loop_n500_t0.json"
+      ],
+      "description": "cifar10_pcm_nominal_s41_a0_e0_open_loop_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_pcm_nominal_s41_a0_e0_closed_loop_n500_t0",
+      "configs": [
+        "configs/cifar10_pcm_nominal_s41_a0_e0_closed_loop_n500_t0.json"
+      ],
+      "description": "cifar10_pcm_nominal_s41_a0_e0_closed_loop_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_audit",
+      "configs": [
+        "configs/cifar100_audit.json"
+      ],
+      "description": "cifar100_audit",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_om_nominal_s41_kernel",
+      "configs": [
+        "configs/cifar100_om_nominal_s41_kernel.json"
+      ],
+      "description": "cifar100_om_nominal_s41_kernel",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_om_nominal_s41_hwa",
+      "configs": [
+        "configs/cifar100_om_nominal_s41_hwa.json"
+      ],
+      "description": "cifar100_om_nominal_s41_hwa",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_om_nominal_s41_a0_population",
+      "configs": [
+        "configs/cifar100_om_nominal_s41_a0_population.json"
+      ],
+      "description": "cifar100_om_nominal_s41_a0_population",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_om_nominal_s41_a0_e0_deploy",
+      "configs": [
+        "configs/cifar100_om_nominal_s41_a0_e0_deploy.json"
+      ],
+      "description": "cifar100_om_nominal_s41_a0_e0_deploy",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_om_nominal_s41_a0_e0_none_n500_t0",
+      "configs": [
+        "configs/cifar100_om_nominal_s41_a0_e0_none_n500_t0.json"
+      ],
+      "description": "cifar100_om_nominal_s41_a0_e0_none_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_om_nominal_s41_a0_e0_calibration_n500_t0",
+      "configs": [
+        "configs/cifar100_om_nominal_s41_a0_e0_calibration_n500_t0.json"
+      ],
+      "description": "cifar100_om_nominal_s41_a0_e0_calibration_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_om_nominal_s41_a0_e0_rewrite_n500_t0",
+      "configs": [
+        "configs/cifar100_om_nominal_s41_a0_e0_rewrite_n500_t0.json"
+      ],
+      "description": "cifar100_om_nominal_s41_a0_e0_rewrite_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_om_nominal_s41_a0_e0_open_loop_n500_t0",
+      "configs": [
+        "configs/cifar100_om_nominal_s41_a0_e0_open_loop_n500_t0.json"
+      ],
+      "description": "cifar100_om_nominal_s41_a0_e0_open_loop_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_om_nominal_s41_a0_e0_closed_loop_n500_t0",
+      "configs": [
+        "configs/cifar100_om_nominal_s41_a0_e0_closed_loop_n500_t0.json"
+      ],
+      "description": "cifar100_om_nominal_s41_a0_e0_closed_loop_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_pcm_nominal_s41_kernel",
+      "configs": [
+        "configs/cifar100_pcm_nominal_s41_kernel.json"
+      ],
+      "description": "cifar100_pcm_nominal_s41_kernel",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_pcm_nominal_s41_hwa",
+      "configs": [
+        "configs/cifar100_pcm_nominal_s41_hwa.json"
+      ],
+      "description": "cifar100_pcm_nominal_s41_hwa",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_pcm_nominal_s41_a0_population",
+      "configs": [
+        "configs/cifar100_pcm_nominal_s41_a0_population.json"
+      ],
+      "description": "cifar100_pcm_nominal_s41_a0_population",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_pcm_nominal_s41_a0_e0_deploy",
+      "configs": [
+        "configs/cifar100_pcm_nominal_s41_a0_e0_deploy.json"
+      ],
+      "description": "cifar100_pcm_nominal_s41_a0_e0_deploy",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_pcm_nominal_s41_a0_e0_none_n500_t0",
+      "configs": [
+        "configs/cifar100_pcm_nominal_s41_a0_e0_none_n500_t0.json"
+      ],
+      "description": "cifar100_pcm_nominal_s41_a0_e0_none_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_pcm_nominal_s41_a0_e0_calibration_n500_t0",
+      "configs": [
+        "configs/cifar100_pcm_nominal_s41_a0_e0_calibration_n500_t0.json"
+      ],
+      "description": "cifar100_pcm_nominal_s41_a0_e0_calibration_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_pcm_nominal_s41_a0_e0_rewrite_n500_t0",
+      "configs": [
+        "configs/cifar100_pcm_nominal_s41_a0_e0_rewrite_n500_t0.json"
+      ],
+      "description": "cifar100_pcm_nominal_s41_a0_e0_rewrite_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_pcm_nominal_s41_a0_e0_open_loop_n500_t0",
+      "configs": [
+        "configs/cifar100_pcm_nominal_s41_a0_e0_open_loop_n500_t0.json"
+      ],
+      "description": "cifar100_pcm_nominal_s41_a0_e0_open_loop_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_pcm_nominal_s41_a0_e0_closed_loop_n500_t0",
+      "configs": [
+        "configs/cifar100_pcm_nominal_s41_a0_e0_closed_loop_n500_t0.json"
+      ],
+      "description": "cifar100_pcm_nominal_s41_a0_e0_closed_loop_n500_t0",
+      "experiment_id": "cifar_resnet_suffix_recovery.v1",
+      "mode": "train"
+    }
+  ],
+  "completion_criteria": [
+    "Exactly one valid completed native run for every declared config.",
+    "Exact P0 pairing, unchanged digital prefix and no test-set selection.",
+    "A pilot validates implementation only; formal claims require independent arrays."
+  ],
+  "evidence_class": "exploratory",
+  "hypothesis": "Observable pulse recovery can improve fresh-array accuracy beyond population HWA, digital calibration and a no-learning rewrite.",
+  "motivation": "Locate hardware mismatch regimes requiring same-task on-chip adaptation.",
+  "schema_version": 1,
+  "study_id": "cifar-suffix-pilot-v1",
+  "title": "CIFAR ResNet suffix recovery: pilot"
+}

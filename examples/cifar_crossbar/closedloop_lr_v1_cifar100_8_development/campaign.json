@@ -1,0 +1,28 @@
+{
+  "backend": "om",
+  "dataset": "cifar100",
+  "depth": 8,
+  "nodes": [
+    {
+      "array_seed": 211001,
+      "config": "screen1.json",
+      "id": "screen1",
+      "sha256": "b764a9419d1d910491c892b9f2b4a0e20c55914fc90602687d682f78d1113747",
+      "stage": "screen"
+    },
+    {
+      "array_seed": 211002,
+      "config": "screen2.json",
+      "id": "screen2",
+      "sha256": "43e396588e42ba2c7eac0d115f4d4bd164f529e88bdcd87a305aebac5fa5cfa3",
+      "stage": "screen"
+    }
+  ],
+  "phase": "development",
+  "plan": "studies/cifar100-om-conv8-closedloop-lr-development-v1.json",
+  "plan_sha256": "7ad6936fd5546fe60e2edd38d8a4dfab532ce73eb996c80d731f6247874df2f8",
+  "relative": "examples/cifar_crossbar/closedloop_lr_v1_cifar100_8_development",
+  "smoke": false,
+  "study_id": "cifar100-om-conv8-closedloop-lr-development-v1",
+  "suffix": "last_four_blocks"
+}

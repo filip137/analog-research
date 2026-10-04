@@ -1,0 +1,35 @@
+{
+  "backend": "om",
+  "dataset": "cifar100",
+  "depth": 8,
+  "nodes": [
+    {
+      "array_seed": 251001,
+      "config": "screen1.json",
+      "id": "screen1",
+      "sha256": "36bddee5ef7d73dd201199c771a521d4b96c4f4d69e29321ec5b94bcb1ea7eee",
+      "stage": "screen"
+    },
+    {
+      "array_seed": 251002,
+      "config": "screen2.json",
+      "id": "screen2",
+      "sha256": "d2f1294c67f6630e71b0e4b514849e6f78d8e527e6442b1d292a600d67e9d59a",
+      "stage": "screen"
+    },
+    {
+      "array_seed": 251003,
+      "config": "screen3.json",
+      "id": "screen3",
+      "sha256": "3f9acba15d24eec77444c1f65e48ba9545e6a814cf17b2bd01af1b5553a96b8e",
+      "stage": "screen"
+    }
+  ],
+  "phase": "confirmation",
+  "plan": "studies/cifar100-om-conv8-closedloop-lr-confirmation-v1.json",
+  "plan_sha256": "14f7e43d7943be8351014d1e276d23a10e433560cd7c0aafe7d5db2162679f7b",
+  "relative": "examples/cifar_crossbar/closedloop_lr_v1_cifar100_8_confirmation",
+  "smoke": false,
+  "study_id": "cifar100-om-conv8-closedloop-lr-confirmation-v1",
+  "suffix": "last_four_blocks"
+}

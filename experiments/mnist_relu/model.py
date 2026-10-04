@@ -20,9 +20,27 @@ class TeacherWeight:
 
 
 class BiasFreeReluTeacher:
-    def __init__(self, *, device: torch.device) -> None:
-        self.input_weight = TeacherWeight((784, 50), device=device)
-        self.output_weight = TeacherWeight((50, 10), device=device)
+    def __init__(
+        self,
+        *,
+        device: torch.device,
+        dims: tuple[int, int, int] = (784, 50, 10),
+    ) -> None:
+        if (
+            not isinstance(dims, tuple)
+            or len(dims) != 3
+            or any(
+                isinstance(item, bool) or not isinstance(item, int) or item <= 0
+                for item in dims
+            )
+        ):
+            raise ValueError(
+                "Expected dims to contain three positive integers. "
+                f"Provided value: {dims!r}."
+            )
+        self.dims = dims
+        self.input_weight = TeacherWeight((dims[0], dims[1]), device=device)
+        self.output_weight = TeacherWeight((dims[1], dims[2]), device=device)
         torch.nn.init.kaiming_uniform_(
             self.input_weight.state.T,
             a=0.0,

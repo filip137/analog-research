@@ -1,0 +1,151 @@
+{
+  "backend": "om",
+  "dataset": "cifar100",
+  "nodes": [
+    {
+      "config": "configs/cache.json",
+      "id": "cache",
+      "sha256": "2774386060ae547ba38aea218ddbbb7b4a8ad771e1a1154cf13e78538cfb325c",
+      "stage": "cache"
+    },
+    {
+      "config": "configs/kernel.json",
+      "id": "kernel",
+      "sha256": "dfdacb11285441a06eda17b2471163097804f7e397895e70d6c3aecb866777e1",
+      "stage": "kernel"
+    },
+    {
+      "config": "configs/generic_0_0.json",
+      "id": "generic_0_0",
+      "sha256": "e986c6a890498731e8c2b5ce44815ccd7732f5801928755fae8048cd82a14ab0",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/generic_0_1.json",
+      "id": "generic_0_1",
+      "sha256": "0efa34b3cb55081784b1978b3a29c65eb20b28ed0044627fedda99511f41a7f0",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/generic_0_2.json",
+      "id": "generic_0_2",
+      "sha256": "393245b3a743839419d6f0be6fdfdfdd0d8123056c69cfaf42872ed8f67d58aa",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/generic_1_0.json",
+      "id": "generic_1_0",
+      "sha256": "ff4242b4fffdd19bf26a73f04b8e65a775e172f519ebe527c2551614017f900d",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/generic_1_1.json",
+      "id": "generic_1_1",
+      "sha256": "96e0bde7d8c6f6462eb63ad2a178d60b812b0dd22b59fa19034fec607e1d7f60",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/generic_1_2.json",
+      "id": "generic_1_2",
+      "sha256": "4bf67e7924d520ed9f855c11eca5bfaae01a04d4de4b5b08ef2dee156052f421",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/generic_2_0.json",
+      "id": "generic_2_0",
+      "sha256": "26e6918c7f87605b432cf63fbccf421abe944c10ff5fab24f9b94f10c57684c8",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/generic_2_1.json",
+      "id": "generic_2_1",
+      "sha256": "53ac8e593b697fc6c6db68f80f0da5767ffc9b753eb4051eeb60e6174af7bee9",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/generic_2_2.json",
+      "id": "generic_2_2",
+      "sha256": "94f9c66bf2a251165032fd82aee9d707a7649aa1517d3a5714a4ba16858e87ed",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/select_generic.json",
+      "id": "select_generic",
+      "sha256": "8cd0534f9801b71fbca32393ff6015396fa587aa02a93a21fa009801be1f9db6",
+      "stage": "select_generic"
+    },
+    {
+      "config": "configs/cdt_open_0.json",
+      "id": "cdt_open_0",
+      "sha256": "d1d8639cad84ef636d6876df82d1fcacfbd22b5684d08d94fe3a5e0a12c7ead7",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/cdt_open_1.json",
+      "id": "cdt_open_1",
+      "sha256": "c77de6efe6359175e05dcf067d2d827a64efda91f9bbb2b31faa7181ad1909f8",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/cdt_open_2.json",
+      "id": "cdt_open_2",
+      "sha256": "44c5da7260589a3cef86d92e5c945f70e8145018010137896166e55ad8494460",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/cdt_gmax_0.json",
+      "id": "cdt_gmax_0",
+      "sha256": "2f5ec50513ab80333572abe364af85b139f4a32466f910bd67752c4da35979b9",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/cdt_gmax_1.json",
+      "id": "cdt_gmax_1",
+      "sha256": "859e4c1050e39665c0d3c463809c1fba045a7b97341bb01713c2a032e820b807",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/cdt_gmax_2.json",
+      "id": "cdt_gmax_2",
+      "sha256": "80cf4373826ae7612531b8b9d7029cf5bf71901e6777ac4bd7112e380acd7022",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/cdt_random_0.json",
+      "id": "cdt_random_0",
+      "sha256": "770214dc6080364c97e5554861de7c5a4bb95ebc6630b9f5f4eb2ff2c569fb97",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/cdt_random_1.json",
+      "id": "cdt_random_1",
+      "sha256": "d6df58b103d2ad298db6fe899871187a37b49c33297f821a7d69a00eb788fa14",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/cdt_random_2.json",
+      "id": "cdt_random_2",
+      "sha256": "0d55adb31ca122c6abcabba77b672e3d417f6c955497b27e158d1741e2ccf15c",
+      "stage": "fit"
+    },
+    {
+      "config": "configs/sources.json",
+      "id": "sources",
+      "sha256": "c3b1fa51b3e43b5991c4b151c4b11658d988f873f143caad9b85028c0b39a54d",
+      "stage": "sources"
+    },
+    {
+      "config": "configs/screen1.json",
+      "id": "screen1",
+      "sha256": "f02de568a2630c35e809c5b6b6fce76a8251ee86b60cc73a45982ca6a0fc080a",
+      "stage": "screen"
+    }
+  ],
+  "phase": "fault_sweep",
+  "plan": "study-plan.json",
+  "plan_sha256": "07d154ace03ea3d5004ded1a8e57cc6dfffa5b635f56c78a6b3de9892daa9869",
+  "schema": "cifar_crossbar.campaign.v1",
+  "smoke": true,
+  "study_id": "cifar100-om-conv8-fault-sweep-canary-v1",
+  "suffix": "last_four_blocks"
+}

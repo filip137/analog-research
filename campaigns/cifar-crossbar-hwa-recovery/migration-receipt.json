@@ -1,0 +1,333 @@
+{
+  "schema": "hwa.cifar_migration.v1",
+  "date": "2026-10-04",
+  "branch": "codex/revised-hwa-training",
+  "destination_base": "9606b48",
+  "sources": [
+    {
+      "root": "/home/filip/server_code/.codex/worktrees/cifar-resnet-suffix-recovery",
+      "commit": "e3052ac1f469fa14187a8c72d773f3e940010505",
+      "branch": "codex/cifar-resnet-suffix-recovery"
+    },
+    {
+      "root": "/home/filip/server_code/.codex/worktrees/cifar10-crossbar-recovery-20260917",
+      "commit": "db93217c69444f93761be6eadab0eae15ccbad1d",
+      "branch": "codex/cifar10-crossbar-recovery-20260917"
+    }
+  ],
+  "copy": {
+    "status": "verified",
+    "method": "SHA-256 source and independent destination, cached only for identical inode/size/mtime",
+    "files": {
+      "cifar-resnet-suffix-recovery": 69968,
+      "cifar10-crossbar-recovery-20260917": 313
+    },
+    "total_files": 70281,
+    "unique_files_hashed": 97876,
+    "bytes_hashed": 361396183330,
+    "elapsed_seconds": 374.98796558380127,
+    "inventory_sha256": "fcaefa779d0d13a0765364202eb75afa53d915fac311c232be87b4e2868fee1b"
+  },
+  "inputs": {
+    "resolved": {
+      "cifar_pcm_recovery_epochs.v1": 10,
+      "cifar_crossbar_full_epochs.v1": 32,
+      "cifar_pcm_hwa_comparison.v1": 24,
+      "cifar_om_closed_loop_lr.v1": 24,
+      "cifar_om_open_loop.v1": 32,
+      "cifar_pcm_fault_recovery.v1": 9,
+      "cifar_resnet_suffix_recovery.v1": 39,
+      "cifar_crossbar_fault_sweep.v1": 562,
+      "cifar10_ibm_om_crossbar.v1": 23
+    },
+    "total": 755,
+    "failures": [],
+    "elapsed_seconds": 11.370485067367554,
+    "training_launched": false
+  },
+  "native_bundles": {
+    "counts": {
+      "runs": 755,
+      "complete": 753,
+      "structurally_valid": 121,
+      "retained_artifacts_verified": 21885,
+      "previously_deleted_artifacts": 46400,
+      "failed": 2
+    },
+    "unexplained": [],
+    "hash_method": "compare original native result artifact digests with source/destination SHA-256 migration inventory; metadata inspected with inspect_run",
+    "runs_with_retention_deletions": 112,
+    "runs_with_preexisting_study_receipt_mismatch": 618
+  },
+  "reports": {
+    "sweep/per_array.csv": {
+      "rows": 27216,
+      "identical": true
+    },
+    "sweep/summary.csv": {
+      "rows": 9072,
+      "identical": true
+    },
+    "sweep/paired_per_array.csv": {
+      "rows": 25920,
+      "identical": true
+    },
+    "sweep/paired_summary.csv": {
+      "rows": 8640,
+      "identical": true
+    },
+    "sweep/costs.csv": {
+      "rows": 5184,
+      "identical": true
+    },
+    "sweep/fault_identities.csv": {
+      "rows": 312,
+      "identical": true
+    },
+    "sweep/clean_sources.csv": {
+      "rows": 1296,
+      "identical": true
+    },
+    "sweep/cross_source_per_array.csv": {
+      "rows": 32832,
+      "identical": true
+    },
+    "sweep/cross_source_summary.csv": {
+      "rows": 10944,
+      "identical": true
+    },
+    "full5/per_array.csv": {
+      "rows": 2400,
+      "identical": true
+    },
+    "full5/summary.csv": {
+      "rows": 800,
+      "identical": true
+    },
+    "full5/paired.csv": {
+      "rows": 1920,
+      "identical": true
+    },
+    "full5/paired_summary.csv": {
+      "rows": 640,
+      "identical": true
+    },
+    "full5/final_costs.csv": {
+      "rows": 384,
+      "identical": true
+    },
+    "full5/cross_source.csv": {
+      "rows": 2880,
+      "identical": true
+    },
+    "full5/cross_source_summary.csv": {
+      "rows": 960,
+      "identical": true
+    },
+    "openloop/curves.csv": {
+      "rows": 20736,
+      "identical": true
+    },
+    "openloop/means.csv": {
+      "rows": 6912,
+      "identical": true
+    },
+    "openloop/paired.csv": {
+      "rows": 5184,
+      "identical": true
+    },
+    "openloop/paired_means.csv": {
+      "rows": 1728,
+      "identical": true
+    },
+    "openloop/costs.csv": {
+      "rows": 3888,
+      "identical": true
+    },
+    "closedloop/curves.csv": {
+      "rows": 2400,
+      "identical": true
+    },
+    "dense/results.csv": {
+      "rows": 24,
+      "identical": true
+    },
+    "dense/paired_effects.csv": {
+      "rows": 12,
+      "identical": true
+    },
+    "five-stage/calibrated_all_conditions.csv": {
+      "rows": 120,
+      "identical": true
+    },
+    "five-stage/calibrated_stuck_high.csv": {
+      "rows": 40,
+      "identical": true
+    },
+    "five-stage/stuck_high_direct_calibration.csv": {
+      "rows": 40,
+      "identical": true
+    },
+    "five-stage/deployed_all_conditions.csv": {
+      "rows": 120,
+      "identical": true
+    },
+    "five-stage/deployed_stuck_high.csv": {
+      "rows": 40,
+      "identical": true
+    }
+  },
+  "native_parity": {
+    "repeated_native_populations": {
+      "om": "9ad424ceea70f9b37a42cf5ebe56adc15a10d8ea680cc61a9fc301d6a7af6ad9",
+      "pcm": "250b003e0b122f2c872ce6adeb8e27ab7aa1bb14b7497806df45ac07d10946da"
+    },
+    "aihwkit_version": "1.1.0",
+    "torch_version": "2.11.0+cu130",
+    "pcm_single_set_native": 0.5880295634269714,
+    "pcm_single_set_expected": 0.5880295848846435,
+    "pcm_reset_native": 0.009999999776482582,
+    "pcm_inference_max_abs_error": 0.0,
+    "drift_compensation": "native_identity_probe_parity",
+    "refresh": "custom_observable_PV_policy_not_native_refresh_SGD",
+    "status": "pass"
+  },
+  "teacher_mapping": [
+    {
+      "dataset": "cifar10",
+      "suffix": "last_two_blocks",
+      "samples": 16,
+      "teacher_sha256": "ef93fc4d3ea83c08d75bfd6fc31af56047cfa241608c9ba3a1f6dc11cca20dd9",
+      "maximum_logit_error": 2.86102294921875e-06,
+      "predictions_equal": true
+    },
+    {
+      "dataset": "cifar10",
+      "suffix": "last_four_blocks",
+      "samples": 16,
+      "teacher_sha256": "ef93fc4d3ea83c08d75bfd6fc31af56047cfa241608c9ba3a1f6dc11cca20dd9",
+      "maximum_logit_error": 3.814697265625e-06,
+      "predictions_equal": true
+    },
+    {
+      "dataset": "cifar100",
+      "suffix": "last_two_blocks",
+      "samples": 16,
+      "teacher_sha256": "84213ce69c556d1e3b983dc13d154a92d4132113592eae55215a656f62bfb896",
+      "maximum_logit_error": 7.62939453125e-06,
+      "predictions_equal": true
+    },
+    {
+      "dataset": "cifar100",
+      "suffix": "last_four_blocks",
+      "samples": 16,
+      "teacher_sha256": "84213ce69c556d1e3b983dc13d154a92d4132113592eae55215a656f62bfb896",
+      "maximum_logit_error": 9.5367431640625e-06,
+      "predictions_equal": true
+    }
+  ],
+  "source_archive_hashes": [
+    {
+      "label": "resnet",
+      "archive": "results/cifar-migration-20261004/resnet-source.tar.gz",
+      "sha256": "f318947209796b4b9a8c378c10c7509c14eaeedade584bd6846024f319fea173"
+    },
+    {
+      "label": "dense",
+      "archive": "results/cifar-migration-20261004/dense-source.tar.gz",
+      "sha256": "01987a9403f470803bd5ffc2a0ca67aab77fdb08e0e989ddbf9b88cd98af85d0"
+    }
+  ],
+  "audit_files": [
+    {
+      "path": "results/cifar-migration-20261004/artifact-verification.json",
+      "sha256": "c86bb96adc47423ab4b379fd133d2bf2484630c019122bdc95baf9ba65026257"
+    },
+    {
+      "path": "results/cifar-migration-20261004/artifact-inventory.jsonl.gz",
+      "sha256": "fcaefa779d0d13a0765364202eb75afa53d915fac311c232be87b4e2868fee1b"
+    },
+    {
+      "path": "results/cifar-migration-20261004/additional-artifacts.json",
+      "sha256": "27fcdfef9bb5c181312d145cda2dfa0b5a2a9780bcb00eeec1b4c57f73ae175f"
+    },
+    {
+      "path": "results/cifar-migration-20261004/source-import.json",
+      "sha256": "fa7a6362a9bd4fd1c0d9ead8863f4d3d4d941aacef6f5a50f620f18652191940"
+    },
+    {
+      "path": "results/cifar-migration-20261004/additional-source-files.json",
+      "sha256": "e0b2ae7fdff33cce72892b418a01f37c9236a09d079dab74c0958fe4577e7020"
+    },
+    {
+      "path": "results/cifar-migration-20261004/resnet-source.json",
+      "sha256": "29aef23ca3abf944b8dc48c5bf73d8a34565c4fce30781ef3c93a860a319198e"
+    },
+    {
+      "path": "results/cifar-migration-20261004/dense-source.json",
+      "sha256": "49cd51971aa47f10f90224d1d17ac20a4baf278f5742cfe53ff83c995f4ad7d1"
+    },
+    {
+      "path": "results/cifar-migration-20261004/resnet-source.tar.gz",
+      "sha256": "f318947209796b4b9a8c378c10c7509c14eaeedade584bd6846024f319fea173"
+    },
+    {
+      "path": "results/cifar-migration-20261004/dense-source.tar.gz",
+      "sha256": "01987a9403f470803bd5ffc2a0ca67aab77fdb08e0e989ddbf9b88cd98af85d0"
+    },
+    {
+      "path": "results/cifar-migration-20261004/resnet-working.patch",
+      "sha256": "f7ea3b4af32810d93a9439393ea2efcb0c0584095f4a6d7a3590472d6c8bece3"
+    },
+    {
+      "path": "results/cifar-migration-20261004/dense-working.patch",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "results/cifar-migration-20261004/config-validation.json",
+      "sha256": "498a83779b20f625a025369861e6f633b52089ab9579b35e58ee5495caa13da8"
+    },
+    {
+      "path": "results/cifar-migration-20261004/reproduction-validation.json",
+      "sha256": "d8c49106850ed58fc7befccb6ab8e29db8e24d14ad5f9d71537706c40453c9c9"
+    },
+    {
+      "path": "results/cifar-migration-20261004/native-bundle-validation.json",
+      "sha256": "22ecd95cd75072d32da884b70a3b81464f7d3d05e15f0235d58aed817f07d344"
+    },
+    {
+      "path": "results/cifar-migration-20261004/report-comparison.json",
+      "sha256": "13bf3d5ac536fd69075db380d8653bd330afad05ad6f6e9bcbe00a8a89d91599"
+    },
+    {
+      "path": "results/cifar-migration-20261004/native-parity.json",
+      "sha256": "4dd8a1fa577878041071d1abf0303daf54401ec0b173891e6cacb871f00292ab"
+    },
+    {
+      "path": "results/cifar-migration-20261004/teacher-smoke.json",
+      "sha256": "316d01ee391f92939afe40a8b395a2dc254281120e9f6b12a4aa3d6d3a47d9f0"
+    },
+    {
+      "path": "results/cifar-migration-20261004/pytest-initial.log",
+      "sha256": "19d71c2667e4cbb53a99de5ea3f64ada53f59e63e1d40b123cf6396c607e476b"
+    },
+    {
+      "path": "results/cifar-migration-20261004/pytest-followup.log",
+      "sha256": "9c5d7c10a2caebeced71491e44fe2b28b7730fd07fc27bd749ab208e452ca830"
+    },
+    {
+      "path": "results/cifar-migration-20261004/pytest-portability.log",
+      "sha256": "f0627c1d0522b7accf006054508ee4fe4253f9b3a1035bde61b0b627bbbcdf24"
+    },
+    {
+      "path": "results/cifar-migration-20261004/pytest-cifar-final.log",
+      "sha256": "d24fae7384568bf47006805fcdf2bcad3c767ce94a4a3a048e4a222d3a2676ae"
+    }
+  ],
+  "limitations": [
+    "Full scientific training was not rerun.",
+    "Earlier epoch 1\u20134 binary states were intentionally deleted before migration.",
+    "Historical prepared-study digest mismatches are preserved.",
+    "Imported scientific reviews remain pending."
+  ]
+}

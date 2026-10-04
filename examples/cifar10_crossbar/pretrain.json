@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "experiment_id": "cifar10_ibm_om_crossbar.v1",
+  "stage": "pretrain",
+  "seed": 42,
+  "data_seed": 42,
+  "data_root": "/home/filip/data",
+  "dims": [
+    3072,
+    256,
+    10
+  ],
+  "batch_size": 256,
+  "epochs": 100,
+  "learning_rate": 0.001,
+  "weight_decay": 0.0001,
+  "maximum_batches": null,
+  "evaluation_limit": null,
+  "settings": {
+    "minimum_validation_accuracy": 0.45,
+    "minimum_lr_factor": 0.01
+  }
+}

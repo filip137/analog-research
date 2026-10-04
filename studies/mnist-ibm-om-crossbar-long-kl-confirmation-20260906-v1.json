@@ -1,0 +1,129 @@
+{
+  "analysis_plan": [
+    "minimum held-apparent validation teacher KL, then higher accuracy, then earlier checkpoint; include P0",
+    "Freeze the best constant and best decaying schedule per architecture and condition; evaluate on two additional saved arrays, one write per array. Report per-array results.",
+    "If a screen winner is still improving near the 30-epoch boundary (best at epoch >=25 and >=1% KL improvement over the preceding five-epoch window), extend that schedule to 60 epochs with the same decay floor; report any unresolved boundary.",
+    "Plot KL versus epochs and cumulative physical pulses; report accuracy and persistent-state diagnostics separately."
+  ],
+  "arms": [
+    {
+      "arm_id": "healthy-constant-3e-6-array-2090501",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_confirmation_20260906/healthy-constant-3e-6-array-2090501.json"
+      ],
+      "description": "Frozen constant recovery on a held-out saved array",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "healthy-decay-3e-6-array-2090501",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_confirmation_20260906/healthy-decay-3e-6-array-2090501.json"
+      ],
+      "description": "Frozen exponential recovery on a held-out saved array",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "healthy-previous-one-epoch-array-2090501",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_confirmation_20260906/healthy-previous-one-epoch-array-2090501.json"
+      ],
+      "description": "Frozen previous one-epoch reference recovery on a held-out saved array",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "healthy-constant-3e-6-array-2090502",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_confirmation_20260906/healthy-constant-3e-6-array-2090502.json"
+      ],
+      "description": "Frozen constant recovery on a held-out saved array",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "healthy-decay-3e-6-array-2090502",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_confirmation_20260906/healthy-decay-3e-6-array-2090502.json"
+      ],
+      "description": "Frozen exponential recovery on a held-out saved array",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "healthy-previous-one-epoch-array-2090502",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_confirmation_20260906/healthy-previous-one-epoch-array-2090502.json"
+      ],
+      "description": "Frozen previous one-epoch reference recovery on a held-out saved array",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-constant-1e-5-array-2090501",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_confirmation_20260906/faulted-constant-1e-5-array-2090501.json"
+      ],
+      "description": "Frozen constant recovery on a held-out saved array",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-decay-1e-5-array-2090501",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_confirmation_20260906/faulted-decay-1e-5-array-2090501.json"
+      ],
+      "description": "Frozen exponential recovery on a held-out saved array",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-previous-one-epoch-array-2090501",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_confirmation_20260906/faulted-previous-one-epoch-array-2090501.json"
+      ],
+      "description": "Frozen previous one-epoch reference recovery on a held-out saved array",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-constant-1e-5-array-2090502",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_confirmation_20260906/faulted-constant-1e-5-array-2090502.json"
+      ],
+      "description": "Frozen constant recovery on a held-out saved array",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-decay-1e-5-array-2090502",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_confirmation_20260906/faulted-decay-1e-5-array-2090502.json"
+      ],
+      "description": "Frozen exponential recovery on a held-out saved array",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-previous-one-epoch-array-2090502",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_confirmation_20260906/faulted-previous-one-epoch-array-2090502.json"
+      ],
+      "description": "Frozen previous one-epoch reference recovery on a held-out saved array",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    }
+  ],
+  "completion_criteria": [
+    "Eight frozen-schedule runs and four one-epoch reference runs complete on two additional saved arrays.",
+    "Teacher and HWA master hashes match the screening inputs.",
+    "All selection uses validation KL with P0 eligible; the official test set remains closed."
+  ],
+  "evidence_class": "exploratory_model_based_exact_p0_schedule_screen",
+  "hypothesis": "The selected longer schedules reduce held-apparent teacher KL on additional saved arrays.",
+  "motivation": "Prior low-rate crossbar runs still improved at epoch 3, while DRN rates had been screened over only 8192 examples.",
+  "schema_version": 1,
+  "study_id": "mnist-ibm-om-crossbar-long-kl-confirmation-20260906-v1",
+  "title": "Frozen low-rate and decaying schedules on two additional crossbar arrays"
+}

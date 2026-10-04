@@ -1,0 +1,52 @@
+{
+  "array_seed": 271001,
+  "backend": "pcm",
+  "batch_size": 64,
+  "calibration_lr": 0.0003,
+  "candidate_family": "generic",
+  "candidate_learning_rate": 0.0003,
+  "candidate_noise": 5.0,
+  "cpu_threads": 1,
+  "data_seed": 20260917,
+  "dataset": "cifar10",
+  "device": "cuda:0",
+  "disable_cudnn": true,
+  "endpoint_seed": 281001,
+  "epochs": 5,
+  "experiment_id": "cifar_crossbar_fault_sweep.v1",
+  "extension_epochs": 0,
+  "fault_kinds": [
+    "open",
+    "gmax",
+    "random"
+  ],
+  "fault_rates_ppm": [
+    0,
+    50000
+  ],
+  "hwa_batch_size": 256,
+  "hwa_epochs": 1,
+  "kernel_bins": 41,
+  "kernel_samples": 512,
+  "learning_rate": 0.0001,
+  "max_examples": 128,
+  "methods": [
+    "none",
+    "calibration",
+    "rewrite",
+    "onchip_weights",
+    "onchip_calibration"
+  ],
+  "program_pulses": 128,
+  "recovery_images": 45000,
+  "recovery_pulses": 640,
+  "schema_version": 1,
+  "seed": 41,
+  "stage": "fit",
+  "suffix": "last_two_blocks",
+  "tile_size": 512,
+  "update_pulses": 1,
+  "validation_every": 1,
+  "validation_images": 1000,
+  "verify_step_fraction": 0.5
+}

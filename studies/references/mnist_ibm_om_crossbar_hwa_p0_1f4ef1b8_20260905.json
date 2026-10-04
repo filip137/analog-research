@@ -1,0 +1,76 @@
+{
+  "artifacts": {
+    "hwa_master": {
+      "artifact_kind": "crossbar_hwa_master",
+      "filename": "hwa_master.pt",
+      "sha256": "b7daa18f5b148114cebc0c6b212099c236b0cebdd588063e72d9e9c127dc6233",
+      "size_bytes": 843628,
+      "source_run": "offchip-hwa/20260904T212251.356851Z-a7d0562d-b588ff9f"
+    },
+    "hwa_faulted_p0": {
+      "apparent_q_sha256": "e8285f62f0688980e0490b567c4ddd0ddf3b08ef9e1278298bd8d281be958d5c",
+      "artifact_kind": "crossbar_corrupted_state_bundle",
+      "assignment_seed": 2090402,
+      "endpoint_seed": 2091402,
+      "filename": "hwa_faulted_p0.pt",
+      "parent_artifact_sha256": "5e62de40ef1364ce537bd90445a4a9a9c08abc3eb2980b15cd5b5f5144745f0e",
+      "persistent_q_sha256": "4682b92d129b6d9ac9cee520ea034312d0d7288defb6986c5445db1ec33f61f9",
+      "plant_state_sha256": "dc8d3665def8f8fbee1f937761fd1563e8233a0e279ebab80135c78585443a24",
+      "role": "faulted_p0",
+      "sha256": "1530c8424697e3aef7157b20eaa8e6dea3f05e8dabf288d012fae3243adbd809",
+      "size_bytes": 30506946,
+      "source_kind": "hwa_master",
+      "source_run": "tune-hwa-corrupt/20260904T212428.247769Z-7c60ea09-c6f862ff"
+    },
+    "hwa_healthy_p0": {
+      "apparent_q_sha256": "46843bc5238523e99563b9330e8553d50868c08e0ee9c46acf58cb68c4139a65",
+      "artifact_kind": "crossbar_deployed_state_bundle",
+      "assignment_seed": 2090402,
+      "endpoint_seed": 2091402,
+      "filename": "hwa_healthy_p0.pt",
+      "persistent_q_sha256": "311ed57f0e34e248d437ef58c33c54bb4c5f5cda8db9f4715d565d708baee40e",
+      "plant_state_sha256": "c4b6112b7b5de2dbf11ca4018d107c3965701cd4d15e7f796ac240ecf9b2e999",
+      "role": "healthy_p0",
+      "sha256": "5e62de40ef1364ce537bd90445a4a9a9c08abc3eb2980b15cd5b5f5144745f0e",
+      "size_bytes": 30504002,
+      "source_kind": "hwa_master",
+      "source_run": "tune-hwa-deploy/20260904T212421.591065Z-589c7492-dd08c84e"
+    },
+    "teacher_weights": {
+      "artifact_kind": "selected_named_weights",
+      "filename": "teacher_weights.pt",
+      "sha256": "7c1f826c6da5e0a8b18024b49305a9c61230a93db28253a2e8ad427d788a4565",
+      "size_bytes": 815654,
+      "source_run": "teacher/20260904T212025.040668Z-08ee74f8-f00bcf21"
+    }
+  },
+  "cross_commit_reuse_policy": "Only the four exact artifacts and eight original control files listed here may cross the source-commit boundary. The canary launch commit remains separately clean and recorded; generic completed-run reuse rules are unchanged.",
+  "provenance_files": {
+    "faulted_manifest.json": "343c4dac2df646ef5baddd9668a464c1863e7d5dad8da97a7866b8e365dc8a23",
+    "faulted_result.json": "7ee8ab128956c24822df0ca98fc049fa4994dc0a0cae27eba4044e26cf888161",
+    "healthy_manifest.json": "14eb0cd2706c0ef859051693ac117ba006bc8d8cb490a8581ce041e928d15fe5",
+    "healthy_result.json": "e6739197ffb34abdf231ab500c380a96e2b407ad1c80212dc5fe455a356a1c49",
+    "hwa_manifest.json": "2ee05ce8fddab849ff13318cc16dfc42ac3a3fad4397c1565ae8a6e6896f3b26",
+    "hwa_result.json": "e5370427c81887fb6f782e8b40d7fc46886231c7a69a2deaa9703cbd0ac30f63",
+    "teacher_manifest.json": "49718571daf8f32888b02eda8a5dcb47510d9d4f9ff9469f02dfa04e58107029",
+    "teacher_result.json": "df8f4619e56797c4b6701cddadad13f7283694f1c9e005819e293dbcbcf5ebda"
+  },
+  "schema": "ebl.ibm_om_crossbar_hwa_p0_import_reference",
+  "schema_version": 1,
+  "source": {
+    "checkout_root_on_akib": "/home/filiposana/staged/ibm_om_crossbar_784_256_1f4ef1b8",
+    "commit": "1f4ef1b8d05b2b0613bf4e8bec4cce799c034cea",
+    "dirty": false,
+    "faulted_source_config_sha256": "b3a3261011898eb1d96de704b4da9829042013e7ae5429af94c7286b8606fcb1",
+    "healthy_source_config_sha256": "c55b2dee67c826ae724b8a93063327904b164af657695adfb5c0f13a3456c85e",
+    "hostname": "integnano-akib",
+    "hwa_source_config_sha256": "14b8b36c83531b370772d8274181fadbc97075c8328c710ea40ec9ff1c74c2c9",
+    "source_plan_sha256": "0db9e7a0b0b189487f561858a484b6a34b33d92e9659d8c1d7b3d092cf0648b4",
+    "study_id": "mnist-ibm-om-crossbar-784-256-hwa-adam-tuning-20260904-v1",
+    "study_sha256": "fa1a0e6678f931985b0681e2371170a991e5a8c6ab99aac70cea900eca9a10a1",
+    "teacher_source_config_sha256": "64c03f4ffd06b3e2d42da3544d30675d1f0f57c85eee9471e86d798d79f688b6",
+    "teacher_source_plan_sha256": "eb9581ac2a50437ecf668f6f47ed07898adec25b6b204bf1a0956f0c18b0d1ab",
+    "teacher_study_id": "mnist-ibm-om-crossbar-784-256-teacher-20260904-v1",
+    "teacher_study_sha256": "bdcc9031c2e8fba795145f553574d71550d989db98a505638b3095576d31cbaa"
+  }
+}

@@ -1,0 +1,298 @@
+{
+  "analysis_plan": [
+    "Report paired epoch-zero, selected, and training-final held-apparent-primary and persistent-secondary accuracy, cross-entropy, and teacher KL for every state/objective/LR cell, with selected epoch and per-epoch, selected, and training-final pulse/cap telemetry.",
+    "For each state/LR cell compare CE versus KL on the same host, and compare every selected checkpoint with its own exact epoch-zero state; do not pool host effects into the objective contrast.",
+    "Rank learning rates by maximum selected held-apparent accuracy, then selected-minus-epoch-zero declared-objective delta, then lower learning rate; retain host as a blocking label and do not pool unadjusted absolute metrics across hosts.",
+    "Use the four no-write fresh-apparent draws only to quantify verification-conditioned snapshot sensitivity; label them counterfactual and not physical inference read noise.",
+    "Treat LR=2e-4 as the explicit q-space learning-rate match to the completed DRN HWA protocol.",
+    "Treat LR=3e-4 as a stress anchor bridging the previous grid, not as another newly optimized low rate.",
+    "Conclude that an update schedule is helpful only if it beats epoch zero without worsening the held-apparent primary metric; report persistent accuracy and KL separately as secondary diagnostics."
+  ],
+  "arms": [
+    {
+      "arm_id": "adam-healthy-ce-lr0",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-healthy-ce-lr0.json"
+      ],
+      "description": "Three-epoch CE PulseAdam diagnostic from the exact healthy HWA P0 at LR=0; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-healthy-kl-lr0",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-healthy-kl-lr0.json"
+      ],
+      "description": "Three-epoch KL PulseAdam diagnostic from the exact healthy HWA P0 at LR=0; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-healthy-ce-lr3em6",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-healthy-ce-lr3em6.json"
+      ],
+      "description": "Three-epoch CE PulseAdam diagnostic from the exact healthy HWA P0 at LR=3e-06; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-healthy-kl-lr3em6",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-healthy-kl-lr3em6.json"
+      ],
+      "description": "Three-epoch KL PulseAdam diagnostic from the exact healthy HWA P0 at LR=3e-06; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-healthy-ce-lr1em5",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-healthy-ce-lr1em5.json"
+      ],
+      "description": "Three-epoch CE PulseAdam diagnostic from the exact healthy HWA P0 at LR=1e-05; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-healthy-kl-lr1em5",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-healthy-kl-lr1em5.json"
+      ],
+      "description": "Three-epoch KL PulseAdam diagnostic from the exact healthy HWA P0 at LR=1e-05; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-healthy-ce-lr3em5",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-healthy-ce-lr3em5.json"
+      ],
+      "description": "Three-epoch CE PulseAdam diagnostic from the exact healthy HWA P0 at LR=3e-05; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-healthy-kl-lr3em5",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-healthy-kl-lr3em5.json"
+      ],
+      "description": "Three-epoch KL PulseAdam diagnostic from the exact healthy HWA P0 at LR=3e-05; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-healthy-ce-lr1em4",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-healthy-ce-lr1em4.json"
+      ],
+      "description": "Three-epoch CE PulseAdam diagnostic from the exact healthy HWA P0 at LR=0.0001; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-healthy-kl-lr1em4",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-healthy-kl-lr1em4.json"
+      ],
+      "description": "Three-epoch KL PulseAdam diagnostic from the exact healthy HWA P0 at LR=0.0001; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-healthy-ce-lr2em4",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-healthy-ce-lr2em4.json"
+      ],
+      "description": "Three-epoch CE PulseAdam diagnostic from the exact healthy HWA P0 at LR=0.0002; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-healthy-kl-lr2em4",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-healthy-kl-lr2em4.json"
+      ],
+      "description": "Three-epoch KL PulseAdam diagnostic from the exact healthy HWA P0 at LR=0.0002; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-healthy-ce-lr3em4",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-healthy-ce-lr3em4.json"
+      ],
+      "description": "Three-epoch CE PulseAdam diagnostic from the exact healthy HWA P0 at LR=0.0003; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-healthy-kl-lr3em4",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-healthy-kl-lr3em4.json"
+      ],
+      "description": "Three-epoch KL PulseAdam diagnostic from the exact healthy HWA P0 at LR=0.0003; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-faulted-ce-lr0",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-faulted-ce-lr0.json"
+      ],
+      "description": "Three-epoch CE PulseAdam diagnostic from the exact faulted HWA P0 at LR=0; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-faulted-kl-lr0",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-faulted-kl-lr0.json"
+      ],
+      "description": "Three-epoch KL PulseAdam diagnostic from the exact faulted HWA P0 at LR=0; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-faulted-ce-lr3em6",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-faulted-ce-lr3em6.json"
+      ],
+      "description": "Three-epoch CE PulseAdam diagnostic from the exact faulted HWA P0 at LR=3e-06; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-faulted-kl-lr3em6",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-faulted-kl-lr3em6.json"
+      ],
+      "description": "Three-epoch KL PulseAdam diagnostic from the exact faulted HWA P0 at LR=3e-06; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-faulted-ce-lr1em5",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-faulted-ce-lr1em5.json"
+      ],
+      "description": "Three-epoch CE PulseAdam diagnostic from the exact faulted HWA P0 at LR=1e-05; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-faulted-kl-lr1em5",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-faulted-kl-lr1em5.json"
+      ],
+      "description": "Three-epoch KL PulseAdam diagnostic from the exact faulted HWA P0 at LR=1e-05; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-faulted-ce-lr3em5",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-faulted-ce-lr3em5.json"
+      ],
+      "description": "Three-epoch CE PulseAdam diagnostic from the exact faulted HWA P0 at LR=3e-05; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-faulted-kl-lr3em5",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-faulted-kl-lr3em5.json"
+      ],
+      "description": "Three-epoch KL PulseAdam diagnostic from the exact faulted HWA P0 at LR=3e-05; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-faulted-ce-lr1em4",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-faulted-ce-lr1em4.json"
+      ],
+      "description": "Three-epoch CE PulseAdam diagnostic from the exact faulted HWA P0 at LR=0.0001; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-faulted-kl-lr1em4",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-faulted-kl-lr1em4.json"
+      ],
+      "description": "Three-epoch KL PulseAdam diagnostic from the exact faulted HWA P0 at LR=0.0001; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-faulted-ce-lr2em4",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-faulted-ce-lr2em4.json"
+      ],
+      "description": "Three-epoch CE PulseAdam diagnostic from the exact faulted HWA P0 at LR=0.0002; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-faulted-kl-lr2em4",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-faulted-kl-lr2em4.json"
+      ],
+      "description": "Three-epoch KL PulseAdam diagnostic from the exact faulted HWA P0 at LR=0.0002; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-faulted-ce-lr3em4",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-faulted-ce-lr3em4.json"
+      ],
+      "description": "Three-epoch CE PulseAdam diagnostic from the exact faulted HWA P0 at LR=0.0003; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "adam-faulted-kl-lr3em4",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/adam-faulted-kl-lr3em4.json"
+      ],
+      "description": "Three-epoch KL PulseAdam diagnostic from the exact faulted HWA P0 at LR=0.0003; epoch zero is eligible for selection.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "fresh-apparent-healthy",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/fresh-apparent-healthy.json"
+      ],
+      "description": "Four authenticated counterfactual fresh-apparent draws from the exact healthy P0 persistent state, with no device write or mutation of the held origin.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "fresh-apparent-faulted",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_hwa_recovery_canary/fresh-apparent-faulted.json"
+      ],
+      "description": "Four authenticated counterfactual fresh-apparent draws from the exact faulted P0 persistent state, with no device write or mutation of the held origin.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    }
+  ],
+  "completion_criteria": [
+    "Exactly 28 Adam diagnostics cover two exact P0 states by two objectives by seven learning rates, plus two separate no-write fresh-apparent diagnostics.",
+    "Every run uses CUDA, the same full ordered 55,000-example epoch stream and full 5,000-example validation split, and never evaluates the official test set.",
+    "Every native manifest binds teacher SHA-256 7c1f826c..., healthy P0 SHA-256 5e62de40..., or faulted P0 SHA-256 1530c842... as declared by the tracked import reference.",
+    "The launcher authenticates the original clean source commit, source manifests/results, artifact registry, HWA ancestry, exact assignment 2090402, and endpoint 2091402 before allowing cross-commit input reuse.",
+    "Each Adam arm records epoch zero and epochs one through three, then selects maximum held-apparent validation accuracy, minimum declared objective as the tie-break, and the earlier epoch as the final tie-break; epoch zero is eligible and persistent-state metrics are diagnostics only.",
+    "Both fresh-apparent arms run on local CUDA with the same explicit seed stream and shape; each records four counterfactual draws and proves both origin apparent and persistent state hashes remain unchanged.",
+    "The CE/KL pair for one state/LR cell runs on the same host; local and Akib each own 14 Adam directories, while local additionally owns both matched fresh-apparent controls."
+  ],
+  "evidence_class": "exploratory_model_based_aihwkit_om_exact_p0_cross_commit_cuda",
+  "hypothesis": "For the exact healthy and published-fault HWA P0 states from commit 1f4ef1b8, sufficiently low-rate teacher-KL PulseAdam can preserve or improve held-apparent validation performance, while hard-label CE and a no-write fresh-apparent intervention separate optimizer/objective effects from verification-conditioned apparent-state fragility.",
+  "motivation": "The completed ten-epoch campaign used a grid whose minimum LR was 3e-4, forced a fixed final checkpoint, and changed the HWA objective from teacher KL to label CE. This diagnostic reuses the exact byte-identical P0 bundles rather than programming a new realization.",
+  "schema_version": 1,
+  "study_id": "mnist-ibm-om-crossbar-hwa-recovery-canary-20260905-v1",
+  "title": "Exact-P0 low-rate HWA recovery and apparent-refresh diagnostic"
+}

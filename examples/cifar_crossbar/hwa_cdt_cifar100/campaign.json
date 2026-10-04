@@ -1,0 +1,113 @@
+{
+  "nodes": [
+    {
+      "config": "configs/cifar100_cache.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_cache",
+      "inputs": {},
+      "sha256": "ca12af99f8abe03ccafe6df88f7dc379fcf888c7e75789d366f3b3024808bff9"
+    },
+    {
+      "config": "configs/cifar100_fit.json",
+      "dataset": "cifar100",
+      "depends": [
+        "cifar100_cache"
+      ],
+      "id": "cifar100_fit",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar100_cache"
+        }
+      },
+      "sha256": "22fd60057e4053003eb7457160f3a0a122acb8c751b948fc4218f003e4980c55"
+    },
+    {
+      "config": "configs/cifar100_tune.json",
+      "dataset": "cifar100",
+      "depends": [
+        "cifar100_cache",
+        "cifar100_fit"
+      ],
+      "id": "cifar100_tune",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar100_cache"
+        },
+        "weights": {
+          "artifact": "checkpoints/sources.pt",
+          "node": "cifar100_fit"
+        }
+      },
+      "sha256": "666a078f5c9ec0a421be0389bffffb3d8a7e0eef457d2f75c320fcd5e5582b8b"
+    },
+    {
+      "config": "configs/cifar100_screen1.json",
+      "dataset": "cifar100",
+      "depends": [
+        "cifar100_cache",
+        "cifar100_tune"
+      ],
+      "id": "cifar100_screen1",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar100_cache"
+        },
+        "weights": {
+          "artifact": "checkpoints/recovery.pt",
+          "node": "cifar100_tune"
+        }
+      },
+      "sha256": "1c01e39c87b2debc6861384f0953e8dff6edfb933d20a093da707fd059c6f109"
+    },
+    {
+      "config": "configs/cifar100_screen2.json",
+      "dataset": "cifar100",
+      "depends": [
+        "cifar100_cache",
+        "cifar100_tune"
+      ],
+      "id": "cifar100_screen2",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar100_cache"
+        },
+        "weights": {
+          "artifact": "checkpoints/recovery.pt",
+          "node": "cifar100_tune"
+        }
+      },
+      "sha256": "5a7a25cec8f7abf08dd536b3e25cb5c6ab8d089b78d13a2db634cd94f04b335f"
+    },
+    {
+      "config": "configs/cifar100_screen3.json",
+      "dataset": "cifar100",
+      "depends": [
+        "cifar100_cache",
+        "cifar100_tune"
+      ],
+      "id": "cifar100_screen3",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar100_cache"
+        },
+        "weights": {
+          "artifact": "checkpoints/recovery.pt",
+          "node": "cifar100_tune"
+        }
+      },
+      "sha256": "9fece23a84f7ec93584853b55bf18b9f848ca10ed70c0996196ff234b974272d"
+    }
+  ],
+  "phase": "hwa_fault_comparison",
+  "plan": "study-plan.json",
+  "plan_sha256": "849407f0275ad6ecd4ff62199f6eb56833b5796371ec8bbb5106dd72f7ee0bc1",
+  "schema": "cifar_crossbar.campaign.v1",
+  "selection_inputs": {},
+  "study_id": "cifar100-pcm-hwa-cdt-comparison-v1"
+}

@@ -1,0 +1,21 @@
+{
+  "backend": "om",
+  "dataset": "cifar10",
+  "depth": 4,
+  "nodes": [
+    {
+      "array_seed": 271001,
+      "config": "screen1.json",
+      "id": "screen1",
+      "sha256": "9bc25f6b5494e4621d81a40f17c433b531c7aa4e7e85c15a8d54f97e75690d49",
+      "stage": "screen"
+    }
+  ],
+  "phase": "development",
+  "plan": "studies/cifar10-om-conv4-closedloop-lr-development-v1-canary.json",
+  "plan_sha256": "2cd15e05187488f6e6f1cc6e29ece889b6a1033132a21680eae93b0f72b3ad6a",
+  "relative": "examples/cifar_crossbar/closedloop_lr_v1_cifar10_4_development_canary",
+  "smoke": true,
+  "study_id": "cifar10-om-conv4-closedloop-lr-development-v1-canary",
+  "suffix": "last_two_blocks"
+}

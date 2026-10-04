@@ -1,0 +1,35 @@
+{
+  "backend": "om",
+  "dataset": "cifar10",
+  "depth": 4,
+  "nodes": [
+    {
+      "array_seed": 251001,
+      "config": "screen1.json",
+      "id": "screen1",
+      "sha256": "f7bb57f1d97aa479103e6bcadb953048f170e50a448c39063cb5ac666599409d",
+      "stage": "screen"
+    },
+    {
+      "array_seed": 251002,
+      "config": "screen2.json",
+      "id": "screen2",
+      "sha256": "57bcbe4161f8b6a582f4b3fe3154b072c9ed492926306437304c3129c2030f5d",
+      "stage": "screen"
+    },
+    {
+      "array_seed": 251003,
+      "config": "screen3.json",
+      "id": "screen3",
+      "sha256": "96051fbb48bfec19a7f1bf912fcdbce5b93d33d2b378442f301747d213915d50",
+      "stage": "screen"
+    }
+  ],
+  "phase": "confirmation",
+  "plan": "studies/cifar10-om-conv4-closedloop-lr-confirmation-v1.json",
+  "plan_sha256": "5ae95c0cf30900d4b16f2c1e4f3604200bfbe4f308a028462fc51c73d2e32746",
+  "relative": "examples/cifar_crossbar/closedloop_lr_v1_cifar10_4_confirmation",
+  "smoke": false,
+  "study_id": "cifar10-om-conv4-closedloop-lr-confirmation-v1",
+  "suffix": "last_two_blocks"
+}

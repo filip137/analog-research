@@ -1,0 +1,29 @@
+{
+  "analysis_plan": [
+    "Temperature-one KL(original teacher || student), accuracy, teacher agreement, array spread.",
+    "Matched calibration and saved-P0 closed-loop comparisons; separate the RESET initialization intervention.",
+    "Keep all source convergence flags, failures, pulse costs and fixed epoch-five endpoints."
+  ],
+  "arms": [
+    {
+      "arm_id": "screen1",
+      "configs": [
+        "../examples/cifar_crossbar/openloop_v1_cifar10_8_paired_canary/screen1.json"
+      ],
+      "description": "Matched V2 array 251001",
+      "experiment_id": "cifar_om_open_loop.v1",
+      "mode": "train"
+    }
+  ],
+  "completion_criteria": [
+    "All native arms complete with verified artifacts and no active run.",
+    "Canary: 72 controls, 54 exact epoch-five replays.",
+    "Fixed faults/prefix, zero write-verification reads, one pulse per update, no cumulative cap."
+  ],
+  "evidence_class": "exploratory",
+  "hypothesis": "One-pulse open-loop recovery without a total cap can reduce teacher KL on fixed faulty OM arrays.",
+  "motivation": "User requested docs/cifar_om_open_loop.md; initialization=saved_p0",
+  "schema_version": 1,
+  "study_id": "cifar10-om-conv8-openloop-paired-v1-canary",
+  "title": "cifar10-om-conv8-openloop-paired-v1-canary"
+}

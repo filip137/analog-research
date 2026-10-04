@@ -9,7 +9,11 @@ import torch
 import torch.nn.functional as F
 
 from experiments.artifacts import RunStore, sha256_file
-from experiments.mnist_relu.config import TeacherTrainSpec, TeacherValidateSpec
+from experiments.mnist_relu.config import (
+    V2_EXPERIMENT_ID,
+    TeacherTrainSpec,
+    TeacherValidateSpec,
+)
 from experiments.mnist_relu.model import BiasFreeReluTeacher
 from experiments.mnist_shared import build_mnist_loaders, limited
 from experiments.schema import to_plain_data
@@ -37,6 +41,22 @@ def _device(name: str) -> torch.device:
     return torch.device(name)
 
 
+def _runtime_device_receipt(
+    *,
+    configured_device: str,
+    resolved_device: torch.device,
+) -> dict[str, Any]:
+    cuda_available = bool(torch.cuda.is_available())
+    receipt: dict[str, Any] = {
+        "configured_device": configured_device,
+        "resolved_device": str(resolved_device),
+        "cuda_available": cuda_available,
+    }
+    if resolved_device.type == "cuda":
+        receipt["device_name"] = torch.cuda.get_device_name(resolved_device)
+    return receipt
+
+
 def _input(role: str, path: Path) -> dict[str, Any]:
     resolved = path.expanduser().resolve()
     if not resolved.is_file():
@@ -47,26 +67,71 @@ def _input(role: str, path: Path) -> dict[str, Any]:
     return {"role": role, "path": str(resolved), "sha256": sha256_file(resolved)}
 
 
+def _experiment_id(request: Any) -> str:
+    return str(request.spec.experiment_id)
+
+
 def _validate_request(request: Any, *, training: bool) -> None:
-    if getattr(request, "base_weights", None) is not None:
-        raise ValueError(
-            "Expected mnist_relu.v1 not to use --base-weights. Provided "
-            f"value: {str(request.base_weights)!r}."
-        )
-    if getattr(request, "device_data", None) is not None:
-        raise ValueError(
-            "Expected mnist_relu.v1 not to use --device-data. Provided "
-            f"value: {str(request.device_data)!r}."
-        )
-    if getattr(request, "teacher_weights", None) is not None:
-        raise ValueError(
-            "Expected mnist_relu.v1 not to use --teacher-weights. Provided "
-            f"value: {str(request.teacher_weights)!r}."
-        )
+    experiment_id = _experiment_id(request)
+    for name in (
+        "base_weights",
+        "device_data",
+        "teacher_weights",
+        "device_state",
+        "selection_receipt",
+    ):
+        value = getattr(request, name, None)
+        if value is not None:
+            raise ValueError(
+                f"Expected {experiment_id} not to use "
+                f"--{name.replace('_', '-')}. Provided value: {str(value)!r}."
+            )
     if training and request.resume is not None and request.weights is not None:
         raise ValueError(
             "Expected at most one of --weights or --resume. Provided value: both."
         )
+
+
+def _validation_accuracy_passes(
+    *,
+    experiment_id: str,
+    accuracy: float,
+    threshold: float,
+) -> bool:
+    if experiment_id == V2_EXPERIMENT_ID:
+        return accuracy > threshold
+    return accuracy >= threshold
+
+
+def _teacher_acceptance_gate(
+    *,
+    experiment_id: str,
+    accuracy: float,
+    threshold: float,
+) -> dict[str, Any]:
+    passed = _validation_accuracy_passes(
+        experiment_id=experiment_id,
+        accuracy=accuracy,
+        threshold=threshold,
+    )
+    if experiment_id == V2_EXPERIMENT_ID:
+        if not passed:
+            raise RuntimeError(
+                "Expected the validation-cross-entropy-selected teacher to "
+                "have validation accuracy strictly above "
+                f"{threshold:.12g}. Provided value: {accuracy:.12g}."
+            )
+        return {
+            "minimum_validation_accuracy": threshold,
+            "comparison_operator": ">",
+            "passed": True,
+        }
+    # Preserve the v1 result payload exactly: its historical gate is
+    # inclusive and did not record an operator field.
+    return {
+        "minimum_validation_accuracy": threshold,
+        "passed": passed,
+    }
 
 
 def _evaluate(
@@ -108,7 +173,8 @@ def run_train(request: "TrainRequest") -> int:
     spec = request.spec
     if not isinstance(spec, TeacherTrainSpec):
         raise TypeError(
-            "Expected mnist_relu.v1 train to resolve TeacherTrainSpec. "
+            "Expected a registered MNIST ReLU teacher train mode to resolve "
+            "TeacherTrainSpec. "
             f"Provided value: {type(spec).__name__}."
         )
     _validate_request(request, training=True)
@@ -130,11 +196,17 @@ def run_train(request: "TrainRequest") -> int:
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(spec.runtime.seed)
         device = _device(spec.runtime.device)
+        runtime_device = _runtime_device_receipt(
+            configured_device=spec.runtime.device,
+            resolved_device=device,
+        )
+        if spec.experiment_id == V2_EXPERIMENT_ID:
+            store.append_metric({"mode": "runtime_device", **runtime_device})
         data = build_mnist_loaders(
             spec.data,
             data_seed=spec.runtime.data_seed,
         )
-        model = BiasFreeReluTeacher(device=device)
+        model = BiasFreeReluTeacher(device=device, dims=spec.model.dims)
         optimizer = torch.optim.Adam(
             model.parameters(),
             lr=spec.settings.learning_rate,
@@ -217,16 +289,43 @@ def run_train(request: "TrainRequest") -> int:
                 selected_loss = float(last_validation["cross_entropy"])
                 selected_accuracy = float(last_validation["accuracy"])
                 selected_epoch = epoch
+                checkpoint_metadata = {
+                    "experiment_id": spec.experiment_id,
+                    "architecture": "bias_free_relu_" + "_".join(
+                        str(item) for item in spec.model.dims
+                    ),
+                    "selection_metric": "validation.cross_entropy",
+                    "selection_value": selected_loss,
+                    "selection_accuracy": selected_accuracy,
+                    "selection_epoch": selected_epoch,
+                }
+                if spec.experiment_id == V2_EXPERIMENT_ID:
+                    checkpoint_metadata.update(
+                        {
+                            "logical_dims": list(spec.model.dims),
+                            "bias": False,
+                            "runtime_seed": spec.runtime.seed,
+                            "data_seed": spec.runtime.data_seed,
+                            "batch_size": spec.data.batch_size,
+                            "train_shuffle": spec.data.shuffle,
+                            "training_examples": last_train["examples"],
+                            "validation_examples": last_validation["examples"],
+                            "validation_split": (
+                                "torchvision_mnist_train_stratified_per_class_"
+                                "numpy_default_rng_sorted_indices"
+                            ),
+                            "preprocessing": (
+                                "to_tensor_flatten_normalize_mean_0.1307_std_0.3"
+                            ),
+                            "validation_accuracy_comparison_operator": ">",
+                            "minimum_validation_accuracy": (
+                                spec.settings.minimum_validation_accuracy
+                            ),
+                        }
+                    )
                 selected_weights = encode_named_weights(
                     model.catalog,
-                    metadata={
-                        "experiment_id": spec.experiment_id,
-                        "architecture": "bias_free_relu_784_50_10",
-                        "selection_metric": "validation.cross_entropy",
-                        "selection_value": selected_loss,
-                        "selection_accuracy": selected_accuracy,
-                        "selection_epoch": selected_epoch,
-                    },
+                    metadata=checkpoint_metadata,
                 )
                 save_encoded_named_weights(weights_path, selected_weights, catalog=model.catalog)
             if selected_weights is None or selected_epoch is None:
@@ -263,6 +362,11 @@ def run_train(request: "TrainRequest") -> int:
 
         if selected_weights is None or selected_epoch is None or selected_accuracy is None:
             raise RuntimeError("Expected training or resume to provide selected teacher weights.")
+        acceptance_gate = _teacher_acceptance_gate(
+            experiment_id=spec.experiment_id,
+            accuracy=selected_accuracy,
+            threshold=spec.settings.minimum_validation_accuracy,
+        )
         artifacts = (
             store.artifact_record(weights_path, kind="selected_named_weights"),
             store.artifact_record(resume_path, kind="epoch_boundary_resume"),
@@ -277,10 +381,12 @@ def run_train(request: "TrainRequest") -> int:
                     "cross_entropy": selected_loss,
                     "accuracy": selected_accuracy,
                 },
-                "acceptance_gate": {
-                    "minimum_validation_accuracy": spec.settings.minimum_validation_accuracy,
-                    "passed": selected_accuracy >= spec.settings.minimum_validation_accuracy,
-                },
+                "acceptance_gate": acceptance_gate,
+                **(
+                    {"runtime_device": runtime_device}
+                    if spec.experiment_id == V2_EXPERIMENT_ID
+                    else {}
+                ),
             },
             artifacts=artifacts,
         )
@@ -294,7 +400,8 @@ def run_validate(request: "ValidateRequest") -> int:
     spec = request.spec
     if not isinstance(spec, TeacherValidateSpec):
         raise TypeError(
-            "Expected mnist_relu.v1 validate to resolve TeacherValidateSpec. "
+            "Expected a registered MNIST ReLU teacher validate mode to resolve "
+            "TeacherValidateSpec. "
             f"Provided value: {type(spec).__name__}."
         )
     _validate_request(request, training=False)
@@ -309,8 +416,14 @@ def run_validate(request: "ValidateRequest") -> int:
     try:
         torch.manual_seed(spec.runtime.seed)
         device = _device(spec.runtime.device)
+        runtime_device = _runtime_device_receipt(
+            configured_device=spec.runtime.device,
+            resolved_device=device,
+        )
+        if spec.experiment_id == V2_EXPERIMENT_ID:
+            store.append_metric({"mode": "runtime_device", **runtime_device})
         data = build_mnist_loaders(spec.data, data_seed=spec.runtime.data_seed)
-        model = BiasFreeReluTeacher(device=device)
+        model = BiasFreeReluTeacher(device=device, dims=spec.model.dims)
         loaded = load_named_weights(request.weights, model.catalog)
         loader = data.validation if spec.settings.split == "validation" else data.test
         metrics = _evaluate(
@@ -325,6 +438,11 @@ def run_validate(request: "ValidateRequest") -> int:
                 "split": spec.settings.split,
                 **metrics,
                 "checkpoint_metadata": loaded.metadata,
+                **(
+                    {"runtime_device": runtime_device}
+                    if spec.experiment_id == V2_EXPERIMENT_ID
+                    else {}
+                ),
             }
         )
         return 0

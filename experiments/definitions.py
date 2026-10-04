@@ -32,7 +32,9 @@ from experiments.small_network.config import (
 from experiments.mnist_relu.config import (
     EXPERIMENT_ID as MNIST_RELU_EXPERIMENT_ID,
     SCHEMA_VERSION as MNIST_RELU_SCHEMA_VERSION,
+    V2_EXPERIMENT_ID as MNIST_RELU_V2_EXPERIMENT_ID,
     parse_teacher_config,
+    parse_teacher_v2_config,
     resolve_teacher_spec,
 )
 from experiments.mnist_analog_relu.config import (
@@ -40,6 +42,12 @@ from experiments.mnist_analog_relu.config import (
     SCHEMA_VERSION as MNIST_IBM_OM_CROSSBAR_RELU_SCHEMA_VERSION,
     parse_crossbar_config,
     resolve_crossbar_spec,
+)
+from experiments.mnist_analog_relu.staged_config import (
+    EXPERIMENT_ID as MNIST_IBM_OM_CROSSBAR_RELU_V2_EXPERIMENT_ID,
+    SCHEMA_VERSION as MNIST_IBM_OM_CROSSBAR_RELU_V2_SCHEMA_VERSION,
+    parse_staged_crossbar_config,
+    resolve_staged_crossbar_spec,
 )
 from experiments.mnist_relu_drn.config import (
     EXPERIMENT_ID as MNIST_RELU_DRN_EXPERIMENT_ID,
@@ -122,6 +130,42 @@ from experiments.reram_program_verify.config import (
     SCHEMA_VERSION as RERAM_PROGRAM_VERIFY_SCHEMA_VERSION,
     parse_reram_program_verify_config,
     resolve_reram_program_verify_spec,
+)
+from experiments.cifar_crossbar.sweep_config import (
+    parse_config as parse_cifar_sweep_config,
+    resolve_spec as resolve_cifar_sweep_spec,
+)
+from experiments.cifar_crossbar.closed_loop_lr_config import (
+    parse_config as parse_cifar_closed_loop_lr_config,
+    resolve_spec as resolve_cifar_closed_loop_lr_spec,
+)
+from experiments.cifar_crossbar.om_open_loop_config import (
+    parse_config as parse_cifar_om_open_loop_config,
+    resolve_spec as resolve_cifar_om_open_loop_spec,
+)
+from experiments.cifar_crossbar.config import (
+    parse_config as parse_cifar_suffix_config,
+    resolve_spec as resolve_cifar_suffix_spec,
+)
+from experiments.cifar_crossbar.fault_config import (
+    parse_config as parse_cifar_pcm_fault_config,
+    resolve_spec as resolve_cifar_pcm_fault_spec,
+)
+from experiments.cifar_crossbar.hwa_fault_config import (
+    parse_config as parse_cifar_pcm_hwa_config,
+    resolve_spec as resolve_cifar_pcm_hwa_spec,
+)
+from experiments.cifar_crossbar.epoch_config import (
+    parse_config as parse_cifar_pcm_epochs_config,
+    resolve_spec as resolve_cifar_pcm_epochs_spec,
+)
+from experiments.cifar_crossbar.full_epoch_config import (
+    parse_config as parse_cifar_full_epochs_config,
+    resolve_spec as resolve_cifar_full_epochs_spec,
+)
+from experiments.cifar10_crossbar.config import (
+    parse_config as parse_cifar10_crossbar,
+    resolve_config as resolve_cifar10_crossbar,
 )
 
 
@@ -343,6 +387,35 @@ MNIST_RELU_V1 = ExperimentDefinition(
 )
 
 
+MNIST_RELU_V2 = ExperimentDefinition(
+    experiment_id=MNIST_RELU_V2_EXPERIMENT_ID,
+    schema_version=MNIST_RELU_SCHEMA_VERSION,
+    description=(
+        "Configurable bias-free 784-H-10 ReLU MNIST teacher training and "
+        "validation with a strict validation-accuracy acceptance gate."
+    ),
+    supported_modes=(RunMode.TRAIN, RunMode.VALIDATE),
+    parser=parse_teacher_v2_config,
+    resolver=resolve_teacher_spec,
+    combinations=(
+        ValidatedCombination(
+            ExtensionSelection(
+                "relu_teacher",
+                "none",
+                "adam",
+                "cross_entropy",
+            ),
+            "validated",
+            (
+                "Bias-free digital teacher selected by validation "
+                "cross-entropy and accepted only above the configured "
+                "validation-accuracy threshold."
+            ),
+        ),
+    ),
+)
+
+
 MNIST_IBM_OM_CROSSBAR_RELU_V1 = ExperimentDefinition(
     experiment_id=MNIST_IBM_OM_CROSSBAR_RELU_EXPERIMENT_ID,
     schema_version=MNIST_IBM_OM_CROSSBAR_RELU_SCHEMA_VERSION,
@@ -369,6 +442,21 @@ MNIST_IBM_OM_CROSSBAR_RELU_V1 = ExperimentDefinition(
             ),
         ),
     ),
+)
+
+
+MNIST_IBM_OM_CROSSBAR_RELU_V2 = ExperimentDefinition(
+    experiment_id=MNIST_IBM_OM_CROSSBAR_RELU_V2_EXPERIMENT_ID,
+    schema_version=MNIST_IBM_OM_CROSSBAR_RELU_V2_SCHEMA_VERSION,
+    description=(
+        "Staged 784-256-10 IBM-OM standard-crossbar experiment separating "
+        "off-chip HWA, P&V deployment, post-deployment corruption, and "
+        "same-array pulse-Adam recovery."
+    ),
+    supported_modes=(RunMode.TRAIN,),
+    parser=parse_staged_crossbar_config,
+    resolver=resolve_staged_crossbar_spec,
+    combinations=(),
 )
 
 
@@ -1003,8 +1091,83 @@ IBM_OM_WINSORIZED_PV_ENSEMBLE_QAT_V1 = ExperimentDefinition(
 )
 
 
+CIFAR10_CROSSBAR_V1 = ExperimentDefinition(
+    experiment_id="cifar10_ibm_om_crossbar.v1",
+    schema_version=1,
+    description="CIFAR-10 dense IBM OM crossbar HWA and paired pulse recovery.",
+    supported_modes=(RunMode.TRAIN,),
+    parser=parse_cifar10_crossbar,
+    resolver=resolve_cifar10_crossbar,
+    combinations=(),
+)
+
+
 # This dictionary is the complete registration mechanism.
 EXPERIMENT_REGISTRY: Dict[str, ExperimentDefinition] = {
+    CIFAR10_CROSSBAR_V1.experiment_id: CIFAR10_CROSSBAR_V1,
+    "cifar_om_closed_loop_lr.v1": ExperimentDefinition(
+        experiment_id="cifar_om_closed_loop_lr.v1", schema_version=1,
+        description="Development-selected uncapped closed-loop OM learning rates with paired confirmation.",
+        supported_modes=(RunMode.TRAIN,), parser=parse_cifar_closed_loop_lr_config,
+        resolver=resolve_cifar_closed_loop_lr_spec, combinations=(),
+    ),
+    "cifar_om_open_loop.v1": ExperimentDefinition(
+        experiment_id="cifar_om_open_loop.v1", schema_version=1,
+        description="Uncapped open-loop OM recovery from saved deployment or fresh open-loop RESET programming.",
+        supported_modes=(RunMode.TRAIN,), parser=parse_cifar_om_open_loop_config,
+        resolver=resolve_cifar_om_open_loop_spec, combinations=(),
+    ),
+    "cifar_crossbar_fault_sweep.v1": ExperimentDefinition(
+        experiment_id="cifar_crossbar_fault_sweep.v1", schema_version=1,
+        description="Mixed-rate corrupt-device HWA and five-epoch recovery at four/eight analog convolutions.",
+        supported_modes=(RunMode.TRAIN,), parser=parse_cifar_sweep_config,
+        resolver=resolve_cifar_sweep_spec, combinations=(),
+    ),
+    "cifar_crossbar_full_epochs.v1": ExperimentDefinition(
+        experiment_id="cifar_crossbar_full_epochs.v1",
+        schema_version=1,
+        description="Five full CIFAR adaptation epochs on fixed PCM and OM arrays after digital or device-specific HWA deployment.",
+        supported_modes=(RunMode.TRAIN,),
+        parser=parse_cifar_full_epochs_config,
+        resolver=resolve_cifar_full_epochs_spec,
+        combinations=(),
+    ),
+    "cifar_pcm_recovery_epochs.v1": ExperimentDefinition(
+        experiment_id="cifar_pcm_recovery_epochs.v1",
+        schema_version=1,
+        description="Development-selected schedules and many-pass fixed-array PCM recovery from digital and HWA sources.",
+        supported_modes=(RunMode.TRAIN,),
+        parser=parse_cifar_pcm_epochs_config,
+        resolver=resolve_cifar_pcm_epochs_spec,
+        combinations=(),
+    ),
+    "cifar_pcm_hwa_comparison.v1": ExperimentDefinition(
+        experiment_id="cifar_pcm_hwa_comparison.v1",
+        schema_version=1,
+        description="Development-selected generic HWA and corrupt-device training followed by matched fresh-array Gaussian PCM recovery.",
+        supported_modes=(RunMode.TRAIN,),
+        parser=parse_cifar_pcm_hwa_config,
+        resolver=resolve_cifar_pcm_hwa_spec,
+        combinations=(),
+    ),
+    "cifar_pcm_fault_recovery.v1": ExperimentDefinition(
+        experiment_id="cifar_pcm_fault_recovery.v1",
+        schema_version=1,
+        description="Permanent PCM failures, Gaussian programming endpoints and one-epoch teacher-KL recovery on CIFAR ResNet suffixes.",
+        supported_modes=(RunMode.TRAIN,),
+        parser=parse_cifar_pcm_fault_config,
+        resolver=resolve_cifar_pcm_fault_spec,
+        combinations=(),
+    ),
+    "cifar_resnet_suffix_recovery.v1": ExperimentDefinition(
+        experiment_id="cifar_resnet_suffix_recovery.v1",
+        schema_version=1,
+        description="Pretrained CIFAR ResNet suffix HWA, fresh-array deployment and matched teacher-KL pulse recovery.",
+        supported_modes=(RunMode.TRAIN,),
+        parser=parse_cifar_suffix_config,
+        resolver=resolve_cifar_suffix_spec,
+        combinations=(),
+    ),
     IBM_OM_BASELINE_SELECTION_V1.experiment_id: IBM_OM_BASELINE_SELECTION_V1,
     IBM_OM_BASELINE_SPACING_PV_V1.experiment_id: IBM_OM_BASELINE_SPACING_PV_V1,
     IBM_OM_BASELINE_SPACING_PV_NO_CLIP_V1.experiment_id: IBM_OM_BASELINE_SPACING_PV_NO_CLIP_V1,
@@ -1016,7 +1179,9 @@ EXPERIMENT_REGISTRY: Dict[str, ExperimentDefinition] = {
     IBM_OM_LOCAL_REFERENCE_COMPENSATION_V1.experiment_id: IBM_OM_LOCAL_REFERENCE_COMPENSATION_V1,
     SMALL_DRN_V1.experiment_id: SMALL_DRN_V1,
     MNIST_RELU_V1.experiment_id: MNIST_RELU_V1,
+    MNIST_RELU_V2.experiment_id: MNIST_RELU_V2,
     MNIST_IBM_OM_CROSSBAR_RELU_V1.experiment_id: MNIST_IBM_OM_CROSSBAR_RELU_V1,
+    MNIST_IBM_OM_CROSSBAR_RELU_V2.experiment_id: MNIST_IBM_OM_CROSSBAR_RELU_V2,
     MNIST_RELU_DRN_KD_V1.experiment_id: MNIST_RELU_DRN_KD_V1,
     MNIST_RELU_DRN_RESET_V1.experiment_id: MNIST_RELU_DRN_RESET_V1,
     MNIST_RELU_DRN_RESET_DIFFERENTIAL_V1.experiment_id: MNIST_RELU_DRN_RESET_DIFFERENTIAL_V1,

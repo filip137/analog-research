@@ -3,6 +3,7 @@ from __future__ import annotations
 from io import StringIO
 import json
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -12,7 +13,9 @@ from experiments.study_workflow import (
     StudyWorkflowError,
     finalize_study,
     load_study_plan,
+    load_study_record,
     prepare_study,
+    register_federated_runs,
     summarize_study,
 )
 
@@ -197,6 +200,64 @@ def test_full_artifact_verification_is_opt_in(tmp_path: Path) -> None:
     assert fully_verified["ready_for_review"] is False
     assert fully_verified["state"] == "invalid"
     assert "SHA-256" in " ".join(fully_verified["runs"][0]["errors"])
+
+
+def test_federated_receipt_preserves_source_study_without_rewriting_run(
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "config.json"
+    _write_json(config, {"scientific_setting": 1})
+    plan = tmp_path / "study-plan.json"
+    _write_json(plan, _plan(config))
+    source = prepare_study(plan, tmp_path / "source-results")
+    canonical = prepare_study(plan, tmp_path / "canonical-results")
+    source_study_path = source / "study.json"
+    source_study = json.loads(source_study_path.read_text(encoding="utf-8"))
+    source_study["prepared_at"] = "2026-09-05T00:00:00+00:00"
+    _write_json(source_study_path, source_study)
+    source_run = _complete_run(source, config)
+    staged_source = tmp_path / "local-study"
+    source.rename(staged_source)
+    source = staged_source
+    source_study_path = source / "study.json"
+    source_run = source / "runs" / "baseline" / source_run.name
+    with pytest.raises(StudyWorkflowError, match="directory name to equal study_id"):
+        load_study_record(source)
+    source_manifest_bytes = (source_run / "manifest.json").read_bytes()
+    target_arm = canonical / "runs" / "baseline"
+    target_arm.rmdir()
+    shutil.copytree(source_run.parent, target_arm)
+    target_run = target_arm / source_run.name
+
+    unregistered = summarize_study(canonical, verify_artifacts=True)
+    assert unregistered["state"] == "invalid"
+    assert "study.study_sha256" in " ".join(unregistered["runs"][0]["errors"])
+
+    receipt_path = register_federated_runs(
+        canonical,
+        source,
+        run_pairs=((source_run, target_run),),
+    )
+    assert (source_run / "manifest.json").read_bytes() == source_manifest_bytes
+    assert (target_run / "manifest.json").read_bytes() == source_manifest_bytes
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    archive = canonical / receipt["source_study"]["archive_path"]
+    assert archive.read_bytes() == source_study_path.read_bytes()
+
+    summary = summarize_study(canonical, verify_artifacts=True)
+    assert summary["state"] == "ready_for_review"
+    assert summary["ready_for_review"] is True
+    assert summary["federated_collection_errors"] == []
+    assert summary["federated_collections"][0]["run_count"] == 1
+    assert summary["runs"][0]["federated_collection_receipt"] == (
+        receipt_path.relative_to(canonical).as_posix()
+    )
+
+    archive.write_bytes(archive.read_bytes() + b"\n")
+    tampered = summarize_study(canonical, verify_artifacts=True)
+    assert tampered["state"] == "invalid"
+    assert tampered["ready_for_review"] is False
+    assert "archive bytes" in " ".join(tampered["federated_collection_errors"])
 
 
 def test_finalize_records_interpretation_and_is_idempotent(tmp_path: Path) -> None:

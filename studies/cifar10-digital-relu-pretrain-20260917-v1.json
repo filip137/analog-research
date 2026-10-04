@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "study_id": "cifar10-digital-relu-pretrain-20260917-v1",
+  "title": "CIFAR-10 digital ReLU source for matched IBM OM recovery",
+  "hypothesis": "A pretrained bias-free 3072-256-10 digital ReLU network supplies a nontrivial common source for the CIFAR-10 crossbar study.",
+  "motivation": "Extend the MNIST HWA-versus-recovery comparison using a source trained without physical noise or faults.",
+  "evidence_class": "exploratory_model_based",
+  "arms": [
+    {
+      "arm_id": "digital",
+      "experiment_id": "cifar10_ibm_om_crossbar.v1",
+      "mode": "train",
+      "configs": [
+        "../examples/cifar10_crossbar/pretrain.json"
+      ],
+      "description": "100-epoch digital pretraining; validation CE selects one frozen source."
+    }
+  ],
+  "completion_criteria": [
+    "One complete native digital run and selected checkpoint.",
+    "Selected validation accuracy at least 45 percent before hardware runs.",
+    "Disjoint 45000/5000 split and official test reserved until checkpoint selection."
+  ],
+  "analysis_plan": [
+    "Record validation-selected epoch, official test accuracy and loss.",
+    "Pin source checkpoint content hash and preprocessing for all hardware arms."
+  ]
+}

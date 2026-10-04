@@ -1,0 +1,77 @@
+{
+  "analysis_plan": [
+    "Primary teacher KL in nats at T=1; also accuracy, clean-source fidelity, paired recovery reductions and array spread.",
+    "Report digital, standard HWA, noise-strength-selected HWA and per-failure CDT with exactly the same suffix/deployment law.",
+    "CDT uses independently resampled physical-bank failures each minibatch; final masks never enter selection.",
+    "Recover for one pass over 5000 images; calibration and weight learning rates selected only on independent development arrays.",
+    "Exploratory inference conditional on one HWA/data-order seed. Preserve negative outcomes and report any unconverged selection; no superiority to the full paper's peripheral/retention model is claimed."
+  ],
+  "arms": [
+    {
+      "arm_id": "cifar100_cache",
+      "configs": [
+        "configs/cifar100_cache.json"
+      ],
+      "description": "cifar100_cache",
+      "experiment_id": "cifar_pcm_hwa_comparison.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_fit",
+      "configs": [
+        "configs/cifar100_fit.json"
+      ],
+      "description": "cifar100_fit",
+      "experiment_id": "cifar_pcm_hwa_comparison.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_tune",
+      "configs": [
+        "configs/cifar100_tune.json"
+      ],
+      "description": "cifar100_tune",
+      "experiment_id": "cifar_pcm_hwa_comparison.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_screen1",
+      "configs": [
+        "configs/cifar100_screen1.json"
+      ],
+      "description": "cifar100_screen1",
+      "experiment_id": "cifar_pcm_hwa_comparison.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_screen2",
+      "configs": [
+        "configs/cifar100_screen2.json"
+      ],
+      "description": "cifar100_screen2",
+      "experiment_id": "cifar_pcm_hwa_comparison.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_screen3",
+      "configs": [
+        "configs/cifar100_screen3.json"
+      ],
+      "description": "cifar100_screen3",
+      "experiment_id": "cifar_pcm_hwa_comparison.v1",
+      "mode": "train"
+    }
+  ],
+  "completion_criteria": [
+    "Complete every declared native stage and paired control.",
+    "Full run: digital audit, 45000-image augmented HWA, development-only source/recovery selection, three fresh final arrays and all 10000 test images.",
+    "Each final array has 42 source/case combinations and five controls (210 measurements).",
+    "Record late HWA convergence flags rather than claiming converged robustness from an unresolved fit."
+  ],
+  "evidence_class": "exploratory",
+  "hypothesis": "One recovery pass on a fresh fixed faulty array can reduce teacher KL beyond development-selected HWA/CDT, calibration and equally frequent unchanged-target rewriting.",
+  "motivation": "Test whether the recovery seen from digital weights persists after generic fault-aware HWA inspired by Li et al. (2023).",
+  "schema_version": 1,
+  "study_id": "cifar100-pcm-hwa-cdt-comparison-v1",
+  "title": "cifar100: generic HWA/CDT and matched one-pass PCM recovery"
+}

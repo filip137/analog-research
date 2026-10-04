@@ -1,0 +1,65 @@
+{
+  "analysis_plan": [
+    "Mean teacher KL at T=1, accuracy, array spread and paired differences against equal-epoch calibration/rewrite.",
+    "Report every epoch without test selection, apparent versus persistent OM metrics, pulse-cap saturation and limited HWA tuning.",
+    "PCM standard HWA is reused; OM HWA is independently fitted using its own endpoint kernel. Distinguish full programming from incremental pulses."
+  ],
+  "arms": [
+    {
+      "arm_id": "cifar100_om_cache",
+      "configs": [
+        "configs/cifar100_om_cache.json"
+      ],
+      "description": "cifar100_om_cache",
+      "experiment_id": "cifar_crossbar_full_epochs.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_om_sources",
+      "configs": [
+        "configs/cifar100_om_sources.json"
+      ],
+      "description": "cifar100_om_sources",
+      "experiment_id": "cifar_crossbar_full_epochs.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_om_screen1",
+      "configs": [
+        "configs/cifar100_om_screen1.json"
+      ],
+      "description": "cifar100_om_screen1",
+      "experiment_id": "cifar_crossbar_full_epochs.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_om_screen2",
+      "configs": [
+        "configs/cifar100_om_screen2.json"
+      ],
+      "description": "cifar100_om_screen2",
+      "experiment_id": "cifar_crossbar_full_epochs.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar100_om_screen3",
+      "configs": [
+        "configs/cifar100_om_screen3.json"
+      ],
+      "description": "cifar100_om_screen3",
+      "experiment_id": "cifar_crossbar_full_epochs.v1",
+      "mode": "train"
+    }
+  ],
+  "completion_criteria": [
+    "All native stages and paired controls complete with verified artifacts.",
+    "Full: 3 independent arrays, each 2 sources x 4 cases x 5 controls; 5 full 45000-image epochs for every adapting control and 10000 test images each epoch.",
+    "Preserve P0, fixed faults, frozen prefix, optimizer/RNG states and device-specific write costs. Canary is explicitly truncated and non-scientific."
+  ],
+  "evidence_class": "exploratory",
+  "hypothesis": "Five full-cohort recovery epochs can reduce teacher KL beyond matched calibration and unchanged-target rewriting on some fixed faulty arrays.",
+  "motivation": "User requested a five-epoch repeat and OM devices; see docs/cifar_full_epoch_recovery.md.",
+  "schema_version": 1,
+  "study_id": "cifar100-om-five-full-epochs-v1",
+  "title": "cifar100 om: five full epochs after digital/HWA deployment"
+}

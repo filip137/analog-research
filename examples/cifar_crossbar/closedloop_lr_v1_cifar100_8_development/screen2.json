@@ -1,0 +1,50 @@
+{
+  "array_seed": 211002,
+  "backend": "om",
+  "batch_size": 64,
+  "calibration_lr": 0.001,
+  "cpu_threads": 1,
+  "data_seed": 20260917,
+  "dataset": "cifar100",
+  "device": "cuda:0",
+  "disable_cudnn": false,
+  "endpoint_seed": 221002,
+  "epochs": 5,
+  "experiment_id": "cifar_om_closed_loop_lr.v1",
+  "fault_cases": [
+    [
+      "open",
+      0
+    ],
+    [
+      "gmax",
+      30000
+    ],
+    [
+      "gmax",
+      50000
+    ]
+  ],
+  "learning_rates": [
+    0.0001,
+    0.0003,
+    0.001
+  ],
+  "max_examples": 0,
+  "phase": "development",
+  "program_pulses": 128,
+  "recovery_images": 45000,
+  "recovery_pulses": null,
+  "schema_version": 1,
+  "seed": 41,
+  "sources": [
+    "digital",
+    "standard_hwa"
+  ],
+  "stage": "screen",
+  "suffix": "last_four_blocks",
+  "tile_size": 512,
+  "update_pulses": 1,
+  "validation_images": 1000,
+  "verify_step_fraction": 0.5
+}

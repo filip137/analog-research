@@ -1,0 +1,58 @@
+{
+  "analysis_plan": [
+    "Primary mean teacher KL at T=1; also accuracy, paired improvement over calibration/rewrite, image and programming budgets.",
+    "Schedules and optional reporting epoch selected only on independent development arrays; show every predeclared test milestone without test-based selection.",
+    "Digital/standard/noise HWA: nominal and 1% open/Gmax/random; each CDT: nominal and 1% of its own fault type.",
+    "Preserve earlier HWA convergence limitations; three arrays are descriptive spread, not a significance test."
+  ],
+  "arms": [
+    {
+      "arm_id": "cifar10_tune",
+      "configs": [
+        "configs/cifar10_tune.json"
+      ],
+      "description": "cifar10_tune",
+      "experiment_id": "cifar_pcm_recovery_epochs.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_screen1",
+      "configs": [
+        "configs/cifar10_screen1.json"
+      ],
+      "description": "cifar10_screen1",
+      "experiment_id": "cifar_pcm_recovery_epochs.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_screen2",
+      "configs": [
+        "configs/cifar10_screen2.json"
+      ],
+      "description": "cifar10_screen2",
+      "experiment_id": "cifar_pcm_recovery_epochs.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cifar10_screen3",
+      "configs": [
+        "configs/cifar10_screen3.json"
+      ],
+      "description": "cifar10_screen3",
+      "experiment_id": "cifar_pcm_recovery_epochs.v1",
+      "mode": "train"
+    }
+  ],
+  "completion_criteria": [
+    "One valid completed native run per declared arm, preserving failed attempts.",
+    "Full: 48 development trajectories and 3 fresh arrays with 90 controls each; all learning trajectories run 20 passes over 5000 images.",
+    "Metrics at 1,2,5,10,20 passes on 10000 test images; held-out development evaluated every pass.",
+    "Exact paired P0/RNG, permanent fault identities, unchanged prefix and matched rewrite counts."
+  ],
+  "evidence_class": "exploratory",
+  "hypothesis": "Additional passes over the same adaptation images can improve teacher fidelity beyond one-pass recovery and equally trained calibration/rewrite controls.",
+  "motivation": "User-requested extension of the completed one-pass PCM failure experiment to both CIFAR datasets.",
+  "schema_version": 1,
+  "study_id": "cifar10-pcm-recovery-epochs-20-v1",
+  "title": "cifar10: recovery convergence after digital/HWA deployment"
+}

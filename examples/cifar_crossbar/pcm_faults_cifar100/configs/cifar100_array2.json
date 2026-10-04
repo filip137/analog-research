@@ -1,0 +1,41 @@
+{
+  "array_seed": 51002,
+  "batch_size": 64,
+  "calibration_lr": 0.001,
+  "cpu_threads": 4,
+  "data_seed": 20260917,
+  "dataset": "cifar100",
+  "device": "cpu",
+  "disable_cudnn": false,
+  "endpoint_seed": 61002,
+  "epochs": 1,
+  "experiment_id": "cifar_pcm_fault_recovery.v1",
+  "fault_kinds": [
+    "open",
+    "gmax",
+    "random"
+  ],
+  "fault_rates_ppm": [
+    0,
+    100,
+    1000,
+    10000
+  ],
+  "learning_rate": 0.001,
+  "max_examples": 0,
+  "methods": [
+    "none",
+    "calibration",
+    "rewrite",
+    "onchip_weights",
+    "onchip_calibration"
+  ],
+  "noise_scale": 1.0,
+  "recovery_images": 5000,
+  "recovery_model": "gaussian_endpoint_reprogramming",
+  "schema_version": 1,
+  "seed": 41,
+  "stage": "screen",
+  "suffix": "last_two_blocks",
+  "tile_size": 512
+}

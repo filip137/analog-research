@@ -1,0 +1,79 @@
+{
+  "data": {
+    "batch_size": 16,
+    "num_points": null,
+    "shuffle": true,
+    "validation_points": 5000
+  },
+  "device": {
+    "assignment_seed": 2090503,
+    "bound_policy": "native_sampled_bounds",
+    "controller": "one_pulse_apparent_verify_persistent_handoff",
+    "deterministic_codebook_pulses": 128,
+    "device_pair_topology": "one_active_om_plus_fixed_intrinsic_reference",
+    "effective_state": "q_equals_a_minus_r",
+    "endpoint_seed": 2090623,
+    "evidence_class": "model_based_aihwkit_preset",
+    "fault_source_corrupt_devices_range": 0.01,
+    "fault_source_corruption_policy": "published",
+    "fault_source_enabled_corrupt_devices_prob": 0.1348,
+    "fault_source_preset_default_corrupt_devices_prob": 0.0,
+    "fault_transition": "post_deployment_published_companion_replay",
+    "healthy_programming_corruption_policy": "counterfactual_repaired",
+    "maximum_programming_pulses": 128,
+    "preset": "ReRamArrayOMPresetDevice",
+    "reference_policy": "fixed_sampled_intrinsic_reference_q_equals_a_minus_r",
+    "verify_tolerance_x": 0.023725
+  },
+  "evaluation": {
+    "profile": "production_full_validation_and_test"
+  },
+  "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+  "mapping": {
+    "codebook_tie_rule": "lowest_pulse_index",
+    "out_of_bounds_policy": "retain_request_and_report_endpoint_saturation",
+    "scratch_initialization": "aihwkit_analog_linear_default_kaiming_uniform",
+    "scratch_initialization_seed": 42,
+    "scratch_scaling_policy": "aihwkit_default_no_weight_scaling_direct_q",
+    "scratch_weight_scaling_omega": [
+      0.0,
+      0.0
+    ],
+    "trained_source_scaling_policy": "one_shared_absmax_scale_per_logical_layer",
+    "trained_source_weight_scaling_omega": [
+      1.0,
+      1.0
+    ]
+  },
+  "model": {
+    "bias": false,
+    "digital_non_linearity": "relu",
+    "dims": [
+      784,
+      256,
+      10
+    ],
+    "maximum_input_size": 512,
+    "maximum_output_size": 512
+  },
+  "runtime": {
+    "data_seed": 42,
+    "device": "cuda",
+    "dtype": "float32",
+    "required_aihwkit_version": "1.1.0",
+    "seed": 42
+  },
+  "schema_version": 2,
+  "source": {
+    "accuracy_comparison": ">",
+    "minimum_validation_accuracy": 0.97,
+    "teacher_architecture": "bias_free_relu_784_256_10",
+    "teacher_experiment_id": "mnist_relu.v2"
+  },
+  "stage": {
+    "fault_source": "published_companion",
+    "input_state_kind": "healthy_p0",
+    "kind": "apply_corruption",
+    "source_kind": "hwa_master"
+  }
+}

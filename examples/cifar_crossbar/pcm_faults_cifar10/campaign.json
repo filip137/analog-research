@@ -1,0 +1,63 @@
+{
+  "nodes": [
+    {
+      "config": "configs/cifar10_cache.json",
+      "dataset": "cifar10",
+      "depends": [],
+      "id": "cifar10_cache",
+      "inputs": {},
+      "sha256": "748a86552b88baf5177d2bb2d4da9fdfe5f627ab4bae8f15b2b95f58c770cc76"
+    },
+    {
+      "config": "configs/cifar10_array1.json",
+      "dataset": "cifar10",
+      "depends": [
+        "cifar10_cache"
+      ],
+      "id": "cifar10_array1",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar10_cache"
+        }
+      },
+      "sha256": "4012e32eebd7d7de3834f1bb8df69f21c60bd0e5d8f871aea751a2c90785fab3"
+    },
+    {
+      "config": "configs/cifar10_array2.json",
+      "dataset": "cifar10",
+      "depends": [
+        "cifar10_cache"
+      ],
+      "id": "cifar10_array2",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar10_cache"
+        }
+      },
+      "sha256": "61efb8319f972c92d4757ca09b2049f377d7c0dcb9e59dbe267e6c1ce473d6fe"
+    },
+    {
+      "config": "configs/cifar10_array3.json",
+      "dataset": "cifar10",
+      "depends": [
+        "cifar10_cache"
+      ],
+      "id": "cifar10_array3",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar10_cache"
+        }
+      },
+      "sha256": "7ac73e1a568b94463d4dbf6659c0d1715b0d7be8e3d0632604ce96805a78b0cc"
+    }
+  ],
+  "phase": "fault_screen",
+  "plan": "study-plan.json",
+  "plan_sha256": "46f489c0b7791880dd9878488ce210c7ff665ce669c72120d6de0864214196e0",
+  "schema": "cifar_crossbar.campaign.v1",
+  "selection_inputs": {},
+  "study_id": "cifar10-pcm-faults-one-epoch-v1"
+}

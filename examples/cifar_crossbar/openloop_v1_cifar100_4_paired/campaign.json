@@ -1,0 +1,35 @@
+{
+  "backend": "om",
+  "dataset": "cifar100",
+  "depth": 4,
+  "initialization": "saved_p0",
+  "nodes": [
+    {
+      "array_seed": 251001,
+      "config": "screen1.json",
+      "id": "screen1",
+      "sha256": "ac75a45305b11fa006d4cf1094fb83ecea06e36e41668870d0d1a23af997609b",
+      "stage": "screen"
+    },
+    {
+      "array_seed": 251002,
+      "config": "screen2.json",
+      "id": "screen2",
+      "sha256": "267378d56e210714ef753c43f97c8634c575b2840f74f6c45ee3723822d73324",
+      "stage": "screen"
+    },
+    {
+      "array_seed": 251003,
+      "config": "screen3.json",
+      "id": "screen3",
+      "sha256": "5cc2ca485bfe5d5b31da67f189de59c0813184b9780de3f394e43f7b1318e5b0",
+      "stage": "screen"
+    }
+  ],
+  "plan": "studies/cifar100-om-conv4-openloop-paired-v1.json",
+  "plan_sha256": "ead8865a7d21daaa4c1ac7d703b143c226cb930ced818ee554ef73092a1ea427",
+  "relative": "examples/cifar_crossbar/openloop_v1_cifar100_4_paired",
+  "smoke": false,
+  "study_id": "cifar100-om-conv4-openloop-paired-v1",
+  "suffix": "last_two_blocks"
+}

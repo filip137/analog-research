@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "experiment_id": "cifar10_ibm_om_crossbar.v1",
+  "stage": "deploy",
+  "seed": 421,
+  "data_seed": 42,
+  "data_root": "/home/filip/data",
+  "dims": [
+    3072,
+    256,
+    10
+  ],
+  "batch_size": 128,
+  "epochs": 1,
+  "learning_rate": 0.0,
+  "weight_decay": 0.0,
+  "maximum_batches": null,
+  "evaluation_limit": null,
+  "settings": {
+    "assignment": 45011,
+    "endpoint": 55011,
+    "source": "hwa"
+  }
+}

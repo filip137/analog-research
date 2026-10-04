@@ -7,15 +7,18 @@ an ordinary matrix-vector multiply, the hidden non-linearity is digital ReLU,
 and a second ordinary MVM produces the logits.
 
 AIHWKit 1.1.0 is still authoritative for sampled OM identity parameters.  The
-pulse equation is evaluated here with explicit Torch generators because the
-native CPU tile does not expose a serializable cycle-to-cycle RNG state.  This
-keeps persistent deployments and recovery forks exactly replayable.
+pulse equation is evaluated here with explicit counter-keyed per-trajectory
+random streams because the native CPU tile does not expose a serializable
+cycle-to-cycle RNG state.  This keeps persistent deployments and same-backend
+recovery forks exactly replayable without a dense future-draw buffer.
 """
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from hashlib import sha256
+import json
 import math
 from typing import Any, Mapping, Sequence
 
@@ -28,7 +31,35 @@ from training.ibm_reram_hwa import (
 from training.ibm_reram_program_verify import (
     OM_PRESET,
     PUBLISHED_CORRUPT_RANGE,
+    derive_seed,
 )
+
+
+CROSSBAR_TRAJECTORY_RNG_BACKEND = (
+    "per_trajectory_stateless_counter_box_muller_v1"
+)
+CROSSBAR_TRAJECTORY_REPRODUCIBILITY_SCOPE = (
+    "bit_exact_for_identical_saved_state_command_sequence_torch_version_and_"
+    "execution_backend;cpu_cuda_cross_backend_values_are_not_claimed_bit_exact"
+)
+CROSSBAR_TRAJECTORY_STATISTICAL_CONTRACT = (
+    "two_independently_projected_31_bit_murmur_finalizer_lanes_form_each_box_muller_"
+    "normal;62_bit_lane_pair_key_collision_space_and_float32_output;simulator_"
+    "pseudorandom_not_cryptographic"
+)
+CROSSBAR_TRAJECTORY_SEED_DERIVATION = (
+    "derive_seed(endpoint_seed,assignment_seed,random_stream_population_"
+    "fingerprint,stream_role,ibm_om_crossbar_per_cell_v1), reduced to a "
+    "nonwrapping positive 63-bit base followed by unique contiguous "
+    "per-cell trajectory seeds in canonical flattened tile order"
+)
+_LEGACY_GENERATOR_SEED_DERIVATION = (
+    "derive_seed(generator.initial_seed,assignment_seed,population_fingerprint,"
+    "ibm_om_crossbar_legacy_generator_adapter_v1), reduced to a nonwrapping "
+    "positive 63-bit base followed by unique contiguous per-cell trajectory "
+    "seeds in canonical flattened tile order"
+)
+_MAX_TRAJECTORY_SEED = 2**63 - 1
 
 
 @dataclass(frozen=True)
@@ -49,6 +80,139 @@ class CrossbarTileSpec:
     @property
     def cells(self) -> int:
         return math.prod(self.shape)
+
+
+@dataclass(frozen=True)
+class IbmOmCrossbarStateBundle:
+    """Validated, reloadable state boundary for one standard crossbar.
+
+    The physical population remains a separately authenticated artifact.  A
+    bundle binds its fingerprint to the exact tiled layout, digital scales,
+    persistent/apparent plant state, RNG streams, and caller-owned provenance.
+    ``state_dict()`` emits only tensors and plain Python containers so the
+    experiment runtime can place it inside its normal hashed checkpoint.
+    """
+
+    STATE_SCHEMA = "ebl.ibm_om_crossbar_state_bundle"
+    STATE_SCHEMA_VERSION = 1
+
+    layout: tuple[CrossbarTileSpec, ...]
+    digital_scales: tuple[float, float]
+    state_kind: str
+    population_fingerprint: str
+    plant_state: Mapping[str, Any]
+    plant_state_sha256: str
+    metadata: Mapping[str, Any]
+    metadata_sha256: str
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return a detached plain-container representation of the bundle."""
+
+        state = {
+            "schema": self.STATE_SCHEMA,
+            "schema_version": self.STATE_SCHEMA_VERSION,
+            "layout": tuple(
+                {
+                    "key": tile.key,
+                    "layer_index": tile.layer_index,
+                    "tile_index": tile.tile_index,
+                    "input_start": tile.input_start,
+                    "input_stop": tile.input_stop,
+                    "out_features": tile.out_features,
+                }
+                for tile in self.layout
+            ),
+            "digital_scales": self.digital_scales,
+            "state_kind": self.state_kind,
+            "population_fingerprint": self.population_fingerprint,
+            "plant_state": _clone_checkpoint_value(self.plant_state),
+            "plant_state_sha256": self.plant_state_sha256,
+            "metadata": _clone_checkpoint_value(self.metadata),
+            "metadata_sha256": self.metadata_sha256,
+        }
+        # Frozen dataclasses do not recursively freeze a caller's nested
+        # mappings.  Fail closed if one was mutated after construction.
+        if _structured_sha256(state["plant_state"]) != self.plant_state_sha256:
+            raise RuntimeError("Expected the bundled plant state to remain immutable.")
+        _, metadata_sha256 = _canonical_metadata(state["metadata"])
+        if metadata_sha256 != self.metadata_sha256:
+            raise RuntimeError("Expected bundled provenance metadata to remain immutable.")
+        return state
+
+    @classmethod
+    def from_state_dict(
+        cls,
+        state: Mapping[str, Any],
+    ) -> "IbmOmCrossbarStateBundle":
+        """Parse and independently validate a serialized bundle."""
+
+        expected = {
+            "schema",
+            "schema_version",
+            "layout",
+            "digital_scales",
+            "state_kind",
+            "population_fingerprint",
+            "plant_state",
+            "plant_state_sha256",
+            "metadata",
+            "metadata_sha256",
+        }
+        if (
+            not isinstance(state, Mapping)
+            or set(state) != expected
+            or state.get("schema") != cls.STATE_SCHEMA
+            or isinstance(state.get("schema_version"), bool)
+            or state.get("schema_version") != cls.STATE_SCHEMA_VERSION
+        ):
+            raise ValueError("Expected an IBM OM crossbar state bundle version 1.")
+        layout = _layout_from_bundle_state(state["layout"])
+        scales = _normalize_digital_scales(state["digital_scales"])
+        state_kind = state["state_kind"]
+        population_fingerprint = state["population_fingerprint"]
+        plant_state = state["plant_state"]
+        plant_state_sha256 = state["plant_state_sha256"]
+        metadata_sha256 = state["metadata_sha256"]
+        if (
+            state_kind not in {"healthy", "faulted"}
+            or not isinstance(population_fingerprint, str)
+            or not population_fingerprint
+            or not isinstance(plant_state, Mapping)
+            or not _is_sha256(plant_state_sha256)
+            or not _is_sha256(metadata_sha256)
+        ):
+            raise ValueError("Expected valid crossbar bundle identity fields.")
+        if _structured_sha256(plant_state) != plant_state_sha256:
+            raise ValueError("Expected the bundled plant-state digest to match.")
+        if plant_state.get("population_fingerprint") != population_fingerprint:
+            raise ValueError("Expected the bundle and plant population fingerprints to match.")
+        plant_schema_version = plant_state.get("schema_version")
+        transition = plant_state.get("fault_transition")
+        mask = plant_state.get("post_deployment_fault_mask")
+        inferred_kind = "healthy"
+        if plant_schema_version in {2, 3} and transition is not None:
+            inferred_kind = "faulted"
+        if inferred_kind != state_kind or (
+            plant_schema_version in {2, 3}
+            and isinstance(mask, torch.Tensor)
+            and bool(torch.any(mask)) != (state_kind == "faulted")
+        ):
+            raise ValueError("Expected the declared bundle state kind to match the plant.")
+        canonical_metadata, actual_metadata_sha256 = _canonical_metadata(
+            state["metadata"]
+        )
+        if actual_metadata_sha256 != metadata_sha256:
+            raise ValueError("Expected the bundled provenance digest to match.")
+        return cls(
+            layout=layout,
+            digital_scales=scales,
+            state_kind=state_kind,
+            population_fingerprint=population_fingerprint,
+            plant_state=_clone_checkpoint_value(plant_state),
+            plant_state_sha256=plant_state_sha256,
+            metadata=canonical_metadata,
+            metadata_sha256=metadata_sha256,
+        )
 
 
 def build_crossbar_layout(
@@ -92,6 +256,241 @@ def build_crossbar_layout(
         if start != inputs:  # pragma: no cover - arithmetic invariant
             raise RuntimeError("Expected the balanced tile split to cover its input.")
     return tuple(result)
+
+
+def _normalize_crossbar_layout(
+    layout: Sequence[CrossbarTileSpec],
+) -> tuple[CrossbarTileSpec, ...]:
+    tiles = tuple(layout)
+    if not tiles or any(not isinstance(tile, CrossbarTileSpec) for tile in tiles):
+        raise ValueError("Expected a non-empty standard-crossbar tile layout.")
+    expected_order: list[CrossbarTileSpec] = []
+    layer_outputs: list[int] = []
+    layer_inputs: list[int] = []
+    for layer_index in (0, 1):
+        layer = tuple(tile for tile in tiles if tile.layer_index == layer_index)
+        if not layer:
+            raise ValueError("Expected both logical layers in the crossbar layout.")
+        start = 0
+        output_features = layer[0].out_features
+        for tile_index, tile in enumerate(layer):
+            if (
+                tile.key != f"crossbar.layer{layer_index}.tile{tile_index}"
+                or tile.tile_index != tile_index
+                or tile.input_start != start
+                or tile.input_stop <= tile.input_start
+                or tile.out_features != output_features
+                or output_features < 1
+            ):
+                raise ValueError("Expected a canonical contiguous crossbar tile layout.")
+            start = tile.input_stop
+            expected_order.append(tile)
+        layer_inputs.append(start)
+        layer_outputs.append(output_features)
+    if (
+        tiles != tuple(expected_order)
+        or layer_inputs[1] != layer_outputs[0]
+        or len({tile.key for tile in tiles}) != len(tiles)
+    ):
+        raise ValueError("Expected an ordered compatible two-layer crossbar layout.")
+    return tiles
+
+
+def _layout_from_bundle_state(value: Any) -> tuple[CrossbarTileSpec, ...]:
+    if not isinstance(value, (tuple, list)) or not value:
+        raise ValueError("Expected a serialized crossbar tile layout.")
+    fields = {
+        "key",
+        "layer_index",
+        "tile_index",
+        "input_start",
+        "input_stop",
+        "out_features",
+    }
+    tiles = []
+    for item in value:
+        if not isinstance(item, Mapping) or set(item) != fields:
+            raise ValueError("Expected exact serialized crossbar tile fields.")
+        integer_names = fields - {"key"}
+        if (
+            not isinstance(item["key"], str)
+            or not item["key"]
+            or any(
+                isinstance(item[name], bool) or not isinstance(item[name], int)
+                for name in integer_names
+            )
+        ):
+            raise ValueError("Expected typed serialized crossbar tile fields.")
+        tiles.append(
+            CrossbarTileSpec(
+                key=item["key"],
+                layer_index=item["layer_index"],
+                tile_index=item["tile_index"],
+                input_start=item["input_start"],
+                input_stop=item["input_stop"],
+                out_features=item["out_features"],
+            )
+        )
+    return _normalize_crossbar_layout(tiles)
+
+
+def _normalize_digital_scales(value: Sequence[float]) -> tuple[float, float]:
+    if not isinstance(value, (tuple, list)):
+        raise ValueError("Expected two serialized digital scales.")
+    if len(value) != 2 or any(
+        isinstance(item, bool) or not isinstance(item, (int, float))
+        for item in value
+    ):
+        raise ValueError("Expected two finite positive digital scales.")
+    scales = tuple(float(item) for item in value)
+    if any(not math.isfinite(item) or item <= 0.0 for item in scales):
+        raise ValueError("Expected two finite positive digital scales.")
+    return scales[0], scales[1]
+
+
+def _is_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _clone_checkpoint_value(value: Any) -> Any:
+    if isinstance(value, torch.Tensor):
+        return value.detach().cpu().clone()
+    if isinstance(value, Mapping):
+        return {key: _clone_checkpoint_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return tuple(_clone_checkpoint_value(item) for item in value)
+    if isinstance(value, list):
+        return [_clone_checkpoint_value(item) for item in value]
+    return deepcopy(value)
+
+
+def _update_structured_digest(digest: Any, value: Any) -> None:
+    """Hash the tensor/plain-container subset used by crossbar checkpoints."""
+
+    if value is None:
+        digest.update(b"none;")
+    elif isinstance(value, bool):
+        digest.update(b"bool:1;" if value else b"bool:0;")
+    elif isinstance(value, int):
+        digest.update(f"int:{value};".encode("ascii"))
+    elif isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("Expected finite values in a crossbar checkpoint.")
+        digest.update(f"float:{value.hex()};".encode("ascii"))
+    elif isinstance(value, str):
+        encoded = value.encode("utf-8")
+        digest.update(f"str:{len(encoded)}:".encode("ascii"))
+        digest.update(encoded)
+        digest.update(b";")
+    elif isinstance(value, torch.Tensor):
+        digest.update(b"tensor:")
+        digest.update(tensor_sha256(value).encode("ascii"))
+        digest.update(b";")
+    elif isinstance(value, Mapping):
+        if any(not isinstance(key, str) for key in value):
+            raise ValueError("Expected string keys in a crossbar checkpoint mapping.")
+        digest.update(f"mapping:{len(value)}:".encode("ascii"))
+        for key in sorted(value):
+            _update_structured_digest(digest, key)
+            _update_structured_digest(digest, value[key])
+        digest.update(b";")
+    elif isinstance(value, (tuple, list)):
+        kind = "tuple" if isinstance(value, tuple) else "list"
+        digest.update(f"{kind}:{len(value)}:".encode("ascii"))
+        for item in value:
+            _update_structured_digest(digest, item)
+        digest.update(b";")
+    else:
+        raise ValueError(
+            "Expected only tensors and plain containers in a crossbar checkpoint."
+        )
+
+
+def _structured_sha256(value: Any) -> str:
+    digest = sha256()
+    _update_structured_digest(digest, value)
+    return digest.hexdigest()
+
+
+def _canonical_metadata(value: Any) -> tuple[dict[str, Any], str]:
+    """Return strict JSON provenance and its canonical content digest."""
+
+    def normalize(item: Any) -> Any:
+        if item is None or isinstance(item, (str, bool)):
+            return item
+        if isinstance(item, int) and not isinstance(item, bool):
+            return item
+        if isinstance(item, float):
+            if not math.isfinite(item):
+                raise ValueError("Expected finite crossbar provenance numbers.")
+            return item
+        if isinstance(item, (tuple, list)):
+            return [normalize(child) for child in item]
+        if isinstance(item, Mapping):
+            if any(not isinstance(key, str) for key in item):
+                raise ValueError("Expected string keys in crossbar provenance metadata.")
+            return {key: normalize(item[key]) for key in sorted(item)}
+        raise ValueError("Expected JSON-compatible crossbar provenance metadata.")
+
+    if not isinstance(value, Mapping):
+        raise ValueError("Expected crossbar provenance metadata to be a mapping.")
+    canonical = normalize(value)
+    encoded = json.dumps(
+        canonical,
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return canonical, sha256(encoded).hexdigest()
+
+
+def aihwkit_analog_linear_default_logical_weights(
+    dims: Sequence[int],
+    *,
+    seed: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Reproduce the default bias-free ``AnalogLinear`` initialization.
+
+    AIHWKit 1.1.0 delegates ``AnalogLinear.reset_parameters`` to PyTorch's
+    ``Linear.reset_parameters``.  The weight draw is therefore Kaiming-uniform
+    with ``a=sqrt(5)`` in the native ``[out_features, in_features]`` layout.
+    This comparator stores logical matrices transposed as ``[in, out]``.
+
+    A dedicated CPU generator makes the starting logical weights independent
+    of device-population sampling and CUDA RNG state.  This copies the
+    initialization equation and draw order; device programming remains the
+    explicit IBM-OM program-and-verify step performed by the experiment.
+    """
+
+    dimensions = tuple(int(value) for value in dims)
+    if len(dimensions) != 3 or any(value < 1 for value in dimensions):
+        raise ValueError("Expected three positive logical dimensions.")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("Expected a non-negative integer initialization seed.")
+
+    generator = torch.Generator(device="cpu")
+    generator.manual_seed(seed)
+    logical = []
+    for in_features, out_features in zip(
+        dimensions[:-1], dimensions[1:], strict=True
+    ):
+        native_weight = torch.empty(
+            (out_features, in_features),
+            dtype=torch.float32,
+            device="cpu",
+        )
+        torch.nn.init.kaiming_uniform_(
+            native_weight,
+            a=math.sqrt(5.0),
+            generator=generator,
+        )
+        logical.append(native_weight.transpose(0, 1).contiguous())
+    return logical[0], logical[1]
 
 
 def validate_population_layout(
@@ -235,7 +634,10 @@ def map_logical_weights(
 
     One positive digital output scale is shared by all tiles in a logical
     layer.  This avoids the tile-wise calibration confound that would arise if
-    each input slice independently used its own maximum.
+    each input slice independently used its own maximum.  An omega of zero
+    copies AIHWKit's default ``MappingParameter`` behavior: no weight remapping
+    and a unit digital scale, so the logical weights are sent directly to the
+    device as signed ``q`` targets.
     """
 
     weights = tuple(
@@ -246,10 +648,10 @@ def map_logical_weights(
         raise ValueError("Expected exactly two logical weight tensors.")
     omega = tuple(float(value) for value in weight_scaling_omega)
     if len(omega) != 2 or any(
-        not math.isfinite(value) or value <= 0.0 or value > 1.0
+        not math.isfinite(value) or value < 0.0 or value > 1.0
         for value in omega
     ):
-        raise ValueError("Expected two finite weight-scaling omega values in (0, 1].")
+        raise ValueError("Expected two finite weight-scaling omega values in [0, 1].")
 
     expected_shapes: list[tuple[int, int]] = []
     for layer_index in (0, 1):
@@ -268,7 +670,11 @@ def map_logical_weights(
         absolute_maximum = float(value.abs().max().item())
         if not math.isfinite(absolute_maximum) or absolute_maximum <= 0.0:
             raise ValueError("Expected every logical layer to have non-zero finite weights.")
-        scales.append(absolute_maximum / omega[layer_index])
+        scales.append(
+            1.0
+            if omega[layer_index] == 0.0
+            else absolute_maximum / omega[layer_index]
+        )
 
     pieces = []
     for tile in layout:
@@ -628,8 +1034,200 @@ def project_to_nearest_effective_code_device(
     return realized, indices
 
 
+def _contiguous_trajectory_seeds(*, base_seed: int, size: int) -> torch.Tensor:
+    """Expand one authenticated seed into unique nonwrapping cell streams."""
+
+    if (
+        isinstance(base_seed, bool)
+        or not isinstance(base_seed, int)
+        or isinstance(size, bool)
+        or not isinstance(size, int)
+        or size < 1
+        or size >= _MAX_TRAJECTORY_SEED
+    ):
+        raise ValueError("Expected a valid base seed and positive trajectory count.")
+    # ``derive_seed`` spans the complete positive signed-63-bit range.  Reduce
+    # it before adding the cell coordinate so construction can never wrap or
+    # collide within one population, even when the derived value is near the
+    # signed-int64 ceiling.
+    first = int(base_seed) % (_MAX_TRAJECTORY_SEED - size) + 1
+    return torch.arange(first, first + size, dtype=torch.int64, device="cpu")
+
+
+def crossbar_trajectory_seeds(
+    population: IbmReramArrayPopulation,
+    *,
+    endpoint_seed: int,
+    stream_role: str,
+    random_stream_population_fingerprint: str | None = None,
+) -> torch.Tensor:
+    """Derive one explicit independent trajectory seed per physical cell.
+
+    The population fingerprint and stream role are deliberately part of the
+    derivation.  Replaying one endpoint on the same frozen array therefore
+    reproduces every cell stream, while a different assignment or declared
+    physical intervention receives a disjoint keyed stream.  Canonical cell
+    order is the population's flattened binding/tile order.
+    """
+
+    if not isinstance(population, IbmReramArrayPopulation):
+        raise TypeError("Expected one frozen IBM OM array population.")
+    if isinstance(endpoint_seed, bool) or not isinstance(endpoint_seed, int):
+        raise TypeError("Expected endpoint_seed to be an integer.")
+    if not isinstance(stream_role, str) or not stream_role.strip():
+        raise ValueError("Expected a non-empty physical random-stream role.")
+    fingerprint = (
+        population.fingerprint
+        if random_stream_population_fingerprint is None
+        else random_stream_population_fingerprint
+    )
+    if not isinstance(fingerprint, str) or not fingerprint.strip():
+        raise ValueError("Expected a non-empty random-stream population fingerprint.")
+    base = derive_seed(
+        endpoint_seed,
+        population.assignment_seed,
+        fingerprint,
+        stream_role.strip(),
+        "ibm_om_crossbar_per_cell_v1",
+    )
+    return _contiguous_trajectory_seeds(base_seed=base, size=population.size)
+
+
+def _normalize_trajectory_seeds(
+    value: Sequence[int] | torch.Tensor,
+    *,
+    size: int,
+) -> torch.Tensor:
+    """Validate an auditable seed vector without silently coercing floats."""
+
+    if isinstance(value, torch.Tensor):
+        if value.dtype != torch.int64 or value.ndim != 1:
+            raise ValueError("Expected trajectory seeds to be a rank-1 int64 tensor.")
+        seeds = value.detach().to(device="cpu").clone()
+    else:
+        if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+            raise TypeError("Expected one integer trajectory seed per crosspoint.")
+        items = tuple(value)
+        if any(isinstance(item, bool) or not isinstance(item, int) for item in items):
+            raise ValueError("Expected every trajectory seed to be an integer.")
+        seeds = torch.tensor(items, dtype=torch.int64, device="cpu")
+    if seeds.shape != (size,) or bool(torch.any(seeds < 1)):
+        raise ValueError(
+            "Expected one positive signed-63-bit trajectory seed per crosspoint."
+        )
+    if int(torch.unique(seeds).numel()) != size:
+        raise ValueError("Expected independent unique per-crosspoint trajectory seeds.")
+    return seeds
+
+
+def _counter_keyed_hash_pair(
+    seeds: torch.Tensor,
+    counters: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return two independently projected 31-bit words for every RNG key.
+
+    A 31-bit adaptation of the MurmurHash3 integer finalizer turns the full
+    signed-63-bit ``(seed, counter)`` key into two words.  Each lane uses a
+    distinct coefficient-and-salt schedule across the seed and counter limbs
+    before finalization; it is not a differently salted view of one collapsed
+    31-bit preimage.  The operands are masked before each multiply, so
+    every intermediate is below signed-int64 overflow on both CPU and CUDA.
+    The resulting 31+31-bit output has a 62-bit pair space.  Even a
+    deliberately loose upper bound of seven
+    billion campaign draws has only about five expected pair collisions under
+    the birthday model (below one part per billion of draws), while float32
+    normal quantization itself already admits repeated output values.
+    """
+
+    if (
+        seeds.dtype != torch.int64
+        or counters.dtype != torch.int64
+        or seeds.shape != counters.shape
+        or seeds.ndim != 1
+    ):
+        raise ValueError("Expected matching rank-1 int64 RNG keys and counters.")
+    mask = 0x7FFFFFFF
+
+    def hashed(lane: int) -> torch.Tensor:
+        if lane == 0:
+            coefficients = (
+                0x9E3779B1,
+                0x85EBCA6B,
+                0xC2B2AE35,
+                0x27D4EB2F,
+                0x165667B1,
+                0x243F6A88,
+            )
+        elif lane == 1:
+            # A second projection of every seed/counter limb is required.
+            # Merely changing a final salt would leave both outputs as a
+            # function of one 31-bit intermediate and would not provide a
+            # 62-bit Box--Muller pair space.
+            coefficients = (
+                0x27D4EB2F,
+                0x165667B1,
+                0x9E3779B1,
+                0x85EBCA6B,
+                0xC2B2AE35,
+                0x13198A2E,
+            )
+        else:  # pragma: no cover - private fixed-lane invariant
+            raise ValueError("Expected one of two counter-RNG lanes.")
+        seed_low = seeds & mask
+        seed_mid = (seeds >> 31) & mask
+        seed_high = (seeds >> 62) & mask
+        counter_low = counters & mask
+        counter_mid = (counters >> 31) & mask
+        counter_high = (counters >> 62) & mask
+        value = (
+            seed_low
+            ^ ((seed_mid * coefficients[0]) & mask)
+            ^ ((seed_high * coefficients[1]) & mask)
+            ^ ((counter_low * coefficients[2]) & mask)
+            ^ ((counter_mid * coefficients[3]) & mask)
+            ^ ((counter_high * coefficients[4]) & mask)
+            ^ coefficients[5]
+        ) & mask
+        value = value ^ (value >> 16)
+        value = (value * 0x85EBCA6B) & mask
+        value = value ^ (value >> 13)
+        value = (value * 0xC2B2AE35) & mask
+        return (value ^ (value >> 16)) & mask
+
+    return hashed(0), hashed(1)
+
+
+def _counter_keyed_standard_normal(
+    seeds: torch.Tensor,
+    counters: torch.Tensor,
+) -> torch.Tensor:
+    """Return counter-keyed Box--Muller normals without future-draw buffers.
+
+    This is a deterministic stochastic-simulator RNG, not an attempted replay
+    of AIHWKit's hidden native tile RNG and not a cryptographic primitive.
+    """
+
+    radius_word, angle_word = _counter_keyed_hash_pair(seeds, counters)
+    # Keep transcendental work in float32: recovery can request thousands of
+    # sparse physical updates on consumer CUDA devices with very weak float64
+    # throughput.  Half-bin centering and a one-ULP upper clamp retain valid
+    # Box--Muller inputs after the int-to-float32 conversion rounds its edge.
+    reciprocal = 1.0 / float(2**31)
+    upper = 1.0 - torch.finfo(torch.float32).eps
+    uniform_radius = (
+        (radius_word.to(torch.float32) + 0.5) * reciprocal
+    ).clamp(max=upper)
+    uniform_angle = (
+        (angle_word.to(torch.float32) + 0.5) * reciprocal
+    ).clamp(max=upper)
+    normal = torch.sqrt(-2.0 * torch.log(uniform_radius)) * torch.cos(
+        (2.0 * math.pi) * uniform_angle
+    )
+    return normal
+
+
 class IbmOmEffectiveCrossbarPlant:
-    """Persistent ``q=a-r`` OM plant with one serializable RNG stream."""
+    """Persistent ``q=a-r`` OM plant with independent cell RNG streams."""
 
     STATE_SCHEMA = "ebl.ibm_om_effective_crossbar_plant"
 
@@ -637,14 +1235,68 @@ class IbmOmEffectiveCrossbarPlant:
         self,
         population: IbmReramArrayPopulation,
         *,
-        generator: torch.Generator,
+        trajectory_seeds: Sequence[int] | torch.Tensor | None = None,
+        trajectory_seed_derivation: str | None = None,
+        generator: torch.Generator | None = None,
         device: torch.device | str,
     ) -> None:
         self.device = torch.device(device)
         self.population = population.to(self.device)
-        self.generator = generator
+        # ``torch.device("cuda")`` is not equal to the concrete
+        # ``torch.device("cuda:0")`` reported by tensors allocated through it.
+        # Keep the plant's device contract canonical so capability ports accept
+        # CUDA-resident minibatches produced with an unindexed CUDA config.
+        self.device = self.population.reference.device
+        if trajectory_seeds is not None and generator is not None:
+            raise ValueError(
+                "Expected either explicit trajectory seeds or the legacy "
+                "generator adapter, not both."
+            )
+        if trajectory_seeds is None:
+            if not isinstance(generator, torch.Generator):
+                raise ValueError("Expected explicit per-cell trajectory seeds.")
+            legacy_base = derive_seed(
+                int(generator.initial_seed()),
+                population.assignment_seed,
+                population.fingerprint,
+                "ibm_om_crossbar_legacy_generator_adapter_v1",
+            )
+            seeds_cpu = _contiguous_trajectory_seeds(
+                base_seed=legacy_base,
+                size=population.size,
+            )
+            derivation = _LEGACY_GENERATOR_SEED_DERIVATION
+        else:
+            seeds_cpu = _normalize_trajectory_seeds(
+                trajectory_seeds,
+                size=population.size,
+            )
+            derivation = (
+                "caller_supplied_explicit_per_cell_v1"
+                if trajectory_seed_derivation is None
+                else trajectory_seed_derivation
+            )
+        if not isinstance(derivation, str) or not derivation.strip():
+            raise ValueError("Expected a non-empty trajectory-seed derivation receipt.")
+        self.trajectory_seed_derivation = derivation.strip()
+        self.trajectory_seeds = seeds_cpu.to(self.device)
+        self.trajectory_draw_indices = torch.zeros(
+            population.size,
+            dtype=torch.int64,
+            device=self.device,
+        )
         self.persistent = self.population.logical_min.clone()
-        self.apparent = self.persistent + self._write_scale * self._normal_all()
+        self.apparent = self.persistent.clone()
+        if self._write_scale > 0.0:
+            initial_mask = torch.ones(
+                population.size,
+                dtype=torch.bool,
+                device=self.device,
+            )
+            indices, write_noise = self._normal(initial_mask)
+            self.apparent[indices] = (
+                self.persistent[indices] + self._write_scale * write_noise
+            )
         self.upward_pulses = torch.zeros(
             self.population.size, dtype=torch.int64, device=self.device
         )
@@ -665,16 +1317,35 @@ class IbmOmEffectiveCrossbarPlant:
         return self.population.size
 
     @property
+    def state_kind(self) -> str:
+        """Return the public recovery-state class without exposing a fault map."""
+
+        return "faulted" if self.fault_transition is not None else "healthy"
+
+    @property
     def _write_scale(self) -> float:
         return float(self.population.write_noise_std * self.population.nominal_dw_min)
 
-    def _normal_all(self) -> torch.Tensor:
-        return torch.randn(
-            (self.size,),
-            dtype=torch.float32,
-            device=self.device,
-            generator=self.generator,
+    def _normal(self, active: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Draw once for selected trajectories and advance no other stream."""
+
+        mask = torch.as_tensor(active, dtype=torch.bool, device=self.device)
+        if mask.shape != (self.size,):
+            raise ValueError("Expected one stochastic-selection flag per crosspoint.")
+        indices = torch.nonzero(mask, as_tuple=False).reshape(-1)
+        if indices.numel() == 0:
+            return indices, torch.empty(
+                (0,), dtype=torch.float32, device=self.device
+            )
+        counters = self.trajectory_draw_indices[indices]
+        if bool(torch.any(counters == torch.iinfo(torch.int64).max)):
+            raise RuntimeError("A per-cell random-draw counter is exhausted.")
+        values = _counter_keyed_standard_normal(
+            self.trajectory_seeds[indices],
+            counters,
         )
+        self.trajectory_draw_indices[indices] += 1
+        return indices, values
 
     def pulse(self, directions: torch.Tensor) -> None:
         direction = torch.as_tensor(directions, dtype=torch.int8, device=self.device)
@@ -688,7 +1359,9 @@ class IbmOmEffectiveCrossbarPlant:
         movable = active & ~self.post_deployment_fault_mask
         population = self.population
         active_state = self.persistent + population.reference
-        cycle = self._normal_all()
+        cycle_indices, cycle_values = self._normal(active)
+        cycle = torch.zeros_like(self.persistent)
+        cycle[cycle_indices] = cycle_values
         candidate = active_state.clone()
         upward = direction > 0
         downward = direction < 0
@@ -715,10 +1388,16 @@ class IbmOmEffectiveCrossbarPlant:
         candidate = torch.maximum(candidate, population.min_bound)
         candidate = torch.minimum(candidate, population.max_bound)
         self.persistent[movable] = (candidate - population.reference)[movable]
-        apparent = self.persistent + self._write_scale * self._normal_all()
         # AIHWKit corrupt cells have zero persistent increments, but write
         # noise still changes the apparent state whenever a write is attempted.
-        self.apparent[active] = apparent[active]
+        if self._write_scale > 0.0:
+            write_indices, write_values = self._normal(active)
+            self.apparent[write_indices] = (
+                self.persistent[write_indices]
+                + self._write_scale * write_values
+            )
+        else:
+            self.apparent[active] = self.persistent[active]
         self.upward_pulses += upward.to(torch.int64)
         self.downward_pulses += downward.to(torch.int64)
 
@@ -803,8 +1482,14 @@ class IbmOmEffectiveCrossbarPlant:
             self.upward_pulses + self.downward_pulses
         )
         self.persistent[fault_mask] = values[fault_mask]
-        transition_apparent = self.persistent + self._write_scale * self._normal_all()
-        self.apparent[fault_mask] = transition_apparent[fault_mask]
+        if self._write_scale > 0.0:
+            fault_indices, transition_noise = self._normal(fault_mask)
+            self.apparent[fault_indices] = (
+                self.persistent[fault_indices]
+                + self._write_scale * transition_noise
+            )
+        else:
+            self.apparent[fault_mask] = self.persistent[fault_mask]
         non_fault_persistent_unchanged = bool(
             torch.equal(
                 self.persistent[~fault_mask],
@@ -851,12 +1536,12 @@ class IbmOmEffectiveCrossbarPlant:
         return _EffectiveControllerPort(self)
 
     def restricted_recovery_update_port(self) -> "_LocalStarUpdatePort":
-        """Expose apparent state and pulse writes without fault or persistent state."""
+        """Expose apparent state and pulse writes for healthy or faulted recovery.
 
-        if self.fault_transition is None:
-            raise RuntimeError(
-                "Expected the post-deployment fault before opening the recovery update port."
-            )
+        The public state-kind label is retained for provenance, while the
+        fault mask, persistent tensor, population, and RNG remain hidden.
+        """
+
         return _LocalStarUpdatePort(self)
 
     def local_star_update_port(self) -> "_LocalStarUpdatePort":
@@ -870,7 +1555,7 @@ class IbmOmEffectiveCrossbarPlant:
         layout: Sequence[CrossbarTileSpec],
         digital_scales: Sequence[float],
     ) -> "_OnChipCrossbarRecoveryPort":
-        """Open a forward/BP/pulse capability after the immutable fault event.
+        """Open a forward/BP/pulse capability on a healthy or faulted plant.
 
         The returned learner view never exposes the full apparent or
         persistent tensors, the population, RNG, or fault metadata.  Forward
@@ -878,11 +1563,6 @@ class IbmOmEffectiveCrossbarPlant:
         physical plant rather than weight-tensor handoffs.
         """
 
-        if self.fault_transition is None:
-            raise RuntimeError(
-                "Expected the post-deployment fault before opening the on-chip "
-                "recovery port."
-            )
         validate_population_layout(self.population, layout)
         return _OnChipCrossbarRecoveryPort(
             self,
@@ -908,7 +1588,7 @@ class IbmOmEffectiveCrossbarPlant:
     def state_dict(self) -> dict[str, Any]:
         return {
             "schema": self.STATE_SCHEMA,
-            "schema_version": 2,
+            "schema_version": 3,
             "population_fingerprint": self.population.fingerprint,
             "persistent": self.persistent.detach().cpu().clone(),
             "apparent": self.apparent.detach().cpu().clone(),
@@ -924,7 +1604,16 @@ class IbmOmEffectiveCrossbarPlant:
             "fault_transition": (
                 None if self.fault_transition is None else dict(self.fault_transition)
             ),
-            "generator_state": self.generator.get_state().detach().cpu().clone(),
+            "rng_backend": CROSSBAR_TRAJECTORY_RNG_BACKEND,
+            "rng_reproducibility_scope": (
+                CROSSBAR_TRAJECTORY_REPRODUCIBILITY_SCOPE
+            ),
+            "rng_statistical_contract": CROSSBAR_TRAJECTORY_STATISTICAL_CONTRACT,
+            "trajectory_seed_derivation": self.trajectory_seed_derivation,
+            "trajectory_seeds": self.trajectory_seeds.detach().cpu().clone(),
+            "trajectory_draw_indices": (
+                self.trajectory_draw_indices.detach().cpu().clone()
+            ),
         }
 
     def load_state_dict(
@@ -944,7 +1633,7 @@ class IbmOmEffectiveCrossbarPlant:
         checkpoint from authenticating its own fault values or historical
         hashes.
         """
-        expected_v1 = {
+        expected_legacy = {
             "schema",
             "schema_version",
             "population_fingerprint",
@@ -954,11 +1643,19 @@ class IbmOmEffectiveCrossbarPlant:
             "downward_pulses",
             "generator_state",
         }
-        expected_v2 = expected_v1 | {
+        expected_legacy_fault = expected_legacy | {
             "post_deployment_fault_mask",
             "post_deployment_stuck_persistent_q",
             "post_deployment_fault_pulse_baseline",
             "fault_transition",
+        }
+        expected_v3 = (expected_legacy_fault - {"generator_state"}) | {
+            "rng_backend",
+            "rng_reproducibility_scope",
+            "rng_statistical_contract",
+            "trajectory_seed_derivation",
+            "trajectory_seeds",
+            "trajectory_draw_indices",
         }
         if (
             not isinstance(state, Mapping)
@@ -967,14 +1664,22 @@ class IbmOmEffectiveCrossbarPlant:
             raise ValueError("Expected a matching effective-crossbar plant state.")
         schema_version = state.get("schema_version")
         if (
-            set(state) != (expected_v1 if schema_version == 1 else expected_v2)
+            set(state) != expected_v3
             or state["schema"] != self.STATE_SCHEMA
             or isinstance(schema_version, bool)
             or not isinstance(schema_version, int)
-            or schema_version not in {1, 2}
+            or schema_version != 3
             or state["population_fingerprint"] != self.population.fingerprint
         ):
-            raise ValueError("Expected a matching effective-crossbar plant state.")
+            if schema_version in {1, 2} and frozenset(state) in {
+                frozenset(expected_legacy),
+                frozenset(expected_legacy_fault),
+            }:
+                raise ValueError(
+                    "Legacy single-generator crossbar states cannot be exactly "
+                    "continued with the required per-trajectory RNG backend."
+                )
+            raise ValueError("Expected a matching effective-crossbar plant state version 3.")
         pending: dict[str, torch.Tensor] = {}
         for name, target, dtype in (
             ("persistent", self.persistent, torch.float32),
@@ -1002,9 +1707,7 @@ class IbmOmEffectiveCrossbarPlant:
             self.post_deployment_fault_pulse_baseline
         )
         pending_transition: dict[str, Any] | None = None
-        if schema_version == 1:
-            pass
-        else:
+        if schema_version == 3:
             fault_mask = state["post_deployment_fault_mask"]
             fault_q = state["post_deployment_stuck_persistent_q"]
             fault_pulse_baseline = state["post_deployment_fault_pulse_baseline"]
@@ -1252,7 +1955,7 @@ class IbmOmEffectiveCrossbarPlant:
                     )
 
                 pre_fault = expected_pre_fault_state
-                pre_fault_v1 = {
+                pre_fault_legacy = {
                     "schema",
                     "schema_version",
                     "population_fingerprint",
@@ -1262,24 +1965,37 @@ class IbmOmEffectiveCrossbarPlant:
                     "downward_pulses",
                     "generator_state",
                 }
-                pre_fault_v2 = pre_fault_v1 | {
+                pre_fault_legacy_fault = pre_fault_legacy | {
                     "post_deployment_fault_mask",
                     "post_deployment_stuck_persistent_q",
                     "post_deployment_fault_pulse_baseline",
                     "fault_transition",
+                }
+                pre_fault_v3 = (pre_fault_legacy_fault - {"generator_state"}) | {
+                    "rng_backend",
+                    "rng_reproducibility_scope",
+                    "rng_statistical_contract",
+                    "trajectory_seed_derivation",
+                    "trajectory_seeds",
+                    "trajectory_draw_indices",
                 }
                 pre_schema_version = pre_fault.get("schema_version")
                 pre_persistent = pre_fault.get("persistent")
                 pre_apparent = pre_fault.get("apparent")
                 pre_upward = pre_fault.get("upward_pulses")
                 pre_downward = pre_fault.get("downward_pulses")
+                pre_rng_backend = pre_fault.get("rng_backend")
+                pre_reproducibility = pre_fault.get("rng_reproducibility_scope")
+                pre_statistical_contract = pre_fault.get("rng_statistical_contract")
+                pre_seed_derivation = pre_fault.get("trajectory_seed_derivation")
+                pre_trajectory_seeds = pre_fault.get("trajectory_seeds")
+                pre_draw_indices = pre_fault.get("trajectory_draw_indices")
                 if (
-                    set(pre_fault)
-                    != (pre_fault_v1 if pre_schema_version == 1 else pre_fault_v2)
+                    set(pre_fault) != pre_fault_v3
                     or pre_fault.get("schema") != self.STATE_SCHEMA
                     or isinstance(pre_schema_version, bool)
                     or not isinstance(pre_schema_version, int)
-                    or pre_schema_version not in {1, 2}
+                    or pre_schema_version != 3
                     or pre_fault.get("population_fingerprint")
                     != self.population.fingerprint
                     or not isinstance(pre_persistent, torch.Tensor)
@@ -1298,11 +2014,34 @@ class IbmOmEffectiveCrossbarPlant:
                     or pre_downward.shape != self.downward_pulses.shape
                     or pre_downward.dtype != torch.int64
                     or bool(torch.any(pre_downward < 0))
+                    or pre_rng_backend != CROSSBAR_TRAJECTORY_RNG_BACKEND
+                    or pre_reproducibility
+                    != CROSSBAR_TRAJECTORY_REPRODUCIBILITY_SCOPE
+                    or pre_statistical_contract
+                    != CROSSBAR_TRAJECTORY_STATISTICAL_CONTRACT
+                    or not isinstance(pre_seed_derivation, str)
+                    or not pre_seed_derivation.strip()
+                    or not isinstance(pre_trajectory_seeds, torch.Tensor)
+                    or pre_trajectory_seeds.device.type != "cpu"
+                    or pre_trajectory_seeds.dtype != torch.int64
+                    or pre_trajectory_seeds.shape != (self.size,)
+                    or not isinstance(pre_draw_indices, torch.Tensor)
+                    or pre_draw_indices.device.type != "cpu"
+                    or pre_draw_indices.dtype != torch.int64
+                    or pre_draw_indices.shape != (self.size,)
+                    or bool(torch.any(pre_draw_indices < 0))
+                    or not isinstance(state.get("trajectory_seeds"), torch.Tensor)
+                    or not torch.equal(
+                        pre_trajectory_seeds,
+                        state["trajectory_seeds"],
+                    )
+                    or pre_seed_derivation
+                    != state.get("trajectory_seed_derivation")
                 ):
                     raise ValueError(
                         "Expected a complete healthy P0 state for fault chronology."
                     )
-                if pre_schema_version == 2:
+                if pre_schema_version == 3:
                     pre_mask = pre_fault["post_deployment_fault_mask"]
                     pre_stuck = pre_fault[
                         "post_deployment_stuck_persistent_q"
@@ -1393,19 +2132,80 @@ class IbmOmEffectiveCrossbarPlant:
             )
         ):
             raise ValueError("Expected saved programmable states to remain in support.")
-        generator_state = state["generator_state"]
+        rng_backend = state["rng_backend"]
+        reproducibility_scope = state["rng_reproducibility_scope"]
+        statistical_contract = state["rng_statistical_contract"]
+        seed_derivation = state["trajectory_seed_derivation"]
+        trajectory_seeds = state["trajectory_seeds"]
+        draw_indices = state["trajectory_draw_indices"]
         if (
-            not isinstance(generator_state, torch.Tensor)
-            or generator_state.dtype != torch.uint8
-            or generator_state.device.type != "cpu"
-            or generator_state.ndim != 1
+            rng_backend != CROSSBAR_TRAJECTORY_RNG_BACKEND
+            or reproducibility_scope
+            != CROSSBAR_TRAJECTORY_REPRODUCIBILITY_SCOPE
+            or statistical_contract != CROSSBAR_TRAJECTORY_STATISTICAL_CONTRACT
+            or not isinstance(seed_derivation, str)
+            or not seed_derivation.strip()
+            or not isinstance(trajectory_seeds, torch.Tensor)
+            or trajectory_seeds.device.type != "cpu"
+            or trajectory_seeds.dtype != torch.int64
+            or trajectory_seeds.shape != (self.size,)
+            or not isinstance(draw_indices, torch.Tensor)
+            or draw_indices.device.type != "cpu"
+            or draw_indices.dtype != torch.int64
+            or draw_indices.shape != (self.size,)
+            or bool(torch.any(draw_indices < 0))
         ):
-            raise ValueError("Expected a saved crossbar generator state tensor.")
-        probe = torch.Generator(device=self.device.type)
-        try:
-            probe.set_state(generator_state.detach().cpu())
-        except RuntimeError as error:
-            raise ValueError("Expected a valid saved crossbar generator state.") from error
+            raise ValueError(
+                "Expected exact saved per-trajectory seeds and draw counters."
+            )
+        normalized_seeds = _normalize_trajectory_seeds(
+            trajectory_seeds,
+            size=self.size,
+        )
+        total_pulses = pending["upward_pulses"] + pending["downward_pulses"]
+        noisy_apparent = int(self._write_scale > 0.0)
+        expected_draw_indices = (
+            torch.full_like(total_pulses, noisy_apparent)
+            + total_pulses * (1 + noisy_apparent)
+            + pending_fault_mask.to(torch.int64) * noisy_apparent
+        )
+        if not torch.equal(
+            draw_indices,
+            expected_draw_indices.detach().cpu(),
+        ):
+            raise ValueError(
+                "Expected per-cell draw counters to match conditioning, pulse, "
+                "write-noise, and fault-transition chronology exactly."
+            )
+
+        # The held apparent state is not an independently mutable checkpoint
+        # field.  Every cell receives one apparent write-noise draw at
+        # conditioning, and thereafter its final draw is the write-noise draw
+        # associated with its most recent pulse (or fault transition).  The
+        # stateless per-trajectory RNG therefore lets us authenticate that
+        # relation exactly when restoring on the same execution backend.  A
+        # cross-backend restore is intentionally outside the bit-exact scope
+        # recorded by ``rng_reproducibility_scope``.
+        if self._write_scale > 0.0:
+            saved_counters = draw_indices.to(self.device)
+            if bool(torch.any(saved_counters < 1)):
+                raise ValueError(
+                    "Expected every noisy apparent state to have a conditioning draw."
+                )
+            last_write_noise = _counter_keyed_standard_normal(
+                normalized_seeds.to(self.device),
+                saved_counters - 1,
+            )
+            expected_apparent = (
+                pending["persistent"] + self._write_scale * last_write_noise
+            )
+        else:
+            expected_apparent = pending["persistent"]
+        if not torch.equal(pending["apparent"], expected_apparent):
+            raise ValueError(
+                "Expected held apparent state to match the deterministic last "
+                "write-noise draw on this execution backend."
+            )
 
         self.persistent.copy_(pending["persistent"])
         self.apparent.copy_(pending["apparent"])
@@ -1415,7 +2215,9 @@ class IbmOmEffectiveCrossbarPlant:
         self.post_deployment_stuck_persistent_q.copy_(pending_fault_q)
         self.post_deployment_fault_pulse_baseline.copy_(pending_fault_baseline)
         self.fault_transition = pending_transition
-        self.generator.set_state(generator_state.detach().cpu())
+        self.trajectory_seed_derivation = seed_derivation.strip()
+        self.trajectory_seeds.copy_(normalized_seeds.to(self.device))
+        self.trajectory_draw_indices.copy_(draw_indices.to(self.device))
 
     def pulse_statistics(self) -> dict[str, Any]:
         total = self.upward_pulses + self.downward_pulses
@@ -1474,6 +2276,132 @@ class IbmOmEffectiveCrossbarPlant:
         }
 
 
+def crossbar_state_bundle(
+    plant: IbmOmEffectiveCrossbarPlant,
+    *,
+    layout: Sequence[CrossbarTileSpec],
+    digital_scales: Sequence[float],
+    metadata: Mapping[str, Any] | None = None,
+) -> IbmOmCrossbarStateBundle:
+    """Freeze an exact healthy or faulted deployment/recovery boundary."""
+
+    if not isinstance(plant, IbmOmEffectiveCrossbarPlant):
+        raise TypeError("Expected an IBM OM effective-crossbar plant.")
+    tiles = _normalize_crossbar_layout(layout)
+    validate_population_layout(plant.population, tiles)
+    scales = _normalize_digital_scales(digital_scales)
+    canonical_metadata, metadata_sha256 = _canonical_metadata(
+        {} if metadata is None else metadata
+    )
+    plant_state = plant.state_dict()
+    return IbmOmCrossbarStateBundle(
+        layout=tiles,
+        digital_scales=scales,
+        state_kind=plant.state_kind,
+        population_fingerprint=plant.population.fingerprint,
+        plant_state=plant_state,
+        plant_state_sha256=_structured_sha256(plant_state),
+        metadata=canonical_metadata,
+        metadata_sha256=metadata_sha256,
+    )
+
+
+def restore_crossbar_state_bundle(
+    bundle: IbmOmCrossbarStateBundle | Mapping[str, Any],
+    *,
+    population: IbmReramArrayPopulation,
+    trajectory_seeds: Sequence[int] | torch.Tensor | None = None,
+    generator: torch.Generator | None = None,
+    device: torch.device | str,
+    expected_layout: Sequence[CrossbarTileSpec],
+    expected_digital_scales: Sequence[float],
+    expected_metadata_sha256: str | None = None,
+    expected_fault_source_population: IbmReramArrayPopulation | None = None,
+    expected_pre_fault_state: Mapping[str, Any] | None = None,
+) -> tuple[IbmOmEffectiveCrossbarPlant, IbmOmCrossbarStateBundle]:
+    """Restore a bundle against external population and configuration authority.
+
+    A faulted bundle additionally requires the published companion population
+    and exact healthy P0 plant state accepted by ``load_state_dict``.  The
+    returned bundle is a newly validated copy; callers can use its canonical
+    metadata, layout, scales, and digests in stage receipts.
+    """
+
+    parsed = IbmOmCrossbarStateBundle.from_state_dict(
+        bundle.state_dict()
+        if isinstance(bundle, IbmOmCrossbarStateBundle)
+        else bundle
+    )
+    tiles = _normalize_crossbar_layout(expected_layout)
+    scales = _normalize_digital_scales(expected_digital_scales)
+    validate_population_layout(population, tiles)
+    if (
+        parsed.layout != tiles
+        or parsed.digital_scales != scales
+        or parsed.population_fingerprint != population.fingerprint
+    ):
+        raise ValueError(
+            "Expected bundle layout, scales, and physical population to match "
+            "the external recovery configuration."
+        )
+    if expected_metadata_sha256 is not None and (
+        not _is_sha256(expected_metadata_sha256)
+        or parsed.metadata_sha256 != expected_metadata_sha256
+    ):
+        raise ValueError("Expected the crossbar bundle provenance digest to match.")
+    if parsed.state_kind == "healthy" and (
+        expected_fault_source_population is not None
+        or expected_pre_fault_state is not None
+    ):
+        raise ValueError("Expected fault replay authority only for a faulted bundle.")
+    if parsed.state_kind == "faulted" and (
+        not isinstance(expected_fault_source_population, IbmReramArrayPopulation)
+        or not isinstance(expected_pre_fault_state, Mapping)
+    ):
+        raise ValueError(
+            "Expected a published companion population and exact healthy P0 "
+            "state for a faulted bundle."
+        )
+    saved_seeds = parsed.plant_state.get("trajectory_seeds")
+    saved_derivation = parsed.plant_state.get("trajectory_seed_derivation")
+    if not isinstance(saved_seeds, torch.Tensor):
+        raise ValueError(
+            "Expected a per-trajectory RNG state; legacy generator checkpoints "
+            "cannot be exactly restored."
+        )
+    normalized_saved_seeds = _normalize_trajectory_seeds(
+        saved_seeds,
+        size=population.size,
+    )
+    if trajectory_seeds is not None and not torch.equal(
+        _normalize_trajectory_seeds(trajectory_seeds, size=population.size),
+        normalized_saved_seeds,
+    ):
+        raise ValueError(
+            "Expected caller-supplied trajectory seeds to match the saved "
+            "physical continuation state exactly."
+        )
+    # ``generator`` remains an accepted keyword for v1 call-site source
+    # compatibility only.  A v3 bundle is its own RNG authority; silently
+    # deriving replacement streams from the placeholder would break replay.
+    if generator is not None and not isinstance(generator, torch.Generator):
+        raise TypeError("Expected generator to be a Torch generator when provided.")
+    plant = IbmOmEffectiveCrossbarPlant(
+        population,
+        trajectory_seeds=normalized_saved_seeds,
+        trajectory_seed_derivation=saved_derivation,
+        device=device,
+    )
+    plant.load_state_dict(
+        parsed.plant_state,
+        expected_fault_source_population=expected_fault_source_population,
+        expected_pre_fault_state=expected_pre_fault_state,
+    )
+    if plant.state_kind != parsed.state_kind:
+        raise RuntimeError("Expected the restored plant state kind to match its bundle.")
+    return plant, parsed
+
+
 class _EffectiveControllerPort:
     """P&V port exposing only apparent normalized effective state."""
 
@@ -1511,6 +2439,7 @@ class _LocalStarUpdatePort:
     __slots__ = (
         "__size",
         "__nominal_dw_min",
+        "__state_kind",
         "__apparent_state",
         "__persistent_state",
         "__pulse_writer",
@@ -1519,6 +2448,7 @@ class _LocalStarUpdatePort:
     def __init__(self, plant: IbmOmEffectiveCrossbarPlant) -> None:
         self.__size = plant.size
         self.__nominal_dw_min = float(plant.population.nominal_dw_min)
+        self.__state_kind = plant.state_kind
         self.__apparent_state = plant.apparent
         self.__persistent_state = plant.persistent
         self.__pulse_writer = plant.pulse
@@ -1540,6 +2470,7 @@ class _LocalStarUpdatePort:
 
     def state_hash_receipt(self) -> dict[str, str]:
         return {
+            "plant_state_kind": self.__state_kind,
             "apparent_sha256": tensor_sha256(self.__apparent_state),
             "persistent_sha256": tensor_sha256(self.__persistent_state),
         }
@@ -1572,6 +2503,7 @@ class _OnChipCrossbarRecoveryPort:
         "__layout",
         "__layout_receipt_value",
         "__digital_scales",
+        "__state_kind",
         "__device",
         "__apparent_state",
         "__persistent_state",
@@ -1595,6 +2527,7 @@ class _OnChipCrossbarRecoveryPort:
         self.__layout = tuple(layout)
         self.__layout_receipt_value = _layout_receipt(self.__layout)
         self.__digital_scales = scales
+        self.__state_kind = plant.state_kind
         self.__device = plant.device
         self.__apparent_state = plant.apparent
         self.__persistent_state = plant.persistent
@@ -1619,6 +2552,7 @@ class _OnChipCrossbarRecoveryPort:
             "layout": self.__layout_receipt_value,
             "q_scales": self.__digital_scales,
             "device": str(self.__device),
+            "plant_state_kind": self.__state_kind,
             "forward_state": "apparent_q",
             "full_weight_tensor_exposed": False,
             "fault_mask_exposed": False,
@@ -1667,6 +2601,7 @@ class _OnChipCrossbarRecoveryPort:
 
     def state_hash_receipt(self) -> dict[str, str]:
         return {
+            "plant_state_kind": self.__state_kind,
             "apparent_sha256": tensor_sha256(self.__apparent_state),
             "persistent_sha256": tensor_sha256(self.__persistent_state),
         }
@@ -1772,6 +2707,8 @@ class _TikiTakaFastArrayPort:
 class PulseAdam:
     """Digital Adam moments followed by one open-loop OM pulse opportunity."""
 
+    STATE_SCHEMA = "ebl.ibm_om_crossbar_pulse_adam"
+
     def __init__(
         self,
         *,
@@ -1782,16 +2719,20 @@ class PulseAdam:
         epsilon: float,
         layer_scope: str,
         nominal_dw_min: float,
-        pulse_cap_per_cell: int,
+        pulse_cap_per_cell: int | None,
         generator: torch.Generator,
         device: torch.device | str,
     ) -> None:
+        tiles = _normalize_crossbar_layout(layout)
         rates = tuple(float(value) for value in learning_rates)
         beta = tuple(float(value) for value in betas)
         if (
-            size < 1
+            isinstance(size, bool)
+            or not isinstance(size, int)
+            or size < 1
+            or size != sum(tile.cells for tile in tiles)
             or len(rates) != 2
-            or any(not math.isfinite(value) or value <= 0.0 for value in rates)
+            or any(not math.isfinite(value) or value < 0.0 for value in rates)
             or len(beta) != 2
             or not 0.0 <= beta[0] < 1.0
             or not 0.0 <= beta[1] < 1.0
@@ -1799,21 +2740,33 @@ class PulseAdam:
             or epsilon <= 0.0
             or not math.isfinite(nominal_dw_min)
             or nominal_dw_min <= 0.0
-            or isinstance(pulse_cap_per_cell, bool)
-            or pulse_cap_per_cell < 1
+            or (
+                pulse_cap_per_cell is not None
+                and (
+                    isinstance(pulse_cap_per_cell, bool)
+                    or pulse_cap_per_cell < 1
+                )
+            )
             or layer_scope not in {"all", "input_only", "output_only"}
         ):
             raise ValueError("Expected a valid two-layer pulse-Adam configuration.")
         self.device = torch.device(device)
         self.generator = generator
         self.beta_1, self.beta_2 = beta
+        self._learning_rates = rates
+        self._layer_scope = layer_scope
+        self._layout_receipt_value = _layout_receipt(tiles)
         self.epsilon = float(epsilon)
         self.nominal_dw_min = float(nominal_dw_min)
-        self.pulse_cap_per_cell = int(pulse_cap_per_cell)
+        self.pulse_cap_per_cell = (
+            None if pulse_cap_per_cell is None else int(pulse_cap_per_cell)
+        )
         self.step_index = 0
+        self.learning_rate_scale = 1.0
         self.first_moment = torch.zeros(size, dtype=torch.float32, device=self.device)
+        self.device = self.first_moment.device
         self.second_moment = torch.zeros_like(self.first_moment)
-        slices = layer_cell_slices(layout)
+        slices = layer_cell_slices(tiles)
         self.learning_rate = torch.empty_like(self.first_moment)
         self.learning_rate[slices[0]] = rates[0]
         self.learning_rate[slices[1]] = rates[1]
@@ -1832,10 +2785,14 @@ class PulseAdam:
     def step(
         self,
         gradient: torch.Tensor,
-        plant: IbmOmEffectiveCrossbarPlant,
+        plant: IbmOmEffectiveCrossbarPlant | _LocalStarUpdatePort,
     ) -> dict[str, int | float]:
         value = gradient.detach().to(device=self.device, dtype=torch.float32).reshape(-1)
-        if value.shape != self.first_moment.shape or not bool(torch.all(torch.isfinite(value))):
+        if (
+            plant.size != self.first_moment.numel()
+            or value.shape != self.first_moment.shape
+            or not bool(torch.all(torch.isfinite(value)))
+        ):
             raise ValueError("Expected one finite gradient per crosspoint.")
         self.step_index += 1
         self.first_moment.mul_(self.beta_1).add_(value, alpha=1.0 - self.beta_1)
@@ -1845,6 +2802,9 @@ class PulseAdam:
         first_hat = self.first_moment / (1.0 - self.beta_1**self.step_index)
         second_hat = self.second_moment / (1.0 - self.beta_2**self.step_index)
         command = -self.learning_rate * first_hat / (second_hat.sqrt() + self.epsilon)
+        if not math.isfinite(self.learning_rate_scale) or not 0 < self.learning_rate_scale <= 1:
+            raise ValueError('Expected a finite learning-rate scale in (0,1].')
+        command = command * self.learning_rate_scale
         command = torch.where(self.enabled, command, torch.zeros_like(command))
         raw_probability = command.abs() / self.nominal_dw_min
         clipped = raw_probability > 1.0
@@ -1855,7 +2815,11 @@ class PulseAdam:
             device=self.device,
             generator=self.generator,
         ) < probability
-        at_cap = self.pulse_count >= self.pulse_cap_per_cell
+        at_cap = (
+            torch.zeros_like(self.enabled)
+            if self.pulse_cap_per_cell is None
+            else self.pulse_count >= self.pulse_cap_per_cell
+        )
         blocked = candidate & self.enabled & at_cap
         selected = candidate & self.enabled & ~at_cap
         direction = torch.sign(command).to(torch.int8) * selected.to(torch.int8)
@@ -1878,6 +2842,135 @@ class PulseAdam:
             "maximum_probability_before_clip": float(raw_probability.max().item()),
         }
 
+    def contract(self) -> dict[str, Any]:
+        return {
+            "size": self.first_moment.numel(),
+            "layout": self._layout_receipt_value,
+            "learning_rates": self._learning_rates,
+            "betas": (self.beta_1, self.beta_2),
+            "epsilon": self.epsilon,
+            "layer_scope": self._layer_scope,
+            "nominal_dw_min": self.nominal_dw_min,
+            "pulse_cap_per_cell": self.pulse_cap_per_cell,
+            "device": str(self.device),
+            "forward_state": "held_apparent_q",
+            "write_state": "persistent_q",
+            "gradient_handoff": "identity_ste_apparent_q_to_persistent_pulse_update",
+        }
+
+    def state_dict(self) -> dict[str, Any]:
+        """Checkpoint Adam moments, endurance counts, counters, and RNG exactly."""
+
+        return {
+            "schema": self.STATE_SCHEMA,
+            "schema_version": 1,
+            "contract": self.contract(),
+            "step_index": self.step_index,
+            "learning_rate_scale": self.learning_rate_scale,
+            "first_moment": self.first_moment.detach().cpu().clone(),
+            "second_moment": self.second_moment.detach().cpu().clone(),
+            "requested": self.requested,
+            "applied": self.applied,
+            "probability_clipped": self.probability_clipped,
+            "blocked_at_cap": self.blocked_at_cap,
+            "pulse_count": self.pulse_count.detach().cpu().clone(),
+            "generator_state": self.generator.get_state().detach().cpu().clone(),
+        }
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore only an exactly matching pulse-Adam configuration."""
+
+        expected = {
+            "schema",
+            "schema_version",
+            "contract",
+            "step_index",
+            "first_moment",
+            "second_moment",
+            "requested",
+            "applied",
+            "probability_clipped",
+            "blocked_at_cap",
+            "pulse_count",
+            "generator_state",
+        }
+        if (
+            not isinstance(state, Mapping)
+            or set(state) not in (expected, expected | {'learning_rate_scale'})
+            or state.get("schema") != self.STATE_SCHEMA
+            or isinstance(state.get("schema_version"), bool)
+            or state.get("schema_version") != 1
+            or state.get("contract") != self.contract()
+        ):
+            raise ValueError("Expected a matching IBM OM pulse-Adam state.")
+
+        def nonnegative_integer(name: str) -> int:
+            value = state[name]
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError("Expected non-negative pulse-Adam counters.")
+            return value
+
+        scale = float(state.get('learning_rate_scale', 1.0))
+        if not math.isfinite(scale) or not 0 < scale <= 1:
+            raise ValueError('Expected a saved learning-rate scale in (0,1].')
+        self.learning_rate_scale = scale
+        step_index = nonnegative_integer("step_index")
+        requested = nonnegative_integer("requested")
+        applied = nonnegative_integer("applied")
+        probability_clipped = nonnegative_integer("probability_clipped")
+        blocked_at_cap = nonnegative_integer("blocked_at_cap")
+        pending: dict[str, torch.Tensor] = {}
+        for name, dtype in (
+            ("first_moment", torch.float32),
+            ("second_moment", torch.float32),
+            ("pulse_count", torch.int64),
+        ):
+            value = state[name]
+            if (
+                not isinstance(value, torch.Tensor)
+                or value.shape != self.first_moment.shape
+                or value.dtype != dtype
+            ):
+                raise ValueError(f"Expected a matching pulse-Adam tensor {name!r}.")
+            pending[name] = value.detach().to(self.device).clone()
+        if (
+            not bool(torch.all(torch.isfinite(pending["first_moment"])))
+            or not bool(torch.all(torch.isfinite(pending["second_moment"])))
+            or bool(torch.any(pending["second_moment"] < 0.0))
+            or bool(torch.any(pending["pulse_count"] < 0))
+            or applied != int(pending["pulse_count"].sum().item())
+            or applied + blocked_at_cap > requested
+            or probability_clipped > requested
+            or (
+                self.pulse_cap_per_cell is not None
+                and bool(torch.any(pending["pulse_count"] > self.pulse_cap_per_cell))
+            )
+        ):
+            raise ValueError("Expected a self-consistent pulse-Adam state.")
+        generator_state = state["generator_state"]
+        if (
+            not isinstance(generator_state, torch.Tensor)
+            or generator_state.dtype != torch.uint8
+            or generator_state.device.type != "cpu"
+            or generator_state.ndim != 1
+        ):
+            raise ValueError("Expected a saved pulse-Adam generator state tensor.")
+        probe = torch.Generator(device=self.device.type)
+        try:
+            probe.set_state(generator_state.detach().cpu())
+        except RuntimeError as error:
+            raise ValueError("Expected a valid pulse-Adam generator state.") from error
+
+        self.step_index = step_index
+        self.first_moment.copy_(pending["first_moment"])
+        self.second_moment.copy_(pending["second_moment"])
+        self.requested = requested
+        self.applied = applied
+        self.probability_clipped = probability_clipped
+        self.blocked_at_cap = blocked_at_cap
+        self.pulse_count.copy_(pending["pulse_count"])
+        self.generator.set_state(generator_state.detach().cpu())
+
     def report(self) -> dict[str, Any]:
         layer_counts = [
             int(self.pulse_count[layer_slice].sum().item())
@@ -1892,8 +2985,12 @@ class PulseAdam:
             "probability_clipped": self.probability_clipped,
             "blocked_at_cap": self.blocked_at_cap,
             "pulse_cap_per_cell": self.pulse_cap_per_cell,
-            "cells_at_cap": int(
-                (self.pulse_count >= self.pulse_cap_per_cell).sum().item()
+            "cells_at_cap": (
+                0
+                if self.pulse_cap_per_cell is None
+                else int(
+                    (self.pulse_count >= self.pulse_cap_per_cell).sum().item()
+                )
             ),
             "commanded_cells": int((self.pulse_count > 0).sum().item()),
             "changed_cells": int((self.pulse_count > 0).sum().item()),
@@ -2050,16 +3147,24 @@ def tensor_sha256(value: torch.Tensor) -> str:
 
 
 __all__ = [
+    "CROSSBAR_TRAJECTORY_REPRODUCIBILITY_SCOPE",
+    "CROSSBAR_TRAJECTORY_RNG_BACKEND",
+    "CROSSBAR_TRAJECTORY_SEED_DERIVATION",
+    "CROSSBAR_TRAJECTORY_STATISTICAL_CONTRACT",
     "CrossbarTileSpec",
     "DeterministicEffectiveCodebook",
+    "IbmOmCrossbarStateBundle",
     "IbmOmEffectiveCrossbarPlant",
     "LocalStarCrossbarStep",
     "PulseAdam",
     "PulseSGD",
     "StandardCrossbarForwardStates",
+    "aihwkit_analog_linear_default_logical_weights",
     "apply_population_bound_policy",
     "build_crossbar_layout",
     "build_deterministic_effective_codebook",
+    "crossbar_state_bundle",
+    "crossbar_trajectory_seeds",
     "effective_state_to_logical_weights",
     "flatten_logical_crossbar_matrices",
     "layer_cell_slices",
@@ -2067,6 +3172,7 @@ __all__ = [
     "map_logical_weights",
     "project_to_nearest_effective_code",
     "project_to_nearest_effective_code_device",
+    "restore_crossbar_state_bundle",
     "standard_crossbar_logits",
     "standard_crossbar_forward_states",
     "tensor_sha256",

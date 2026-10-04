@@ -1,0 +1,97 @@
+{
+  "nodes": [
+    {
+      "config": "configs/cifar100_pcm_cache.json",
+      "dataset": "cifar100",
+      "depends": [],
+      "id": "cifar100_pcm_cache",
+      "inputs": {},
+      "sha256": "9bb8f422d769ccc1d3a23c25f9e8ac8180c388f58ebb30c6066301db125cae2a"
+    },
+    {
+      "config": "configs/cifar100_pcm_sources.json",
+      "dataset": "cifar100",
+      "depends": [
+        "cifar100_pcm_cache"
+      ],
+      "id": "cifar100_pcm_sources",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar100_pcm_cache"
+        },
+        "weights": {
+          "path": "/home/filip/cifar_full_epoch_inputs/cifar100_pcm_source.pt",
+          "sha256": "cf3996000acb7f0ff7e261ec242d46fc81938a853fb9c7cb8145d941c9569a64"
+        }
+      },
+      "sha256": "1f95115d9f842586e0c5a3bd05f6b3d0a7b0a7ce8ed382cefb82cbc8225e89a7"
+    },
+    {
+      "config": "configs/cifar100_pcm_screen1.json",
+      "dataset": "cifar100",
+      "depends": [
+        "cifar100_pcm_cache",
+        "cifar100_pcm_sources"
+      ],
+      "id": "cifar100_pcm_screen1",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar100_pcm_cache"
+        },
+        "weights": {
+          "artifact": "checkpoints/sources.pt",
+          "node": "cifar100_pcm_sources"
+        }
+      },
+      "sha256": "f7af32eeb75c86f87f0ea75a04e18134cbcfdedbdeac3cb8cd8b36c0a7f5749e"
+    },
+    {
+      "config": "configs/cifar100_pcm_screen2.json",
+      "dataset": "cifar100",
+      "depends": [
+        "cifar100_pcm_cache",
+        "cifar100_pcm_sources"
+      ],
+      "id": "cifar100_pcm_screen2",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar100_pcm_cache"
+        },
+        "weights": {
+          "artifact": "checkpoints/sources.pt",
+          "node": "cifar100_pcm_sources"
+        }
+      },
+      "sha256": "b1b408ae305a8f73e96e15958310a60061db232eac392a5f338eb7ff68c04a02"
+    },
+    {
+      "config": "configs/cifar100_pcm_screen3.json",
+      "dataset": "cifar100",
+      "depends": [
+        "cifar100_pcm_cache",
+        "cifar100_pcm_sources"
+      ],
+      "id": "cifar100_pcm_screen3",
+      "inputs": {
+        "device-data": {
+          "artifact": "checkpoints/cache.pt",
+          "node": "cifar100_pcm_cache"
+        },
+        "weights": {
+          "artifact": "checkpoints/sources.pt",
+          "node": "cifar100_pcm_sources"
+        }
+      },
+      "sha256": "414cf1ba4d5534c067eaa7d8841666b028ee2300317f18f1cd73f3e4ff12352a"
+    }
+  ],
+  "phase": "full_epochs",
+  "plan": "study-plan.json",
+  "plan_sha256": "d4144ebf41443c6cba791ca2b2306ec8710610eec72a4c82abcff5bc29365e70",
+  "schema": "cifar_crossbar.campaign.v1",
+  "selection_inputs": {},
+  "study_id": "cifar100-pcm-five-full-epochs-v1"
+}

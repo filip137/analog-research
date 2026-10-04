@@ -1,0 +1,21 @@
+{
+  "backend": "om",
+  "dataset": "cifar100",
+  "depth": 8,
+  "initialization": "reset_open_loop",
+  "nodes": [
+    {
+      "array_seed": 251001,
+      "config": "screen1.json",
+      "id": "screen1",
+      "sha256": "97f91fd3757f4d905675f7466fdaa7e13a25262ae4fe13cef30c87da49a4da7b",
+      "stage": "screen"
+    }
+  ],
+  "plan": "studies/cifar100-om-conv8-openloop-reset-v1-canary.json",
+  "plan_sha256": "5202d4909eddc76969adb47c709150fc8853c156b8e66aec9bb63664df8e01db",
+  "relative": "examples/cifar_crossbar/openloop_v1_cifar100_8_reset_canary",
+  "smoke": true,
+  "study_id": "cifar100-om-conv8-openloop-reset-v1-canary",
+  "suffix": "last_four_blocks"
+}

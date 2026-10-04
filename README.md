@@ -1,60 +1,54 @@
-# Energy-Based Learning Framework
+# Crossbar hardware-aware training and on-chip learning
 
-This repository simulates and trains dissipative resistive networks with
-coordinate-descent equilibrium solvers. Its core layout follows the original
-[energy-based-learning framework](https://github.com/rain-neuromorphics/energy-based-learning):
-model mechanics live in `model/`, reusable learning mechanics live in
-`training/`, and executable research compositions live in `experiments/`.
+This HWA worktree studies hardware-aware training, deployment and array-specific
+recovery on simulated crossbar arrays. It includes dense MNIST/CIFAR networks and
+full CIFAR-10/100 ResNet-32 networks with a frozen digital prefix and four or eight
+analog suffix convolutions plus the classifier.
 
-The supported experiment entrypoint is:
+Start with the [CIFAR scientific campaign](campaigns/cifar-crossbar-hwa-recovery/README.md)
+and [reproduction guide](docs/cifar_reproduction.md). The campaign records historical
+results, their controls and limitations, and the October 2026 migration from the
+original `server_code/.codex/worktrees` checkouts.
 
-```bash
-python -m ebl describe --experiment small_drn.v1
-python -m ebl train \
-  --config examples/small_drn/base.json \
-  --output-dir runs
-```
-
-Training, linspace analysis, validation, and legacy checkpoint import are
-separate commands. Evaluation commands always require an explicit named
-weights artifact; they never search for the “latest” checkpoint.
+The supported execution interface is the native experiment CLI:
 
 ```bash
-python -m ebl linspace \
-  --config examples/small_drn/base.json \
-  --weights runs/<run-id>/checkpoints/weights.pt \
-  --output-dir runs
-
-python -m ebl validate \
-  --config examples/small_drn/base.json \
-  --weights runs/<run-id>/checkpoints/weights.pt \
-  --output-dir runs
+python -m ebl describe --experiment cifar_crossbar_fault_sweep.v1
+python -m ebl describe --experiment cifar10_ibm_om_crossbar.v1
 ```
 
-Every train, linspace, or validate invocation owns a new exclusive run
-directory. It starts with a resolved config, source/runtime manifest, and
-status, then records command-specific metrics, results, artifacts, logs, or
-checkpoints as the work proceeds. See
-[`docs/experiment_runtime.md`](docs/experiment_runtime.md) for the extension
-boundaries, checkpoint rules, worktree workflow, and campaign protocol.
-New multi-run studies follow the lightweight
-[`experiment workflow`](docs/experiment_workflow.md): a tracked plan freezes
-the initial hypothesis and exact configs, native runs retain the existing
-bundle contract, and reviewed finalization records the interpretation in the
-finished-study ledger.
-The cohort-A measured ReRAM projection and bounded-learning-rate workflow is
-documented in
-[`docs/measured_cohort_a_training.md`](docs/measured_cohort_a_training.md),
-with held-out cohort-B deployment and fine-tuning in
-[`docs/measured_cohort_b_finetuning.md`](docs/measured_cohort_b_finetuning.md),
-and physical low-rank recovery in
-[`docs/measured_cohort_b_lora_recovery.md`](docs/measured_cohort_b_lora_recovery.md).
+Each training invocation requires an exact config, explicit input artifacts and
+an output root. It creates a new native run bundle with resolved configuration,
+source/runtime identity, metrics and checkpoints. The CIFAR reproduction helper
+prints these commands using verified local inputs; see the guide for setup.
 
-## LoRA/HWA result tracking
+OM recovery models physical pulse updates with held apparent-state forwards.
+The main PCM recovery studies use Gaussian endpoint reprogramming. Both compute
+gradients and optimizer state digitally. Calibration, weight-only recovery and
+joint recovery are reported separately, including matched no-weight-write
+controls and physical update counts.
 
-New raw LoRA/HWA outputs live under [`results/`](results/README.md). The
-[current-simulation ledger](docs/current_simulations.md) automatically lists
-running native runs while retaining human-maintained paused and queued work.
-The
-[finished-simulation ledger](docs/experimental_manifest.md) records concluded
-studies and progress toward the research goal.
+## Code and evidence
+
+- `experiments/cifar_crossbar/`: ResNet mapping, HWA/CDT, deployment, recovery,
+  strict configs, reports and input relocation.
+- `experiments/cifar10_crossbar/`: the separate dense CIFAR-10 experiment.
+- `experiments/mnist_analog_relu/` and `training/`: shared crossbar plants,
+  population samplers, HWA and update controllers.
+- `examples/cifar_crossbar/`, `examples/cifar10_crossbar/`: exact scientific configs.
+- `campaigns/`: question-led experiment/result records and generated ledgers.
+- `results/` and `artifacts/`: ignored native bundles, checkpoints, datasets,
+  source snapshots, plots and migration inventories. A Git checkout alone does
+  not contain these historical data.
+
+New work follows the [experiment workflow](docs/experiment_workflow.md).
+`docs/current_simulations.md` and `docs/experimental_manifest.md` are historical
+snapshots; current specifications and conclusions belong to campaign or pilot notes.
+
+The framework originated in the
+[energy-based-learning project](https://github.com/rain-neuromorphics/energy-based-learning).
+Retained DRN/EP and LoRA modules support historical comparisons and shared
+code. See [runtime contracts](docs/experiment_runtime.md),
+[measured cohort A](docs/measured_cohort_a_training.md),
+[cohort B](docs/measured_cohort_b_finetuning.md) and
+[historical LoRA recovery](docs/measured_cohort_b_lora_recovery.md) for that lineage.

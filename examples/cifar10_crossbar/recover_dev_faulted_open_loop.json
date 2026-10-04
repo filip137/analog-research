@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "experiment_id": "cifar10_ibm_om_crossbar.v1",
+  "stage": "recover",
+  "seed": 421,
+  "data_seed": 42,
+  "data_root": "/home/filip/data",
+  "dims": [
+    3072,
+    256,
+    10
+  ],
+  "batch_size": 64,
+  "epochs": 30,
+  "learning_rate": 1e-05,
+  "weight_decay": 0.0,
+  "maximum_batches": null,
+  "evaluation_limit": null,
+  "settings": {
+    "condition": "faulted",
+    "writer": "open_loop",
+    "schedule": "constant",
+    "verify_tolerance_q": 0.04745,
+    "maximum_verify_pulses": 128,
+    "total_pulse_cap": 640
+  }
+}

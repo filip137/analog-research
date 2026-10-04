@@ -1,0 +1,126 @@
+{
+  "analysis_plan": [
+    "Verify common P0 ancestry, identical assignment/write seeds, train order, optimizer budget, and apparent-forward/persistent-write semantics across candidates.",
+    "Verify every HWA validation receipt's independent derived seed, generator-state hashes, held apparent-q hash, complete 5,000-example coverage, and separately labelled nonpersistent support-clamped digital-master diagnostic.",
+    "Report all 24 final validation losses and accuracies, candidate means, pulse/cap telemetry, deterministic tie handling, and the selected pair.",
+    "Do not treat this one assignment/write tuning phase as array-transfer evidence."
+  ],
+  "arms": [
+    {
+      "arm_id": "offchip-hwa",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/offchip_hwa.json"
+      ],
+      "description": "Ten fixed epochs of stochastic apparent-state teacher-KL HWA.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "tune-hwa-deploy",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/deploy_hwa_master.json"
+      ],
+      "description": "Program one HWA tuning realization.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "tune-hwa-corrupt",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/apply_corruption_hwa_master.json"
+      ],
+      "description": "Apply the published companion faults to that exact HWA P0.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "tune-scratch-deploy",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/deploy_scratch.json"
+      ],
+      "description": "Program one matched scratch tuning realization.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "tune-scratch-corrupt",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/apply_corruption_scratch.json"
+      ],
+      "description": "Apply the published companion faults to that exact scratch P0.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "tune-adam-hwa-healthy",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_hwa_healthy_p0_lr3e4_cap128.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_hwa_healthy_p0_lr3e4_uncapped.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_hwa_healthy_p0_lr1e3_cap128.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_hwa_healthy_p0_lr1e3_uncapped.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_hwa_healthy_p0_lr3e3_cap128.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_hwa_healthy_p0_lr3e3_uncapped.json"
+      ],
+      "description": "HWA master programmed and recovered on its exact healthy tuning P0.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "tune-adam-hwa-corrupt",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_hwa_published_fault_lr3e4_cap128.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_hwa_published_fault_lr3e4_uncapped.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_hwa_published_fault_lr1e3_cap128.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_hwa_published_fault_lr1e3_uncapped.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_hwa_published_fault_lr3e3_cap128.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_hwa_published_fault_lr3e3_uncapped.json"
+      ],
+      "description": "The exact HWA tuning P0 faulted before recovery.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "tune-adam-scratch-healthy",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_scratch_healthy_p0_lr3e4_cap128.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_scratch_healthy_p0_lr3e4_uncapped.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_scratch_healthy_p0_lr1e3_cap128.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_scratch_healthy_p0_lr1e3_uncapped.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_scratch_healthy_p0_lr3e3_cap128.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_scratch_healthy_p0_lr3e3_uncapped.json"
+      ],
+      "description": "Kaiming initialization programmed and recovered on its exact healthy tuning P0.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "tune-adam-scratch-corrupt",
+      "configs": [
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_scratch_published_fault_lr3e4_cap128.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_scratch_published_fault_lr3e4_uncapped.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_scratch_published_fault_lr1e3_cap128.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_scratch_published_fault_lr1e3_uncapped.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_scratch_published_fault_lr3e3_cap128.json",
+        "../examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/tuning/adam_scratch_published_fault_lr3e3_uncapped.json"
+      ],
+      "description": "The exact scratch tuning P0 faulted before recovery.",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    }
+  ],
+  "completion_criteria": [
+    "The HWA master completes ten 55,000-example epochs on CUDA using sampled apparent q for every training forward and no persistent plant update.",
+    "Initial, every epoch, and fixed-final HWA validation each use one explicitly seeded apparent-q sample held across all 5,000 examples; the support-clamped digital master is reported only as a nonpersistent diagnostic.",
+    "The HWA stage is validation-only and never evaluates the official test set during protocol development.",
+    "Exactly one tuning assignment and one programming seed create the HWA and scratch P0 sources; each corruption arm reuses its exact P0 without reprogramming.",
+    "All six learning-rate/cap candidates complete ten epochs from all four exact starts, for complete 6-by-4 coverage.",
+    "Selection minimizes equally weighted final validation cross-entropy; candidates within 1e-6 prefer cap 128 and then lower learning rate. Test metrics cannot select.",
+    "The artifact-verified analysis writes one immutable strict selection receipt for production."
+  ],
+  "evidence_class": "model_based_aihwkit_om_protocol_development_cuda",
+  "hypothesis": "A single Adam learning-rate and lifetime-cap pair selected by equally weighting HWA/scratch and healthy/published-fault starts will provide a fair fixed protocol for the independent production arrays.",
+  "motivation": "Tuning must not consume any production assignment or test outcome, and healthy/corrupt candidates must fork identical programmed P0 artifacts.",
+  "schema_version": 1,
+  "study_id": "mnist-ibm-om-crossbar-784-256-hwa-adam-tuning-20260904-v1",
+  "title": "Stochastic HWA and one-write Adam tuning for the 784-256-10 IBM-OM crossbar"
+}

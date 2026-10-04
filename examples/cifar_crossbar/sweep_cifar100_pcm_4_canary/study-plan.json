@@ -1,0 +1,218 @@
+{
+  "analysis_plan": [
+    "Original teacher KL at T1, accuracy, teacher agreement, per-array spread and paired differences.",
+    "Separate all HWA-only/calibration/rewrite controls from weight and joint recovery; report convergence limits.",
+    "Corruption-aware sources train equal mixed 2/3/5% rates of one kind; 1% is an unselected reference."
+  ],
+  "arms": [
+    {
+      "arm_id": "cache",
+      "configs": [
+        "configs/cache.json"
+      ],
+      "description": "cache",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "generic_0_0",
+      "configs": [
+        "configs/generic_0_0.json"
+      ],
+      "description": "generic_0_0",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "generic_0_1",
+      "configs": [
+        "configs/generic_0_1.json"
+      ],
+      "description": "generic_0_1",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "generic_0_2",
+      "configs": [
+        "configs/generic_0_2.json"
+      ],
+      "description": "generic_0_2",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "generic_1_0",
+      "configs": [
+        "configs/generic_1_0.json"
+      ],
+      "description": "generic_1_0",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "generic_1_1",
+      "configs": [
+        "configs/generic_1_1.json"
+      ],
+      "description": "generic_1_1",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "generic_1_2",
+      "configs": [
+        "configs/generic_1_2.json"
+      ],
+      "description": "generic_1_2",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "generic_2_0",
+      "configs": [
+        "configs/generic_2_0.json"
+      ],
+      "description": "generic_2_0",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "generic_2_1",
+      "configs": [
+        "configs/generic_2_1.json"
+      ],
+      "description": "generic_2_1",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "generic_2_2",
+      "configs": [
+        "configs/generic_2_2.json"
+      ],
+      "description": "generic_2_2",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "select_generic",
+      "configs": [
+        "configs/select_generic.json"
+      ],
+      "description": "select_generic",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cdt_open_0",
+      "configs": [
+        "configs/cdt_open_0.json"
+      ],
+      "description": "cdt_open_0",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cdt_open_1",
+      "configs": [
+        "configs/cdt_open_1.json"
+      ],
+      "description": "cdt_open_1",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cdt_open_2",
+      "configs": [
+        "configs/cdt_open_2.json"
+      ],
+      "description": "cdt_open_2",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cdt_gmax_0",
+      "configs": [
+        "configs/cdt_gmax_0.json"
+      ],
+      "description": "cdt_gmax_0",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cdt_gmax_1",
+      "configs": [
+        "configs/cdt_gmax_1.json"
+      ],
+      "description": "cdt_gmax_1",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cdt_gmax_2",
+      "configs": [
+        "configs/cdt_gmax_2.json"
+      ],
+      "description": "cdt_gmax_2",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cdt_random_0",
+      "configs": [
+        "configs/cdt_random_0.json"
+      ],
+      "description": "cdt_random_0",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cdt_random_1",
+      "configs": [
+        "configs/cdt_random_1.json"
+      ],
+      "description": "cdt_random_1",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "cdt_random_2",
+      "configs": [
+        "configs/cdt_random_2.json"
+      ],
+      "description": "cdt_random_2",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "sources",
+      "configs": [
+        "configs/sources.json"
+      ],
+      "description": "sources",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "screen1",
+      "configs": [
+        "configs/screen1.json"
+      ],
+      "description": "screen1",
+      "experiment_id": "cifar_crossbar_fault_sweep.v1",
+      "mode": "train"
+    }
+  ],
+  "completion_criteria": [
+    "All declared native arms complete and artifacts verify.",
+    "Canary: 90 controls on one array.",
+    "Unchanged prefix, fixed layer-bound nested faults, exact P0 pairing, device-specific costs and checkpoint replay."
+  ],
+  "evidence_class": "exploratory",
+  "hypothesis": "Array-specific recovery can improve teacher KL beyond calibrated corruption-aware HWA at some failure rates and analog depths.",
+  "motivation": "Approved docs/cifar_fault_rate_sweep.md; CIFAR-10 first, then CIFAR-100.",
+  "schema_version": 1,
+  "study_id": "cifar100-pcm-conv4-fault-sweep-canary-v1",
+  "title": "cifar100-pcm-conv4-fault-sweep-canary-v1"
+}

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -422,3 +423,79 @@ def test_population_hwa_is_replayable_and_independent_of_fixed_array_bounds() ->
             narrow_error["unscaled_residual_tensor_sequence_sha256"]
             == wide_error["unscaled_residual_tensor_sequence_sha256"]
         )
+
+
+def test_held_apparent_hwa_validation_is_replayable_and_stream_independent() -> None:
+    payload = json.loads(CONFIG.read_text(encoding="utf-8"))
+    spec = parse_crossbar_config(payload)
+    layout = build_crossbar_layout((784, 50, 10), maximum_input_size=512)
+    size = sum(tile.cells for tile in layout)
+    population = _population(size, layout)
+    source = torch.linspace(-0.5, 0.5, size, dtype=torch.float32)
+    codebook_values = torch.stack((-torch.ones(size), torch.ones(size)))
+    torch.manual_seed(91)
+    teacher = BiasFreeReluTeacher(device=torch.device("cpu"))
+    inputs = torch.rand(2, 784, generator=torch.Generator().manual_seed(92))
+    loader = [(inputs, torch.tensor([1, 2], dtype=torch.int64))]
+
+    def run(*, include_test: bool):
+        settings = SimpleNamespace(
+            **{
+                **vars(spec.offchip),
+                "epochs": 1,
+                "maximum_batches": 1,
+                "epoch_evaluation": (
+                    "validation_and_test" if include_test else "validation_only"
+                ),
+                "evaluation_forward_policy": (
+                    "one_sampled_held_apparent_q_per_evaluation"
+                ),
+            }
+        )
+        compatibility = SimpleNamespace(
+            offchip=settings,
+            evaluation=SimpleNamespace(
+                maximum_validation_batches=1,
+                sample_limit=2,
+            ),
+        )
+        return runtime._offchip_adapt(
+            source_requested=source,
+            population=population,
+            codebook_values=codebook_values,
+            spec=compatibility,
+            layout=layout,
+            digital_scales=(1.0, 1.0),
+            teacher=teacher,
+            validation_loader=loader,
+            train_loader=loader,
+            device=torch.device("cpu"),
+            test_loader=loader if include_test else None,
+        )
+
+    _no_test_q, no_test_report, no_test_state = run(include_test=False)
+    _with_test_q, with_test_report, with_test_state = run(include_test=True)
+
+    assert torch.equal(
+        no_test_state["forward_noise_generator_final_state"],
+        with_test_state["forward_noise_generator_final_state"],
+    )
+    assert no_test_report["initial_validation"] == with_test_report["initial_validation"]
+    assert no_test_report["epochs"][0]["validation"] == (
+        with_test_report["epochs"][0]["validation"]
+    )
+    evaluation = no_test_report["fixed_final_validation"]
+    assert evaluation["network_forward_state"] == "held_apparent_q"
+    assert evaluation["primary_state"] == "held_apparent_q"
+    assert evaluation["persistent_device_state_present"] is False
+    assert evaluation["diagnostic_state_role"] == (
+        "nonpersistent_support_clamped_digital_master_q"
+    )
+    receipt = evaluation["held_apparent_state_receipt"]
+    assert receipt["evaluation_id"] == "epoch_001.validation"
+    assert receipt["support_clamped_digital_master_q_sha256"] == (
+        no_test_report["fixed_final_realized_sha256"]
+    )
+    assert with_test_report["fixed_final_test"]["held_apparent_state_receipt"][
+        "evaluation_id"
+    ] == "epoch_001.test"

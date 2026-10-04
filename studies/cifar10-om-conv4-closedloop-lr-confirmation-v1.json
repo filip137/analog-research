@@ -1,0 +1,47 @@
+{
+  "analysis_plan": [
+    "Select only mean epoch-five development teacher KL across two sources, three cases and two dev arrays.",
+    "Retain every LR curve and nominal-array regressions; raw KL selection can be dominated by severe faults.",
+    "Freeze selection before final arrays; report test accuracy and teacher KL alongside matched historical open-loop/calibration controls."
+  ],
+  "arms": [
+    {
+      "arm_id": "screen1",
+      "configs": [
+        "../examples/cifar_crossbar/closedloop_lr_v1_cifar10_4_confirmation/screen1.json"
+      ],
+      "description": "confirmation array 251001",
+      "experiment_id": "cifar_om_closed_loop_lr.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "screen2",
+      "configs": [
+        "../examples/cifar_crossbar/closedloop_lr_v1_cifar10_4_confirmation/screen2.json"
+      ],
+      "description": "confirmation array 251002",
+      "experiment_id": "cifar_om_closed_loop_lr.v1",
+      "mode": "train"
+    },
+    {
+      "arm_id": "screen3",
+      "configs": [
+        "../examples/cifar_crossbar/closedloop_lr_v1_cifar10_4_confirmation/screen3.json"
+      ],
+      "description": "confirmation array 251003",
+      "experiment_id": "cifar_om_closed_loop_lr.v1",
+      "mode": "train"
+    }
+  ],
+  "completion_criteria": [
+    "All native arms complete and artifacts verify; no active arm.",
+    "Development: 24 five-epoch trajectories per array; confirmation: six or twelve, depending on deduplicated selected LR.",
+    "Fixed prefix/faults, exact P0 pairing, one pulse/update, no total cap, exact epoch-five replay."
+  ],
+  "evidence_class": "exploratory",
+  "hypothesis": "Higher closed-loop Adam LR may overcome the fixed OM verify tolerance and improve matched recovery.",
+  "motivation": "User approved docs/cifar_om_closed_loop_lr.md; no HWA refitting; loulou only.",
+  "schema_version": 1,
+  "study_id": "cifar10-om-conv4-closedloop-lr-confirmation-v1",
+  "title": "cifar10-om-conv4-closedloop-lr-confirmation-v1"
+}

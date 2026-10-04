@@ -1,0 +1,129 @@
+{
+  "analysis_plan": [
+    "minimum held-apparent validation teacher KL, then higher accuracy, then earlier checkpoint; include P0",
+    "Freeze the best constant and best decaying schedule per architecture and condition; evaluate on two additional saved arrays, one write per array. Report per-array results.",
+    "If a screen winner is still improving near the 30-epoch boundary (best at epoch >=25 and >=1% KL improvement over the preceding five-epoch window), extend that schedule to 60 epochs with the same decay floor; report any unresolved boundary.",
+    "Plot KL versus epochs and cumulative physical pulses; report accuracy and persistent-state diagnostics separately."
+  ],
+  "arms": [
+    {
+      "arm_id": "healthy-constant-1e-6",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_schedules_20260906/healthy-constant-1e-6.json"
+      ],
+      "description": "Thirty full epochs of teacher-KL recovery: constant-1e-6",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-constant-1e-6",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_schedules_20260906/faulted-constant-1e-6.json"
+      ],
+      "description": "Thirty full epochs of teacher-KL recovery: constant-1e-6",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "healthy-constant-3e-6",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_schedules_20260906/healthy-constant-3e-6.json"
+      ],
+      "description": "Thirty full epochs of teacher-KL recovery: constant-3e-6",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-constant-3e-6",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_schedules_20260906/faulted-constant-3e-6.json"
+      ],
+      "description": "Thirty full epochs of teacher-KL recovery: constant-3e-6",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "healthy-constant-1e-5",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_schedules_20260906/healthy-constant-1e-5.json"
+      ],
+      "description": "Thirty full epochs of teacher-KL recovery: constant-1e-5",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-constant-1e-5",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_schedules_20260906/faulted-constant-1e-5.json"
+      ],
+      "description": "Thirty full epochs of teacher-KL recovery: constant-1e-5",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "healthy-constant-3e-5",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_schedules_20260906/healthy-constant-3e-5.json"
+      ],
+      "description": "Thirty full epochs of teacher-KL recovery: constant-3e-5",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-constant-3e-5",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_schedules_20260906/faulted-constant-3e-5.json"
+      ],
+      "description": "Thirty full epochs of teacher-KL recovery: constant-3e-5",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "healthy-decay-3e-6",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_schedules_20260906/healthy-decay-3e-6.json"
+      ],
+      "description": "Thirty full epochs of teacher-KL recovery: decay-3e-6",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-decay-3e-6",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_schedules_20260906/faulted-decay-3e-6.json"
+      ],
+      "description": "Thirty full epochs of teacher-KL recovery: decay-3e-6",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "healthy-decay-1e-5",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_schedules_20260906/healthy-decay-1e-5.json"
+      ],
+      "description": "Thirty full epochs of teacher-KL recovery: decay-1e-5",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    },
+    {
+      "arm_id": "faulted-decay-1e-5",
+      "configs": [
+        "../examples/mnist_analog_relu/long_kl_schedules_20260906/faulted-decay-1e-5.json"
+      ],
+      "description": "Thirty full epochs of teacher-KL recovery: decay-1e-5",
+      "experiment_id": "mnist_ibm_om_crossbar_relu.v2",
+      "mode": "train"
+    }
+  ],
+  "completion_criteria": [
+    "All 12 declared schedule/condition arms complete 30 full epochs on CUDA.",
+    "Every selected checkpoint replays minimum held-apparent validation KL including P0.",
+    "Preserve the two architecture/device models; make no causal cross-architecture claim."
+  ],
+  "evidence_class": "exploratory_model_based_exact_p0_schedule_screen",
+  "hypothesis": "Can longer lower-rate or decaying pulse-Adam recovery improve teacher KL beyond previously accuracy-selected one-epoch states?",
+  "motivation": "Prior low-rate crossbar runs still improved at epoch 3, while DRN rates had been screened over only 8192 examples.",
+  "schema_version": 1,
+  "study_id": "mnist-ibm-om-crossbar-long-kl-schedules-20260906-v1",
+  "title": "Thirty-epoch low-rate and decaying KL recovery from exact HWA deployments"
+}
