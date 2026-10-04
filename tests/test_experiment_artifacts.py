@@ -11,7 +11,7 @@ from experiments.artifacts import RunStore, content_hash
 def _store(tmp_path: Path, *, run_id: str = "run-001") -> RunStore:
     return RunStore.create(
         output_root=tmp_path,
-        experiment_id="small_drn.v1",
+        experiment_id="mnist_relu.v1",
         resolved_config={"schema_version": 1, "value": 3},
         command=["ebl", "train", "--config", "config.json"],
         repo_root=Path(__file__).parents[1],
@@ -33,7 +33,7 @@ def test_run_store_writes_stable_request_and_completion(tmp_path: Path) -> None:
     manifest = json.loads((store.run_dir / "manifest.json").read_text())
     status = json.loads((store.run_dir / "status.json").read_text())
     result = json.loads(result_path.read_text())
-    assert manifest["experiment_id"] == "small_drn.v1"
+    assert manifest["experiment_id"] == "mnist_relu.v1"
     assert manifest["config"]["sha256"] == content_hash(
         {"schema_version": 1, "value": 3}
     )

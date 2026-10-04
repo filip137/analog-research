@@ -533,7 +533,6 @@ def _validate_stage_capability(
         )
     capability_by_input = {
         "weights": "weights",
-        "base_weights": "base_weights",
         "resume": "full_training_state",
     }
     unavailable = sorted(

@@ -3,8 +3,6 @@
 from ebl.cli import (
     CampaignRunRequest,
     CommandHandlers,
-    ImportLegacyCheckpointRequest,
-    LinspaceRequest,
     TrainRequest,
     ValidateRequest,
     build_parser,
@@ -14,8 +12,6 @@ from ebl.cli import (
 __all__ = [
     "CampaignRunRequest",
     "CommandHandlers",
-    "ImportLegacyCheckpointRequest",
-    "LinspaceRequest",
     "TrainRequest",
     "ValidateRequest",
     "build_parser",

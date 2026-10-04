@@ -15,4 +15,6 @@ The existing `runner.py`, `schema.py` and `manifests/` are executable subprocess
 orchestration, not a mandatory research-planning hierarchy. Historical JSON plans
 remain under `studies/`; large artifacts remain under `results/`.
 
-Implemented workflow validation: [local pilot](pilots/20260925-hwa-bounded-learning.md).
+Historical workflow validation: [local pilot](pilots/20260925-hwa-bounded-learning.md).
+Current execution scope and compatibility checks:
+[crossbar cleanup](pilots/20261004-crossbar-worktree-cleanup.md).

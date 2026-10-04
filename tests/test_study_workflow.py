@@ -40,7 +40,7 @@ def _plan(config: Path, *, study_id: str = "workflow-smoke-v1") -> dict:
             {
                 "arm_id": "baseline",
                 "description": "One declared baseline run.",
-                "experiment_id": "small_drn.v1",
+                "experiment_id": "mnist_relu.v1",
                 "mode": "train",
                 "configs": [str(config)],
             }
@@ -63,7 +63,7 @@ def _complete_run(root: Path, config: Path, *, payload: bytes = b"payload") -> P
     output_root = root / "runs" / "baseline"
     store = RunStore.create(
         output_root=output_root,
-        experiment_id="small_drn.v1",
+        experiment_id="mnist_relu.v1",
         resolved_config={"scientific_setting": 1},
         command=(
             "ebl",
@@ -180,7 +180,7 @@ def test_run_rejects_config_not_declared_by_the_study(tmp_path: Path) -> None:
     with pytest.raises(StudyWorkflowError, match="predeclared"):
         RunStore.create(
             output_root=root / "runs" / "baseline",
-            experiment_id="small_drn.v1",
+            experiment_id="mnist_relu.v1",
             resolved_config={"scientific_setting": 2},
             command=("ebl", "train", "--config", str(other)),
             repo_root=tmp_path,

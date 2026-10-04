@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 
 from experiments.artifacts import atomic_write_json, sha256_file
-from experiments.mnist_analog_relu.runtime import (
+from experiments.mnist_analog_relu.crossbar_common import (
     _sample_population, _program_endpoint, _matched_published_fault_overlay,
 )
 from training.ibm_om_standard_crossbar import (

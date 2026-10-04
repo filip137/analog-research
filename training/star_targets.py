@@ -40,7 +40,6 @@ STAR_TARGET_SCHEMA_VERSION = 1
 CROSSBAR_STATE_REPRESENTATION = (
     "crossbar.post_relu_hidden_and_output_logits.v1"
 )
-DRN_RAW_RAIL_STATE_REPRESENTATION = "drn.raw_physical_rail_voltage.v1"
 STAR_STORAGE_DTYPES = frozenset({"fp32", "fp16", "int8"})
 
 _LIFECYCLE = "healthy_pre_fault_calibration"
@@ -132,22 +131,7 @@ _REPRESENTATIONS: Mapping[str, tuple[StarStateComponent, ...]] = MappingProxyTyp
                 source_layer_index=1,
             ),
         ),
-        DRN_RAW_RAIL_STATE_REPRESENTATION: (
-            StarStateComponent(
-                key="hidden_raw_rails",
-                role="hidden",
-                width=100,
-                units="model_native_voltage",
-                source_layer_index=1,
-            ),
-            StarStateComponent(
-                key="output_raw_rails",
-                role="output",
-                width=20,
-                units="model_native_voltage",
-                source_layer_index=2,
-            ),
-        ),
+
     }
 )
 
@@ -1221,7 +1205,6 @@ def load_star_targets(
 
 __all__ = [
     "CROSSBAR_STATE_REPRESENTATION",
-    "DRN_RAW_RAIL_STATE_REPRESENTATION",
     "STAR_STORAGE_DTYPES",
     "STAR_TARGET_SCHEMA",
     "STAR_TARGET_SCHEMA_VERSION",

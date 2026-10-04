@@ -45,10 +45,9 @@ New work follows the [experiment workflow](docs/experiment_workflow.md).
 `docs/current_simulations.md` and `docs/experimental_manifest.md` are historical
 snapshots; current specifications and conclusions belong to campaign or pilot notes.
 
+See the [supported-scope guide](docs/crossbar_scope.md) and
+[runtime commands](docs/experiment_runtime.md) for the 13 retained experiment
+families. EP/DRN, LoRA and MNIST crossbar v1 execution code is available at
+pre-cleanup commit `16938bf`; historical scientific records remain in this tree.
 The framework originated in the
 [energy-based-learning project](https://github.com/rain-neuromorphics/energy-based-learning).
-Retained DRN/EP and LoRA modules support historical comparisons and shared
-code. See [runtime contracts](docs/experiment_runtime.md),
-[measured cohort A](docs/measured_cohort_a_training.md),
-[cohort B](docs/measured_cohort_b_finetuning.md) and
-[historical LoRA recovery](docs/measured_cohort_b_lora_recovery.md) for that lineage.

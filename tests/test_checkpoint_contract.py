@@ -6,22 +6,18 @@ import numpy as np
 import pytest
 import torch
 
-from model.resistive.builders import (
+from training.parameters import (
     ParameterBinding,
     ParameterCatalog,
-    build_deep_resistive_energy,
 )
 import training.checkpoint as checkpoint_module
 from training.checkpoint import (
     CheckpointError,
     EPOCH_BOUNDARY_SCHEMA,
     EPOCH_BOUNDARY_SCHEMA_VERSION,
-    LEGACY_BASE_ONLY,
-    LEGACY_FULL,
     NAMED_WEIGHTS_SCHEMA,
     encode_named_weights,
     load_epoch_boundary_checkpoint,
-    load_legacy_positional_weights,
     load_named_weights,
     save_encoded_named_weights,
     save_epoch_boundary_checkpoint,
@@ -111,33 +107,6 @@ def _catalog(*, trainable_tensor=False):
     return catalog, base, adapter
 
 
-def _passive_low_rank_catalog():
-    bundle = build_deep_resistive_energy(
-        layer_shapes=[(4,), (2,)],
-        weight_gains=[0.2],
-        input_gain=1.0,
-        non_linearity="linear",
-        exponential_diode_param={},
-        quadratic_diode_param={},
-        hard_sigmoid_param={},
-        voltage_amp=1.0,
-        current_amp=1.0,
-        weight_min=0.0,
-        weight_max=1.0,
-        passive_low_rank_adapter={
-            "rank": 2,
-            "input_factor_gain": 0.1,
-            "input_factor_min": 1e-7,
-            "conductance_max": 1.0,
-            "output_factor_init": "zero",
-        },
-    )
-    base_catalog = ParameterCatalog(
-        bundle.catalog.for_group("base", checkpointed_only=True)
-    )
-    return bundle.catalog, base_catalog
-
-
 def test_named_weights_round_trip_preserves_tensor_identity_and_metadata(
     tmp_path,
 ):
@@ -169,68 +138,6 @@ def test_named_weights_round_trip_preserves_tensor_identity_and_metadata(
     assert id(adapter.state) == adapter_identity
     torch.testing.assert_close(base.state, expected_base)
     torch.testing.assert_close(adapter.state, expected_adapter)
-
-
-def test_passive_low_rank_named_full_and_base_profiles_are_structural(
-    tmp_path,
-):
-    catalog, base_catalog = _passive_low_rank_catalog()
-    full_path = tmp_path / "full.pt"
-    base_path = tmp_path / "base.pt"
-    expected = {
-        binding.key: binding.state.detach().clone() for binding in catalog
-    }
-
-    save_named_weights(full_path, catalog)
-    save_named_weights(base_path, base_catalog)
-    assert list(torch.load(
-        full_path, map_location="cpu", weights_only=True
-    )["weights"]) == [
-        "base.dense_weight.0",
-        "adapter.input_factor.0",
-        "adapter.output_factor.0",
-    ]
-    assert list(torch.load(
-        base_path, map_location="cpu", weights_only=True
-    )["weights"]) == ["base.dense_weight.0"]
-
-    for binding in catalog:
-        binding.state.fill_(0.4)
-    load_named_weights(full_path, catalog)
-    for binding in catalog:
-        torch.testing.assert_close(
-            binding.state,
-            expected[binding.key],
-            rtol=0.0,
-            atol=0.0,
-        )
-
-    adapter_before = {}
-    for binding in catalog:
-        if binding.group == "base":
-            binding.state.zero_()
-        else:
-            binding.state.fill_(0.3)
-            adapter_before[binding.key] = binding.state.detach().clone()
-    load_named_weights(base_path, base_catalog)
-    torch.testing.assert_close(
-        catalog.by_key["base.dense_weight.0"].state,
-        expected["base.dense_weight.0"],
-        rtol=0.0,
-        atol=0.0,
-    )
-    for key, value in adapter_before.items():
-        torch.testing.assert_close(
-            catalog.by_key[key].state,
-            value,
-            rtol=0.0,
-            atol=0.0,
-        )
-
-    with pytest.raises(CheckpointError, match="keys"):
-        load_named_weights(base_path, catalog)
-    with pytest.raises(CheckpointError, match="keys"):
-        load_named_weights(full_path, base_catalog)
 
 
 def test_named_weights_validate_every_tensor_before_copying(tmp_path):
@@ -324,73 +231,6 @@ def test_encoded_weights_accept_float32_representable_bound_endpoint(
         payload,
         catalog=catalog,
     )
-
-
-def test_legacy_profiles_are_explicit_and_base_only_leaves_adapter_unchanged(
-    tmp_path,
-):
-    catalog, base, adapter = _catalog()
-    base_path = tmp_path / "base.pt"
-    full_path = tmp_path / "full.pt"
-    torch.save([torch.full_like(base.state, 0.25)], base_path)
-    torch.save(
-        [
-            torch.full_like(base.state, 0.5),
-            torch.full_like(adapter.state, 0.75),
-        ],
-        full_path,
-    )
-    adapter_before = adapter.state.clone()
-
-    result = load_legacy_positional_weights(
-        base_path,
-        catalog,
-        profile=LEGACY_BASE_ONLY,
-    )
-    assert result.restored_keys == ("base.weight.0",)
-    torch.testing.assert_close(base.state, torch.full_like(base.state, 0.25))
-    torch.testing.assert_close(adapter.state, adapter_before)
-
-    with pytest.raises(CheckpointError, match="exactly 2 tensors"):
-        load_legacy_positional_weights(
-            base_path,
-            catalog,
-            profile=LEGACY_FULL,
-        )
-
-    load_legacy_positional_weights(
-        full_path,
-        catalog,
-        profile=LEGACY_FULL,
-    )
-    torch.testing.assert_close(base.state, torch.full_like(base.state, 0.5))
-    torch.testing.assert_close(
-        adapter.state, torch.full_like(adapter.state, 0.75)
-    )
-
-
-def test_legacy_import_validates_all_positions_before_copying(tmp_path):
-    catalog, base, adapter = _catalog()
-    path = tmp_path / "invalid-full.pt"
-    torch.save(
-        [
-            torch.full_like(base.state, 0.9),
-            torch.ones(3, dtype=torch.float32),
-        ],
-        path,
-    )
-    base_before = base.state.clone()
-    adapter_before = adapter.state.clone()
-
-    with pytest.raises(CheckpointError, match="shape"):
-        load_legacy_positional_weights(
-            path,
-            catalog,
-            profile=LEGACY_FULL,
-        )
-
-    torch.testing.assert_close(base.state, base_before)
-    torch.testing.assert_close(adapter.state, adapter_before)
 
 
 def test_epoch_boundary_restores_weights_optimizer_scheduler_and_rng(tmp_path):

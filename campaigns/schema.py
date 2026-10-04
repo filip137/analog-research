@@ -155,9 +155,9 @@ class StageSpec:
             optional={"depends_on", "inputs"},
         )
         command = raw["command"]
-        if command not in {"train", "linspace", "validate", "characterize"}:
+        if command not in {"train", "validate", "characterize"}:
             raise ValueError(
-                "Expected campaign stage.command to be 'train', 'linspace', "
+                "Expected campaign stage.command to be 'train', "
                 f"'validate', or 'characterize'. Provided value: {command!r}."
             )
         config = _path(raw["config"], "campaign stage.config")
@@ -179,7 +179,6 @@ class StageSpec:
             set(raw_inputs)
             - {
                 "weights",
-                "base_weights",
                 "resume",
                 "teacher_weights",
                 "device_data",
@@ -189,7 +188,7 @@ class StageSpec:
         if unknown_inputs:
             raise ValueError(
                 "Expected campaign stage.inputs keys to be drawn from "
-                "['base_weights', 'device_data', 'device_model', 'resume', "
+                "['device_data', 'device_model', 'resume', "
                 "'teacher_weights', 'weights']. Provided value: "
                 "unknown keys "
                 f"{unknown_inputs!r} in {dict(raw_inputs)!r}."

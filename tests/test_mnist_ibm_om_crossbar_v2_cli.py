@@ -15,9 +15,7 @@ from ebl.cli import (
     main,
 )
 from experiments.definitions import get_definition
-from experiments.mnist_analog_relu.runtime import (
-    _validate_request as _validate_v1_crossbar_request,
-)
+
 from experiments.schema import RunMode
 
 
@@ -25,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_train_forwards_independent_staged_input_artifacts() -> None:
-    config = ROOT / "examples" / "small_drn" / "base.json"
+    config = ROOT / "examples" / "mnist_relu" / "teacher.json"
     seen: list[TrainRequest] = []
 
     result = main(
@@ -55,7 +53,6 @@ def test_train_forwards_independent_staged_input_artifacts() -> None:
     assert request.device_state == Path("deployed.pt")
     assert request.selection_receipt == Path("selection.json")
     assert request.weights is None
-    assert request.base_weights is None
     for option in (
         "--resume",
         "--teacher-weights",
@@ -82,7 +79,6 @@ def test_describe_v2_exposes_staged_input_artifacts() -> None:
     assert payload["supported_modes"] == ["train"]
     assert payload["combinations"] == []
     assert payload["commands"]["train"]["optional_input_options"] == [
-        "--device-data",
         "--teacher-weights",
         "--device-state",
         "--selection-receipt",
@@ -114,21 +110,3 @@ def test_v2_default_handler_lazily_dispatches_to_staged_runtime(
     )
     assert _default_train_handler(request) == 23
     assert seen == [request]
-
-
-@pytest.mark.parametrize("name", ("device_state", "selection_receipt"))
-def test_v1_crossbar_rejects_staged_v2_inputs(name: str) -> None:
-    request = SimpleNamespace(
-        teacher_weights=Path("teacher.pt"),
-        weights=None,
-        base_weights=None,
-        resume=None,
-        device_data=None,
-        device_model=None,
-        device_state=None,
-        selection_receipt=None,
-    )
-    setattr(request, name, Path("wrong-artifact"))
-
-    with pytest.raises(ValueError, match=name.replace("_", "-")):
-        _validate_v1_crossbar_request(request)

@@ -1,7 +1,6 @@
 """Versioned, atomic checkpoint codecs for experiment runtimes.
 
-The named-weight format is the canonical model contract.  Positional tensor
-lists remain available only through explicit legacy import profiles.  Resume
+The named-weight format is the canonical model contract.  Resume
 checkpoints represent an epoch boundary and restore model tensors in place so
 optimizers keep valid tensor identities.
 """
@@ -22,7 +21,7 @@ from typing import Any, Optional
 import numpy as np
 import torch
 
-from model.resistive.builders import ParameterBinding, ParameterCatalog
+from training.parameters import ParameterBinding, ParameterCatalog
 from training.modifier import ParameterModifier
 
 
@@ -35,28 +34,6 @@ RESUME_CAPABILITIES = frozenset({"exact", "stateful_nondeterministic"})
 
 class CheckpointError(ValueError):
     """Raised when checkpoint bytes do not satisfy the declared contract."""
-
-
-@dataclass(frozen=True)
-class LegacyImportProfile:
-    """Explicit mapping from a positional legacy list to catalog bindings."""
-
-    name: str
-    groups: Optional[tuple[str, ...]]
-
-    def select(self, catalog: ParameterCatalog) -> tuple[ParameterBinding, ...]:
-        if self.groups is None:
-            return catalog.checkpointed
-        allowed = set(self.groups)
-        return tuple(
-            binding
-            for binding in catalog.checkpointed
-            if binding.group in allowed
-        )
-
-
-LEGACY_FULL = LegacyImportProfile(name="full", groups=None)
-LEGACY_BASE_ONLY = LegacyImportProfile(name="base-only", groups=("base",))
 
 
 @dataclass(frozen=True)
@@ -570,54 +547,6 @@ def load_named_weights(
         schema_version=NAMED_WEIGHTS_SCHEMA_VERSION,
         restored_keys=restored,
         metadata=metadata,
-    )
-
-
-def load_legacy_positional_weights(
-    path: Path | str,
-    catalog: ParameterCatalog,
-    *,
-    profile: LegacyImportProfile,
-) -> CheckpointLoadResult:
-    """Import a legacy tensor list through an explicit positional profile."""
-
-    if not isinstance(profile, LegacyImportProfile):
-        raise TypeError(
-            "Expected profile to be LEGACY_FULL, LEGACY_BASE_ONLY, or an "
-            f"explicit LegacyImportProfile. Provided value: {profile!r}."
-        )
-    payload = _torch_load(path)
-    bindings = profile.select(catalog)
-    if not isinstance(payload, (list, tuple)):
-        raise CheckpointError(
-            "Expected positional legacy checkpoint to contain a list or tuple "
-            f"of {len(bindings)} tensors. Provided value: "
-            f"{type(payload).__name__}."
-        )
-    if len(payload) != len(bindings):
-        raise CheckpointError(
-            f"Expected legacy profile {profile.name!r} to contain exactly "
-            f"{len(bindings)} tensors. Provided value: {len(payload)} tensors."
-        )
-    staged = tuple(
-        (
-            binding,
-            _stage_tensor(
-                binding,
-                value,
-                source=(
-                    f"legacy profile {profile.name!r} tensor at index {index}"
-                ),
-            ),
-        )
-        for index, (binding, value) in enumerate(zip(bindings, payload))
-    )
-    restored = _apply_staged(staged)
-    return CheckpointLoadResult(
-        schema=f"legacy.positional.{profile.name}",
-        schema_version=0,
-        restored_keys=restored,
-        metadata={},
     )
 
 
@@ -1170,9 +1099,6 @@ __all__ = [
     "EPOCH_BOUNDARY_SCHEMA",
     "EPOCH_BOUNDARY_SCHEMA_VERSION",
     "EpochBoundaryResume",
-    "LEGACY_BASE_ONLY",
-    "LEGACY_FULL",
-    "LegacyImportProfile",
     "NAMED_WEIGHTS_SCHEMA",
     "NAMED_WEIGHTS_SCHEMA_VERSION",
     "RESUME_CAPABILITIES",
@@ -1180,7 +1106,6 @@ __all__ = [
     "capture_rng_state",
     "encode_named_weights",
     "load_epoch_boundary_checkpoint",
-    "load_legacy_positional_weights",
     "load_named_weights",
     "restore_rng_state",
     "save_encoded_named_weights",

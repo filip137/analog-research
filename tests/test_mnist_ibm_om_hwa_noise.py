@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import make_dataclass, replace
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,9 +8,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from experiments.artifacts import sha256_file
-from experiments.mnist_analog_relu.config import parse_crossbar_config
-from experiments.mnist_analog_relu import runtime
+from experiments.mnist_analog_relu import crossbar_common as runtime
 from experiments.mnist_relu.model import BiasFreeReluTeacher
 from training.ibm_om_standard_crossbar import build_crossbar_layout
 from training.ibm_reram_endpoint_model import (
@@ -19,21 +17,117 @@ from training.ibm_reram_endpoint_model import (
 from training.ibm_reram_hwa import IbmReramArrayPopulation
 
 
-ROOT = Path(__file__).resolve().parents[1]
-CONFIG = (
-    ROOT
-    / "examples"
-    / "mnist_analog_relu"
-    / "ibm_om_onchip_importance"
-    / "hwa_noise_diagnostic_repaired_stochastic_hwa.json"
-)
-POPULATION_CONFIG = (
-    ROOT
-    / "examples"
-    / "mnist_analog_relu"
-    / "ibm_om_onchip_importance"
-    / "hwa_long_population_programming_error_hwa.json"
-)
+def test_staged_settings_execute_a_real_hwa_minibatch():
+    from experiments.mnist_analog_relu.staged_config import parse_staged_crossbar_config
+    from experiments.mnist_analog_relu.staged_runtime import _offchip_adaptation_spec
+
+    path = Path(__file__).resolve().parents[1] / (
+        "examples/mnist_analog_relu/ibm_om_crossbar_staged_v2/offchip_hwa.json"
+    )
+    stage = replace(
+        parse_staged_crossbar_config(json.loads(path.read_text())).stage,
+        epochs=1, maximum_batches=1,
+    )
+    spec = _offchip_adaptation_spec(stage, evaluate_test=False)
+    layout = build_crossbar_layout((4, 3, 2), maximum_input_size=2)
+    size = sum(tile.cells for tile in layout)
+    population = _population(size, layout)
+    source = torch.linspace(-0.2, 0.2, size)
+    torch.manual_seed(23)
+    teacher = BiasFreeReluTeacher(device=torch.device("cpu"), dims=(4, 3, 2))
+    loader = [(torch.rand(2, 4), torch.tensor([0, 1]))]
+
+    def run():
+        return runtime._offchip_adapt(
+            source_requested=source, population=population,
+            codebook_values=torch.stack((-torch.ones(size), torch.ones(size))),
+            spec=spec, layout=layout, digital_scales=(1.0, 1.0), teacher=teacher,
+            validation_loader=loader, train_loader=loader, device=torch.device("cpu"),
+        )
+
+    deployment, report, state = run()
+    repeated, repeated_report, repeated_state = run()
+    assert report["optimizer_steps"] == 1
+    assert report["primary_evaluation_state"] == "held_apparent_q"
+    assert report["programming_error"] is None
+    assert torch.isfinite(deployment).all()
+    assert not torch.equal(state["fixed_final_master_q"], source)
+    assert torch.equal(repeated, deployment)
+    assert repeated_report == report
+    assert runtime._state_tree_equal(repeated_state, state)
+
+
+def _settings(kind="stochastic"):
+    """Fixed numerical fixtures for the shared adaptation algorithm."""
+    def freeze(value):
+        if isinstance(value, dict):
+            cls = make_dataclass("Settings", [(name, object) for name in value], frozen=True)
+            return cls(**{name: freeze(item) for name, item in value.items()})
+        return value
+    settings = {'stochastic': {'offchip': {'policy': 'stochastic_apparent_hwa',
+                                'training_protocol': 'legacy_five_epoch_fixed_final',
+                                'epochs': 5,
+                                'logical_learning_rates': (0.0001, 0.0001),
+                                'beta_1': 0.9,
+                                'beta_2': 0.999,
+                                'epsilon': 1e-08,
+                                'objective': 'teacher_kl',
+                                'master_q_bounds': (-1.0, 1.0),
+                                'maximum_batches': 256,
+                                'checkpoint_policy': 'fixed_final_epoch_no_selection',
+                                'deployment_target': 'policy_realized_state',
+                                'epoch_evaluation': 'validation_only',
+                                'forward_noise': {'model': 'aihwkit_1_1_0_softbounds_reference_additive_write_noise',
+                                                  'base_state': 'support_clamped_persistent_q',
+                                                  'equation': 'q_apparent_equals_q_persistent_plus_write_noise_std_times_nominal_dw_min_times_standard_normal',
+                                                  'resampling': 'independent_full_array_draw_per_minibatch',
+                                                  'samples_per_minibatch': 1,
+                                                  'relative_scale': 1.0,
+                                                  'seed': 88042,
+                                                  'gradient_estimator': 'identity_straight_through'},
+                                'programming_error': None},
+                    'evaluation': {'evaluate_test': True,
+                                   'sample_limit': 1000,
+                                   'maximum_validation_batches': 2,
+                                   'selection_metric': 'fixed_final_epoch_no_selection'}},
+     'population': {'offchip': {'policy': 'population_programming_error_hwa',
+                                'training_protocol': 'full_mnist_ten_epoch_fixed_final',
+                                'epochs': 10,
+                                'logical_learning_rates': (0.0001, 0.0001),
+                                'beta_1': 0.9,
+                                'beta_2': 0.999,
+                                'epsilon': 1e-08,
+                                'objective': 'teacher_kl',
+                                'master_q_bounds': (-1.0, 1.0),
+                                'maximum_batches': 3438,
+                                'checkpoint_policy': 'fixed_final_epoch_no_selection',
+                                'deployment_target': 'fixed_final_master_fault_blind_pv',
+                                'epoch_evaluation': 'validation_and_test',
+                                'forward_noise': None,
+                                'programming_error': {'model': 'ibm_reram_om_pv128_healthy_accepted_endpoint_residual_v1',
+                                                      'artifact_path': 'data/ibm_reram_om_pv128_hwa_v1.json',
+                                                      'artifact_sha256': '3030e04d6205dc90d0894ac453d2c1c522dffdc004f69b9c6ab7eaf7ef4b8ba3',
+                                                      'condition_key': 'adaptive__lower_to_target__tau_step_0.5',
+                                                      'controller': 'adaptive',
+                                                      'start_protocol': 'lower_to_target',
+                                                      'maximum_programming_pulses': 128,
+                                                      'verify_tolerance_x': 0.023725,
+                                                      'target_coordinate': 'global_x_equals_q_plus_one_over_two',
+                                                      'training_population': 'healthy_noncorrupt_accepted_endpoints_no_fixed_array',
+                                                      'endpoint_state': 'apparent_q',
+                                                      'resampling': 'independent_full_array_draw_per_minibatch',
+                                                      'samples_per_minibatch': 1,
+                                                      'strength_schedule': 'linear_epoch_ramp',
+                                                      'initial_strength': 0.0,
+                                                      'final_strength': 1.0,
+                                                      'ramp_epochs': 10,
+                                                      'seed': 88042,
+                                                      'gradient_estimator': 'identity_straight_through'}},
+                    'evaluation': {'evaluate_test': True,
+                                   'sample_limit': 1000,
+                                   'maximum_validation_batches': 63,
+                                   'selection_metric': 'fixed_final_epoch_no_selection'}}}
+    return freeze(settings[kind])
 
 
 def _population(
@@ -102,25 +196,6 @@ def _accepted_endpoint_artifact() -> dict[str, object]:
     }
 
 
-def _device_model_bundle() -> dict[str, object]:
-    return {
-        "schema": "ebl.ibm_reram.om_hwa_device_model",
-        "schema_version": 1,
-        "preset": "reram_array_om",
-        "evidence_class": "model_based_aihwkit_preset",
-        "coordinate": "x=(w+1)/2",
-        "programming": {
-            "controller": "adaptive",
-            "condition_key": "adaptive__lower_to_target__tau_step_0.5",
-            "start_protocol": "lower_to_target",
-            "maximum_program_pulses": 128,
-            "tolerance_step_ratio": 0.5,
-            "nominal_step_fraction": 0.04745,
-        },
-        "endpoint_models": {
-            "continuous": _accepted_endpoint_artifact(),
-        },
-    }
 
 
 def test_aihwkit_om_apparent_write_noise_is_replayable_and_unclamped() -> None:
@@ -168,8 +243,7 @@ def test_aihwkit_om_apparent_write_noise_has_preset_sigma() -> None:
 
 
 def test_stochastic_hwa_replays_noise_and_deploys_persistent_support_state() -> None:
-    payload = json.loads(CONFIG.read_text(encoding="utf-8"))
-    spec = parse_crossbar_config(payload)
+    spec = _settings()
     spec = replace(
         spec,
         offchip=replace(spec.offchip, maximum_batches=1),
@@ -274,50 +348,10 @@ def test_stochastic_hwa_replays_noise_and_deploys_persistent_support_state() -> 
     )
 
 
-def test_population_programming_error_model_loader_checks_bundle_and_digest(
-    tmp_path: Path,
-) -> None:
-    artifact_path = tmp_path / "om_hwa_bundle.json"
-    artifact_path.write_text(
-        json.dumps(_device_model_bundle(), sort_keys=True),
-        encoding="utf-8",
-    )
-    spec = parse_crossbar_config(
-        json.loads(POPULATION_CONFIG.read_text(encoding="utf-8"))
-    )
-    settings = replace(
-        spec.offchip.programming_error,
-        artifact_path=str(artifact_path),
-        artifact_sha256=sha256_file(artifact_path),
-    )
-    spec = replace(
-        spec,
-        offchip=replace(spec.offchip, programming_error=settings),
-    )
-
-    resolved_path, model = runtime._load_offchip_programming_error_model(spec)
-
-    assert resolved_path == artifact_path.resolve()
-    assert model is not None
-    assert model.condition_key == "adaptive__lower_to_target__tau_step_0.5"
-    assert len(model.fingerprint) == 64
-
-    bad_settings = replace(settings, artifact_sha256="0" * 64)
-    with pytest.raises(ValueError, match="SHA-256"):
-        runtime._load_offchip_programming_error_model(
-            replace(
-                spec,
-                offchip=replace(
-                    spec.offchip,
-                    programming_error=bad_settings,
-                ),
-            )
-        )
 
 
 def test_population_hwa_is_replayable_and_independent_of_fixed_array_bounds() -> None:
-    payload = json.loads(POPULATION_CONFIG.read_text(encoding="utf-8"))
-    spec = parse_crossbar_config(payload)
+    spec = _settings("population")
     spec = replace(
         spec,
         offchip=replace(spec.offchip, maximum_batches=1),
@@ -426,8 +460,7 @@ def test_population_hwa_is_replayable_and_independent_of_fixed_array_bounds() ->
 
 
 def test_held_apparent_hwa_validation_is_replayable_and_stream_independent() -> None:
-    payload = json.loads(CONFIG.read_text(encoding="utf-8"))
-    spec = parse_crossbar_config(payload)
+    spec = _settings()
     layout = build_crossbar_layout((784, 50, 10), maximum_input_size=512)
     size = sum(tile.cells for tile in layout)
     population = _population(size, layout)

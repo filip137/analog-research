@@ -23,3 +23,8 @@ make coverage ambiguous and block finalization.
 
 The review template belongs in `results/<study-id>/analysis/review.json` only
 after the declared evidence has been collected and inspected.
+
+EP/DRN/LoRA and MNIST crossbar v1 execution plans are available at `16938bf`.
+Their frozen results and scientific notes remain historical evidence. This directory
+keeps current crossbar/teacher/characterization plans and reference receipts;
+see [supported scope](../docs/crossbar_scope.md).

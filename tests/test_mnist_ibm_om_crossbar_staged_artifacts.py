@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from experiments.artifacts import sha256_file
-from experiments.mnist_analog_relu.runtime import _matched_published_fault_overlay
+from experiments.mnist_analog_relu.crossbar_common import _matched_published_fault_overlay
 from experiments.mnist_analog_relu.staged_artifacts import (
     STAGED_PROGRAM_STREAM_ROLE,
     StagedDeviceState,

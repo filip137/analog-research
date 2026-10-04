@@ -28,7 +28,7 @@ def _complete_result(
         "schema": "ebl.run",
         "schema_version": 1,
         "run_id": run_dir.name,
-        "experiment_id": "small_drn.v1",
+        "experiment_id": "mnist_relu.v1",
         "status": "complete",
         "finished_at": "2026-07-27T00:00:00+00:00",
         "duration_seconds": 0.0,
@@ -69,7 +69,7 @@ def _preflight(_target, *, allow_dirty):
                 ],
                 "resume": {
                     "weights": True,
-                    "base_weights": True,
+                    "weights": True,
                     "full_training_state": True,
                 },
             },
@@ -79,7 +79,7 @@ def _preflight(_target, *, allow_dirty):
                     "required_options": ["--config", "--output-dir"],
                     "exclusive_input_options": [
                         "--weights",
-                        "--base-weights",
+                        "--device-model",
                         "--resume",
                     ],
                 },
@@ -398,12 +398,12 @@ def test_preflight_rejects_advertised_but_unavailable_command(
         )
 
 
-def test_base_weights_remains_an_explicit_hyphenated_stage_input(
+def test_device_model_remains_an_explicit_hyphenated_stage_input(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     (tmp_path / "train.json").write_text("{}")
-    (tmp_path / "base.pt").write_bytes(b"weights")
+    (tmp_path / "model.pt").write_bytes(b"weights")
     manifest = {
         "schema_version": 1,
         "campaign_id": "base-weights",
@@ -415,7 +415,7 @@ def test_base_weights_remains_an_explicit_hyphenated_stage_input(
                 "target": "target",
                 "command": "train",
                 "config": "train.json",
-                "inputs": {"base_weights": {"path": "base.pt"}},
+                "inputs": {"device_model": {"path": "model.pt"}},
             }
         ],
     }
@@ -429,9 +429,9 @@ def test_base_weights_remains_an_explicit_hyphenated_stage_input(
     )
 
     command = records["train"]["command"]
-    assert "--base-weights" in command
-    assert "--base_weights" not in command
-    assert str((tmp_path / "base.pt").resolve()) in command
+    assert "--device-model" in command
+    assert "--device_model" not in command
+    assert str((tmp_path / "model.pt").resolve()) in command
 
 
 def test_optional_external_inputs_are_validated_and_forwarded(

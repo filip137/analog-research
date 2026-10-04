@@ -1,5 +1,10 @@
 # Pilot: Does one pulse-Adam recovery minibatch lower held-out teacher KL compared with leaving the same programmed standard crossbar frozen?
 
+> Historical execution interface: this pilot used `mnist_ibm_om_crossbar_relu.v1`.
+> Reproduce it with its original inputs at commit `16938bf`. Its scientific
+> results and native bundles are retained; current staged crossbar work uses v2.
+
+
 State: complete and scientifically reviewed; initial specification recorded 2026-09-25T15:49:21.129440+00:00.
 Authorization: user assigned implementation including bounded local workflow pilots.
 

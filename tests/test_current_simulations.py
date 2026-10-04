@@ -28,7 +28,7 @@ def _write_native_run(
             {
                 "schema": "ebl.run",
                 "run_id": run_id,
-                "experiment_id": "small_drn.v1",
+                "experiment_id": "mnist_relu.v1",
                 "command": ["ebl", "train", "--config", "config.json"],
             }
         ),
@@ -172,7 +172,7 @@ def test_run_store_preserves_history_on_create_and_completion(
     original = ledger.read_text(encoding="utf-8")
     store = RunStore.create(
         output_root=tmp_path / "results" / "study-a" / "runs" / "base",
-        experiment_id="small_drn.v1",
+        experiment_id="mnist_relu.v1",
         resolved_config={"schema_version": 1},
         command=["ebl", "train", "--config", "config.json"],
         repo_root=tmp_path,
@@ -197,7 +197,7 @@ def test_run_store_preserves_history_on_failure(
     original = ledger.read_text(encoding="utf-8")
     store = RunStore.create(
         output_root=tmp_path / "results" / "study-a" / "runs" / "base",
-        experiment_id="small_drn.v1",
+        experiment_id="mnist_relu.v1",
         resolved_config={"schema_version": 1},
         command=["ebl", "train", "--config", "config.json"],
         repo_root=tmp_path,
@@ -221,7 +221,7 @@ def test_run_store_can_defer_live_ledger_updates_for_atomic_multirun_launch(
     monkeypatch.setenv("EBL_DEFER_CURRENT_SIMULATIONS", "1")
     store = RunStore.create(
         output_root=tmp_path / "results" / "study-a" / "runs" / "base",
-        experiment_id="small_drn.v1",
+        experiment_id="mnist_relu.v1",
         resolved_config={"schema_version": 1},
         command=["ebl", "train", "--config", "config.json"],
         repo_root=tmp_path,
@@ -249,7 +249,7 @@ def test_refresh_failure_never_fails_the_native_run(
     )
     store = RunStore.create(
         output_root=tmp_path / "results" / "study-a" / "runs" / "base",
-        experiment_id="small_drn.v1",
+        experiment_id="mnist_relu.v1",
         resolved_config={"schema_version": 1},
         command=["ebl", "train", "--config", "config.json"],
         repo_root=tmp_path,

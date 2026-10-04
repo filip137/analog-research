@@ -8,19 +8,19 @@
     {
       "arm_id": "baseline",
       "configs": [
-        "../examples/small_drn/base.json"
+        "../examples/mnist_relu/teacher.json"
       ],
-      "description": "Reference direct equilibrium-propagation training.",
-      "experiment_id": "small_drn.v1",
+      "description": "Digital teacher at the declared learning rate.",
+      "experiment_id": "mnist_relu.v1",
       "mode": "train"
     },
     {
-      "arm_id": "lora",
+      "arm_id": "lower_lr",
       "configs": [
-        "../examples/small_drn/lora.json"
+        "../examples/mnist_relu/teacher_lr5e4.json"
       ],
-      "description": "Matched exploratory passive low-rank training arm.",
-      "experiment_id": "small_drn.v1",
+      "description": "Digital teacher at a lower declared learning rate.",
+      "experiment_id": "mnist_relu.v1",
       "mode": "train"
     }
   ],
@@ -30,7 +30,7 @@
     "The final review distinguishes measurement from interpretation."
   ],
   "evidence_class": "example",
-  "hypothesis": "Under this illustrative setup, the passive low-rank arm changes the selected validation metric relative to the direct baseline.",
+  "hypothesis": "Under this illustrative setup, a lower learning rate changes the selected teacher validation metric.",
   "motivation": "Demonstrate the study-results workflow with two existing small configs; this file is a template, not scientific evidence.",
   "schema_version": 1,
   "study_id": "example-exploratory-workflow-v1",

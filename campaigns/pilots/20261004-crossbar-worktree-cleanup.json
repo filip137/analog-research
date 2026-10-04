@@ -1,0 +1,89 @@
+{
+  "artifacts": {
+    "after-parity.json": {
+      "bytes": 33075,
+      "sha256": "5866c5ee7202495df047b926fbc805251844a6a7b9e369d53d2894a2e63cacf5"
+    },
+    "audit_cifar_reproduction.py": {
+      "bytes": 1312,
+      "sha256": "937976168fd89cb57077e1c50993b04f9bc3c6967e39579127c612bddd44655c"
+    },
+    "before-parity.json": {
+      "bytes": 33075,
+      "sha256": "5866c5ee7202495df047b926fbc805251844a6a7b9e369d53d2894a2e63cacf5"
+    },
+    "check_before_after_parity.py": {
+      "bytes": 3854,
+      "sha256": "aa7d3bb49c5734ef0d6f0a567b68f834d997af3c1e486b6a651ce49e17a872d3"
+    },
+    "helper-source-parity.json": {
+      "bytes": 688,
+      "sha256": "bcf73895744c85804f1d84cd2bfbef51eb5c3e74a7bc2fb2303a76434e7c0511"
+    },
+    "native-parity.json": {
+      "bytes": 585,
+      "sha256": "4dd8a1fa577878041071d1abf0303daf54401ec0b173891e6cacb871f00292ab"
+    },
+    "pytest-native-plant.log": {
+      "bytes": 1170,
+      "sha256": "cf44fa4e35fa9c0d7e28822b0e713865983f27d1e9a6cf436388a0e04e657ead"
+    },
+    "pytest-verified.log": {
+      "bytes": 2926,
+      "sha256": "46b369e2005acba47187da2573e72afbaeb8ac58d5a3753d1055f40489ae0744"
+    },
+    "rebuild_reports.py": {
+      "bytes": 2253,
+      "sha256": "18bb7b7fc47511a27e2e3c5097c99b6ec9d4675306eee482d37dffa127835c2f"
+    },
+    "registry.json": {
+      "bytes": 7966,
+      "sha256": "f9527aec782cadc1370d0f8019ee544fe1f10f7c88234b246f13b8905272bbfc"
+    },
+    "removals.json": {
+      "bytes": 51837,
+      "sha256": "36f7e9bbe11d55ac8f80f5d90cf8c162cda01b60e8be132fc48179c252f18d46"
+    },
+    "report-comparison.json": {
+      "bytes": 2242,
+      "sha256": "13bf3d5ac536fd69075db380d8653bd330afad05ad6f6e9bcbe00a8a89d91599"
+    },
+    "reproduction-validation.json": {
+      "bytes": 480,
+      "sha256": "ebd4bc941178289cbc2eb0f58612d765165a918ebe4d55baedb5de1e9230013d"
+    }
+  },
+  "audit_directory": "results/crossbar-cleanup-20261004",
+  "base_commit": "16938bfd6d852a50573539bb4c7dbb5832e71594",
+  "date": "2026-10-04",
+  "historical_evidence_modified": false,
+  "registered_families": 13,
+  "remote_jobs_launched": false,
+  "removed_tracked_files": 697,
+  "retired_families": 17,
+  "schema": "hwa.crossbar_cleanup.v1",
+  "scope": "crossbar HWA, deployment and on-chip learning; digital teacher and device characterization controls",
+  "training_launched": false,
+  "verification": {
+    "cifar_csv_rows_identical": 172644,
+    "cifar_csv_tables_identical": 29,
+    "cifar_recipes_verified": 755,
+    "deterministic_before_after_fixtures_identical": true,
+    "native_parity": "pass",
+    "native_program_verify_suite": {
+      "passed": 22,
+      "pytest_provider": "py312 pure-Python pytest appended after native AIHWKit/torch/numpy imports",
+      "skip_reason": "CUDA unavailable",
+      "skipped": 2
+    },
+    "retained_suite": {
+      "passed": 1830,
+      "skip_reasons": {
+        "AIHWKit_unavailable_in_primary_interpreter": 7,
+        "CUDA": 5
+      },
+      "skipped": 12
+    },
+    "shared_helper_bodies_unchanged": 20
+  }
+}

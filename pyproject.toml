@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ebl-experiments"
 version = "0.1.0"
-description = "Versioned experiment runtime for dissipative resistive networks"
+description = "Crossbar hardware-aware training and on-chip learning experiments"
 requires-python = ">=3.10"
 
 [project.scripts]
@@ -14,12 +14,17 @@ ebl = "ebl.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = [
-  "campaigns*",
-  "ebl*",
-  "experiments*",
-  "labs*",
-  "model*",
-  "training*",
+  "campaigns",
+  "ebl",
+  "experiments",
+  "experiments.cifar_crossbar",
+  "experiments.cifar10_crossbar",
+  "experiments.mnist_analog_relu",
+  "experiments.mnist_relu",
+  "experiments.reram_program_verify",
+  "labs",
+  "labs.tools",
+  "training",
 ]
 exclude = [
   "labs.MNIST_network_data*",

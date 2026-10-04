@@ -1,8 +1,6 @@
 """Checkpointable IBM-OM primitives for a standard tiled crossbar MLP.
 
-The DRN uses full non-negative conductances in a passive equilibrium solve.
-This module implements the deliberately different AIHWKit-style comparator:
-each programmable crosspoint exposes the effective signed state ``q=a-r`` to
+In this AIHWKit-style crossbar, each programmable crosspoint exposes the effective signed state ``q=a-r`` to
 an ordinary matrix-vector multiply, the hidden non-linearity is digital ReLU,
 and a second ordinary MVM produces the logits.
 
@@ -516,7 +514,7 @@ def apply_population_bound_policy(
     *,
     policy: str,
 ) -> tuple[IbmReramArrayPopulation, dict[str, Any]]:
-    """Apply the declared native or DRN-matched bound treatment.
+    """Apply the declared native or winsorized bound treatment.
 
     The matched policy reproduces the recent four-device DRN control's only
     bound intervention: sample and repair the complete identity first, then

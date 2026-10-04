@@ -9,7 +9,6 @@ import torch
 from experiments.artifacts import atomic_write_json, sha256_file
 from training.star_targets import (
     CROSSBAR_STATE_REPRESENTATION,
-    DRN_RAW_RAIL_STATE_REPRESENTATION,
     StarSourceBinding,
     StarTargetAccumulator,
     StarTargetBinding,
@@ -66,11 +65,7 @@ def _binding(
     calibration,
 ) -> StarTargetBinding:
     return StarTargetBinding(
-        architecture_id=(
-            "mnist.crossbar.784-50-10"
-            if representation == CROSSBAR_STATE_REPRESENTATION
-            else "mnist.drn.1568-100-20"
-        ),
+        architecture_id="mnist.crossbar.784-50-10",
         state_representation_id=representation,
         source=_source(),
         calibration=calibration,
@@ -131,8 +126,6 @@ def test_fp64_class_means_are_batching_invariant() -> None:
     [
         (CROSSBAR_STATE_REPRESENTATION, "int8", 600, 600),
         (CROSSBAR_STATE_REPRESENTATION, "fp16", 600, 1_200),
-        (DRN_RAW_RAIL_STATE_REPRESENTATION, "int8", 1_200, 1_200),
-        (DRN_RAW_RAIL_STATE_REPRESENTATION, "fp16", 1_200, 2_400),
     ],
 )
 def test_compact_storage_value_and_byte_counts(
@@ -151,8 +144,7 @@ def test_compact_storage_value_and_byte_counts(
 
 @pytest.mark.parametrize("storage_dtype", ["fp16", "int8"])
 @pytest.mark.parametrize(
-    "representation",
-    [CROSSBAR_STATE_REPRESENTATION, DRN_RAW_RAIL_STATE_REPRESENTATION],
+    "representation", [CROSSBAR_STATE_REPRESENTATION],
 )
 def test_pickle_free_round_trip_checks_receipt_and_binding(
     tmp_path,
@@ -283,12 +275,8 @@ def test_load_fails_closed_for_source_representation_and_receipt_mismatch(
 
     with pytest.raises(StarTargetError, match="binding to match exactly"):
         load_star_targets(path, record.receipt_path, wrong_binding)
-    drn_binding = replace(
-        binding,
-        state_representation_id=DRN_RAW_RAIL_STATE_REPRESENTATION,
-    )
-    with pytest.raises(StarTargetError, match="NPZ fields"):
-        load_star_targets(path, record.receipt_path, drn_binding)
+    with pytest.raises(StarTargetError, match="supported STAR state representation"):
+        replace(binding, state_representation_id="unsupported.state.v1")
 
     receipt = json.loads(record.receipt_path.read_text(encoding="utf-8"))
     receipt["artifact_sha256"] = "0" * 64
@@ -318,5 +306,5 @@ def test_accumulator_rejects_nonfinite_or_structurally_wrong_states() -> None:
         StarTargetAccumulator(
             class_count=10,
             representation_id=CROSSBAR_STATE_REPRESENTATION,
-            component_specs=state_components(DRN_RAW_RAIL_STATE_REPRESENTATION),
+            component_specs=(),
         )

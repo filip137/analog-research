@@ -60,7 +60,6 @@ class TrainRequest:
     config_path: Path
     output_dir: Path
     weights: Optional[Path]
-    base_weights: Optional[Path]
     resume: Optional[Path]
     command: Tuple[str, ...]
     device_data: Optional[Path] = None
@@ -71,16 +70,6 @@ class TrainRequest:
 
 
 @dataclass(frozen=True)
-class LinspaceRequest:
-    definition: ExperimentDefinition
-    spec: Any
-    config_path: Path
-    output_dir: Path
-    weights: Path
-    command: Tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class ValidateRequest:
     definition: ExperimentDefinition
     spec: Any
@@ -88,8 +77,6 @@ class ValidateRequest:
     output_dir: Path
     weights: Path
     command: Tuple[str, ...]
-    teacher_weights: Optional[Path] = None
-    device_model: Optional[Path] = None
 
 
 @dataclass(frozen=True)
@@ -98,17 +85,6 @@ class CharacterizeRequest:
     spec: Any
     config_path: Path
     output_dir: Path
-    command: Tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class ImportLegacyCheckpointRequest:
-    definition: ExperimentDefinition
-    document: Any
-    config_path: Path
-    source: Path
-    output: Path
-    kind: str
     command: Tuple[str, ...]
 
 
@@ -132,10 +108,8 @@ class CommandHandlers:
     """Optional execution handlers connected by the application layer."""
 
     train: Optional[Handler] = None
-    linspace: Optional[Handler] = None
     validate: Optional[Handler] = None
     characterize: Optional[Handler] = None
-    checkpoint_import_legacy: Optional[Handler] = None
     campaign_run: Optional[Handler] = None
 
 
@@ -161,7 +135,7 @@ def build_parser() -> argparse.ArgumentParser:
     describe.add_argument(
         "--experiment",
         dest="experiment_id",
-        help="stable registered ID, for example small_drn.v1",
+        help="stable registered ID, for example mnist_ibm_om_crossbar_relu.v2",
     )
     describe.add_argument(
         "--json",
@@ -181,11 +155,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="initialize the complete model from a weights artifact",
     )
     initial.add_argument(
-        "--base-weights",
-        type=Path,
-        help="initialize only base weights, leaving adapters independent",
-    )
-    initial.add_argument(
         "--resume",
         type=Path,
         help="resume from a full training-state checkpoint",
@@ -194,16 +163,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--device-data",
         type=Path,
         help=(
-            "explicit measured-device HDF5 input required by measured "
-            "training backends"
+            "explicit device data or cached activations required by the "
+            "selected experiment"
         ),
     )
     train.add_argument(
         "--device-model",
         type=Path,
         help=(
-            "explicit calibrated hardware-derived device-model JSON used by "
-            "IBM OM HWA modifiers"
+            "explicit fitted device model or sampled population bundle used by "
+            "crossbar HWA and recovery"
         ),
     )
     train.add_argument(
@@ -228,17 +197,6 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    linspace = commands.add_parser(
-        "linspace",
-        help="evaluate a trained checkpoint over a configured linspace",
-    )
-    _add_config_and_output(linspace)
-    linspace.add_argument(
-        "--weights",
-        type=Path,
-        required=True,
-        help="explicit weights artifact to evaluate",
-    )
 
     validate = commands.add_parser(
         "validate",
@@ -251,63 +209,12 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="explicit weights artifact to validate",
     )
-    validate.add_argument(
-        "--teacher-weights",
-        type=Path,
-        help="explicit named ReLU teacher checkpoint for KL evaluation",
-    )
-    validate.add_argument(
-        "--device-model",
-        type=Path,
-        help=(
-            "explicit calibrated hardware-derived device-model JSON used by "
-            "physical deployment validation"
-        ),
-    )
-
     characterize = commands.add_parser(
         "characterize",
         help="characterize a physical-device model selected by the config file",
     )
     _add_config_and_output(characterize)
 
-    checkpoint = commands.add_parser(
-        "checkpoint",
-        help="checkpoint inspection and conversion commands",
-    )
-    checkpoint_commands = checkpoint.add_subparsers(
-        dest="checkpoint_command",
-        required=True,
-        metavar="CHECKPOINT_COMMAND",
-    )
-    import_legacy = checkpoint_commands.add_parser(
-        "import-legacy",
-        help="convert a legacy checkpoint to the versioned artifact format",
-    )
-    import_legacy.add_argument(
-        "--config",
-        type=Path,
-        required=True,
-        help="JSON config that selects and describes the experiment",
-    )
-    import_legacy.add_argument(
-        "--source",
-        type=Path,
-        required=True,
-        help="legacy checkpoint to read",
-    )
-    import_legacy.add_argument(
-        "--output",
-        type=Path,
-        required=True,
-        help="versioned checkpoint file to write",
-    )
-    import_legacy.add_argument(
-        "--kind",
-        choices=("full", "base"),
-        default="full",
-        help="whether the source contains full-model or base-only weights",
-    )
 
     campaign = commands.add_parser(
         "campaign",
@@ -480,195 +387,55 @@ def _definition_payload(definition: ExperimentDefinition) -> dict:
     }
 
 
-def _protocol_payload(
-    definitions: Sequence[ExperimentDefinition],
-) -> dict:
-    reset_only = (
-        len(definitions) == 1
-        and definitions[0].experiment_id
-        in {
-            "mnist_relu_drn_reset.v1",
-            "mnist_relu_drn_reset_differential.v1",
-            "mnist_relu_drn_reset_bias.v1",
-            "mnist_relu_drn_reset_bias_legacy.v1",
-            "mnist_relu_drn_reset_factorial.v1",
-        }
-    )
-    combinations = [
-        combination
-        for definition in definitions
-        for combination in definition.combinations
-    ]
-    supports_ibm_device_model = any(
-        definition.experiment_id in {
-            "mnist_relu_drn_kd.v1", "cifar_resnet_suffix_recovery.v1",
-            "cifar_pcm_fault_recovery.v1", "cifar_pcm_hwa_comparison.v1",
-            "cifar_pcm_recovery_epochs.v1", "cifar_crossbar_full_epochs.v1", "cifar_crossbar_fault_sweep.v1", "cifar_om_open_loop.v1", "cifar_om_closed_loop_lr.v1"
-        }
-        for definition in definitions
-    )
-    supports_staged_crossbar_inputs = any(
-        definition.experiment_id in {
-            "cifar10_ibm_om_crossbar.v1",
-            "mnist_ibm_om_crossbar_relu.v2", "cifar_resnet_suffix_recovery.v1",
-            "cifar_pcm_fault_recovery.v1", "cifar_pcm_hwa_comparison.v1",
-            "cifar_pcm_recovery_epochs.v1", "cifar_crossbar_full_epochs.v1", "cifar_crossbar_fault_sweep.v1", "cifar_om_open_loop.v1", "cifar_om_closed_loop_lr.v1"
-        }
-        for definition in definitions
-    )
+def _protocol_payload(definitions: Sequence[ExperimentDefinition]) -> dict:
+    combinations = [item for definition in definitions for item in definition.combinations]
+    ids = {definition.experiment_id for definition in definitions}
+    train_inputs = []
+    if any(name.startswith("cifar_") for name in ids):
+        train_inputs.extend(["--device-data", "--device-model", "--teacher-weights", "--device-state", "--selection-receipt"])
+    elif "mnist_ibm_om_crossbar_relu.v2" in ids:
+        train_inputs.extend(["--teacher-weights", "--device-state", "--selection-receipt"])
     return {
         "protocol_version": 1,
         "capabilities": {
             "supported_commands": [
-                "describe",
-                "train",
-                "linspace",
-                "validate",
-                "characterize",
-                "checkpoint import-legacy",
-                "campaign run",
-                "study prepare",
-                "study summarize",
-                "study finalize",
+                "describe", "train", "validate", "characterize", "campaign run",
+                "runs inspect", "study prepare", "study summarize", "study finalize",
             ],
             "config_selects_experiment": True,
             "strict_json_config": True,
             "immutable_mode_specs": True,
             "extensions": {
-                "model_adapter": sorted(
-                    {
-                        item.selection.model_adapter
-                        for item in combinations
-                    }
-                ),
-                "weight_modifier": sorted(
-                    {
-                        item.selection.weight_modifier
-                        for item in combinations
-                    }
-                ),
-                "update_backend": sorted(
-                    {
-                        item.selection.update_backend
-                        for item in combinations
-                    }
-                ),
-                "algorithm": sorted(
-                    {
-                        item.selection.algorithm
-                        for item in combinations
-                    }
-                ),
-                "unlisted_combinations": "rejected",
-            },
+                name: sorted({getattr(item.selection, name) for item in combinations})
+                for name in ("model_adapter", "weight_modifier", "update_backend", "algorithm")
+            } | {"unlisted_combinations": "rejected"},
             "resume": {
-                "weights": not reset_only,
-                "base_weights": not reset_only,
+                "weights": True,
                 "full_training_state": True,
-                "legacy_checkpoint_import": not reset_only,
                 "campaign_stage_reuse": True,
             },
             "campaign": {
-                "schema_version": 1,
-                "dry_run": True,
-                "stage_artifact_references": True,
-                "allow_dirty": True,
+                "schema_version": 1, "dry_run": True,
+                "stage_artifact_references": True, "allow_dirty": True,
                 "failure_policies": ["continue", "fail_fast"],
             },
         },
         "commands": {
-            "describe": {
-                "available": True,
-                "required_options": [],
-            },
+            "describe": {"available": True, "required_options": []},
             "train": {
-                "available": any(
-                    RunMode.TRAIN in item.supported_modes
-                    for item in definitions
-                ),
-                "required_options": (
-                    [
-                        "--config",
-                        "--output-dir",
-                        "--device-data",
-                        "--teacher-weights",
-                    ]
-                    if reset_only
-                    else ["--config", "--output-dir"]
-                ),
-                "exclusive_input_options": (
-                    ["--resume"]
-                    if reset_only
-                    else ["--weights", "--base-weights", "--resume"]
-                ),
-                "optional_input_options": (
-                    []
-                    if reset_only
-                    else [
-                        "--device-data",
-                        *(
-                            ["--device-model"]
-                            if supports_ibm_device_model
-                            else []
-                        ),
-                        "--teacher-weights",
-                        *(
-                            ["--device-state", "--selection-receipt"]
-                            if supports_staged_crossbar_inputs
-                            else []
-                        ),
-                    ]
-                ),
-            },
-            "linspace": {
-                "available": any(
-                    RunMode.LINSPACE in item.supported_modes
-                    for item in definitions
-                ),
-                "required_options": [
-                    "--config",
-                    "--output-dir",
-                    "--weights",
-                ],
+                "available": any(RunMode.TRAIN in item.supported_modes for item in definitions),
+                "required_options": ["--config", "--output-dir"],
+                "exclusive_input_options": ["--weights", "--resume"],
+                "optional_input_options": train_inputs,
             },
             "validate": {
-                "available": any(
-                    RunMode.VALIDATE in item.supported_modes
-                    for item in definitions
-                ),
-                "required_options": [
-                    "--config",
-                    "--output-dir",
-                    "--weights",
-                    *(["--teacher-weights"] if reset_only else []),
-                ],
-                "optional_input_options": (
-                    []
-                    if reset_only
-                    else [
-                        "--teacher-weights",
-                        *(
-                            ["--device-model"]
-                            if supports_ibm_device_model
-                            else []
-                        ),
-                    ]
-                ),
+                "available": any(RunMode.VALIDATE in item.supported_modes for item in definitions),
+                "required_options": ["--config", "--output-dir", "--weights"],
+                "optional_input_options": [],
             },
             "characterize": {
-                "available": any(
-                    RunMode.CHARACTERIZE in item.supported_modes
-                    for item in definitions
-                ),
+                "available": any(RunMode.CHARACTERIZE in item.supported_modes for item in definitions),
                 "required_options": ["--config", "--output-dir"],
-            },
-            "checkpoint import-legacy": {
-                "available": True,
-                "required_options": [
-                    "--config",
-                    "--source",
-                    "--output",
-                ],
             },
             "campaign run": {
                 "available": True,
@@ -820,42 +587,10 @@ def _default_train_handler(request: TrainRequest) -> Optional[int]:
         from experiments.cifar_crossbar.fault_runtime import run_train
     elif request.definition.experiment_id == "cifar_resnet_suffix_recovery.v1":
         from experiments.cifar_crossbar.runtime import run_train
-    elif request.definition.experiment_id == "small_drn.v1":
-        from experiments.small_network.runtime import run_train
     elif request.definition.experiment_id in {"mnist_relu.v1", "mnist_relu.v2"}:
         from experiments.mnist_relu.runtime import run_train
-    elif request.definition.experiment_id == "mnist_ibm_om_crossbar_relu.v1":
-        from experiments.mnist_analog_relu.runtime import run_train
     elif request.definition.experiment_id == "mnist_ibm_om_crossbar_relu.v2":
         from experiments.mnist_analog_relu.staged_runtime import run_train
-    elif request.definition.experiment_id == "mnist_relu_drn_kd.v1":
-        from experiments.mnist_relu_drn.runtime import run_train
-    elif request.definition.experiment_id == "mnist_ibm_om_winsorized_qat.v1":
-        from experiments.mnist_relu_drn.ibm_om_winsorized_qat_runtime import (
-            run_train,
-        )
-    elif (
-        request.definition.experiment_id
-        == "mnist_ibm_om_winsorized_multi_assignment_qat.v1"
-    ):
-        from experiments.mnist_relu_drn.ibm_om_winsorized_multi_assignment_qat_runtime import (
-            run_train,
-        )
-    elif (
-        request.definition.experiment_id
-        == "mnist_ibm_om_winsorized_pv_ensemble_qat.v1"
-    ):
-        from experiments.mnist_relu_drn.ibm_om_winsorized_pv_ensemble_qat_runtime import (
-            run_train,
-        )
-    elif request.definition.experiment_id in {
-        "mnist_relu_drn_reset.v1",
-        "mnist_relu_drn_reset_differential.v1",
-        "mnist_relu_drn_reset_bias.v1",
-        "mnist_relu_drn_reset_bias_legacy.v1",
-        "mnist_relu_drn_reset_factorial.v1",
-    }:
-        from experiments.mnist_relu_drn_reset.runtime import run_train
     else:  # pragma: no cover - registry and handler map change together
         raise ConfigError(
             "Expected train runtime dispatch for a registered experiment. "
@@ -865,67 +600,13 @@ def _default_train_handler(request: TrainRequest) -> Optional[int]:
     return run_train(request)
 
 
-def _default_linspace_handler(request: LinspaceRequest) -> Optional[int]:
-    if request.definition.experiment_id != "small_drn.v1":
-        raise ConfigError(
-            "Expected linspace runtime dispatch only for 'small_drn.v1'. "
-            f"Provided value: {request.definition.experiment_id!r}."
-        )
-    from experiments.small_network.runtime import run_linspace
-
-    return run_linspace(request)
-
-
 def _default_validate_handler(request: ValidateRequest) -> Optional[int]:
-    if request.definition.experiment_id == "mnist_ibm_om_baseline_selection.v1":
-        from experiments.mnist_relu_drn.ibm_om_baseline_selection_runtime import (
-            run_validate,
-        )
-    elif request.definition.experiment_id == "mnist_ibm_om_baseline_spacing_pv.v1":
-        from experiments.mnist_relu_drn.ibm_om_baseline_spacing_pv_runtime import (
-            run_validate,
-        )
-    elif (
-        request.definition.experiment_id
-        == "mnist_ibm_om_baseline_spacing_pv_no_clip.v1"
-    ):
-        from experiments.mnist_relu_drn.ibm_om_baseline_spacing_pv_no_clip_runtime import (
-            run_validate,
-        )
-    elif (
-        request.definition.experiment_id
-        == "mnist_ibm_om_baseline_spacing_pv_truncated_nominal.v1"
-    ):
-        from experiments.mnist_relu_drn.ibm_om_baseline_spacing_pv_truncated_nominal_runtime import (
-            run_validate,
-        )
-    elif request.definition.experiment_id == "ibm_om_four_reference_balance.v1":
-        from experiments.mnist_relu_drn.ibm_om_four_reference_balance_runtime import (
-            run_validate,
-        )
-    elif request.definition.experiment_id == "ibm_om_local_reference_compensation.v1":
-        from experiments.mnist_relu_drn.ibm_om_local_reference_compensation_runtime import (
-            run_validate,
-        )
-    elif request.definition.experiment_id == "small_drn.v1":
-        from experiments.small_network.runtime import run_validate
-    elif request.definition.experiment_id in {"mnist_relu.v1", "mnist_relu.v2"}:
-        from experiments.mnist_relu.runtime import run_validate
-    elif request.definition.experiment_id == "mnist_relu_drn_kd.v1":
-        from experiments.mnist_relu_drn.runtime import run_validate
-    elif request.definition.experiment_id in {
-        "mnist_relu_drn_reset.v1",
-        "mnist_relu_drn_reset_differential.v1",
-        "mnist_relu_drn_reset_bias.v1",
-        "mnist_relu_drn_reset_bias_legacy.v1",
-        "mnist_relu_drn_reset_factorial.v1",
-    }:
-        from experiments.mnist_relu_drn_reset.runtime import run_validate
-    else:  # pragma: no cover - registry and handler map change together
+    if request.definition.experiment_id not in {"mnist_relu.v1", "mnist_relu.v2"}:
         raise ConfigError(
-            "Expected validate runtime dispatch for a registered experiment. "
+            "Expected validate runtime dispatch for a digital MNIST teacher. "
             f"Provided value: {request.definition.experiment_id!r}."
         )
+    from experiments.mnist_relu.runtime import run_validate
 
     return run_validate(request)
 
@@ -944,28 +625,13 @@ def _default_characterize_handler(
     return run_characterize(request)
 
 
-def _default_checkpoint_import_legacy_handler(
-    request: ImportLegacyCheckpointRequest,
-) -> Optional[int]:
-    if request.definition.experiment_id != "small_drn.v1":
-        raise ConfigError(
-            "Expected legacy checkpoint import only for 'small_drn.v1'. "
-            f"Provided value: {request.definition.experiment_id!r}."
-        )
-    from experiments.small_network.runtime import import_legacy_checkpoint
-
-    return import_legacy_checkpoint(request)
-
-
 def _default_command_handlers() -> CommandHandlers:
     """Build handlers without importing the numerical runtime."""
 
     return CommandHandlers(
         train=_default_train_handler,
-        linspace=_default_linspace_handler,
         validate=_default_validate_handler,
         characterize=_default_characterize_handler,
-        checkpoint_import_legacy=_default_checkpoint_import_legacy_handler,
     )
 
 
@@ -1028,7 +694,6 @@ def _dispatch(
             config_path=args.config,
             output_dir=args.output_dir,
             weights=args.weights,
-            base_weights=args.base_weights,
             resume=args.resume,
             command=command,
             device_data=args.device_data,
@@ -1042,23 +707,6 @@ def _dispatch(
             request,
         )
 
-    if args.command_name == "linspace":
-        definition, spec = resolve_experiment_config(
-            args.config,
-            RunMode.LINSPACE,
-        )
-        request = LinspaceRequest(
-            definition=definition,
-            spec=spec,
-            config_path=args.config,
-            output_dir=args.output_dir,
-            weights=args.weights,
-            command=command,
-        )
-        return _handler_result(
-            _require_handler(handlers.linspace, "linspace"),
-            request,
-        )
 
     if args.command_name == "validate":
         definition, spec = resolve_experiment_config(
@@ -1072,8 +720,6 @@ def _dispatch(
             output_dir=args.output_dir,
             weights=args.weights,
             command=command,
-            teacher_weights=args.teacher_weights,
-            device_model=args.device_model,
         )
         return _handler_result(
             _require_handler(handlers.validate, "validate"),
@@ -1097,27 +743,6 @@ def _dispatch(
             request,
         )
 
-    if (
-        args.command_name == "checkpoint"
-        and args.checkpoint_command == "import-legacy"
-    ):
-        definition, document = load_experiment_config(args.config)
-        request = ImportLegacyCheckpointRequest(
-            definition=definition,
-            document=document,
-            config_path=args.config,
-            source=args.source,
-            output=args.output,
-            kind=args.kind,
-            command=command,
-        )
-        return _handler_result(
-            _require_handler(
-                handlers.checkpoint_import_legacy,
-                "checkpoint import-legacy",
-            ),
-            request,
-        )
 
     if (
         args.command_name == "campaign"

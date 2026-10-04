@@ -14,15 +14,17 @@
       "case_id": "base",
       "target": "base",
       "command": "train",
-      "config": "../small_drn/base.json"
+      "config": "../mnist_relu/teacher.json"
     },
     {
       "id": "validate",
       "case_id": "base",
       "target": "base",
       "command": "validate",
-      "config": "../small_drn/base.json",
-      "depends_on": ["train"],
+      "config": "../mnist_relu/teacher.json",
+      "depends_on": [
+        "train"
+      ],
       "inputs": {
         "weights": {
           "stage": "train",

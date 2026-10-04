@@ -1,4 +1,4 @@
-"""Build the immutable IBM OM device-model bundle consumed by DRN HWA runs."""
+"""Build the immutable IBM OM device-model bundle used for crossbar programming-error HWA."""
 
 from __future__ import annotations
 

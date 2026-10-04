@@ -26,7 +26,7 @@ from experiments.artifacts import (
     content_hash,
     sha256_file,
 )
-from experiments.mnist_analog_relu.runtime import (
+from experiments.mnist_analog_relu.crossbar_common import (
     _evaluate,
     _evaluate_plant_states,
     _mapping_report,
@@ -607,6 +607,40 @@ def _validate_staged_hwa_evaluation(
         )
 
 
+def _offchip_adaptation_spec(
+    stage: OffchipHwaStageSettings, *, evaluate_test: bool,
+) -> SimpleNamespace:
+    """Supply the complete shared HWA contract for a staged off-chip run."""
+    return SimpleNamespace(
+        offchip=SimpleNamespace(
+            policy=stage.policy,
+            epoch_evaluation=(
+                "validation_and_test"
+                if evaluate_test
+                else "validation_only"
+            ),
+            logical_learning_rates=(stage.learning_rate, stage.learning_rate),
+            beta_1=stage.beta_1,
+            beta_2=stage.beta_2,
+            epsilon=stage.epsilon,
+            forward_noise=stage.forward_noise,
+            programming_error=None,
+            epochs=stage.epochs,
+            maximum_batches=stage.maximum_batches,
+            master_q_bounds=stage.master_q_bounds,
+            deployment_target=stage.deployment_target,
+            training_protocol=stage.training_protocol,
+            objective=stage.objective,
+            checkpoint_policy=stage.checkpoint_policy,
+            evaluation_forward_policy=stage.evaluation_forward_policy,
+        ),
+        evaluation=SimpleNamespace(
+            maximum_validation_batches=None,
+            sample_limit=None,
+        ),
+    )
+
+
 def _run_offchip_hwa(
     *,
     request: Any,
@@ -649,32 +683,8 @@ def _run_offchip_hwa(
         requested,
         maximum_pulses=spec.device.deterministic_codebook_pulses,
     )
-    compatibility_spec = SimpleNamespace(
-        offchip=SimpleNamespace(
-            policy=stage.policy,
-            epoch_evaluation=(
-                "validation_and_test"
-                if spec.evaluation.evaluate_test
-                else "validation_only"
-            ),
-            logical_learning_rates=(stage.learning_rate, stage.learning_rate),
-            beta_1=stage.beta_1,
-            beta_2=stage.beta_2,
-            epsilon=stage.epsilon,
-            forward_noise=stage.forward_noise,
-            epochs=stage.epochs,
-            maximum_batches=stage.maximum_batches,
-            master_q_bounds=stage.master_q_bounds,
-            deployment_target=stage.deployment_target,
-            training_protocol=stage.training_protocol,
-            objective=stage.objective,
-            checkpoint_policy=stage.checkpoint_policy,
-            evaluation_forward_policy=stage.evaluation_forward_policy,
-        ),
-        evaluation=SimpleNamespace(
-            maximum_validation_batches=None,
-            sample_limit=None,
-        ),
+    compatibility_spec = _offchip_adaptation_spec(
+        stage, evaluate_test=spec.evaluation.evaluate_test,
     )
     deployment, report, state = _offchip_adapt(
         source_requested=requested,
