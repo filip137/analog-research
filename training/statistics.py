@@ -624,3 +624,39 @@ class WeightDistributionStat(MeanStat):
             return torch.abs(weight).std()
         else:
             return weight.mean()
+
+
+def add_standard_statistics(runner, energy_fn, cost_fn, *, training=False,
+                            non_linearity=None, v_min=None, v_max=None):
+    """Register the lab's standard metrics once, during experiment setup.
+
+    Names and units match the historical Monitor series. The monitor only
+    records these statistics; it never constructs a second set.
+    """
+    non_linearity = non_linearity or getattr(energy_fn, "_non_linearity", "perfect_diode")
+    if non_linearity in {"hard_sigmoid", "double_diode_quadratic", "double_diode_exponential"}:
+        diode_params = getattr(energy_fn, "_quadratic_diode_param", {}) or {}
+        v_min = diode_params.get("v_min") if v_min is None else v_min
+        v_max = diode_params.get("v_max") if v_max is None else v_max
+        if v_min is None or v_max is None:
+            raise ValueError(f"v_min and v_max must be provided for {non_linearity} saturation monitoring")
+    free = [
+        Counter(energy_fn, runner.dataset_size()), EnergyStat(energy_fn),
+        CostStat(cost_fn), ErrorStat(cost_fn), TopFiveErrorStat(cost_fn),
+    ]
+    free += [NormStat(layer) for layer in energy_fn.layers()]
+    free += [SaturationStat(layer, non_linearity, v_min, v_max) for layer in energy_fn.layers()]
+    for statistic in free:
+        runner.add_statistic(statistic, phase="free")
+    if training:
+        gradients = [GradientStat(parameter) for parameter in energy_fn.params()]
+        weights = [parameter for parameter in energy_fn.params() if "Weight" in parameter.name]
+        gradients += [WeightRowSumStat(parameter) for parameter in weights]
+        gradients += [WeightColumnSumStat(parameter) for parameter in weights]
+        gradients += [
+            WeightDistributionStat(parameter, kind)
+            for kind in ("mean", "std", "min", "max", "abs_mean", "abs_std")
+            for parameter in weights
+        ]
+        for statistic in gradients:
+            runner.add_statistic(statistic, phase="gradients")

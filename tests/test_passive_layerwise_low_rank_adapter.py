@@ -18,7 +18,7 @@ from training.device_programming import (
     program_wan2022_base_conductances,
 )
 from training.sgd import AugmentedFunction, EquilibriumProp
-from training.tiki_taka import build_optimizer
+from training.optimizers import build_optimizer
 
 
 _DIODE = {

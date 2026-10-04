@@ -1,28 +1,15 @@
 from dataclasses import dataclass
 import json
 import os
-import sys
 from pathlib import Path
 from typing import Optional
 
 import torch
-import torch.nn.functional as F
 
-from model.resistive.interaction import BasePoolResistive
 from training.epoch import Trainer, Evaluator
-from training.statistics import (
-    Counter,
-    CostStat,
-    EnergyStat,
-    ErrorStat,
-    TopFiveErrorStat,
-    NormStat,
-    SaturationStat,
-)
-
-
-class NonFiniteGradientError(RuntimeError):
-    """Raised when a training step produces NaN or infinite gradients."""
+from training.engine import EvaluationComponents, FreePhaseEvent
+from training.diagnostics import FiniteGradientGuard, GradientUpdateObserver, LayerMeasurements
+from training.statistics import add_standard_statistics
 
 
 @dataclass
@@ -37,7 +24,7 @@ class MnistParts:
     model_cfg: dict
     training_cfg: dict
     # Optional training wiring:
-    # - `learning_rates` should align with `Optimizer`'s parameter list (after PoolWeight filtering).
+    # - `learning_rates` should align with `SGDOptimizer`'s parameter list (after PoolWeight filtering).
     # - `scheduler` is created by training utilities (e.g. `track_training_statistics`), not during setup.
     learning_rates: Optional[list]
     scheduler: Optional[object]
@@ -49,284 +36,82 @@ class MnistParts:
 
 
 def build_evaluator(network, cost_fn, dataloader, energy_minimizer, model_cfg, record_statistics=()):
-    """Construct a fresh Evaluator with core and per-layer stats."""
-    evaluator = CustomEvaluator(network, cost_fn, dataloader, energy_minimizer, record_statistics)
+    """Construct an engine-backed evaluator and register its statistics once."""
+    evaluator = CustomEvaluator(
+        EvaluationComponents(network, cost_fn, energy_minimizer),
+        dataloader,
+        reset_input=True,
+        record_statistics=record_statistics,
+    )
     energy_source = getattr(network, "_function", None) or network
-    if not hasattr(energy_source, "eval"):
-        raise ValueError("energy_source for evaluator has no eval()")
-    evaluator.add_statistic(Counter(energy_source, len(dataloader.dataset)))
-    evaluator.add_statistic(EnergyStat(energy_source))
-    evaluator.add_statistic(CostStat(cost_fn))
-    evaluator.add_statistic(ErrorStat(cost_fn))
-    evaluator.add_statistic(TopFiveErrorStat(cost_fn))
-
     quad_params = model_cfg.get("quadratic_diode_param", {})
-    v_min = quad_params.get("v_min")
-    v_max = quad_params.get("v_max")
-    for layer in energy_source.layers():
-        evaluator.add_statistic(NormStat(layer))
-        evaluator.add_statistic(
-            SaturationStat(
-                layer,
-                non_linearity=model_cfg["non_linearity"],
-                v_min=v_min,
-                v_max=v_max,
-            )
-        )
-    evaluator._reset()
+    add_standard_statistics(
+        evaluator, energy_source, cost_fn,
+        non_linearity=model_cfg["non_linearity"],
+        v_min=quad_params.get("v_min"), v_max=quad_params.get("v_max"),
+    )
     return evaluator
 
 
-class CustomTrainer(Trainer):
-    """Trainer variant that tracks residual currents for debugging."""
+class _LayerRecording:
+    """Expose lab result views backed by an optional engine observer."""
 
-    def __init__(
-        self,
-        network,
-        cost_fn,
-        params,
-        dataloader,
-        differentiator,
-        optimizer,
-        energy_minimizer,
-        record_statistics=(),
-    ):
-        super().__init__(network, cost_fn, params, dataloader, differentiator, optimizer, energy_minimizer)
-        self.record_statistics = tuple(record_statistics) if record_statistics is not None else ()
-        self.res_currents = {}
-        self.layer_states = {}
+    @property
+    def layer_states(self):
+        return self._measurements.layer_states
 
+    @property
+    def res_currents(self):
+        return self._measurements.res_currents
 
+    def _recording_handler(self, record_statistics):
+        requested = tuple(record_statistics or ())
+        self._measurements = LayerMeasurements(
+            store_states="store_states" in requested,
+            residual_currents="calc_residual_current" in requested,
+        )
+        return self._measurements
 
 
-
-    
-    def winner_hist_within_window(self, x, Kh, Kw, S, P=0, D=1):
-        # x: (N,C,H,W)
-        N, C, H, W = x.shape
-        patches = F.unfold(x.abs(), (Kh, Kw), padding=P, stride=S, dilation=D)  # (N, C*Kh*Kw, L)
-        patches = patches.view(N, C, Kh*Kw, -1)
-        rel_idx = patches.argmax(dim=2)  # (N,C,L) index within window
-        hist = torch.bincount(rel_idx.reshape(-1), minlength=Kh*Kw).float()
-        hist = hist / hist.sum().clamp(min=1)
-        return hist  # length Kh*Kw
-
-
-        
-    def absmax_margin_stats(self, x, Kh, Kw, stride, padding=0, dilation=1, tol=1e-6):
-        # x: (N,C,H,W)
-        N, C, H, W = x.shape
-        patches = F.unfold(x.abs(), (Kh, Kw), padding=padding, stride=stride, dilation=dilation)
-        # patches: (N, C*Kh*Kw, L) -> (N, C, Kh*Kw, L)
-        patches = patches.view(N, C, Kh*Kw, -1)
-        top2 = patches.topk(2, dim=2).values  # (N, C, 2, L)
-        margin = top2[:, :, 0, :] - top2[:, :, 1, :]  # (N, C, L)
-
-        frac_ties = (margin <= tol).float().mean().item()
-        mean_margin = margin.mean().item()
-        return mean_margin, frac_ties
-
-    def run(self, verbose: bool = False):
-        self._reset()
-        self.res_currents = {}
-        max_pooling_dict = {}
-        winners_dict = {}
-        debug = bool(os.environ.get("DRN_DEBUG_DIODE"))
-        store_states = "store_states" in self.record_statistics
-        if store_states:
-            self.layer_states = {layer.name: [] for layer in self._network.layers()}
-        else:
-            self.layer_states = {}
-        for x, y in self._dataloader:
-            self._network.set_input(x, reset=False)
-            self._energy_minimizer.compute_equilibrium()
-            fn = self._network._function
-            if debug:
-                for layer in fn.layers():
-                    contribs = []
-                    for j, inter in enumerate(fn._interactions):
-                        if layer not in inter.layers():
-                            continue
-                        grad = inter.grad_layer_fn(layer)()           # this interaction’s dE/dz for this layer
-                        if isinstance(inter, BasePoolResistive):
-                            analytical_grad = inter.analytical_grad_layer_fn(layer)
-                            diff = analytical_grad() - grad
-                        contribs.append((j, inter.__class__.__name__, grad))
-
-                    # Example: print norms per interaction and the total
-                    total = sum(g for *_, g in contribs)
-                    print(f"[{layer.name}] total ||grad||={torch.norm(total):.4e}")
-                    for j, name, g in contribs:
-                        print(f"  {j}:{name} ||grad||={torch.norm(g):.4e}")
-            if "calc_residual_current" in self.record_statistics:
-                fn = self._network._function
-                for layer in fn.layers():
-                    grad = fn.grad_layer_fn(layer)()
-                    # Residual current = ||dE/dz||_inf
-                    res = grad.abs().max()
-                    self.res_currents.setdefault(layer.name, []).append(float(res.item()))
-                    if layer.name == "Layer_1" or layer.name == "Layer_3":
-                        x = layer.state
-                        mean_margin, frac_ties = self.absmax_margin_stats(x, Kh =2, Kw=2, stride=2, padding=0, dilation=1, tol=1e-6)
-                        max_pooling_dict.setdefault(layer.name, []).append([float(mean_margin), float(frac_ties)])
-                        winners = self.winner_hist_within_window(x, Kh = 2, Kw = 2, S = 2, P=0, D=1)
-                        winners_dict.setdefault(layer.name, []).append(winners)
-            if "store_states" in self.record_statistics:
-                for i, layer in enumerate(self._network.layers()):
-                    name = getattr(layer, "name", f"layer_{i}")
-                    self.layer_states[name].append(layer.state.detach().cpu().clone())
-
-            self._cost_fn.set_target(y)
-            self._do_measurements(0)
-
-            grads = self._differentiator.compute_gradient()
-            for param, grad in zip(self._params, grads):
-                if not torch.isfinite(grad).all():
-                    if store_states and debug:
-                        for i, layer in enumerate(self._network.layers()):
-                            state = layer.state
-                            if torch.isfinite(state).all():
-                                continue
-                            nan_count = torch.isnan(state).sum().item()
-                            inf_count = torch.isinf(state).sum().item()
-                            name = getattr(layer, "name", f"layer_{i}")
-                            print(
-                                f"[state-check] non-finite state in {name}: nan={nan_count} inf={inf_count} "
-                                f"shape={tuple(state.shape)} dtype={state.dtype} device={state.device}"
-                            )
-                    nan_count = torch.isnan(grad).sum().item()
-                    inf_count = torch.isinf(grad).sum().item()
-                    name = getattr(param, "name", param.__class__.__name__)
-                    raise NonFiniteGradientError(
-                        f"[grad-check] non-finite gradient for {name}: nan={nan_count} inf={inf_count} "
-                        f"shape={tuple(grad.shape)} dtype={grad.dtype} device={grad.device}"
-                    )
-            for param, grad in zip(self._params, grads):
-                param.state.grad = grad
-            self._do_measurements(1)
-
-            self.track_gradient_and_update_sizes(grads, verbose=debug)
-            for param in self._params:
-                param.clamp_()
-
-            if verbose:
-                print(f"\r{self}", end="", flush=True)
-
-        if verbose:
-            print(f"\r{self}", end="", flush=True)
+def _print_interaction_gradients(event):
+    """Keep the lab's opt-in circuit diagnostics outside the numerical loop."""
+    if not isinstance(event, FreePhaseEvent):
+        return
+    function = event.components.network._function
+    for layer in function.layers():
+        contributions = [
+            (index, type(interaction).__name__, interaction.grad_layer_fn(layer)())
+            for index, interaction in enumerate(function._interactions)
+            if layer in interaction.layers()
+        ]
+        if not contributions:
+            continue
+        total = sum(gradient for _, _, gradient in contributions)
+        print(f"[{layer.name}] total ||grad||={torch.norm(total):.4e}")
+        for index, name, gradient in contributions:
+            print(f"  {index}:{name} ||grad||={torch.norm(gradient):.4e}")
 
 
-class CustomEvaluator(Evaluator):
-    """Evaluator variant that records per-layer states for each batch."""
+class CustomTrainer(_LayerRecording, Trainer):
+    """Configure lab observers while sharing the core training loop."""
 
-    def __init__(self, network, cost_fn, dataloader, energy_minimizer, record_statistics):
-        super().__init__(network, cost_fn, dataloader, energy_minimizer)
-        self.layer_states = {}
-        self.res_currents = {}
-        self.record_statistics = record_statistics
-
-    def run(self, verbose: bool = False):
-        self._reset()
-        store_states = "store_states" in self.record_statistics
-        if store_states:
-            self.layer_states = {layer.name: [] for layer in self._network.layers()}
-        else:
-            self.layer_states = {}
-
-        for x, y, idx in self._dataloader:
-            self._network.set_input(x, reset=True)
-            self._energy_minimizer.compute_equilibrium()
-
-            if store_states:
-                for i, layer in enumerate(self._network.layers()):
-                    name = getattr(layer, "name", f"layer_{i}")
-                    self.layer_states[name].append(layer.state.detach().cpu().clone())
-
-            self._idx = idx
-            self._cost_fn.set_target(y)
-            self._do_measurements()
-
-            if verbose:
-                sys.stdout.write("\r")
-                sys.stdout.write(str(self))
-                sys.stdout.flush()
-
-        if verbose:
-            sys.stdout.write("\r")
-            sys.stdout.write(str(self))
-            sys.stdout.flush()
+    def __init__(self, components, dataloader, *, reset_input, record_statistics=()):
+        handlers = [FiniteGradientGuard(), self._recording_handler(record_statistics)]
+        if os.environ.get("DRN_DEBUG_DIODE"):
+            handlers.extend((_print_interaction_gradients, GradientUpdateObserver(verbose=True)))
+        super().__init__(components, dataloader, reset_input=reset_input,
+                         event_handlers=handlers)
 
 
-def _extract_batch_input(batch):
-    """Return the input tensor from dataloader batches with flexible tuple shapes."""
-    if isinstance(batch, (list, tuple)):
-        if len(batch) >= 1:
-            return batch[0]
-        return None
-    return batch
+class CustomEvaluator(_LayerRecording, Evaluator):
+    """Configure lab observers while sharing the core evaluation loop."""
 
+    def __init__(self, components, dataloader, *, reset_input, record_statistics=()):
+        super().__init__(
+            components, dataloader, reset_input=reset_input,
+            event_handlers=(self._recording_handler(record_statistics),),
+        )
 
-class LayerStateEvaluator(Evaluator):
-    """Evaluator that records per-layer settled states for each batch."""
-
-    def __init__(self, network, cost_fn, dataloader, energy_minimizer):
-        super().__init__(network, cost_fn, dataloader, energy_minimizer)
-        self.layer_states = {}
-
-    def run(self, verbose: bool = False):
-        self._reset()
-        self.layer_states = {layer.name: [] for layer in self._network._function.layers()}
-
-        for batch in self._dataloader:
-            x = _extract_batch_input(batch)
-            if x is None:
-                continue
-
-            self._network.set_input(x, reset=True)
-            self._energy_minimizer.compute_equilibrium()
-
-            for i, layer in enumerate(self._network._function.layers()):
-                name = getattr(layer, "name", f"layer_{i}")
-                self.layer_states[name].append(layer.state.detach().cpu().clone())
-
-            if verbose:
-                print(f"\r{self}", end="", flush=True)
-
-        if verbose:
-            print(f"\r{self}", end="", flush=True)
-
-
-class ResidualCurrentEvaluator(Evaluator):
-    """Evaluator that records residual currents (||dE/dz||_inf) per layer."""
-
-    def __init__(self, network, cost_fn, dataloader, energy_minimizer):
-        super().__init__(network, cost_fn, dataloader, energy_minimizer)
-        self.res_currents = {}
-
-    def run(self, verbose: bool = False):
-        self._reset()
-        self.res_currents = {layer.name: [] for layer in self._network._function.layers()}
-
-        for batch in self._dataloader:
-            x = _extract_batch_input(batch)
-            if x is None:
-                continue
-
-            self._network.set_input(x, reset=True)
-            self._energy_minimizer.compute_equilibrium()
-
-            # Record per-layer residual current (infinity norm)
-            for layer in self._network._function.layers():
-                grad_fn = self._network._function.grad_layer_fn(layer)
-                grad = grad_fn()
-                res_current = grad.abs().max()
-                self.res_currents[layer.name].append(float(res_current.item()))
-
-            if verbose:
-                print(f"\r{self}", end="", flush=True)
-
-        if verbose:
-            print(f"\r{self}", end="", flush=True)
 
 
 def export_pt_to_npz(pt_path, npz_path: Optional[Path] = None, param_names=None):

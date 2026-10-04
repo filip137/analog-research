@@ -43,7 +43,7 @@ from model.function.cost import SquaredError, SquaredErrorPairedOutputs  # noqa:
 from model.function.network import Network  # noqa: E402
 from model.variable.parameter import ConvWeight  # noqa: E402
 from training.sgd import AugmentedFunction, EquilibriumProp  # noqa: E402
-from training.tiki_taka import build_optimizer  # noqa: E402
+from training.optimizers import build_optimizer  # noqa: E402
 
 
 def _default_quadratic_params():

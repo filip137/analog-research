@@ -80,6 +80,60 @@ The trajectory is over isotonic fits to the measured endpoint sequence; it is
 an explicit simulator rule, not independent evidence that one physical pulse
 will reproduce the fitted next state.
 
+## Core training interfaces
+
+Experiment setup constructs the model, cost, free-phase minimizer, gradient
+estimator, update backend, and parameter modifier. `ExperimentComponents`
+groups the network, cost, minimizer, parameters, estimator, and optimizer.
+The modifier is passed separately to the runner or engine.
+`EvaluationComponents` holds only the network, cost, and free-phase minimizer.
+For unlabelled diagnostics, evaluation
+accepts `cost_fn=None` with `Batch(inputs, targets=None)`.
+
+`training.engine.train_epoch` owns the minibatch order: set input, settle,
+set target, measure the free phase, compute and assign gradients, restore the
+modifier, update once, and clamp. Gradient computation and measurements stay
+inside the modifier context. `evaluate` holds its modifier context across
+the whole loader. Gradient accumulation and device writes belong to the
+update backend's `step()` implementation.
+
+`training.epoch.Trainer(components, loader, reset_input=...)` and
+`Evaluator(components, loader, reset_input=...)` bind loaders and statistics
+to these shared loops. Training requires an explicit reset policy: existing
+ordinary lab trainers reset, while custom lab trainers and `small_drn.v1`
+carry states between compatible batches. Register statistics with
+`add_statistic(statistic, phase="free")` or `phase="gradients"`; numeric
+statistic-list indices are no longer accepted.
+
+Observers consume `FreePhaseEvent`, `GradientsReadyEvent`,
+`BeforeUpdateEvent` (after modifier restoration), and `AfterUpdateEvent`
+(after clamping). `training.diagnostics.GradientUpdateObserver` snapshots
+parameters only when explicitly attached and reports the actual clamped
+update. `FiniteGradientGuard` and `LayerMeasurements` are reusable observers.
+Lab layer measurements retain raw energy-gradient infinity norms over all
+layers; the solver's projected-current residual probe is a separate metric.
+`BetaSize` is a separate diagnostic pass: it compares mean absolute
+displacements against a nonzero nudged phase and restores voltages and
+nudging, including on failure.
+
+`training.optimizers` exports `SGDOptimizer` and `build_optimizer`; these
+are no longer exported from `monitor` or `tiki_taka`. Core EP and backprop
+remain in `training.sgd`. Historical recurrent/contrastive algorithms and
+the `detailed_gradients(estimator, cumulative=True)` dispatcher live in
+`training.research_gradients`. Those research algorithms retain their
+historical solver requirements and are not part of the supported core API.
+
+Lab setup registers standard statistics once with
+`training.statistics.add_standard_statistics`. The monitor consumes those
+registrations through `Monitor(trainer=..., evaluator=..., scheduler=...,
+save_model=..., path=...)`; it does not construct statistics or optimizers.
+Existing series names and units are retained. In particular, the six weight
+distribution statistics retain their shared TensorBoard tag and historical
+order for existing plotters, and the legacy pickle entry retains the last
+(`abs_std`) series. Duplicate registrations of the same statistic are rejected.
+Use `monitor.run(num_epochs)` to open and close the TensorBoard writer for
+each run; repeated `run(1)` calls preserve epoch numbering and series history.
+
 ## Commands
 
 This document describes the numerical runtime. The plan-to-review lifecycle

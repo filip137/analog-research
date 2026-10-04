@@ -44,7 +44,8 @@ from training.measured_trace import (
 from training.modifier import ParameterModifier
 from training.program_verify import ProgramVerifyOptimizer
 from training.sgd import AugmentedFunction, Backprop, EquilibriumProp
-from training.tiki_taka import build_optimizer, parse_update_pipeline
+from training.optimizers import build_optimizer
+from training.tiki_taka import parse_update_pipeline
 
 
 _CLASS_COUNTS = {"moons": 2, "yinyang": 3, "digits": 10, "mnist": 10}

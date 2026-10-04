@@ -4,13 +4,8 @@ import pytest
 import torch
 
 from model.variable.parameter import Bias, DenseWeight, PoolWeight
-from training.monitor import Optimizer
-from training.tiki_taka import (
-    TikiTakaConfig,
-    TikiTakaOptimizer,
-    build_optimizer,
-    parse_update_pipeline,
-)
+from training.optimizers import SGDOptimizer, build_optimizer
+from training.tiki_taka import TikiTakaConfig, TikiTakaOptimizer, parse_update_pipeline
 
 
 class _ParameterFunction:
@@ -72,7 +67,7 @@ def test_build_optimizer_preserves_direct_sgd_factory_behavior(update_pipeline):
         weight_decay=0.0,
     )
 
-    assert isinstance(optimizer, Optimizer)
+    assert isinstance(optimizer, SGDOptimizer)
     assert not isinstance(optimizer, TikiTakaOptimizer)
 
     _set_gradient(parameter, [2.0, -4.0])

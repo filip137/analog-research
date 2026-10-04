@@ -5,8 +5,10 @@ from typing import Optional
 import torch
 
 from training.monitor import Monitor
+from training.engine import ExperimentComponents
+from training.statistics import add_standard_statistics
 from training.sgd import AugmentedFunction, EquilibriumProp
-from training.tiki_taka import build_optimizer
+from training.optimizers import build_optimizer
 from labs.common import MnistParts, CustomTrainer, build_evaluator
 
 
@@ -62,7 +64,7 @@ def track_training_statistics(
                 "`model_cfg['learning_rates']` (or `learning_rates_biases` + `learning_rates_weights`)."
             )
 
-    # `training.monitor.Optimizer` filters out `PoolWeight` parameters (kept frozen), but configs may still provide
+    # `training.optimizers.SGDOptimizer` filters out `PoolWeight` parameters (kept frozen), but configs may still provide
     # a learning-rate for them. If so, drop those entries to keep alignment with the optimizer's parameter list.
     from model.variable.parameter import PoolWeight
 
@@ -100,28 +102,26 @@ def track_training_statistics(
         run_dir.mkdir(parents=True, exist_ok=True)
 
     trainer = CustomTrainer(
-        network,
-        cost_fn,
-        params,
+        ExperimentComponents(
+            network=network, cost_fn=cost_fn,
+            energy_minimizer=energy_minimizer_inference,
+            parameters=tuple(params) + tuple(cost_fn.params()),
+            differentiator=estimator, optimizer=optimizer,
+        ),
         train_loader,
-        estimator,
-        optimizer,
-        energy_minimizer_inference,
+        reset_input=False,
         record_statistics=record_statistics,
     )
     evaluator = build_evaluator(network, cost_fn, test_loader, energy_minimizer_inference, model_cfg, record_statistics)
-
     quad_params = model_cfg.get("quadratic_diode_param", {})
-    monitor = Monitor(
-        energy_fn,
-        cost_fn,
-        trainer,
-        scheduler,
-        evaluator,
-        str(run_dir),
+    add_standard_statistics(
+        trainer, energy_fn, cost_fn, training=True,
         non_linearity=model_cfg.get("non_linearity"),
-        v_min=quad_params.get("v_min"),
-        v_max=quad_params.get("v_max"),
+        v_min=quad_params.get("v_min"), v_max=quad_params.get("v_max"),
+    )
+    monitor = Monitor(
+        trainer=trainer, evaluator=evaluator, scheduler=scheduler,
+        save_model=energy_fn.save, path=run_dir,
     )
     epochs = num_epochs if num_epochs is not None else training_cfg.get("num_epochs")
     if epochs is None:

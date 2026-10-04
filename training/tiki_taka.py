@@ -410,7 +410,7 @@ class TikiTakaOptimizer(torch.optim.Optimizer):
 
     Dense and convolutional weights use the auxiliary crossbar.  Biases use
     direct digital SGD unless ``accumulate_biases`` is enabled.  Pooling
-    weights remain frozen, matching :class:`training.monitor.Optimizer`.
+    weights remain frozen, matching :class:`training.optimizers.SGDOptimizer`.
 
     The auxiliary state and its per-parameter transfer counters/cursors live in
     the standard PyTorch optimizer state, so ``state_dict()`` preserves them.
@@ -1353,37 +1353,3 @@ class TikiTakaOptimizer(torch.optim.Optimizer):
             f"n_reads_per_transfer={config.n_reads_per_transfer}, "
             f"transfer_lr={config.transfer_lr}, direction={direction}"
         )
-
-
-def build_optimizer(
-    energy_fn,
-    cost_fn,
-    learning_rates,
-    *,
-    update_pipeline=None,
-    momentum: float = 0.0,
-    weight_decay: float = 0.0,
-):
-    """Build the existing SGD optimizer or the optional Tiki-Taka optimizer."""
-
-    config = parse_update_pipeline(update_pipeline)
-    if config is None:
-        # Import lazily to avoid coupling Monitor's TensorBoard setup to users
-        # that import only the Tiki-Taka configuration helpers.
-        from training.monitor import Optimizer
-
-        return Optimizer(
-            energy_fn,
-            cost_fn,
-            learning_rates,
-            momentum=momentum,
-            weight_decay=weight_decay,
-        )
-    return TikiTakaOptimizer(
-        energy_fn,
-        cost_fn,
-        learning_rates,
-        config=config,
-        momentum=momentum,
-        weight_decay=weight_decay,
-    )

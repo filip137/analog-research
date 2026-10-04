@@ -1,7 +1,7 @@
 """Protocol-driven training and evaluation loops.
 
 This module is intentionally independent of experiment configuration,
-hardware-aware policies, persistence, and legacy ``training.epoch`` classes.
+hardware-aware policies, persistence, and the ``training.epoch`` runners.
 It defines the ordering contract that those higher-level layers can reuse.
 """
 
@@ -28,7 +28,10 @@ DEFAULT_EVALUATION_RESET_INPUT = True
 
 @dataclass(frozen=True)
 class EvaluationComponents:
-    """Objects required to settle and measure a model."""
+    """Objects required to settle and measure a model.
+
+    ``cost_fn=None`` supports unlabelled state and residual diagnostics.
+    """
 
     network: Any
     cost_fn: Any
@@ -70,7 +73,31 @@ class GradientsReadyEvent:
     gradients: Tuple[Any, ...]
 
 
-TrainingEvent = Union[FreePhaseEvent, GradientsReadyEvent]
+@dataclass(frozen=True)
+class BeforeUpdateEvent:
+    """Restored parameters immediately before the update backend runs."""
+
+    epoch: int
+    batch_index: int
+    global_step: int
+    batch: Batch[Any, Any, Any]
+    components: ExperimentComponents
+
+
+@dataclass(frozen=True)
+class AfterUpdateEvent:
+    """Parameters after the backend update and model-bound clamping."""
+
+    epoch: int
+    batch_index: int
+    global_step: int
+    batch: Batch[Any, Any, Any]
+    components: ExperimentComponents
+
+
+TrainingEvent = Union[
+    FreePhaseEvent, GradientsReadyEvent, BeforeUpdateEvent, AfterUpdateEvent
+]
 TrainingEventHandler = Callable[[TrainingEvent], None]
 
 
@@ -132,7 +159,8 @@ def train_epoch(
 
     The modifier covers input assignment, the free phase, target assignment,
     gradient computation, and both metric/event points.  It exits before
-    ``optimizer.step()``, after which every parameter is clamped.  Training
+    ``optimizer.step()``, after which every parameter is clamped. Before/after
+    update events observe restored and clamped parameters respectively. Training
     deliberately defaults to ``reset_input=False`` to preserve the legacy
     small-network continuation between equal-sized minibatches.
     """
@@ -193,9 +221,15 @@ def train_epoch(
             )
             _emit(handlers, gradient_event)
 
+        _emit(handlers, BeforeUpdateEvent(
+            epoch, batch_index, global_step, batch, components
+        ))
         components.optimizer.step()
         for parameter in components.parameters:
             parameter.clamp_()
+        _emit(handlers, AfterUpdateEvent(
+            epoch, batch_index, global_step, batch, components
+        ))
 
         batch_count += 1
         example_count += batch.example_count
@@ -244,7 +278,8 @@ def evaluate(
             batch = as_batch(raw_batch)
             components.network.set_input(batch.inputs, reset=reset_input)
             components.energy_minimizer.compute_equilibrium()
-            components.cost_fn.set_target(batch.targets)
+            if components.cost_fn is not None:
+                components.cost_fn.set_target(batch.targets)
 
             event = EvaluationBatchEvent(
                 epoch=epoch,

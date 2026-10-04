@@ -9,9 +9,8 @@ import torch
 from experiments.small_network.components import build_model_stack, seed_runtime
 from experiments.small_network.config import parse_small_drn_config
 from model.resistive.minimizer import QuadraticMinimizer
-from training.monitor import Optimizer
+from training.optimizers import SGDOptimizer, build_optimizer
 from training.sgd import AugmentedFunction, EquilibriumProp
-from training.tiki_taka import build_optimizer
 
 
 _ROOT = Path(__file__).parents[1]
@@ -253,7 +252,7 @@ def test_composed_direct_update_matches_frozen_legacy_oracle() -> None:
         momentum=optimizer_settings["momentum"],
         weight_decay=optimizer_settings["weight_decay"],
     )
-    assert isinstance(optimizer, Optimizer)
+    assert isinstance(optimizer, SGDOptimizer)
     optimizer.step()
     for parameter in parameters:
         parameter.clamp_()

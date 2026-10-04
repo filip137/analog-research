@@ -21,7 +21,9 @@ DEFAULT_OUTPUT_ROOT = Path("/home/filip/server_code/simulation_results/experimen
 for path in (LABS_DIR, PROJECT_ROOT):
     if str(path) not in sys.path:
         sys.path.append(str(path))
-from training.epoch import BetaSize
+from training.diagnostics import BetaSize
+from training.batch import Batch
+from training.engine import EvaluationComponents
 from model.resistive.network import DeepResistiveEnergy  # noqa: E402
 from model.function.network import Network  # noqa: E402
 from labs.custom_minimizer import CustomQuadraticMinimizer, MinimizerSettings  # noqa: E402
@@ -32,8 +34,7 @@ from labs.common import (
     MnistParts,
     save_beta_summary,
     build_evaluator,
-    LayerStateEvaluator,
-    ResidualCurrentEvaluator,
+    CustomEvaluator,
 )
 from supporting.stats_snapshot import snapshot_stats
 from supporting.pca_utils import prepare_pca_grid
@@ -627,12 +628,9 @@ def _compute_beta_summary(
     )
 
     beta = BetaSize(
-        network=network,
-        cost_fn=cost_fn,
-        params=params,
-        dataloader=parts.test_loader,
-        differentiator=estimator,
-        energy_minimizer=energy_minimizer_inference,
+        EvaluationComponents(network, cost_fn, energy_minimizer_inference),
+        parts.test_loader,
+        estimator,
         max_batches=max_batches,
     )
     beta.run(verbose=verbose)
@@ -864,30 +862,34 @@ def sweep_pca(
             record_statistics,
         )
         evaluator.run(verbose=verbose)
-        return snapshot_stats(evaluator._stats)
+        return snapshot_stats([evaluator.statistics])
 
-    if output == "states":
-        evaluator = LayerStateEvaluator(
-            parts.network,
-            parts.cost_fn,
-            parts.test_loader,
-            energy_minimizer,
+    if output in ("states", "residuals"):
+        def input_batches():
+            # PCA loaders may yield tensors, input-only tuples, or labelled
+            # batches. State/residual diagnostics do not require targets.
+            for raw in parts.test_loader:
+                if isinstance(raw, Batch):
+                    inputs = raw.inputs
+                elif isinstance(raw, (tuple, list)):
+                    inputs = raw[0] if raw else None
+                else:
+                    inputs = raw
+                if inputs is not None:
+                    yield Batch(inputs, None)
+
+        requested = "store_states" if output == "states" else "calc_residual_current"
+        evaluator = CustomEvaluator(
+            EvaluationComponents(parts.network, None, energy_minimizer),
+            input_batches(), reset_input=True, record_statistics=(requested,),
         )
         evaluator.run(verbose=verbose)
-        return {
-            name: torch.cat(values, dim=0)
-            for name, values in evaluator.layer_states.items()
-            if values
-        }
-
-    if output == "residuals":
-        evaluator = ResidualCurrentEvaluator(
-            parts.network,
-            parts.cost_fn,
-            parts.test_loader,
-            energy_minimizer,
-        )
-        evaluator.run(verbose=verbose)
+        if output == "states":
+            return {
+                name: torch.cat(values, dim=0)
+                for name, values in evaluator.layer_states.items()
+                if values
+            }
         return evaluator.res_currents
 
     raise ValueError("output must be 'stats', 'states' or 'residuals'.")

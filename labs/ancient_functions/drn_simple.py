@@ -8,21 +8,23 @@ from pathlib import Path
 from datetime import datetime
 import socket
 
-LABS_DIR = Path(__file__).resolve().parent
+LABS_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = LABS_DIR.parent
 DATASETS_MODULE_PATH = PROJECT_ROOT / "datasets.py"
-for path in (LABS_DIR, PROJECT_ROOT):
-    if str(path) not in sys.path:
-        sys.path.append(str(path))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-from tests.network import DeepResistiveEnergy
+from labs.tests.network import DeepResistiveEnergy
 from model.function.network import Network
 from model.function.cost import SquaredError, SquaredErrorPairedOutputs
 from model.variable.parameter import DenseWeight
-from custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer
+from labs.custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer
 from training.sgd import EquilibriumProp, Backprop, AugmentedFunction
 from training.epoch import Trainer, Evaluator
-from training.monitor import Monitor, Optimizer
+from training.engine import ExperimentComponents, EvaluationComponents
+from training.statistics import add_standard_statistics
+from training.optimizers import SGDOptimizer
+from training.monitor import Monitor
 
 
 def _load_project_datasets_module():
@@ -294,7 +296,7 @@ def main(argv=None):
     if args.weights:
         gamma = 1
         learning_rates = [lr*gamma for lr in learning_rates]
-    optimizer = Optimizer(
+    optimizer = SGDOptimizer(
         energy_fn, cost_fn, learning_rates,
         training_cfg.get("momentum", 0.0),
         training_cfg.get("weight_decay", 0.0)
@@ -316,9 +318,19 @@ def main(argv=None):
     energy_minimizer_inference.num_iterations = num_iterations_inference
     energy_minimizer_inference.mode = minimizer_mode
 
-    trainer = Trainer(network, cost_fn, params, training_loader,
-                      estimator, optimizer, energy_minimizer_inference)
-    evaluator = Evaluator(network, cost_fn, test_loader, energy_minimizer_inference)
+    trainer = Trainer(
+        ExperimentComponents(
+            network, cost_fn, energy_minimizer_inference,
+            tuple(params) + tuple(cost_fn.params()), estimator, optimizer,
+        ),
+        training_loader, reset_input=True,
+    )
+    evaluator = Evaluator(
+        EvaluationComponents(network, cost_fn, energy_minimizer_inference),
+        test_loader, reset_input=True,
+    )
+    for runner, training in ((trainer, True), (evaluator, False)):
+        add_standard_statistics(runner, energy_fn, cost_fn, training=training)
 
     # Scheduler
     scheduler = torch.optim.lr_scheduler.ExponentialLR(
@@ -354,7 +366,10 @@ def main(argv=None):
 
     path = str(run_dir)
 
-    monitor = Monitor(energy_fn, cost_fn, trainer, scheduler, evaluator, path)
+    monitor = Monitor(
+        trainer=trainer, evaluator=evaluator, scheduler=scheduler,
+        save_model=energy_fn.save, path=path,
+    )
 
     # Print info
     print(f"Dataset: {dataset} -- batch_size={batch_size}")
@@ -371,7 +386,7 @@ def main(argv=None):
 
     # Run training and stream test error every epoch
     for epoch_idx in range(num_epochs):
-        monitor.one_epoch(verbose=config["debug"].get("verbose"))
+        monitor.run(1, verbose=config["debug"].get("verbose"))
         test_error = float(monitor.test_error())
         print(f"[epoch {epoch_idx + 1}/{num_epochs}] test error: {test_error:.4f}", flush=True)
         if early_stop_error is not None and (epoch_idx + 1) >= early_stop_after:

@@ -15,15 +15,5 @@ class DirectReadoutGradient:
             for parameter in self._cost_fn.params()
         ]
 
-    def detailed_gradients(self, cumulative=True):
-        del cumulative
-        return {
-            parameter.name: [gradient]
-            for parameter, gradient in zip(
-                self._cost_fn.params(),
-                self.compute_gradient(),
-            )
-        }
-
     def __str__(self) -> str:
         return "Direct digital-readout gradient"

@@ -9,18 +9,17 @@ from pathlib import Path
 import numpy as np
 import torch
 
-PROJECT_ROOT = Path("/home/filip/server_code")
-LABS_DIR = PROJECT_ROOT / "labs"
-for path in (PROJECT_ROOT, LABS_DIR):
-    if str(path) not in sys.path:
-        sys.path.append(str(path))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from labs.datasets import MoonsDataset  # noqa: E402
 from model.resistive.network import DeepResistiveEnergy  # noqa: E402
 from model.function.network import Network  # noqa: E402
-from custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer  # noqa: E402
+from labs.custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer  # noqa: E402
+from training.engine import ExperimentComponents  # noqa: E402
 from training.epoch import Trainer  # noqa: E402
-from training.monitor import Optimizer  # noqa: E402
+from training.optimizers import SGDOptimizer  # noqa: E402
 from training.sgd import AugmentedFunction, EquilibriumProp  # noqa: E402
 from model.function.cost import SquaredError, SquaredErrorPairedOutputs  # noqa: E402
 from model.variable.parameter import Bias  # noqa: E402
@@ -123,7 +122,7 @@ def _train_one(
             learning_rates.append(0.0)
         else:
             learning_rates.append(lr)
-    optimizer = Optimizer(
+    optimizer = SGDOptimizer(
         energy_fn,
         cost_fn,
         learning_rates,
@@ -132,26 +131,26 @@ def _train_one(
     )
 
     trainer = Trainer(
-        network,
-        cost_fn,
-        params,
+        ExperimentComponents(
+            network=network, cost_fn=cost_fn, energy_minimizer=energy_minimizer,
+            parameters=tuple(params) + tuple(cost_fn.params()),
+            differentiator=estimator, optimizer=optimizer,
+        ),
         train_loader,
-        estimator,
-        optimizer,
-        energy_minimizer,
+        reset_input=True,
     )
     train_counter = Counter(energy_fn, len(train_loader.dataset))
     train_counter_post = Counter(energy_fn, len(train_loader.dataset))
     train_counter_post.display = False
 
-    trainer.add_statistic(train_counter, list_idx=0)
-    trainer.add_statistic(train_counter_post, list_idx=1)
-    trainer.add_statistic(EnergyStat(energy_fn), list_idx=0)
-    trainer.add_statistic(CostStat(cost_fn), list_idx=0)
+    trainer.add_statistic(train_counter, phase="free")
+    trainer.add_statistic(train_counter_post, phase="gradients")
+    trainer.add_statistic(EnergyStat(energy_fn), phase="free")
+    trainer.add_statistic(CostStat(cost_fn), phase="free")
     error_stat = ErrorStat(cost_fn)
-    trainer.add_statistic(error_stat, list_idx=0)
+    trainer.add_statistic(error_stat, phase="free")
     if output_layer.shape[0] >= 5:
-        trainer.add_statistic(TopFiveErrorStat(cost_fn), list_idx=0)
+        trainer.add_statistic(TopFiveErrorStat(cost_fn), phase="free")
 
     run_dir = output_root / f"h{hidden_layers}_d{hidden_dim}" / datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)

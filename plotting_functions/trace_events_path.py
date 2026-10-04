@@ -30,7 +30,7 @@ def trace_events_path():
     
     # 3. Monitor initialization
     print(f"\n3. Monitor initialization in drn_config.py:")
-    print(f"   monitor = Monitor(energy_fn, cost_fn, trainer, scheduler, evaluator, path)")
+    print(f"   monitor = Monitor(trainer=trainer, evaluator=evaluator, scheduler=scheduler, save_model=energy_fn.save, path=path)")
     print(f"   # path = '{path}'")
     
     # 4. SummaryWriter creation in Monitor.__init__

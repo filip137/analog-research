@@ -6,7 +6,8 @@ from model.resistive.minimizer import QuadraticMinimizer
 from model.resistive.network import DeepResistiveEnergy
 from model.variable.parameter import Bias, DenseWeight
 from training.sgd import AugmentedFunction, EquilibriumProp
-from training.tiki_taka import TikiTakaOptimizer, build_optimizer
+from training.optimizers import build_optimizer
+from training.tiki_taka import TikiTakaOptimizer
 
 
 def _build_minimizer(fn, free_layers, diode_params):

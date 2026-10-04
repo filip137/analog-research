@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 import sys
-import os
 import json
+from pathlib import Path
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Add project root to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'labs'))
+# Add this checkout's project root to the path.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from model.resistive.network import DeepResistiveEnergy
-from custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer
+from labs.custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer
 from training.sgd import EquilibriumProp, AugmentedFunction
 from model.function.cost import SquaredError, SquaredErrorPairedOutputs
-from training.tiki_taka import build_optimizer
-from training.epoch import Trainer
+from training.optimizers import build_optimizer
 from datasets import load_dataloaders
 
 def load_config(config_path="config.json"):

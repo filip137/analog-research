@@ -1,361 +1,120 @@
+"""Epoch orchestration and recording of statistics registered by experiment setup."""
+
 from datetime import datetime
+from pathlib import Path
 import pickle
 import time
-import torch
 
-try:
-    from torch.utils.tensorboard import SummaryWriter
-except Exception as exc:
-    SummaryWriter = None
-    _SUMMARYWRITER_IMPORT_ERROR = exc
 
-from training.statistics import Counter, ErrorFinder, EnergyStat, CostStat, ErrorStat, TopFiveErrorStat, ViolationStat, NormStat, SaturationStat, GradientStat, WeightRowSumStat, WeightColumnSumStat, WeightDistributionStat
-from model.variable.parameter import PoolWeight
+def _create_summary_writer(path):
+    try:
+        from torch.utils.tensorboard import SummaryWriter
+    except Exception as error:
+        print(f"[monitor] Tensorboard disabled: {error}")
+        return None
+    return SummaryWriter(str(path))
 
 
 class Monitor:
-    """
-    Class used to monitor the training process.
+    """Coordinate runners and record results without constructing numerical objects."""
 
-    Attributes
-    ----------
-    _network (SumSeparableFunction): the network to train
-    _trainer (Trainer): used to train the network on the training set
-    _scheduler (lr_scheduler): used to adjust the learning rates after every training epoch
-    _evaluator (Evaluator): used to evaluate the network on the test set
-    _path (str): the directory where to save the model and the characteristics of the training process
-    _series (list of TimeSeries): the time series of statistics that are monitored during training
-    _test_error_curve (TimeSeries): the test error curve
-    _epoch (int): epoch of training (where the statistics have been recorded)
-    _writer (SummaryWriter): tensorboard summary writer to update
-
-    Methods
-    -------
-    run(num_epochs, verbose=False, use_tensorboard=True)
-        Trains the network for num_epochs epochs
-    save_network()
-        Saves the model in the path
-    save_series()
-        Saves the state of the training process in the path
-    """
-
-    def __init__(self, network, cost_fn, trainer, scheduler, evaluator, path=None, use_tensorboard=True, non_linearity=None, v_min=None, v_max=None):
-        """Creates an instance of Monitor
-
-        Args:
-            network (SumSeparableFunction): the network to train
-            cost_fn (CostFunction): the cost function to optimize
-            trainer (Trainer): used to train the network on the training set
-            evaluator (Evaluator): used to evaluate the network on the test set
-            scheduler (lr_scheduler): used to adjust the learning rates after every training epoch
-            path (str, optional): the directory where to save the model and the characteristics of the training process. Default: None
-            use_tensorboard (bool, optional): if True, uses a summary writer to monitor with tensorboard. Default: True
-            non_linearity (str, optional): the type of non-linearity for saturation calculation. Defaults to the
-                network's non-linearity if omitted.
-            v_min (float, optional): minimum voltage for diode-like nonlinearities. Default: None
-            v_max (float, optional): maximum voltage for diode-like nonlinearities. Default: None
-        """
-
-        self._network = network
-        self._cost_fn = cost_fn
+    def __init__(self, *, trainer, evaluator, scheduler, save_model, path=None,
+                 use_tensorboard=True):
+        if not callable(save_model):
+            raise TypeError("Expected save_model to be a callable accepting a path.")
         self._trainer = trainer
-        self._scheduler = scheduler
         self._evaluator = evaluator
-        # self._gdd = gdd  # FIXME
-
-        self._path = datetime.now().strftime("%Y%m%d-%H%M%S") if path is None else path  # If no path is given, uses the date of creation of the monitor
-
-        # Store non-linearity parameters for saturation calculation
-        inferred_non_linearity = non_linearity or getattr(network, "_non_linearity", 'perfect_diode')
-        self._non_linearity = inferred_non_linearity
-
-        inferred_v_min = v_min
-        inferred_v_max = v_max
-        diode_like = {'hard_sigmoid', 'double_diode_quadratic', 'double_diode_exponential'}
-        if inferred_non_linearity in diode_like:
-            # Allow monitor to auto-fill clamp bounds from the energy function if available.
-            diode_params = getattr(network, "_quadratic_diode_param", {}) or {}
-            if inferred_v_min is None:
-                inferred_v_min = diode_params.get("v_min")
-            if inferred_v_max is None:
-                inferred_v_max = diode_params.get("v_max")
-            if inferred_v_min is None or inferred_v_max is None:
-                raise ValueError(
-                    f"v_min and v_max must be provided for {inferred_non_linearity} saturation monitoring"
-                )
-
-        self._v_min = inferred_v_min
-        self._v_max = inferred_v_max
-
-        self._series = []
-        self._test_error_curve = None  # initialized in _build_series()
-
-        self._build_series()
-
+        self._scheduler = scheduler
+        self._save_model = save_model
+        self._path = Path(path) if path is not None else Path(datetime.now().strftime("%Y%m%d-%H%M%S"))
+        self._series = [
+            TimeSeries(statistic, train=train)
+            for runner, train in ((trainer, True), (evaluator, False))
+            for statistic in runner.statistics
+            if statistic.name
+        ]
+        # Weight-distribution variants intentionally retain their historical
+        # shared tag and registration order: existing plotters deinterleave
+        # the six values. Epoch rejects duplicate *statistics*, not those tags.
+        error_series = [series for series in self._series if series.name == "Error/test"]
+        if len(error_series) != 1:
+            raise ValueError("Register exactly one evaluation Error statistic before constructing Monitor.")
+        self._test_error_curve = error_series[0]
         self._epoch = 0
-
-        self._use_tensorboard = bool(use_tensorboard and SummaryWriter is not None)
-        if use_tensorboard and SummaryWriter is None:
-            print(f"[monitor] Tensorboard disabled: {_SUMMARYWRITER_IMPORT_ERROR}")
-        if self._use_tensorboard:
-            self._writer = SummaryWriter(self._path)
-
+        self._use_tensorboard = bool(use_tensorboard)
+        self._writer = None
         self._start_time = time.time()
 
-
     def run(self, num_epochs, verbose=True):
-        """Launch a run for num_epochs epochs
+        self._path.mkdir(parents=True, exist_ok=True)
+        try:
+            if self._use_tensorboard:
+                self._writer = _create_summary_writer(self._path)
+            for _ in range(num_epochs):
+                self.one_epoch(verbose=verbose)
+        finally:
+            writer, self._writer = self._writer, None
+            if writer is not None:
+                writer.close()
 
-        Logs statistics about the run either after every batch or after every epoch.
-
-        Args:
-            num_epochs (int): number of epochs of training
-            verbose (bool, optional): if True, prints logs after every batch processed ; if False: prints logs after every epoch. Default: True
-        """
-
-        for _ in range(num_epochs): self.one_epoch(verbose=verbose)
-    
     def one_epoch(self, verbose=True):
-        """Performs one epoch of training
-
-        Logs statistics about the run either after every batch or at the end of the epoch.
-
-        Args:
-            verbose (bool, optional): if True, prints logs after every batch processed ; if False: prints logs at the end of the epoch. Default: True
-        """
-
+        self._path.mkdir(parents=True, exist_ok=True)
         self._epoch += 1
-
-        print('Epoch {}'.format(self._epoch))
-
-        # Training
-        self._trainer.run(verbose)
+        print(f"Epoch {self._epoch}")
+        self._trainer.run(verbose=verbose)
         self._scheduler.step()
-
-        # Evaluation
-        self._evaluator.run(verbose)
-
-        # Update the statistics of training and evaluation
-        for series in self._series: series.update()
-        if self._use_tensorboard: self._update_summary_writer()
-
-        if not verbose:  # Print the statistics of training and evaluation at every epoch
+        self._evaluator.run(verbose=verbose)
+        for series in self._series:
+            series.update()
+        if self._writer is not None:
+            for series in self._series:
+                self._writer.add_scalar(series.name, series.last_value(), self._epoch)
+        if not verbose:
             print(str(self._trainer))
             print(str(self._evaluator))
-        
-        self.save_series()  # saves the training curves
-        if self._test_error_curve.is_minimum(): self.save_network()  # saves the network's parameters
-
-        # Print the total duration
+        self.save_series()
+        if self._test_error_curve.is_minimum():
+            self.save_network()
         seconds = time.time() - self._start_time
-        minutes, seconds = seconds // 60, seconds % 60
-        hours, minutes = minutes // 60, minutes % 60
-        print('Duration = {:.0f} hours {:.0f} min {:.0f} sec \n'.format(hours, minutes, seconds))
-    
+        minutes, seconds = divmod(seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        print(f"Duration = {hours:.0f} hours {minutes:.0f} min {seconds:.0f} sec\n")
+
     def test_error(self):
-        """Returns the last value of the test error rate"""
         return self._test_error_curve.last_value()
 
     def save_network(self):
-        """Saves the network's parameters"""
-
-        model_path = self._path + '/model.pt'
-        self._network.save(model_path)
+        self._save_model(str(self._path / "model.pt"))
 
     def save_series(self):
-        """Saves the time series (`training curves')"""
-
-        time_series_path = self._path + '/time_series.pkl'
-        with open(time_series_path, 'wb') as handle:
-            dictionary = {series.name: series.get() for series in self._series if series.name}
-            pickle.dump(dictionary, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-    def _add_statistic(self, statistic, train, list_idx=0):
-        """Adds a statistic to either the trainer or the evaluator, and adds the corresponding time series to the monitor
-
-        Special cases:
-        * if the statistic is a ChangeStat of a Layer, also adds the corresponding series to _series_layer_changes
-        * if the statistic is a test ErrorStat, also sets the corresponding series as _test_error_curve
-
-        Args:
-            statistic (Statistic): the statistic to add
-            train (bool): whether we add the statistic to the trainer (True) or the evaluator (False)
-            list_idx (int, optional): the index of the list that we add the statistic to. Default: 0
-        """
-
-        if train: self._trainer.add_statistic(statistic, list_idx)
-        else: self._evaluator.add_statistic(statistic)
-
-        series = TimeSeries(statistic, train)
-        self._series.append(series)
-
-        if not train and isinstance(statistic, ErrorStat): self._test_error_curve = series
-
-    def _build_series(self):
-        """Prepares the statistics and the corresponding time series to monitor"""
-
-        network = self._network
-        cost_fn = self._cost_fn
-        train_set_size = self._trainer.dataset_size()
-        test_set_size = self._evaluator.dataset_size()
-
-        # the statistics to add to the trainer
-        stats_train_0 = [
-        Counter(network, train_set_size),
-        EnergyStat(network),
-        CostStat(cost_fn),
-        ErrorStat(cost_fn),
-        TopFiveErrorStat(cost_fn),
-        ]
-        stats_train_0 += [NormStat(layer) for layer in network.layers()]
-        stats_train_0 += [SaturationStat(layer, self._non_linearity, self._v_min, self._v_max) for layer in network.layers()]
-        # stats_train_1 = [GradientStat(layer) for layer in network.layers()]  # FIXME
-        stats_train_1 = [GradientStat(param) for param in network.params()]
-
-        # Add weight row and column sum statistics
-        weight_params = [param for param in network.params() if "Weight" in param.name]
-        stats_train_1 += [WeightRowSumStat(param) for param in weight_params]
-        stats_train_1 += [WeightColumnSumStat(param) for param in weight_params]
-        
-        # Add weight distribution statistics
-        weight_dist_stats = ['mean', 'std', 'min', 'max', 'abs_mean', 'abs_std']
-        for stat_type in weight_dist_stats:
-            stats_train_1 += [WeightDistributionStat(param, stat_type) for param in weight_params]
-
-        for stat in stats_train_0: self._add_statistic(stat, train=True)
-        for stat in stats_train_1: self._add_statistic(stat, train=True, list_idx=1)
-
-        # the statistics to add to the evaluator
-        stats_test = [
-        Counter(network, test_set_size),
-        EnergyStat(network),
-        CostStat(cost_fn),
-        ErrorStat(cost_fn),
-        TopFiveErrorStat(cost_fn),
-        # ErrorFinder(network, evaluator),
-        ]
-        stats_test += [NormStat(layer) for layer in network.layers()]
-        stats_test += [SaturationStat(layer, self._non_linearity, self._v_min, self._v_max) for layer in network.layers()]
-
-        for stat in stats_test: self._add_statistic(stat, train=False)
-
-    def _update_summary_writer(self):
-        """Add the statistics to the summary writer to monitor with tensorboard"""
-
-        # for param in self._network.params(): self._writer.add_histogram(param.name, param.state, self._epoch)
-
-        for series in self._series:
-            if series.name: self._writer.add_scalar(series.name, series.last_value(), self._epoch)
-
-        # FIXME
-        # figs = self._gdd.produce_curves()
-        # for name, fig in figs.items(): self._writer.add_image('GDD {}'.format(name), fig, self._epoch)
-
+        with (self._path / "time_series.pkl").open("wb") as handle:
+            pickle.dump(
+                {series.name: series.get() for series in self._series},
+                handle, protocol=pickle.HIGHEST_PROTOCOL,
+            )
 
 
 class TimeSeries:
-    """Class for time series of statistics during training
-
-    Attributes
-    ----------
-    name (str): the name of the time series
-    _statistic (Statistic): the underlying statistic whose value is measured regularly to define the time series
-    _time_series (list): the time series. Each entry corresponds to the value of the statistic at a given epoch
-
-    Methods
-    -------
-    update()
-        Appends the current value of the statistic to the time series
-    get()
-        Returns the time series of statistics
-    last_value()
-        Returns the last value of the time series of statistics
-    minimum()
-        Returns the minimum of the time series
-    is_minimum()
-        Checks if the last value of the time series is strictly less than all the previous values
-    """
+    """One registered statistic sampled at each epoch boundary."""
 
     def __init__(self, statistic, train=True):
-        """Creates an instance of Series
-
-        Args:
-            statistic (Statistic): the underlying statistic whose time series we compute during training
-            train (bool, optional): whether this is a time series during training (training time) or evaluation (test time). Default: True
-        """
-
         self._statistic = statistic
         self._time_series = []
-
-        self._name = None
-        if self._statistic.display_name:
-            name = self._statistic.name
-            if train: name += '/train'
-            else: name += '/test'
-            if self._statistic.option: name += '_'+self._statistic.option
-            self._name = name
-
-    @property
-    def name(self):
-        """Gets the name of the time series"""
-        return self._name
+        self.name = statistic.name + ("/train" if train else "/test")
+        if statistic.option:
+            self.name += "_" + statistic.option
 
     def update(self):
-        """Appends the current value of the statistic to the time series"""
         self._time_series.append(self._statistic.get())
 
     def get(self):
-        """Returns the time series"""
         return self._time_series
 
     def last_value(self):
-        """Returns the last value of the time series"""
         return self._time_series[-1]
 
     def minimum(self):
-        """Returns the minimum of the time series"""
         return min(self._time_series)
 
     def is_minimum(self):
-        """Checks if the last value of the time series is strictly less than all the previous values
-
-        Returns:
-            bool: whether or not the last value of the time series is the strict minimum of the series
-        """
-
-        epoch = len(self._time_series)
-        if epoch <= 1: return True
-
-        last_value = self._time_series[-1]
-        min_value = min(self._time_series[:-1])
-        return last_value < min_value
-
-
-class Optimizer(torch.optim.SGD):
-
-    def __init__(self, energy_fn, cost_fn, learning_rates, momentum=0, weight_decay=0):
-        """Creates an instance of the SGD Optimizer.
-
-        Args:
-            energy_fn (SumSeparableFunction): the energy function whose parameters we optimize
-            cost_fn (CostFunction): the cost function whose parameters we optimize
-            learning_rates (list of float): the list of learning rates for the energy parameters and cost parameters
-            momentum (float, optional): the momentum. Default: 0.0
-            weight_decay (float, optional): the weight decay. Default: 0.0
-        """
-
-        self._learning_rates = learning_rates
-        self._momentum = momentum
-        self._weight_decay = weight_decay
-
-        # Filter out PoolWeight params (kept frozen)
-        params = [p for p in (energy_fn.params() + cost_fn.params()) if not isinstance(p, PoolWeight)]
-        if len(learning_rates) != len(params):
-            raise ValueError(
-                f"learning_rates length ({len(learning_rates)}) does not match parameter count ({len(params)} after filtering PoolWeight)"
-            )
-        params = [{"params": param.state, "lr": lr} for param, lr in zip(params, learning_rates)]
-        torch.optim.SGD.__init__(self, params, lr=0.1, momentum=momentum, weight_decay=weight_decay)
-
-    def __str__(self):
-        return 'SGD -- initial learning rates = {}, momentum={}, weight_decay={}'.format(self._learning_rates, self._momentum, self._weight_decay)
+        return len(self._time_series) == 1 or self.last_value() < min(self._time_series[:-1])

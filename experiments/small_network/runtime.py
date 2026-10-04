@@ -67,9 +67,9 @@ from training.checkpoint import (
     save_epoch_boundary_checkpoint,
     save_named_weights,
 )
+from training.diagnostics import FiniteGradientGuard
 from training.engine import (
     FreePhaseEvent,
-    GradientsReadyEvent,
     evaluate,
     train_epoch,
 )
@@ -748,7 +748,7 @@ def _execute_training(
             runtime.training_components,
             training_loader,
             modifier=runtime.modifier,
-            event_handlers=(train_metrics, _FiniteGradientGuard()),
+            event_handlers=(train_metrics, FiniteGradientGuard()),
             epoch=epoch,
             start_global_step=global_step,
             reset_input=False,
@@ -1226,21 +1226,6 @@ class _TrainingMetrics:
                 1.0 - self.error_sum / self.count if self.count else None
             ),
         }
-
-
-class _FiniteGradientGuard:
-    def __call__(self, event: Any) -> None:
-        if not isinstance(event, GradientsReadyEvent):
-            return
-        for index, gradient in enumerate(event.gradients):
-            if not isinstance(gradient, torch.Tensor) or not torch.isfinite(
-                gradient
-            ).all():
-                raise FloatingPointError(
-                    "Expected every computed gradient to be a finite tensor. "
-                    f"Provided value: gradient index {index}, "
-                    f"type={type(gradient).__name__}."
-                )
 
 
 class _BatchCapture:
