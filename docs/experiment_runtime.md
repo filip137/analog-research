@@ -103,6 +103,36 @@ inside the modifier context. `evaluate` holds its modifier context across
 the whole loader. Gradient accumulation and device writes belong to the
 update backend's `step()` implementation.
 
+### One loop path
+
+Every per-batch loop of `small_drn.v1`, `mnist_relu_drn_kd.v1` and
+`mnist_relu_drn_reset*.v1` is a call to `train_epoch` or `evaluate`. The
+experiment's composition decides which stages run:
+
+| Pass | `differentiator` | `optimizer` | Used by |
+|---|---|---|---|
+| training step | set | set | `small_drn.v1`; KD `_train_epoch` (also gradient-based deployed recovery); RESET `train_epoch` |
+| gradient pass, no update | set | `None` | RESET LR probe; direct-pulse recovery calibration |
+| update without gradient | `None` | recovery, `clamp_after_update=False` | rail-refresh recovery |
+| evaluation | — | — | KD `_evaluate`; RESET `evaluate`; calibration and post-hoc logit collection; decomposition replay |
+
+Experiment-specific behaviour is plugged in, not written as a loop:
+
+- `training.core.batch.prepared_batches` (and its MNIST wrapper
+  `experiments.mnist_shared.teacher_batches`, which builds
+  `TeacherTargets(logits, labels)`) applies batch and sample limits, an
+  early `stop()` and device transfer without pulling extra loader items;
+- the costs' `set_target` hook applies those targets;
+- `ComposedModifier` joins the HWA modifier with the KD forward-logit gain
+  (`ForwardGainModifier`);
+- probes measure each free phase in training and each batch in evaluation;
+  `PerBatchProbe` collects values whose reduction stays with the caller;
+- `FiniteGradientGuard(names, label=...)` runs before any observer that reacts
+  to gradient values, such as the RESET LR-safety monitor.
+
+`tests/test_training_loop_golden.py` replays these loops bit-exactly against
+goldens captured before the migration.
+
 `training.lab.epoch.Trainer(components, loader, reset_input=...)` and
 `Evaluator(components, loader, reset_input=...)` bind loaders and statistics
 to these shared loops. Training requires an explicit reset policy: existing
