@@ -1,4 +1,4 @@
-"""Evaluation probes consumed by the shared single-pass evaluator.
+"""Probes consumed by the shared training and evaluation loops.
 
 The concrete probes use only the public or long-established duck-typed
 interfaces of the current network, cost, and minimizer objects.  They retain
@@ -33,7 +33,11 @@ ResultT = TypeVar("ResultT")
 
 
 class EvaluationProbe(Protocol[ResultT]):
-    """Accumulate one named result while an evaluator traverses its loader."""
+    """Accumulate one named result while a loop traverses its loader.
+
+    ``evaluate`` passes each settled ``EvaluationBatchEvent``; ``train_epoch``
+    passes each ``FreePhaseEvent``. Both carry ``batch`` and ``components``.
+    """
 
     @property
     def name(self) -> str:
@@ -43,10 +47,10 @@ class EvaluationProbe(Protocol[ResultT]):
         """Clear state before an evaluation pass."""
 
     def observe(self, event: "EvaluationBatchEvent") -> None:
-        """Observe one already-settled evaluation minibatch."""
+        """Observe one already-settled minibatch."""
 
     def result(self) -> ResultT:
-        """Return the accumulated result after the evaluation context exits."""
+        """Return the accumulated result after the loop's contexts exit."""
 
 
 @dataclass(frozen=True)
@@ -55,6 +59,32 @@ class ProbeResult(Generic[ResultT]):
 
     name: str
     value: ResultT
+
+
+class PerBatchProbe:
+    """Collect ``measure(event)`` once per minibatch, in loader order.
+
+    Reductions stay with the caller, so concatenation and summation order
+    are exactly the caller's.
+    """
+
+    def __init__(self, name: str, measure: Callable[[Any], Any]) -> None:
+        self._name = name
+        self._measure = measure
+        self._values: List[Any] = []
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def reset(self) -> None:
+        self._values = []
+
+    def observe(self, event: Any) -> None:
+        self._values.append(self._measure(event))
+
+    def result(self) -> List[Any]:
+        return list(self._values)
 
 
 class MeanValueProbe:

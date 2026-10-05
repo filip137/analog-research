@@ -40,11 +40,18 @@ class EvaluationComponents:
 
 @dataclass(frozen=True)
 class ExperimentComponents(EvaluationComponents):
-    """Objects required for one complete parameter-update step."""
+    """Objects required for one training step; the components select its stages.
+
+    ``differentiator=None`` skips gradient computation and assignment, as in
+    a gradient-free device refresh. ``optimizer=None`` skips the update, as
+    in a gradient probe or calibration pass. ``clamp_after_update=False``
+    leaves parameters exactly as the update backend wrote them.
+    """
 
     parameters: Tuple[Any, ...]
-    differentiator: Any
-    optimizer: Any
+    differentiator: Optional[Any]
+    optimizer: Optional[Any]
+    clamp_after_update: bool = True
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "parameters", tuple(self.parameters))
@@ -117,13 +124,19 @@ EvaluationEventHandler = Callable[[EvaluationBatchEvent], None]
 
 @dataclass(frozen=True)
 class TrainingEpochResult:
-    """Progress produced by one call to :func:`train_epoch`."""
+    """Progress and named probe values from one call to :func:`train_epoch`."""
 
     epoch: int
     batch_count: int
     example_count: int
     start_global_step: int
     next_global_step: int
+    probe_results: Tuple[ProbeResult[Any], ...] = ()
+
+    def probe_value(self, name: str) -> Any:
+        """Return one probe value by name."""
+
+        return _probe_value(self.probe_results, name)
 
 
 @dataclass(frozen=True)
@@ -139,10 +152,7 @@ class EvaluationResult:
     def probe_value(self, name: str) -> Any:
         """Return one probe value by name."""
 
-        for probe_result in self.probe_results:
-            if probe_result.name == name:
-                return probe_result.value
-        raise KeyError(name)
+        return _probe_value(self.probe_results, name)
 
 
 def train_epoch(
@@ -150,6 +160,7 @@ def train_epoch(
     dataloader: Iterable[RawBatch],
     *,
     modifier: Optional[ParameterModifier] = None,
+    probes: Iterable[EvaluationProbe[Any]] = (),
     event_handlers: Iterable[TrainingEventHandler] = (),
     epoch: int = 0,
     start_global_step: int = 0,
@@ -160,14 +171,19 @@ def train_epoch(
     The modifier covers input assignment, the free phase, target assignment,
     gradient computation, and both metric/event points.  It exits before
     ``optimizer.step()``, after which every parameter is clamped. Before/after
-    update events observe restored and clamped parameters respectively. Training
-    deliberately defaults to ``reset_input=False`` to preserve the legacy
-    small-network continuation between equal-sized minibatches.
+    update events observe restored and clamped parameters respectively. Probes
+    observe every free phase after the handlers. Training deliberately
+    defaults to ``reset_input=False`` to preserve the legacy small-network
+    continuation between equal-sized minibatches.
     """
 
     _validate_reset_input(reset_input)
     active_modifier = modifier_or_default(modifier)
+    active_probes = tuple(probes)
     handlers = tuple(event_handlers)
+    _validate_probes(active_probes)
+    for probe in active_probes:
+        probe.reset()
     batch_count = 0
     example_count = 0
 
@@ -188,48 +204,32 @@ def train_epoch(
                 components=components,
             )
             _emit(handlers, free_event)
+            for probe in active_probes:
+                probe.observe(free_event)
 
-            raw_gradients = components.differentiator.compute_gradient()
-            try:
-                gradients = tuple(raw_gradients)
-            except TypeError as error:
-                raise ValueError(
-                    "Expected differentiator.compute_gradient() to return "
-                    "one gradient per experiment parameter. "
-                    f"Provided value: {raw_gradients!r}."
-                ) from error
-
-            if len(gradients) != len(components.parameters):
-                raise ValueError(
-                    "Expected differentiator.compute_gradient() to return "
-                    f"{len(components.parameters)} gradients. "
-                    f"Provided value: {len(gradients)} gradients."
+            if components.differentiator is not None:
+                gradients = _assigned_gradients(components)
+                gradient_event = GradientsReadyEvent(
+                    epoch=epoch,
+                    batch_index=batch_index,
+                    global_step=global_step,
+                    batch=batch,
+                    components=components,
+                    gradients=gradients,
                 )
+                _emit(handlers, gradient_event)
 
-            for parameter, gradient in zip(
-                components.parameters, gradients
-            ):
-                parameter.state.grad = gradient
-
-            gradient_event = GradientsReadyEvent(
-                epoch=epoch,
-                batch_index=batch_index,
-                global_step=global_step,
-                batch=batch,
-                components=components,
-                gradients=gradients,
-            )
-            _emit(handlers, gradient_event)
-
-        _emit(handlers, BeforeUpdateEvent(
-            epoch, batch_index, global_step, batch, components
-        ))
-        components.optimizer.step()
-        for parameter in components.parameters:
-            parameter.clamp_()
-        _emit(handlers, AfterUpdateEvent(
-            epoch, batch_index, global_step, batch, components
-        ))
+        if components.optimizer is not None:
+            _emit(handlers, BeforeUpdateEvent(
+                epoch, batch_index, global_step, batch, components
+            ))
+            components.optimizer.step()
+            if components.clamp_after_update:
+                for parameter in components.parameters:
+                    parameter.clamp_()
+            _emit(handlers, AfterUpdateEvent(
+                epoch, batch_index, global_step, batch, components
+            ))
 
         batch_count += 1
         example_count += batch.example_count
@@ -240,6 +240,7 @@ def train_epoch(
         example_count=example_count,
         start_global_step=start_global_step,
         next_global_step=start_global_step + batch_count,
+        probe_results=_probe_results(active_probes),
     )
 
 
@@ -295,17 +296,51 @@ def evaluate(
             batch_count += 1
             example_count += batch.example_count
 
-    probe_results = tuple(
-        ProbeResult(name=probe.name, value=probe.result())
-        for probe in active_probes
-    )
     return EvaluationResult(
         epoch=epoch,
         split=split,
         batch_count=batch_count,
         example_count=example_count,
-        probe_results=probe_results,
+        probe_results=_probe_results(active_probes),
     )
+
+
+def _assigned_gradients(components: ExperimentComponents) -> Tuple[Any, ...]:
+    raw_gradients = components.differentiator.compute_gradient()
+    try:
+        gradients = tuple(raw_gradients)
+    except TypeError as error:
+        raise ValueError(
+            "Expected differentiator.compute_gradient() to return "
+            "one gradient per experiment parameter. "
+            f"Provided value: {raw_gradients!r}."
+        ) from error
+
+    if len(gradients) != len(components.parameters):
+        raise ValueError(
+            "Expected differentiator.compute_gradient() to return "
+            f"{len(components.parameters)} gradients. "
+            f"Provided value: {len(gradients)} gradients."
+        )
+
+    for parameter, gradient in zip(components.parameters, gradients):
+        parameter.state.grad = gradient
+    return gradients
+
+
+def _probe_results(
+    probes: Tuple[EvaluationProbe[Any], ...],
+) -> Tuple[ProbeResult[Any], ...]:
+    return tuple(
+        ProbeResult(name=probe.name, value=probe.result()) for probe in probes
+    )
+
+
+def _probe_value(probe_results: Tuple[ProbeResult[Any], ...], name: str) -> Any:
+    for probe_result in probe_results:
+        if probe_result.name == name:
+            return probe_result.value
+    raise KeyError(name)
 
 
 def _emit(handlers: Tuple[Callable[[Any], None], ...], event: Any) -> None:

@@ -1,16 +1,18 @@
-"""Shared numerical MNIST loading for the teacher/distillation experiments."""
+"""Shared MNIST loading and teacher-supervised batches for the DRN experiments."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 import os
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Callable, Iterable, Optional
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import datasets, transforms
+
+from training.core.batch import Batch, prepared_batches
 
 
 class FlattenedDataset(Dataset):
@@ -166,4 +168,56 @@ def limited(loader: Iterable, maximum_batches: int | None):
     return islice(loader, maximum_batches)
 
 
-__all__ = ["MnistLoaders", "build_mnist_loaders", "limited"]
+@dataclass(frozen=True)
+class TeacherTargets:
+    """Teacher logits and labels for one batch; ``len`` is the example count."""
+
+    logits: torch.Tensor
+    labels: torch.Tensor
+
+    def __len__(self) -> int:
+        return int(self.labels.shape[0])
+
+
+def teacher_batches(
+    loader: Iterable,
+    teacher: Any,
+    device: Any,
+    *,
+    maximum_batches: Optional[int] = None,
+    sample_limit: Optional[int] = None,
+    stop: Optional[Callable[[], bool]] = None,
+    before_transfer: Optional[Callable[[torch.Tensor, torch.Tensor], None]] = None,
+):
+    """Engine batches of ``(inputs, TeacherTargets)`` from an MNIST loader.
+
+    ``before_transfer`` sees the loader-side tensors after truncation, e.g. to
+    hash the exact cohort. Teacher logits are computed without gradients on
+    the transferred inputs, when the engine pulls the batch.
+    """
+
+    def prepare(batch: Batch) -> Batch:
+        if before_transfer is not None:
+            before_transfer(batch.inputs, batch.targets)
+        inputs = batch.inputs.to(device, dtype=torch.float32)
+        labels = batch.targets.to(device, dtype=torch.long)
+        with torch.no_grad():
+            logits = teacher.logits(inputs)
+        return Batch(inputs, TeacherTargets(logits, labels))
+
+    return prepared_batches(
+        loader,
+        maximum_batches=maximum_batches,
+        sample_limit=sample_limit,
+        prepare=prepare,
+        stop=stop,
+    )
+
+
+__all__ = [
+    "MnistLoaders",
+    "TeacherTargets",
+    "build_mnist_loaders",
+    "limited",
+    "teacher_batches",
+]

@@ -8,8 +8,9 @@ implementation.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
+from itertools import islice
 from typing import Any, Generic, Optional, TypeVar, Union
 
 
@@ -78,6 +79,53 @@ def as_batch(raw_batch: RawBatch) -> Batch[Any, Any, Any]:
         "(inputs, targets) or (inputs, targets, indices). "
         f"Provided value: {raw_batch!r}."
     )
+
+
+def prepared_batches(
+    loader: Iterable[RawBatch],
+    *,
+    maximum_batches: Optional[int] = None,
+    sample_limit: Optional[int] = None,
+    prepare: Optional[Callable[[Batch[Any, Any, Any]], Batch[Any, Any, Any]]] = None,
+    stop: Optional[Callable[[], bool]] = None,
+) -> Iterator[Batch[Any, Any, Any]]:
+    """Adapt a loader for the engine without changing what it consumes.
+
+    Per item, in order: at most ``maximum_batches`` items are pulled, and
+    never one past the limit; ``stop()`` is checked before every pull;
+    with ``sample_limit``, inputs, targets and indices are truncated to the
+    examples still allowed, and the first item pulled after the limit is
+    reached is dropped; ``prepare`` then maps the loader-side batch, e.g.
+    device transfer and target construction.
+
+    This is a generator, so the loader iterator is created at the engine's
+    first pull, inside whatever context the engine holds at that point.
+    """
+
+    source = loader if maximum_batches is None else islice(loader, maximum_batches)
+    iterator = iter(source)
+    seen = 0
+    while stop is None or not stop():
+        try:
+            raw_batch = next(iterator)
+        except StopIteration:
+            return
+        batch = as_batch(raw_batch)
+        if sample_limit is not None:
+            remaining = sample_limit - seen
+            if remaining <= 0:
+                return
+            batch = Batch(
+                _head(batch.inputs, remaining),
+                _head(batch.targets, remaining),
+                _head(batch.indices, remaining),
+            )
+        seen += batch.example_count
+        yield batch if prepare is None else prepare(batch)
+
+
+def _head(value: Any, count: int) -> Any:
+    return None if value is None else value[:count]
 
 
 def _leading_size(value: Any) -> Optional[int]:

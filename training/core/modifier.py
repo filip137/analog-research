@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from contextlib import nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 from typing import Any, ContextManager, Optional, Protocol, runtime_checkable
 
 
@@ -96,6 +96,49 @@ class SplitParameterModifier:
             )
         self.training.load_state_dict(state_dict["training"])
         self.evaluation.load_state_dict(state_dict["evaluation"])
+
+
+class ComposedModifier:
+    """Hold several modifiers' contexts together, entered in the given order.
+
+    Contexts exit in reverse order, so the first modifier restores last.
+    """
+
+    def __init__(self, *modifiers: Optional[ParameterModifier]) -> None:
+        self.modifiers = tuple(modifier_or_default(modifier) for modifier in modifiers)
+
+    def training_context(self) -> ContextManager[Any]:
+        return self._entered("training_context")
+
+    def evaluation_context(self) -> ContextManager[Any]:
+        return self._entered("evaluation_context")
+
+    @contextmanager
+    def _entered(self, name: str):
+        with ExitStack() as stack:
+            for modifier in self.modifiers:
+                stack.enter_context(getattr(modifier, name)())
+            yield self
+
+    def state_dict(self) -> dict:
+        return {
+            "version": 1,
+            "modifiers": [modifier.state_dict() for modifier in self.modifiers],
+        }
+
+    def load_state_dict(self, state_dict: Mapping) -> None:
+        if (
+            not isinstance(state_dict, Mapping)
+            or set(state_dict) != {"version", "modifiers"}
+            or state_dict["version"] != 1
+            or len(state_dict["modifiers"]) != len(self.modifiers)
+        ):
+            raise ValueError(
+                "Expected composed parameter-modifier state version 1 with one "
+                f"entry per modifier. Provided value: {state_dict!r}."
+            )
+        for modifier, state in zip(self.modifiers, state_dict["modifiers"]):
+            modifier.load_state_dict(state)
 
 
 def modifier_or_default(
