@@ -133,6 +133,29 @@ Experiment-specific behaviour is plugged in, not written as a loop:
 `tests/test_training_loop_golden.py` replays these loops bit-exactly against
 goldens captured before the migration.
 
+### One train-phase lifecycle
+
+Above the loop, every `run_train` of `mnist_relu.v1`, `small_drn.v1`,
+`mnist_relu_drn_kd.v1` and `mnist_relu_drn_reset*.v1` is one *train phase*
+run by `experiments.lifecycle.train_phase`:
+
+- `BestCheckpoint` is the strict global-best selection; it alone writes
+  `weights.pt` (`restore` from a resume checkpoint, `seed` for an epoch -1
+  candidate, `offer` after each validation);
+- `run_epochs` fixes the order train → validate → select → epoch-boundary
+  `resume.pt` → cadenced metric → observers, and leaves a `resume.pt` even
+  when a continuation runs no epoch;
+- `run_phase` records completion or failure (including interrupts).
+
+Families supply hooks: build the stack and initialize or resume it, train
+one epoch, validate, the selection record and payload, the resume progress
+state and the epoch metric. LR selection with its exact production restart
+is still family-owned, and IBM OM deployed recovery (`run_recovery_train`)
+is not yet a phase. `tests/test_run_lifecycle_golden.py` replays complete
+`ebl train` bundles bit-exactly against goldens captured before this move;
+`python tests/run_lifecycle_golden_cases.py verify CASE...` replays chosen
+cases.
+
 `training.lab.epoch.Trainer(components, loader, reset_input=...)` and
 `Evaluator(components, loader, reset_input=...)` bind loaders and statistics
 to these shared loops. Training requires an explicit reset policy: existing
