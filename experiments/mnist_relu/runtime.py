@@ -240,7 +240,7 @@ def run_train(request: "TrainRequest") -> int:
                 },
             )
 
-        def save_resume(completed: int, step: int) -> None:
+        def save_resume(completed: int, step: int, _last: EpochResult | None) -> None:
             save_epoch_boundary_checkpoint(
                 resume_path,
                 catalog=model.catalog,

@@ -12,6 +12,7 @@ import torch
 import torch.nn.functional as F
 
 from experiments.artifacts import RunStore, atomic_write_json, sha256_file
+from experiments.lifecycle import BestCheckpoint, EpochResult, run_epochs, run_phase
 from experiments.mnist_relu.model import BiasFreeReluTeacher
 from experiments.mnist_relu_drn.components import (
     BoundedDrnTeacher,
@@ -41,7 +42,6 @@ from training.checkpoint import (
     encode_named_weights,
     load_epoch_boundary_checkpoint,
     load_named_weights,
-    save_encoded_named_weights,
     save_epoch_boundary_checkpoint,
 )
 from training.measured_trace import (
@@ -1563,7 +1563,7 @@ def run_train(request: "TrainRequest") -> int:
         repo_root=_ROOT,
         input_artifacts=input_artifacts,
     )
-    try:
+    def phase():
         torch.manual_seed(spec.runtime.seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(spec.runtime.seed)
@@ -1619,9 +1619,13 @@ def run_train(request: "TrainRequest") -> int:
         global_step = 0
         mapping_report: dict[str, Any] | None = None
         programming_report = None
-        selected_weights = None
-        selected_epoch = -1
-        selected_validation = None
+        best = BestCheckpoint(
+            weights_path,
+            stack.bundle.catalog,
+            better=lambda candidate, incumbent: _selection_improved(
+                candidate, incumbent, metric=spec.settings.selection_metric
+            ),
+        )
         deployment_source: dict[str, Any] | None = None
         deployment_metrics: dict[str, Any] | None = None
         initial: dict[str, Any] | None = None
@@ -1657,8 +1661,6 @@ def run_train(request: "TrainRequest") -> int:
             start_epoch = resumed.epoch
             global_step = resumed.global_step
             stack.cost.gain = float(resumed.progress_state["fixed_logit_gain"])
-            selected_epoch = int(resumed.progress_state["selected_epoch"])
-            selected_validation = dict(resumed.progress_state["selected_validation"])
             mapping_report = deepcopy(resumed.progress_state.get("mapping"))
             deployment_source = deepcopy(
                 resumed.progress_state.get("deployment_source")
@@ -1685,9 +1687,11 @@ def run_train(request: "TrainRequest") -> int:
             resumed_last_clean_validation = deepcopy(
                 resumed.progress_state.get("last_clean_validation")
             )
-            selected_weights = resumed.selected_weights
-            if selected_weights is not None:
-                save_encoded_named_weights(weights_path, selected_weights, catalog=stack.bundle.catalog)
+            best.restore(
+                epoch=int(resumed.progress_state["selected_epoch"]),
+                selection=dict(resumed.progress_state["selected_validation"]),
+                payload=resumed.selected_weights,
+            )
         elif request.weights is not None:
             loaded = load_named_weights(request.weights, stack.bundle.catalog)
             _validate_checkpoint_metadata(
@@ -2110,10 +2114,8 @@ def run_train(request: "TrainRequest") -> int:
                 "conductances": initial_conductances,
             }
         )
-        if selected_validation is None:
-            selected_validation = dict(initial)
-            selected_epoch = -1
-            selected_weights = _selected_payload(
+        def payload(epoch: int, validation: tuple[Any, dict[str, Any]]) -> dict[str, Any]:
+            return _selected_payload(
                 stack,
                 spec=spec,
                 teacher_path=request.teacher_weights,
@@ -2121,144 +2123,74 @@ def run_train(request: "TrainRequest") -> int:
                 mapping=mapping_report,
                 deployment_source=deployment_source,
                 device_model_sha256=device_model_sha,
-                epoch=-1,
-                validation=initial,
+                epoch=epoch,
+                validation=validation[1],
             )
-            save_encoded_named_weights(weights_path, selected_weights, catalog=stack.bundle.catalog)
 
-        last_train = resumed_last_train
-        last_validation = (
-            resumed_last_validation
-            if resumed_last_validation is not None
-            else initial
+        best.seed(
+            epoch=-1,
+            selection=dict(initial),
+            payload=lambda: payload(-1, (initial_clean_validation, initial)),
         )
-        last_clean_validation = (
-            resumed_last_clean_validation
-            if resumed_last_clean_validation is not None
-            else initial_clean_validation
-        )
-        for epoch in range(start_epoch, spec.settings.num_epochs):
-            last_train, batches = _train_epoch(
+
+        def train(_epoch: int, step: int) -> tuple[dict[str, Any], int]:
+            trained, batches = _train_epoch(
                 stack,
                 teacher,
                 data.train,
                 maximum_batches=spec.settings.max_batches,
                 modifier=modifier,
             )
-            global_step += batches
-            last_clean_validation = _evaluate(
+            return trained, step + batches
+
+        def validate(_epoch: int) -> tuple[dict[str, Any], dict[str, Any]]:
+            clean = _evaluate(
                 stack,
                 teacher,
                 data.validation,
                 maximum_batches=spec.settings.max_validation_batches,
             )
-            last_validation = _selection_evaluate(
+            return clean, _selection_evaluate(
                 stack,
                 teacher,
                 data.validation,
                 spec=spec,
                 modifier=modifier,
-                clean=last_clean_validation,
+                clean=clean,
             )
-            improved = _selection_improved(
-                last_validation,
-                selected_validation,
-                metric=spec.settings.selection_metric,
-            )
-            if improved:
-                selected_epoch = epoch
-                selected_validation = dict(last_validation)
-                selected_weights = _selected_payload(
-                    stack,
-                    spec=spec,
-                    teacher_path=request.teacher_weights,
-                    teacher_sha256=teacher_sha,
-                    mapping=mapping_report,
-                    deployment_source=deployment_source,
-                    device_model_sha256=device_model_sha,
-                    epoch=epoch,
-                    validation=last_validation,
-                )
-                save_encoded_named_weights(weights_path, selected_weights, catalog=stack.bundle.catalog)
-            if selected_weights is None:
-                raise RuntimeError("Expected selected KD weights at every epoch boundary.")
-            progress = {
-                "fixed_logit_gain": stack.cost.gain,
-                "selected_epoch": selected_epoch,
-                "selected_validation": selected_validation,
-                "mapping": mapping_report,
-                "initial_validation": initial,
-                "initial_clean_validation": initial_clean_validation,
-                "initial_conductances": initial_conductances,
-                "deployment_source": deployment_source,
-                "deployment": deployment_metrics,
-                "last_train": last_train,
-                "last_validation": last_validation,
-                "last_clean_validation": last_clean_validation,
-            }
-            save_epoch_boundary_checkpoint(
-                resume_path,
-                catalog=stack.bundle.catalog,
-                epoch=epoch + 1,
-                global_step=global_step,
-                optimizer=stack.optimizer,
-                modifier=modifier,
-                progress_state=progress,
-                selected_weights=selected_weights,
-                dataloader_generators={"train": data.train_generator},
-                metadata=_model_checkpoint_metadata(
-                    stack,
-                    spec=spec,
-                    teacher_sha256=teacher_sha,
-                    mapping=mapping_report,
-                    deployment_source=deployment_source,
-                    device_model_sha256=device_model_sha,
-                ),
-            )
-            if (epoch + 1) % spec.settings.log_every == 0 or epoch + 1 == spec.settings.num_epochs:
-                metric = {
-                    "mode": "train",
-                    "epoch": epoch,
-                    "completed_epochs": epoch + 1,
-                    "global_step": global_step,
-                    "train": last_train,
-                    "validation": last_validation,
-                    "validation_clean": last_clean_validation,
-                    "selection_evaluation": (
-                        spec.settings.selection_evaluation
-                    ),
-                    "selected": improved,
-                    "selected_epoch": selected_epoch,
-                    "selection_metric": spec.settings.selection_metric,
-                    "selected_value": selected_validation[
-                        spec.settings.selection_metric
-                    ],
-                    "selected_kl": selected_validation["kl_teacher_student"],
-                    "conductances": conductance_statistics(
-                        stack.bundle.catalog,
-                        encoding=spec.model.encoding,
-                    ),
-                }
-                if isinstance(stack.optimizer, MeasuredTraceOptimizer):
-                    metric["measured_projection"] = stack.optimizer.programming_report
-                elif isinstance(stack.optimizer, ProgramVerifyOptimizer):
-                    metric["program_verify"] = stack.optimizer.programming_report
-                store.append_metric(metric)
 
-        if selected_weights is None or selected_validation is None:
-            raise RuntimeError("Expected training to provide selected KD weights.")
-        if not resume_path.exists():
+        def last_state(last: EpochResult | None) -> tuple[Any, Any, Any]:
+            """Return (last train, last selection, last clean validation)."""
+
+            if last is None:
+                return (
+                    resumed_last_train,
+                    (
+                        resumed_last_validation
+                        if resumed_last_validation is not None
+                        else initial
+                    ),
+                    (
+                        resumed_last_clean_validation
+                        if resumed_last_clean_validation is not None
+                        else initial_clean_validation
+                    ),
+                )
+            return last.train, last.validation[1], last.validation[0]
+
+        def save_resume(completed: int, step: int, last: EpochResult | None) -> None:
+            last_train, last_validation, last_clean_validation = last_state(last)
             save_epoch_boundary_checkpoint(
                 resume_path,
                 catalog=stack.bundle.catalog,
-                epoch=start_epoch,
-                global_step=global_step,
+                epoch=completed,
+                global_step=step,
                 optimizer=stack.optimizer,
                 modifier=modifier,
                 progress_state={
                     "fixed_logit_gain": stack.cost.gain,
-                    "selected_epoch": selected_epoch,
-                    "selected_validation": selected_validation,
+                    "selected_epoch": best.epoch,
+                    "selected_validation": best.selection,
                     "mapping": mapping_report,
                     "initial_validation": initial,
                     "initial_clean_validation": initial_clean_validation,
@@ -2269,7 +2201,7 @@ def run_train(request: "TrainRequest") -> int:
                     "last_validation": last_validation,
                     "last_clean_validation": last_clean_validation,
                 },
-                selected_weights=selected_weights,
+                selected_weights=best.payload,
                 dataloader_generators={"train": data.train_generator},
                 metadata=_model_checkpoint_metadata(
                     stack,
@@ -2280,6 +2212,58 @@ def run_train(request: "TrainRequest") -> int:
                     device_model_sha256=device_model_sha,
                 ),
             )
+
+        def record(result: EpochResult) -> dict[str, Any]:
+            clean, selection = result.validation
+            metric = {
+                "mode": "train",
+                "epoch": result.epoch,
+                "completed_epochs": result.completed_epochs,
+                "global_step": result.global_step,
+                "train": result.train,
+                "validation": selection,
+                "validation_clean": clean,
+                "selection_evaluation": (
+                    spec.settings.selection_evaluation
+                ),
+                "selected": result.improved,
+                "selected_epoch": best.epoch,
+                "selection_metric": spec.settings.selection_metric,
+                "selected_value": best.selection[
+                    spec.settings.selection_metric
+                ],
+                "selected_kl": best.selection["kl_teacher_student"],
+                "conductances": conductance_statistics(
+                    stack.bundle.catalog,
+                    encoding=spec.model.encoding,
+                ),
+            }
+            if isinstance(stack.optimizer, MeasuredTraceOptimizer):
+                metric["measured_projection"] = stack.optimizer.programming_report
+            elif isinstance(stack.optimizer, ProgramVerifyOptimizer):
+                metric["program_verify"] = stack.optimizer.programming_report
+            return metric
+
+        last, _completed, global_step = run_epochs(
+            store=store,
+            start_epoch=start_epoch,
+            num_epochs=spec.settings.num_epochs,
+            global_step=global_step,
+            log_every=spec.settings.log_every,
+            train_epoch=train,
+            validate=validate,
+            best=best,
+            selection=lambda validation: dict(validation[1]),
+            payload=payload,
+            save_resume=save_resume,
+            resume_path=resume_path,
+            record=record,
+            missing_selection="Expected selected KD weights at every epoch boundary.",
+        )
+        last_train, last_validation, last_clean_validation = last_state(last)
+        selected_epoch = best.epoch
+        selected_validation = best.selection
+
         evaluation_modifier = _evaluation_modifier(modifier)
         if isinstance(evaluation_modifier, IbmReramHwaParameterModifier):
             load_named_weights(weights_path, stack.bundle.catalog)
@@ -2352,8 +2336,8 @@ def run_train(request: "TrainRequest") -> int:
             if cohort_b or program_verify
             else None
         )
-        store.complete(
-            metrics={
+        return (
+            {
                 "teacher": {"sha256": teacher_sha, "metadata": teacher_metadata},
                 "encoding": spec.model.encoding,
                 "include_biases": spec.model.include_biases,
@@ -2412,7 +2396,7 @@ def run_train(request: "TrainRequest") -> int:
                 ),
                 "training_device_programming": training_device_programming,
             },
-            artifacts=(
+            (
                 store.artifact_record(weights_path, kind="selected_named_weights"),
                 store.artifact_record(resume_path, kind="epoch_boundary_resume"),
                 *_ibm_population_artifact_records(store, modifier),
@@ -2438,10 +2422,9 @@ def run_train(request: "TrainRequest") -> int:
                 ),
             ),
         )
-        return 0
-    except BaseException as error:
-        store.fail(error)
-        raise
+
+    run_phase(store, phase)
+    return 0
 
 
 def run_validate(request: "ValidateRequest") -> int:

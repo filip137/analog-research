@@ -138,7 +138,7 @@ def run_epochs(
     best: BestCheckpoint,
     selection: Callable[[V], Mapping[str, Any]],
     payload: Callable[[int, V], Mapping[str, Any]],
-    save_resume: Callable[[int, int], Any],
+    save_resume: Callable[[int, int, Optional[EpochResult[V]]], Any],
     resume_path: Path,
     record: Callable[[EpochResult[V]], Mapping[str, Any]],
     after_epoch: Iterable[Callable[[EpochResult[V]], Any]] = (),
@@ -147,9 +147,9 @@ def run_epochs(
     """Run epochs ``start_epoch .. num_epochs - 1`` of one train phase.
 
     ``train_epoch(epoch, global_step)`` returns the epoch's train metrics and
-    the next global step.  ``save_resume(completed_epochs, global_step)``
-    writes the epoch-boundary checkpoint from the caller's current state and
-    ``best``.  Returns the last epoch's result (``None`` when no epoch ran),
+    the next global step.  ``save_resume(completed_epochs, global_step,
+    last)`` writes the epoch-boundary checkpoint from the caller's state,
+    ``best`` and the latest epoch result (``None`` before any epoch ran).  Returns the last epoch's result (``None`` when no epoch ran),
     the completed-epoch count and the global step.
     """
 
@@ -166,8 +166,6 @@ def run_epochs(
         )
         best.require(missing_selection)
         completed = epoch + 1
-        save_resume(completed, global_step)
-        logged = completed % log_every == 0 or completed == num_epochs
         last = EpochResult(
             epoch=epoch,
             completed_epochs=completed,
@@ -175,9 +173,10 @@ def run_epochs(
             train=trained,
             validation=validation,
             improved=improved,
-            logged=logged,
+            logged=completed % log_every == 0 or completed == num_epochs,
         )
-        if logged:
+        save_resume(completed, global_step, last)
+        if last.logged:
             store.append_metric(record(last))
         for observer in observers:
             observer(last)
@@ -185,7 +184,7 @@ def run_epochs(
     # A continuation whose target epoch is already complete still owns a
     # fresh, self-contained resume artifact.
     if not resume_path.exists():
-        save_resume(completed, global_step)
+        save_resume(completed, global_step, last)
     return last, completed, global_step
 
 

@@ -820,7 +820,7 @@ def _execute_training(
             },
         )
 
-    def save_resume(completed: int, step: int) -> None:
+    def save_resume(completed: int, step: int, _last: EpochResult | None) -> None:
         chosen = best.selection or {}
         save_epoch_boundary_checkpoint(
             resume_path,
