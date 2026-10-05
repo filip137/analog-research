@@ -14,9 +14,9 @@ from ebl.cli import CommandHandlers, TrainRequest, ValidateRequest, main
 from experiments.definitions import resolve_experiment_config
 from experiments.mnist_relu_drn.components import build_student_stack
 from experiments.mnist_relu_drn.runtime import (
+    ForwardGainModifier,
     _evaluate,
     _ibm_target_mapping_preflights,
-    _modifier_forward_gain,
     _selection_improved,
     _selected_payload,
     _validate_array_specific_modifier_population_parity,
@@ -664,6 +664,9 @@ def test_modifier_evaluation_reports_applied_forward_gain_and_restores_master() 
         def set_teacher(self, teacher_logits, labels) -> None:
             del teacher_logits, labels
 
+        def set_target(self, targets) -> None:
+            self.set_teacher(targets.logits, targets.labels)
+
         def student_logits(self) -> torch.Tensor:
             raw = torch.zeros((2, 10), dtype=torch.float32)
             raw[0, 0] = 1.0
@@ -861,7 +864,7 @@ def test_runtime_applies_and_restores_declared_device_forward_gain() -> None:
     modifier._config = SimpleNamespace(forward_logit_gain=562.0)
     stack = SimpleNamespace(cost=SimpleNamespace(gain=4.5))
 
-    with _modifier_forward_gain(stack, modifier, evaluation=True):
+    with ForwardGainModifier(stack.cost, modifier).evaluation_context():
         assert stack.cost.gain == 562.0
     assert stack.cost.gain == 4.5
 

@@ -31,7 +31,7 @@ from experiments.mnist_relu_drn.config import (
     StudentTrainSpec,
     StudentValidateSpec,
 )
-from experiments.mnist_shared import build_mnist_loaders, limited
+from experiments.mnist_shared import build_mnist_loaders, teacher_batches
 from experiments.schema import to_plain_data
 from model.resistive.interaction import DenseResistive, SignedDenseResistive
 from model.resistive.device_config import parse_device_programming_config
@@ -54,7 +54,14 @@ from training.ibm_reram_hwa import (
     IbmReramHwaParameterModifier,
     build_ibm_reram_hwa_modifier,
 )
-from training.core.modifier import SplitParameterModifier, modifier_or_default
+from training.core.engine import (
+    EvaluationComponents,
+    ExperimentComponents,
+    evaluate,
+    train_epoch,
+)
+from training.core.guards import FiniteGradientGuard
+from training.core.modifier import ComposedModifier, SplitParameterModifier
 from training.program_verify import ProgramVerifyOptimizer
 
 if TYPE_CHECKING:
@@ -194,30 +201,53 @@ def _training_modifier(modifier):
     return modifier.training if isinstance(modifier, SplitParameterModifier) else modifier
 
 
-@contextmanager
-def _modifier_forward_gain(
-    stack: StudentStack,
-    modifier,
-    *,
-    evaluation: bool,
-):
-    candidate = (
-        _evaluation_modifier(modifier)
-        if evaluation
-        else _training_modifier(modifier)
-    )
-    gain = (
-        candidate.config.forward_logit_gain
-        if isinstance(candidate, IbmReramHwaParameterModifier)
-        else None
-    )
-    original = float(stack.cost.gain)
-    try:
-        if gain is not None:
-            stack.cost.gain = float(gain)
-        yield
-    finally:
-        stack.cost.gain = original
+class ForwardGainModifier:
+    """Apply an IBM OM modifier's forward logit gain to the KD cost.
+
+    Training and evaluation each take the gain of their own half of a split
+    modifier. The previous cost gain is restored when the context exits.
+    """
+
+    def __init__(self, cost: Any, modifier) -> None:
+        self._cost = cost
+        self._training_gain = _forward_logit_gain(_training_modifier(modifier))
+        self._evaluation_gain = _forward_logit_gain(_evaluation_modifier(modifier))
+
+    def training_context(self):
+        return self._applied(self._training_gain)
+
+    def evaluation_context(self):
+        return self._applied(self._evaluation_gain)
+
+    @contextmanager
+    def _applied(self, gain: float | None):
+        original = float(self._cost.gain)
+        try:
+            if gain is not None:
+                self._cost.gain = float(gain)
+            yield self
+        finally:
+            self._cost.gain = original
+
+    def state_dict(self) -> dict:
+        return {}
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        if state_dict:
+            raise ValueError(
+                "Expected the stateless forward-gain modifier state to be empty. "
+                f"Provided value: {state_dict!r}."
+            )
+
+
+def _forward_logit_gain(candidate) -> float | None:
+    if isinstance(candidate, IbmReramHwaParameterModifier):
+        return candidate.config.forward_logit_gain
+    return None
+
+
+def _kd_modifier(stack: StudentStack, modifier) -> ComposedModifier:
+    return ComposedModifier(modifier, ForwardGainModifier(stack.cost, modifier))
 
 
 def _ibm_population_fingerprints(modifier) -> dict[str, str | None]:
@@ -1172,6 +1202,109 @@ def _literal_bounded_drn_initialization(
     }
 
 
+class KdEvaluationProbe:
+    """Teacher-student metrics over one KD evaluation pass at the applied gain."""
+
+    name = "kd_evaluation"
+
+    def reset(self) -> None:
+        self._totals = {
+            "kl": 0.0,
+            "raw_kl": 0.0,
+            "student_correct": 0,
+            "teacher_correct": 0,
+            "agreement": 0,
+            "raw_score_squared": 0.0,
+            "calibrated_score_squared": 0.0,
+            "teacher_score_squared": 0.0,
+        }
+        self._examples = 0
+        self._applied_gain: float | None = None
+
+    def observe(self, event: Any) -> None:
+        cost = event.components.cost_fn
+        teacher_logits = event.batch.targets.logits
+        labels = event.batch.targets.labels
+        totals = self._totals
+        self._applied_gain = float(cost.gain)
+        raw_scores = cost.student_logits() / cost.gain
+        student_logits = raw_scores * cost.gain
+        teacher_log_prob = F.log_softmax(teacher_logits, dim=1)
+        teacher_prob = teacher_log_prob.exp()
+        student_log_prob = F.log_softmax(student_logits, dim=1)
+        raw_student_log_prob = F.log_softmax(raw_scores, dim=1)
+        totals["kl"] += float(
+            (teacher_prob * (teacher_log_prob - student_log_prob)).sum().item()
+        )
+        totals["raw_kl"] += float(
+            (teacher_prob * (teacher_log_prob - raw_student_log_prob)).sum().item()
+        )
+        student_prediction = student_logits.argmax(dim=1)
+        teacher_prediction = teacher_logits.argmax(dim=1)
+        totals["student_correct"] += int(student_prediction.eq(labels).sum().item())
+        totals["teacher_correct"] += int(teacher_prediction.eq(labels).sum().item())
+        totals["agreement"] += int(student_prediction.eq(teacher_prediction).sum().item())
+        totals["raw_score_squared"] += float(raw_scores.square().sum().item())
+        totals["calibrated_score_squared"] += float(student_logits.square().sum().item())
+        totals["teacher_score_squared"] += float(teacher_logits.square().sum().item())
+        self._examples += int(labels.shape[0])
+
+    def result(self) -> dict[str, Any]:
+        examples = self._examples
+        totals = self._totals
+        if examples == 0:
+            raise ValueError("Expected KD evaluation to process examples. Provided value: 0.")
+        score_values = examples * 10
+        return {
+            "examples": examples,
+            "kl_teacher_student": totals["kl"] / examples,
+            "raw_kl_teacher_student": totals["raw_kl"] / examples,
+            "student_accuracy": totals["student_correct"] / examples,
+            "teacher_accuracy": totals["teacher_correct"] / examples,
+            "teacher_agreement": totals["agreement"] / examples,
+            "raw_score_rms": (totals["raw_score_squared"] / score_values) ** 0.5,
+            "calibrated_score_rms": (totals["calibrated_score_squared"] / score_values) ** 0.5,
+            "teacher_logit_rms": (totals["teacher_score_squared"] / score_values) ** 0.5,
+            "fixed_logit_gain": self._applied_gain,
+        }
+
+
+class TeacherAgreementProbe:
+    """KL, accuracy and teacher agreement at each training free phase."""
+
+    name = "teacher_agreement"
+
+    def reset(self) -> None:
+        self._kl_sum = 0.0
+        self._student_correct = 0
+        self._agreement = 0
+        self._examples = 0
+
+    def observe(self, event: Any) -> None:
+        cost = event.components.cost_fn
+        teacher_logits = event.batch.targets.logits
+        labels = event.batch.targets.labels
+        with torch.no_grad():
+            batch_kl = cost.eval()
+            student_prediction = cost.student_logits().argmax(dim=1)
+            teacher_prediction = teacher_logits.argmax(dim=1)
+            self._kl_sum += float(batch_kl.sum().item())
+            self._student_correct += int(student_prediction.eq(labels).sum().item())
+            self._agreement += int(student_prediction.eq(teacher_prediction).sum().item())
+        self._examples += int(labels.shape[0])
+
+    def result(self) -> dict[str, Any]:
+        examples = self._examples
+        if examples == 0:
+            raise ValueError("Expected KD training to process examples. Provided value: 0.")
+        return {
+            "examples": examples,
+            "kl_teacher_student": self._kl_sum / examples,
+            "student_accuracy": self._student_correct / examples,
+            "teacher_agreement": self._agreement / examples,
+        }
+
+
 def _evaluate(
     stack: StudentStack,
     teacher: BiasFreeReluTeacher | BoundedDrnTeacher,
@@ -1181,74 +1314,21 @@ def _evaluate(
     sample_limit: int | None = None,
     modifier=None,
 ) -> dict[str, Any]:
-    totals = {
-        "kl": 0.0,
-        "raw_kl": 0.0,
-        "student_correct": 0,
-        "teacher_correct": 0,
-        "agreement": 0,
-        "raw_score_squared": 0.0,
-        "calibrated_score_squared": 0.0,
-        "teacher_score_squared": 0.0,
-    }
-    examples = 0
-    applied_gain: float | None = None
-    active_modifier = modifier_or_default(modifier)
-    with (
-        active_modifier.evaluation_context(),
-        _modifier_forward_gain(stack, modifier, evaluation=True),
-        torch.no_grad(),
-    ):
-        applied_gain = float(stack.cost.gain)
-        for inputs, labels in limited(loader, maximum_batches):
-            if sample_limit is not None:
-                remaining = sample_limit - examples
-                if remaining <= 0:
-                    break
-                inputs = inputs[:remaining]
-                labels = labels[:remaining]
-            inputs = inputs.to(stack.device, dtype=torch.float32)
-            labels = labels.to(stack.device, dtype=torch.long)
-            teacher_logits = teacher.logits(inputs)
-            stack.network.set_input(inputs, reset=True)
-            stack.minimizer.compute_equilibrium()
-            stack.cost.set_teacher(teacher_logits, labels)
-            raw_scores = stack.cost.student_logits() / stack.cost.gain
-            student_logits = raw_scores * stack.cost.gain
-            teacher_log_prob = F.log_softmax(teacher_logits, dim=1)
-            teacher_prob = teacher_log_prob.exp()
-            student_log_prob = F.log_softmax(student_logits, dim=1)
-            raw_student_log_prob = F.log_softmax(raw_scores, dim=1)
-            totals["kl"] += float(
-                (teacher_prob * (teacher_log_prob - student_log_prob)).sum().item()
-            )
-            totals["raw_kl"] += float(
-                (teacher_prob * (teacher_log_prob - raw_student_log_prob)).sum().item()
-            )
-            student_prediction = student_logits.argmax(dim=1)
-            teacher_prediction = teacher_logits.argmax(dim=1)
-            totals["student_correct"] += int(student_prediction.eq(labels).sum().item())
-            totals["teacher_correct"] += int(teacher_prediction.eq(labels).sum().item())
-            totals["agreement"] += int(student_prediction.eq(teacher_prediction).sum().item())
-            totals["raw_score_squared"] += float(raw_scores.square().sum().item())
-            totals["calibrated_score_squared"] += float(student_logits.square().sum().item())
-            totals["teacher_score_squared"] += float(teacher_logits.square().sum().item())
-            examples += int(labels.shape[0])
-    if examples == 0:
-        raise ValueError("Expected KD evaluation to process examples. Provided value: 0.")
-    score_values = examples * 10
-    return {
-        "examples": examples,
-        "kl_teacher_student": totals["kl"] / examples,
-        "raw_kl_teacher_student": totals["raw_kl"] / examples,
-        "student_accuracy": totals["student_correct"] / examples,
-        "teacher_accuracy": totals["teacher_correct"] / examples,
-        "teacher_agreement": totals["agreement"] / examples,
-        "raw_score_rms": (totals["raw_score_squared"] / score_values) ** 0.5,
-        "calibrated_score_rms": (totals["calibrated_score_squared"] / score_values) ** 0.5,
-        "teacher_logit_rms": (totals["teacher_score_squared"] / score_values) ** 0.5,
-        "fixed_logit_gain": applied_gain,
-    }
+    probe = KdEvaluationProbe()
+    with torch.no_grad():
+        result = evaluate(
+            EvaluationComponents(stack.network, stack.cost, stack.minimizer),
+            teacher_batches(
+                loader,
+                teacher,
+                stack.device,
+                maximum_batches=maximum_batches,
+                sample_limit=sample_limit,
+            ),
+            modifier=_kd_modifier(stack, modifier),
+            probes=(probe,),
+        )
+    return result.probe_value(probe.name)
 
 
 def _selection_evaluate(
@@ -1341,68 +1421,28 @@ def _train_epoch(
     maximum_batches: int | None,
     modifier=None,
 ) -> tuple[dict[str, Any], int]:
-    kl_sum = 0.0
-    student_correct = 0
-    agreement = 0
-    examples = 0
-    batches = 0
-    active_modifier = modifier_or_default(modifier)
-    for batch_index, (inputs, labels) in enumerate(limited(loader, maximum_batches)):
-        inputs = inputs.to(stack.device, dtype=torch.float32)
-        labels = labels.to(stack.device, dtype=torch.long)
-        with torch.no_grad():
-            teacher_logits = teacher.logits(inputs)
-        stack.optimizer.zero_grad(set_to_none=True)
-        with (
-            active_modifier.training_context(),
-            _modifier_forward_gain(stack, modifier, evaluation=False),
-        ):
-            stack.network.set_input(inputs, reset=True)
-            stack.minimizer.compute_equilibrium()
-            stack.cost.set_teacher(teacher_logits, labels)
-            with torch.no_grad():
-                batch_kl = stack.cost.eval()
-                student_prediction = stack.cost.student_logits().argmax(dim=1)
-                teacher_prediction = teacher_logits.argmax(dim=1)
-                kl_sum += float(batch_kl.sum().item())
-                student_correct += int(student_prediction.eq(labels).sum().item())
-                agreement += int(
-                    student_prediction.eq(teacher_prediction).sum().item()
-                )
-            gradients = tuple(stack.differentiator.compute_gradient())
-        parameters = tuple(stack.bundle.energy.params())
-        if len(gradients) != len(parameters):
-            raise RuntimeError(
-                "Expected one KL gradient per trainable conductance tensor. "
-                f"Provided value: gradients={len(gradients)}, parameters={len(parameters)}."
-            )
-        for binding, parameter, gradient in zip(
-            stack.bundle.catalog.trainable,
-            parameters,
-            gradients,
-        ):
-            if not torch.isfinite(gradient).all():
-                raise FloatingPointError(
-                    "Expected finite KD gradients. "
-                    f"Provided value: parameter={binding.key!r}, batch={batch_index}."
-                )
-            parameter.state.grad = gradient
-        stack.optimizer.step()
-        for parameter in parameters:
-            parameter.clamp_()
-        examples += int(labels.shape[0])
-        batches = batch_index + 1
-    if examples == 0:
-        raise ValueError("Expected KD training to process examples. Provided value: 0.")
-    return (
-        {
-            "examples": examples,
-            "kl_teacher_student": kl_sum / examples,
-            "student_accuracy": student_correct / examples,
-            "teacher_agreement": agreement / examples,
-        },
-        batches,
+    probe = TeacherAgreementProbe()
+    result = train_epoch(
+        ExperimentComponents(
+            stack.network,
+            stack.cost,
+            stack.minimizer,
+            tuple(stack.bundle.energy.params()),
+            stack.differentiator,
+            stack.optimizer,
+        ),
+        teacher_batches(loader, teacher, stack.device, maximum_batches=maximum_batches),
+        modifier=_kd_modifier(stack, modifier),
+        probes=(probe,),
+        event_handlers=(
+            FiniteGradientGuard(
+                tuple(binding.key for binding in stack.bundle.catalog.trainable),
+                label="KD",
+            ),
+        ),
+        reset_input=True,
     )
+    return result.probe_value(probe.name), result.batch_count
 
 
 def _selected_payload(

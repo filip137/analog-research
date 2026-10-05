@@ -636,38 +636,45 @@ def collect_evaluation_trace(
 ) -> EvaluationTrace:
     """Replay the production equations and retain ordered output diagnostics."""
 
-    from experiments.mnist_shared import limited
+    from experiments.mnist_shared import teacher_batches
+    from training.core.engine import EvaluationComponents, evaluate
+    from training.core.probes import PerBatchProbe
 
-    raw_pieces = []
-    student_pieces = []
-    teacher_pieces = []
-    label_pieces = []
+    def outputs(event: Any) -> tuple[torch.Tensor, ...]:
+        cost = event.components.cost_fn
+        targets = event.batch.targets
+        raw_scores = cost.student_logits() / cost.gain
+        student_logits = raw_scores * cost.gain
+        return (
+            raw_scores.detach().cpu(),
+            student_logits.detach().cpu(),
+            targets.logits.detach().cpu(),
+            targets.labels.detach().cpu(),
+        )
+
     digest = sha256()
+    probe = PerBatchProbe("outputs", outputs)
     with torch.no_grad():
-        examples_seen = 0
-        for inputs, labels in limited(loader, maximum_batches):
-            if sample_limit is not None:
-                remaining = sample_limit - examples_seen
-                if remaining <= 0:
-                    break
-                inputs = inputs[:remaining]
-                labels = labels[:remaining]
-            _update_cohort_digest(digest, inputs, labels)
-            inputs = inputs.to(stack.device, dtype=torch.float32)
-            labels = labels.to(stack.device, dtype=torch.long)
-            teacher_logits = teacher.logits(inputs)
-            stack.network.set_input(inputs, reset=True)
-            stack.minimizer.compute_equilibrium()
-            stack.cost.set_teacher(teacher_logits, labels)
-            raw_scores = stack.cost.student_logits() / stack.cost.gain
-            student_logits = raw_scores * stack.cost.gain
-            raw_pieces.append(raw_scores.detach().cpu())
-            student_pieces.append(student_logits.detach().cpu())
-            teacher_pieces.append(teacher_logits.detach().cpu())
-            label_pieces.append(labels.detach().cpu())
-            examples_seen += int(labels.shape[0])
-    if not student_pieces:
+        result = evaluate(
+            EvaluationComponents(stack.network, stack.cost, stack.minimizer),
+            teacher_batches(
+                loader,
+                teacher,
+                stack.device,
+                maximum_batches=maximum_batches,
+                sample_limit=sample_limit,
+                before_transfer=lambda inputs, labels: _update_cohort_digest(
+                    digest, inputs, labels
+                ),
+            ),
+            probes=(probe,),
+        )
+    pieces = result.probe_value(probe.name)
+    if not pieces:
         raise ValueError("Expected decomposition evaluation to process examples.")
+    raw_pieces, student_pieces, teacher_pieces, label_pieces = (
+        list(column) for column in zip(*pieces)
+    )
     raw_scores = torch.cat(raw_pieces)
     student_logits = torch.cat(student_pieces)
     teacher_logits = torch.cat(teacher_pieces)

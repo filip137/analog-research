@@ -27,6 +27,9 @@ from training.measured_trace import (
     MeasuredCohortBOptimizer,
 )
 from training.program_verify import ProgramVerifyOptimizer
+from experiments.mnist_shared import teacher_batches
+from training.core.engine import EvaluationComponents, evaluate
+from training.core.probes import PerBatchProbe
 from training.core.sgd import Backprop
 from training.sign_sgd import SignSGD
 
@@ -75,15 +78,10 @@ class TeacherKLDivergence(Function):
         self._teacher_logits = logits.detach()
         self._labels = labels.detach().to(device=logits.device, dtype=torch.long)
 
-    def set_target(self, labels: torch.Tensor) -> None:
-        if self._teacher_logits is None:
-            raise RuntimeError(
-                "Expected teacher logits before setting KL labels. Provided value: none."
-            )
-        self._labels = labels.detach().to(
-            device=self._teacher_logits.device,
-            dtype=torch.long,
-        )
+    def set_target(self, targets: Any) -> None:
+        """Engine target hook: ``targets`` carries ``logits`` and ``labels``."""
+
+        self.set_teacher(targets.logits, targets.labels)
 
     def student_logits(self) -> torch.Tensor:
         return paired_scores(self._layer.state) * self._gain
@@ -592,17 +590,6 @@ def apply_targets(catalog: ParameterCatalog, targets: tuple[torch.Tensor, ...]) 
             binding.state.copy_(target.to(device=binding.state.device, dtype=binding.state.dtype))
 
 
-def settle_scores(
-    stack: StudentStack,
-    inputs: torch.Tensor,
-    *,
-    reset: bool = True,
-) -> torch.Tensor:
-    stack.network.set_input(inputs.to(stack.device), reset=reset)
-    stack.minimizer.compute_equilibrium()
-    return paired_scores(stack.bundle.energy.layers()[-1].state)
-
-
 def fit_positive_logit_gain(
     raw_scores: torch.Tensor,
     teacher_logits: torch.Tensor,
@@ -645,14 +632,27 @@ def collect_calibration(
     teacher: BiasFreeReluTeacher | BoundedDrnTeacher,
     loader: Iterable,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    scores = []
-    logits = []
+    """Settled raw output scores and teacher logits, without a cost target."""
+
+    output_layer = stack.bundle.energy.layers()[-1]
+    probe = PerBatchProbe(
+        "calibration",
+        lambda event: (
+            paired_scores(output_layer.state).detach(),
+            event.batch.targets.logits.detach(),
+        ),
+    )
     with torch.no_grad():
-        for inputs, _labels in loader:
-            inputs = inputs.to(stack.device, dtype=torch.float32)
-            scores.append(settle_scores(stack, inputs, reset=True).detach())
-            logits.append(teacher.logits(inputs).detach())
-    return torch.cat(scores), torch.cat(logits)
+        result = evaluate(
+            EvaluationComponents(stack.network, None, stack.minimizer),
+            teacher_batches(loader, teacher, stack.device),
+            probes=(probe,),
+        )
+    pieces = result.probe_value(probe.name)
+    return (
+        torch.cat([scores for scores, _logits in pieces]),
+        torch.cat([logits for _scores, logits in pieces]),
+    )
 
 
 def select_mapping_and_gain(
@@ -803,7 +803,6 @@ __all__ = [
     "measured_optimizer_type",
     "paired_scores",
     "select_mapping_and_gain",
-    "settle_scores",
     "collapse_clamped_dual_rail_input",
     "signed_differential_lift",
     "signed_dual_rail_lift",

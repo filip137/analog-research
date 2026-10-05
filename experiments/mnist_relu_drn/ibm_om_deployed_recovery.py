@@ -33,7 +33,7 @@ from experiments.mnist_relu_drn.ibm_om_deployment_decomposition import (
     population_from_deployment,
     validate_deployment_contract,
 )
-from experiments.mnist_shared import build_mnist_loaders, limited
+from experiments.mnist_shared import build_mnist_loaders, teacher_batches
 from experiments.schema import to_plain_data
 from training.checkpoint import (
     atomic_torch_save,
@@ -44,12 +44,15 @@ from training.checkpoint import (
     save_epoch_boundary_checkpoint,
     save_named_weights,
 )
+from training.core.engine import ExperimentComponents, GradientsReadyEvent, train_epoch
+from training.core.guards import FiniteGradientGuard
 from training.ibm_reram_recovery import (
     IbmOmDeployedRecovery,
     sample_physical_fast_population,
 )
 
 from .runtime import (
+    TeacherAgreementProbe,
     _ROOT,
     _amplification_index_report,
     _evaluate,
@@ -255,38 +258,6 @@ def _evaluate_gain_pair(
     return result
 
 
-def _assign_gradients(
-    stack: StudentStack,
-    teacher: Any,
-    inputs: torch.Tensor,
-    labels: torch.Tensor,
-    *,
-    batch_index: int,
-) -> None:
-    inputs = inputs.to(stack.device, dtype=torch.float32)
-    labels = labels.to(stack.device, dtype=torch.long)
-    with torch.no_grad():
-        teacher_logits = teacher.logits(inputs)
-    stack.network.set_input(inputs, reset=True)
-    stack.minimizer.compute_equilibrium()
-    stack.cost.set_teacher(teacher_logits, labels)
-    gradients = tuple(stack.differentiator.compute_gradient())
-    parameters = tuple(stack.bundle.energy.params())
-    if len(gradients) != len(parameters):
-        raise RuntimeError("Expected one direct-calibration gradient per parameter.")
-    for binding, parameter, gradient in zip(
-        stack.bundle.catalog.trainable,
-        parameters,
-        gradients,
-    ):
-        if not bool(torch.all(torch.isfinite(gradient))):
-            raise FloatingPointError(
-                "Expected finite direct-pulse calibration gradients. "
-                f"Provided parameter={binding.key!r}, batch={batch_index}."
-            )
-        parameter.state.grad = gradient
-
-
 def _solve_direct_probability_scale(
     ratios: torch.Tensor,
     *,
@@ -455,41 +426,52 @@ def _calibrate_direct_probabilities(
     ratio_pieces: dict[str, list[torch.Tensor]] = {
         key: [] for key in recovery.keys
     }
-    try:
-        for batch_index, (inputs, labels) in enumerate(
-            limited(loader, calibration_batches)
-        ):
-            recovery.zero_grad(set_to_none=True)
-            _assign_gradients(
-                stack,
-                teacher,
-                inputs,
-                labels,
-                batch_index=batch_index,
-            )
-            snapshot = recovery.direct_calibration_snapshot()
-            ratio_batches.append(
-                torch.cat(
-                    tuple(
-                        snapshot[key]["pulse_probability_ratio"]
-                        .detach()
-                        .cpu()
-                        for key in recovery.keys
-                    )
+
+    def record_snapshot(event: Any) -> None:
+        if not isinstance(event, GradientsReadyEvent):
+            return
+        snapshot = recovery.direct_calibration_snapshot()
+        ratio_batches.append(
+            torch.cat(
+                tuple(
+                    snapshot[key]["pulse_probability_ratio"].detach().cpu()
+                    for key in recovery.keys
                 )
             )
-            if percentile is not None:
-                for key in recovery.keys:
-                    magnitude_pieces[key].append(
-                        snapshot[key]["raw_gradient_magnitude"]
-                        .detach()
-                        .cpu()
-                    )
-                    ratio_pieces[key].append(
-                        snapshot[key]["pulse_probability_ratio"]
-                        .detach()
-                        .cpu()
-                    )
+        )
+        if percentile is not None:
+            for key in recovery.keys:
+                magnitude_pieces[key].append(
+                    snapshot[key]["raw_gradient_magnitude"].detach().cpu()
+                )
+                ratio_pieces[key].append(
+                    snapshot[key]["pulse_probability_ratio"].detach().cpu()
+                )
+
+    try:
+        # A gradient pass: the snapshot reads the assigned gradients, and no
+        # update runs.
+        train_epoch(
+            ExperimentComponents(
+                stack.network,
+                stack.cost,
+                stack.minimizer,
+                tuple(stack.bundle.energy.params()),
+                stack.differentiator,
+                None,
+            ),
+            teacher_batches(
+                loader, teacher, stack.device, maximum_batches=calibration_batches
+            ),
+            event_handlers=(
+                FiniteGradientGuard(
+                    tuple(binding.key for binding in stack.bundle.catalog.trainable),
+                    label="direct-pulse calibration",
+                ),
+                record_snapshot,
+            ),
+            reset_input=True,
+        )
         if len(ratio_batches) != calibration_batches:
             raise RuntimeError(
                 "Expected the declared number of direct-pulse calibration batches."
@@ -581,38 +563,29 @@ def _refresh_epoch(
     *,
     maximum_batches: int | None,
 ) -> tuple[dict[str, Any], int]:
-    kl_sum = 0.0
-    student_correct = 0
-    agreement = 0
-    examples = 0
-    batches = 0
-    for batch_index, (inputs, labels) in enumerate(limited(loader, maximum_batches)):
-        inputs = inputs.to(stack.device, dtype=torch.float32)
-        labels = labels.to(stack.device, dtype=torch.long)
-        with torch.no_grad():
-            teacher_logits = teacher.logits(inputs)
-            stack.network.set_input(inputs, reset=True)
-            stack.minimizer.compute_equilibrium()
-            stack.cost.set_teacher(teacher_logits, labels)
-            kl_sum += float(stack.cost.eval().sum().item())
-            student = stack.cost.student_logits().argmax(dim=1)
-            teacher_prediction = teacher_logits.argmax(dim=1)
-            student_correct += int(student.eq(labels).sum().item())
-            agreement += int(student.eq(teacher_prediction).sum().item())
-            recovery.step()
-        examples += int(labels.shape[0])
-        batches = batch_index + 1
-    if examples == 0:
-        raise ValueError("Expected rail-refresh training to process examples.")
-    return (
-        {
-            "examples": examples,
-            "kl_teacher_student": kl_sum / examples,
-            "student_accuracy": student_correct / examples,
-            "teacher_agreement": agreement / examples,
-        },
-        batches,
-    )
+    """Gradient-free recovery: settle, measure, then one ``recovery.step()``.
+
+    The recovery writes the apparent conductances itself, so they are not
+    clamped afterwards.
+    """
+
+    probe = TeacherAgreementProbe()
+    with torch.no_grad():
+        result = train_epoch(
+            ExperimentComponents(
+                stack.network,
+                stack.cost,
+                stack.minimizer,
+                tuple(stack.bundle.energy.params()),
+                None,
+                recovery,
+                clamp_after_update=False,
+            ),
+            teacher_batches(loader, teacher, stack.device, maximum_batches=maximum_batches),
+            probes=(probe,),
+            reset_input=True,
+        )
+    return result.probe_value(probe.name), result.batch_count
 
 
 def _recovery_metadata(
