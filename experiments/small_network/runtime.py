@@ -28,6 +28,8 @@ from experiments.artifacts import (
     content_hash,
     sha256_file,
 )
+from experiments.lifecycle import BestCheckpoint, EpochResult, run_epochs, run_phase
+from experiments.lifecycle.train_phase import lower
 from experiments.schema import to_plain_data
 from experiments.small_network.components import (
     EvaluationRuntime,
@@ -63,7 +65,6 @@ from training.checkpoint import (
     load_epoch_boundary_checkpoint,
     load_legacy_positional_weights,
     load_named_weights,
-    save_encoded_named_weights,
     save_epoch_boundary_checkpoint,
     save_named_weights,
 )
@@ -201,7 +202,11 @@ def execute_train(
     )
     selection_report: Mapping[str, Any] | None = None
     selection_path: Path | None = None
-    try:
+    metrics: dict[str, Any] = {}
+    last_epoch_report: TrainingEpochReport | None = None
+
+    def phase() -> tuple[dict[str, Any], tuple[ArtifactRecord, ...]]:
+        nonlocal metrics, selection_report, selection_path, last_epoch_report
         seed_runtime(spec.common.runtime.seed)
         if (
             request.resume is None
@@ -280,10 +285,9 @@ def execute_train(
                     kind="learning_rate_selection",
                 ),
             )
-        result_path = store.complete(metrics=metrics, artifacts=artifacts)
-    except Exception as exc:
-        store.fail(exc)
-        raise
+        return metrics, artifacts
+
+    result_path = run_phase(store, phase)
     selected = metrics["selected"]
     return TrainingOutcome(
         run_dir=store.run_dir,
@@ -434,11 +438,7 @@ def _execute_training(
 
     start_epoch = 0
     global_step = 0
-    selected_cost: float | None = None
-    selected_epoch: int | None = None
-    selected_error: float | None = None
-    selected_accuracy: float | None = None
-    selected_weights: Mapping[str, Any] | None = None
+    best = BestCheckpoint(weights_path, catalog, better=lower("mean_cost"))
     last_epoch_report: TrainingEpochReport | None = None
     device_programming: Mapping[str, Any] | None = None
     pre_deployment_validation: Mapping[str, Any] | None = None
@@ -485,17 +485,20 @@ def _execute_training(
                 "clean-evaluation selected_weights snapshot. "
                 "Provided value: null."
             )
-        selected_weights = resumed.selected_weights
         (
             selected_cost,
             selected_epoch,
             selected_error,
             selected_accuracy,
         ) = _selection_from_progress(resumed.progress_state)
-        save_encoded_named_weights(
-            weights_path,
-            selected_weights,
-            catalog=catalog,
+        best.restore(
+            epoch=selected_epoch,
+            selection={
+                "mean_cost": selected_cost,
+                "mean_error": selected_error,
+                "accuracy": selected_accuracy,
+            },
+            payload=resumed.selected_weights,
         )
         start_epoch = resumed.epoch
         global_step = resumed.global_step
@@ -735,44 +738,41 @@ def _execute_training(
             }
         )
 
-    last_validation: dict[str, Any] | None = None
-    last_noisy_validation: dict[str, Any] | None = None
-    completed_epoch = start_epoch
-    for epoch in range(start_epoch, spec.settings.num_epochs):
+    def train(epoch: int, step: int) -> tuple[dict[str, Any], int]:
         train_metrics = _TrainingMetrics()
-        training_loader = _limit_batches(
-            runtime.data.train_loader,
-            spec.settings.max_batches,
-        )
         trained = train_epoch(
             runtime.training_components,
-            training_loader,
+            _limit_batches(
+                runtime.data.train_loader,
+                spec.settings.max_batches,
+            ),
             modifier=runtime.modifier,
             event_handlers=(train_metrics, FiniteGradientGuard()),
             epoch=epoch,
-            start_global_step=global_step,
+            start_global_step=step,
             reset_input=False,
         )
-        global_step = trained.next_global_step
-        completed_epoch = epoch + 1
+        return train_metrics.result(), trained.next_global_step
 
+    def validate(
+        epoch: int,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        noisy = None
         if runtime.noisy_evaluation:
-            noisy_validation = evaluate(
-                runtime.evaluation_components,
-                _limit_batches(
-                    runtime.data.held_out_loader,
-                    spec.settings.max_validation_batches,
-                ),
-                modifier=runtime.modifier,
-                probes=(MeanCostProbe(), MeanErrorProbe()),
-                epoch=epoch,
-                split="validation_noisy",
-                reset_input=True,
+            noisy = _classification_metrics(
+                evaluate(
+                    runtime.evaluation_components,
+                    _limit_batches(
+                        runtime.data.held_out_loader,
+                        spec.settings.max_validation_batches,
+                    ),
+                    modifier=runtime.modifier,
+                    probes=(MeanCostProbe(), MeanErrorProbe()),
+                    epoch=epoch,
+                    split="validation_noisy",
+                    reset_input=True,
+                )
             )
-            last_noisy_validation = _classification_metrics(
-                noisy_validation
-            )
-
         validation = evaluate(
             runtime.evaluation_components,
             _limit_batches(
@@ -785,131 +785,128 @@ def _execute_training(
             split="validation",
             reset_input=True,
         )
-        last_validation = _classification_metrics(validation)
-        validation_cost = last_validation["mean_cost"]
-        if validation_cost is None:
+        clean = _classification_metrics(validation)
+        if clean["mean_cost"] is None:
             raise ValueError(
                 "Expected clean validation to evaluate at least one example. "
                 f"Provided value: {validation.example_count} examples."
             )
+        return noisy, clean
 
-        improved = selected_cost is None or validation_cost < selected_cost
-        if improved:
-            selected_cost = validation_cost
-            selected_epoch = epoch
-            selected_error = last_validation["mean_error"]
-            selected_accuracy = last_validation["accuracy"]
-            selected_weights = encode_named_weights(
-                catalog,
-                metadata={
-                    **_selected_model_metadata(spec, runtime),
-                    "selection_metric": "validation.mean_cost",
-                    "selection_value": selected_cost,
-                    "selection_epoch": selected_epoch,
-                    "selection_error_fraction": selected_error,
-                    "selection_accuracy": selected_accuracy,
-                },
-            )
-            save_encoded_named_weights(
-                weights_path,
-                selected_weights,
-                catalog=catalog,
-            )
+    def selection(
+        validation: tuple[dict[str, Any] | None, dict[str, Any]],
+    ) -> dict[str, Any]:
+        clean = validation[1]
+        return {
+            "mean_cost": clean["mean_cost"],
+            "mean_error": clean["mean_error"],
+            "accuracy": clean["accuracy"],
+        }
 
-        if selected_weights is None or selected_epoch is None:
-            raise RuntimeError(
-                "Expected clean validation to select a named-weights snapshot. "
-                "Provided value: no selected snapshot."
-            )
-        progress_state = _selection_progress(
-            cost=selected_cost,
-            epoch=selected_epoch,
-            error_fraction=selected_error,
-            accuracy=selected_accuracy,
+    def payload(
+        epoch: int,
+        validation: tuple[dict[str, Any] | None, dict[str, Any]],
+    ) -> dict[str, Any]:
+        chosen = selection(validation)
+        return encode_named_weights(
+            catalog,
+            metadata={
+                **_selected_model_metadata(spec, runtime),
+                "selection_metric": "validation.mean_cost",
+                "selection_value": chosen["mean_cost"],
+                "selection_epoch": epoch,
+                "selection_error_fraction": chosen["mean_error"],
+                "selection_accuracy": chosen["accuracy"],
+            },
         )
+
+    def save_resume(completed: int, step: int) -> None:
+        chosen = best.selection or {}
         save_epoch_boundary_checkpoint(
             resume_path,
             catalog=catalog,
-            epoch=completed_epoch,
-            global_step=global_step,
-            optimizer=runtime.optimizer,
-            modifier=runtime.modifier,
-            scheduler=None,
-            runtime_state=runtime.runtime_state,
-            progress_state=progress_state,
-            selected_weights=selected_weights,
-            dataloader_generators=generators,
-            resume_capability=runtime.resume_capability,
-            metadata=_resume_metadata(spec, runtime),
-        )
-
-        should_log = (
-            completed_epoch % spec.settings.log_every == 0
-            or completed_epoch == spec.settings.num_epochs
-        )
-        train_values = train_metrics.result()
-        last_epoch_report = _epoch_report(
-            epoch=epoch,
-            completed_epoch=completed_epoch,
-            global_step=global_step,
-            train=train_values,
-            validation=last_validation,
-            improved=improved,
-            selected_epoch=selected_epoch,
-            selected_cost=selected_cost,
-            selected_error=selected_error,
-            selected_accuracy=selected_accuracy,
-        )
-        if should_log:
-            epoch_metric = {
-                "mode": "train",
-                "epoch": epoch,
-                "completed_epochs": completed_epoch,
-                "global_step": global_step,
-                "train": train_values,
-                "validation": last_validation,
-                "validation_noisy": last_noisy_validation,
-                "selected": improved,
-                "selected_epoch": selected_epoch,
-                "selected_cost": selected_cost,
-            }
-            if isinstance(runtime.optimizer, MeasuredTraceOptimizer):
-                epoch_metric["measured_projection"] = (
-                    runtime.optimizer.programming_report
-                )
-            store.append_metric(epoch_metric)
-        for observer in observers:
-            observer(last_epoch_report)
-
-    if selected_weights is None:
-        raise ValueError(
-            "Expected training or its resume checkpoint to provide selected "
-            "clean-evaluation weights. Provided value: null."
-        )
-
-    # A continuation whose configured target epoch is already complete still
-    # owns a fresh, self-contained resume artifact.
-    if not resume_path.exists():
-        save_epoch_boundary_checkpoint(
-            resume_path,
-            catalog=catalog,
-            epoch=completed_epoch,
-            global_step=global_step,
+            epoch=completed,
+            global_step=step,
             optimizer=runtime.optimizer,
             modifier=runtime.modifier,
             scheduler=None,
             runtime_state=runtime.runtime_state,
             progress_state=_selection_progress(
-                cost=selected_cost,
-                epoch=selected_epoch,
-                error_fraction=selected_error,
-                accuracy=selected_accuracy,
+                cost=chosen.get("mean_cost"),
+                epoch=best.epoch,
+                error_fraction=chosen.get("mean_error"),
+                accuracy=chosen.get("accuracy"),
             ),
-            selected_weights=selected_weights,
+            selected_weights=best.payload,
             dataloader_generators=generators,
             resume_capability=runtime.resume_capability,
             metadata=_resume_metadata(spec, runtime),
         )
+
+    def record(result: EpochResult) -> dict[str, Any]:
+        noisy, clean = result.validation
+        epoch_metric = {
+            "mode": "train",
+            "epoch": result.epoch,
+            "completed_epochs": result.completed_epochs,
+            "global_step": result.global_step,
+            "train": result.train,
+            "validation": clean,
+            "validation_noisy": noisy,
+            "selected": result.improved,
+            "selected_epoch": best.epoch,
+            "selected_cost": best.selection["mean_cost"],
+        }
+        if isinstance(runtime.optimizer, MeasuredTraceOptimizer):
+            epoch_metric["measured_projection"] = (
+                runtime.optimizer.programming_report
+            )
+        return epoch_metric
+
+    def report(result: EpochResult) -> None:
+        nonlocal last_epoch_report
+        last_epoch_report = _epoch_report(
+            epoch=result.epoch,
+            completed_epoch=result.completed_epochs,
+            global_step=result.global_step,
+            train=result.train,
+            validation=result.validation[1],
+            improved=result.improved,
+            selected_epoch=best.epoch,
+            selected_cost=best.selection["mean_cost"],
+            selected_error=best.selection["mean_error"],
+            selected_accuracy=best.selection["accuracy"],
+        )
+        for observer in observers:
+            observer(last_epoch_report)
+
+    last, completed_epoch, global_step = run_epochs(
+        store=store,
+        start_epoch=start_epoch,
+        num_epochs=spec.settings.num_epochs,
+        global_step=global_step,
+        log_every=spec.settings.log_every,
+        train_epoch=train,
+        validate=validate,
+        best=best,
+        selection=selection,
+        payload=payload,
+        save_resume=save_resume,
+        resume_path=resume_path,
+        record=record,
+        after_epoch=(report,),
+        missing_selection=(
+            "Expected training or its resume checkpoint to provide selected "
+            "clean-evaluation weights. Provided value: null."
+        ),
+    )
+    last_noisy_validation, last_validation = (
+        (None, None) if last is None else last.validation
+    )
+    selected_cost = best.selection["mean_cost"]
+    selected_epoch = best.epoch
+    selected_error = best.selection["mean_error"]
+    selected_accuracy = best.selection["accuracy"]
 
     om_bounds_report = (
         runtime.optimizer.bounds_report

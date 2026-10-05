@@ -181,6 +181,7 @@ def run_epochs(
             store.append_metric(record(last))
         for observer in observers:
             observer(last)
+    best.require(missing_selection)
     # A continuation whose target epoch is already complete still owns a
     # fresh, self-contained resume artifact.
     if not resume_path.exists():
