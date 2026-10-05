@@ -980,9 +980,37 @@ def check(selected: list[str] | None = None) -> None:
         raise SystemExit(1)
 
 
+def verify(selected: list[str] | None = None) -> None:
+    """Replay cases (default: all) against their captured goldens."""
+
+    names = selected or sorted(all_cases())
+
+    def attempt(name: str) -> Any:
+        try:
+            return run_isolated(name)
+        except RuntimeError as error:
+            return error
+
+    failed = False
+    for name, actual in _parallel(attempt, names).items():
+        if isinstance(actual, Exception):
+            failed = True
+            print(f"FAILED {name}: {str(actual)[-1500:]}")
+            continue
+        try:
+            assert_same(torch.load(golden_path(name), weights_only=False), actual, path=name)
+        except AssertionError as error:
+            failed = True
+            print(f"DIFFERS {name}: {error}")
+            continue
+        print(f"matches {name}")
+    if failed:
+        raise SystemExit(1)
+
+
 if __name__ == "__main__":
     command, *names = sys.argv[1:] or ["capture"]
     if command == "record":
         record(*names)
     else:
-        {"capture": capture, "check": check}[command](names or None)
+        {"capture": capture, "check": check, "verify": verify}[command](names or None)

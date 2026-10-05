@@ -13,6 +13,8 @@ import torch
 import torch.nn.functional as F
 
 from experiments.artifacts import RunStore, atomic_write_json, sha256_file
+from experiments.lifecycle import BestCheckpoint, EpochResult, run_epochs, run_phase
+from experiments.lifecycle.train_phase import lower
 from experiments.mnist_relu.model import BiasFreeReluTeacher
 from experiments.mnist_relu_drn.components import (
     conductance_statistics,
@@ -35,7 +37,6 @@ from training.checkpoint import (
     encode_named_weights,
     load_epoch_boundary_checkpoint,
     load_named_weights,
-    save_encoded_named_weights,
     save_epoch_boundary_checkpoint,
 )
 from training.core import engine
@@ -575,7 +576,7 @@ def run_train(request: "TrainRequest") -> int:
         repo_root=_ROOT,
         input_artifacts=input_artifacts,
     )
-    try:
+    def phase():
         _seed_runtime(spec.runtime.seed)
         device = torch.device(spec.runtime.device)
         data = build_mnist_loaders(spec.data, data_seed=spec.runtime.data_seed)
@@ -614,12 +615,11 @@ def run_train(request: "TrainRequest") -> int:
         weights_path = store.run_dir / "checkpoints" / "weights.pt"
         resume_path = store.run_dir / "checkpoints" / "resume.pt"
         selection_path = store.run_dir / "artifacts" / "learning_rate_selection.json"
+        best = BestCheckpoint(
+            weights_path, stack.bundle.catalog, better=lower("objective_loss")
+        )
         start_epoch = 0
         global_step = 0
-        selected_weights = None
-        selected_epoch = -1
-        selected_validation: dict[str, Any] | None = None
-        last_train = None
         selection_report: dict[str, Any]
 
         if request.resume is not None:
@@ -640,10 +640,10 @@ def run_train(request: "TrainRequest") -> int:
             )
             start_epoch = resumed.epoch
             global_step = resumed.global_step
-            selected_weights = resumed.selected_weights
-            selected_epoch = int(resumed.progress_state["selected_epoch"])
-            selected_validation = dict(
-                resumed.progress_state["selected_validation"]
+            best.restore(
+                epoch=int(resumed.progress_state["selected_epoch"]),
+                selection=dict(resumed.progress_state["selected_validation"]),
+                payload=resumed.selected_weights,
             )
             initial = dict(resumed.progress_state["initial_validation"])
             initial_conductances = dict(
@@ -652,12 +652,6 @@ def run_train(request: "TrainRequest") -> int:
             selection_report = dict(
                 resumed.progress_state["learning_rate_selection"]
             )
-            if selected_weights is not None:
-                save_encoded_named_weights(
-                    weights_path,
-                    selected_weights,
-                    catalog=stack.bundle.catalog,
-                )
             store.append_metric(
                 {
                     "mode": "resume",
@@ -743,6 +737,7 @@ def run_train(request: "TrainRequest") -> int:
                 production_initialization = (
                     stack.optimizer.initialize_at_pulse_zero()
                 )
+                best.catalog = stack.bundle.catalog
                 store.append_metric(
                     {
                         "mode": "production_restart",
@@ -802,164 +797,70 @@ def run_train(request: "TrainRequest") -> int:
                 f"training. Provided value: {learning_rates!r}."
             )
 
-        if selected_validation is None:
-            selected_validation = dict(initial)
-            selected_weights = _selected_payload(
+        def payload(epoch: int, validation: dict[str, Any]) -> dict[str, Any]:
+            return _selected_payload(
                 stack,
                 spec=spec,
                 teacher_path=request.teacher_weights,
                 teacher_sha256=teacher_sha,
                 learning_rates=learning_rates,
-                epoch=-1,
-                validation=initial,
-            )
-            save_encoded_named_weights(
-                weights_path, selected_weights, catalog=stack.bundle.catalog
+                epoch=epoch,
+                validation=validation,
             )
 
-        last_validation = evaluate(
-            stack,
-            teacher,
-            data.validation,
-            maximum_batches=spec.settings.max_validation_batches,
+        best.seed(
+            epoch=-1,
+            selection=dict(initial),
+            payload=lambda: payload(-1, initial),
         )
-        for epoch in range(start_epoch, spec.settings.num_epochs):
-            last_train, batches = train_epoch(
+
+        def validate(_epoch: int) -> dict[str, Any]:
+            return evaluate(
+                stack,
+                teacher,
+                data.validation,
+                maximum_batches=spec.settings.max_validation_batches,
+            )
+
+        # Evaluated once more before training; it is the last validation of
+        # a continuation that runs no further epoch.
+        boundary_validation = validate(start_epoch - 1)
+
+        def train(_epoch: int, step: int) -> tuple[dict[str, Any], int]:
+            trained, batches = train_epoch(
                 stack,
                 teacher,
                 data.train,
                 maximum_batches=spec.settings.max_batches,
                 reset_input=spec.settings.reset_input_between_batches,
             )
-            global_step += batches
-            last_validation = evaluate(
-                stack,
-                teacher,
-                data.validation,
-                maximum_batches=spec.settings.max_validation_batches,
-            )
-            improved = (
-                last_validation["objective_loss"]
-                < selected_validation["objective_loss"]
-            )
-            if improved:
-                selected_epoch = epoch
-                selected_validation = dict(last_validation)
-                selected_weights = _selected_payload(
-                    stack,
-                    spec=spec,
-                    teacher_path=request.teacher_weights,
-                    teacher_sha256=teacher_sha,
-                    learning_rates=learning_rates,
-                    epoch=epoch,
-                    validation=last_validation,
-                )
-                save_encoded_named_weights(
-                    weights_path,
-                    selected_weights,
-                    catalog=stack.bundle.catalog,
-                )
-            if selected_weights is None:
-                raise RuntimeError(
-                    "Expected selected RESET weights at every epoch boundary."
-                )
-            progress = {
-                "fixed_logit_gain": 1.0,
-                "objective": spec.settings.objective,
-                "selected_learning_rates": list(learning_rates),
-                "selected_epoch": selected_epoch,
-                "selected_validation": selected_validation,
-                "initial_validation": initial,
-                "initial_conductances": initial_conductances,
-                "learning_rate_selection": selection_report,
-            }
-            checkpoint_metadata = {
-                "experiment_id": spec.experiment_id,
-                "encoding": spec.model.encoding,
-                "include_biases": spec.model.include_biases,
-                "amplification_indexing": spec.model.amplification_indexing,
-                "amplification_indices": _amplification_index_report(stack),
-                "objective": spec.settings.objective,
-                "initialization": "measured_reset",
-                "fixed_logit_gain": 1.0,
-                "temperature": 1.0,
-                "reset_input_between_batches": (
-                    spec.settings.reset_input_between_batches
-                ),
-                "teacher_sha256": teacher_sha,
-                "device_data_sha256": stack.optimizer.data_report[
-                    "source_sha256"
-                ],
-                "device_assignment_sha256_by_parameter": stack.optimizer.data_report[
-                    "assignment_sha256_by_parameter"
-                ],
-            }
-            save_epoch_boundary_checkpoint(
-                resume_path,
-                catalog=stack.bundle.catalog,
-                epoch=epoch + 1,
-                global_step=global_step,
-                optimizer=stack.optimizer,
-                progress_state=progress,
-                selected_weights=selected_weights,
-                dataloader_generators={"train": data.train_generator},
-                metadata=checkpoint_metadata,
-            )
-            if (
-                (epoch + 1) % spec.settings.log_every == 0
-                or epoch + 1 == spec.settings.num_epochs
-            ):
-                store.append_metric(
-                    {
-                        "mode": "train",
-                        "epoch": epoch,
-                        "completed_epochs": epoch + 1,
-                        "global_step": global_step,
-                        "train": last_train,
-                        "validation": last_validation,
-                        "selected": improved,
-                        "selected_epoch": selected_epoch,
-                        "selected_objective_loss": selected_validation[
-                            "objective_loss"
-                        ],
-                        "learning_rates": list(learning_rates),
-                        "conductances": conductance_statistics(
-                            stack.bundle.catalog,
-                            encoding=spec.model.encoding,
-                        ),
-                        "measured_projection": stack.optimizer.programming_report,
-                    }
-                )
+            return trained, step + batches
 
-        if selected_weights is None or selected_validation is None:
-            raise RuntimeError("Expected training to provide selected RESET weights.")
-        if not resume_path.exists():
+        def save_resume(completed: int, step: int) -> None:
             save_epoch_boundary_checkpoint(
                 resume_path,
                 catalog=stack.bundle.catalog,
-                epoch=start_epoch,
-                global_step=global_step,
+                epoch=completed,
+                global_step=step,
                 optimizer=stack.optimizer,
                 progress_state={
                     "fixed_logit_gain": 1.0,
                     "objective": spec.settings.objective,
                     "selected_learning_rates": list(learning_rates),
-                    "selected_epoch": selected_epoch,
-                    "selected_validation": selected_validation,
+                    "selected_epoch": best.epoch,
+                    "selected_validation": best.selection,
                     "initial_validation": initial,
                     "initial_conductances": initial_conductances,
                     "learning_rate_selection": selection_report,
                 },
-                selected_weights=selected_weights,
+                selected_weights=best.payload,
                 dataloader_generators={"train": data.train_generator},
                 metadata={
                     "experiment_id": spec.experiment_id,
                     "encoding": spec.model.encoding,
                     "include_biases": spec.model.include_biases,
                     "amplification_indexing": spec.model.amplification_indexing,
-                    "amplification_indices": _amplification_index_report(
-                        stack
-                    ),
+                    "amplification_indices": _amplification_index_report(stack),
                     "objective": spec.settings.objective,
                     "initialization": "measured_reset",
                     "fixed_logit_gain": 1.0,
@@ -977,6 +878,43 @@ def run_train(request: "TrainRequest") -> int:
                 },
             )
 
+        def record(result: EpochResult) -> dict[str, Any]:
+            return {
+                "mode": "train",
+                "epoch": result.epoch,
+                "completed_epochs": result.completed_epochs,
+                "global_step": result.global_step,
+                "train": result.train,
+                "validation": result.validation,
+                "selected": result.improved,
+                "selected_epoch": best.epoch,
+                "selected_objective_loss": best.selection["objective_loss"],
+                "learning_rates": list(learning_rates),
+                "conductances": conductance_statistics(
+                    stack.bundle.catalog,
+                    encoding=spec.model.encoding,
+                ),
+                "measured_projection": stack.optimizer.programming_report,
+            }
+
+        last, _completed, _step = run_epochs(
+            store=store,
+            start_epoch=start_epoch,
+            num_epochs=spec.settings.num_epochs,
+            global_step=global_step,
+            log_every=spec.settings.log_every,
+            train_epoch=train,
+            validate=validate,
+            best=best,
+            selection=dict,
+            payload=payload,
+            save_resume=save_resume,
+            resume_path=resume_path,
+            record=record,
+            missing_selection="Expected selected RESET weights at every epoch boundary.",
+        )
+        best.require("Expected training to provide selected RESET weights.")
+
         final_conductances = conductance_statistics(
             stack.bundle.catalog, encoding=spec.model.encoding
         )
@@ -986,8 +924,8 @@ def run_train(request: "TrainRequest") -> int:
         selected_conductances = conductance_statistics(
             stack.bundle.catalog, encoding=spec.model.encoding
         )
-        store.complete(
-            metrics={
+        return (
+            {
                 "teacher": {"sha256": teacher_sha, "metadata": teacher_metadata},
                 "encoding": spec.model.encoding,
                 "include_biases": spec.model.include_biases,
@@ -1004,13 +942,15 @@ def run_train(request: "TrainRequest") -> int:
                 "selected_learning_rates": list(learning_rates),
                 "learning_rate_selection": selection_report["selection"],
                 "initial_validation": initial,
-                "last_train": last_train,
-                "last_validation": last_validation,
-                "selected": {"epoch": selected_epoch, **selected_validation},
+                "last_train": None if last is None else last.train,
+                "last_validation": (
+                    boundary_validation if last is None else last.validation
+                ),
+                "selected": {"epoch": best.epoch, **best.selection},
                 "posthoc_validation_calibration": posthoc,
                 "acceptance_gate": {
                     "minimum_validation_accuracy": spec.settings.minimum_validation_accuracy,
-                    "passed": selected_validation["student_accuracy"]
+                    "passed": best.selection["student_accuracy"]
                     >= spec.settings.minimum_validation_accuracy,
                 },
                 "initial_conductances": initial_conductances,
@@ -1018,7 +958,7 @@ def run_train(request: "TrainRequest") -> int:
                 "selected_conductances": selected_conductances,
                 "measured_programming": final_programming,
             },
-            artifacts=(
+            (
                 store.artifact_record(weights_path, kind="selected_named_weights"),
                 store.artifact_record(resume_path, kind="epoch_boundary_resume"),
                 store.artifact_record(
@@ -1026,10 +966,9 @@ def run_train(request: "TrainRequest") -> int:
                 ),
             ),
         )
-        return 0
-    except BaseException as error:
-        store.fail(error)
-        raise
+
+    run_phase(store, phase)
+    return 0
 
 
 def run_validate(request: "ValidateRequest") -> int:

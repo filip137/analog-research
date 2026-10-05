@@ -9,6 +9,8 @@ import torch
 import torch.nn.functional as F
 
 from experiments.artifacts import RunStore, sha256_file
+from experiments.lifecycle import BestCheckpoint, EpochResult, run_epochs, run_phase
+from experiments.lifecycle.train_phase import lower
 from experiments.mnist_relu.config import TeacherTrainSpec, TeacherValidateSpec
 from experiments.mnist_relu.model import BiasFreeReluTeacher
 from experiments.mnist_shared import build_mnist_loaders, limited
@@ -17,7 +19,6 @@ from training.checkpoint import (
     encode_named_weights,
     load_epoch_boundary_checkpoint,
     load_named_weights,
-    save_encoded_named_weights,
     save_epoch_boundary_checkpoint,
 )
 
@@ -104,6 +105,43 @@ def _evaluate(
     }
 
 
+def _train_epoch(
+    model: BiasFreeReluTeacher,
+    optimizer: torch.optim.Optimizer,
+    loader: Iterable,
+    *,
+    device: torch.device,
+    maximum_batches: int | None,
+) -> tuple[dict[str, Any], int]:
+    model.train()
+    loss_sum = 0.0
+    correct = 0
+    examples = 0
+    batches = 0
+    for batch_index, (batch_inputs, labels) in enumerate(limited(loader, maximum_batches)):
+        batch_inputs = batch_inputs.to(device=device, dtype=torch.float32)
+        labels = labels.to(device=device, dtype=torch.long)
+        optimizer.zero_grad(set_to_none=True)
+        logits = model.logits(batch_inputs)
+        loss = F.cross_entropy(logits, labels)
+        loss.backward()
+        optimizer.step()
+        loss_sum += float(loss.item()) * labels.shape[0]
+        correct += int((logits.argmax(dim=1) == labels).sum().item())
+        examples += int(labels.shape[0])
+        batches = batch_index + 1
+    if examples == 0:
+        raise ValueError("Expected teacher training to process examples. Provided value: 0.")
+    return (
+        {
+            "examples": examples,
+            "cross_entropy": loss_sum / examples,
+            "accuracy": correct / examples,
+        },
+        batches,
+    )
+
+
 def run_train(request: "TrainRequest") -> int:
     spec = request.spec
     if not isinstance(spec, TeacherTrainSpec):
@@ -125,7 +163,8 @@ def run_train(request: "TrainRequest") -> int:
         repo_root=_ROOT,
         input_artifacts=inputs,
     )
-    try:
+
+    def phase():
         torch.manual_seed(spec.runtime.seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(spec.runtime.seed)
@@ -142,12 +181,9 @@ def run_train(request: "TrainRequest") -> int:
         )
         weights_path = store.run_dir / "checkpoints" / "weights.pt"
         resume_path = store.run_dir / "checkpoints" / "resume.pt"
+        best = BestCheckpoint(weights_path, model.catalog, better=lower("cross_entropy"))
         start_epoch = 0
         global_step = 0
-        selected_loss: float | None = None
-        selected_accuracy: float | None = None
-        selected_epoch: int | None = None
-        selected_weights = None
         if request.resume is not None:
             resumed = load_epoch_boundary_checkpoint(
                 request.resume,
@@ -157,124 +193,109 @@ def run_train(request: "TrainRequest") -> int:
             )
             start_epoch = resumed.epoch
             global_step = resumed.global_step
-            selected_weights = resumed.selected_weights
-            selected_loss = float(resumed.progress_state["selected_cross_entropy"])
-            selected_accuracy = float(resumed.progress_state["selected_accuracy"])
-            selected_epoch = int(resumed.progress_state["selected_epoch"])
-            if selected_weights is not None:
-                save_encoded_named_weights(weights_path, selected_weights, catalog=model.catalog)
+            best.restore(
+                epoch=int(resumed.progress_state["selected_epoch"]),
+                selection={
+                    "cross_entropy": float(
+                        resumed.progress_state["selected_cross_entropy"]
+                    ),
+                    "accuracy": float(resumed.progress_state["selected_accuracy"]),
+                },
+                payload=resumed.selected_weights,
+            )
         elif request.weights is not None:
             load_named_weights(request.weights, model.catalog)
 
-        initial = _evaluate(
-            model,
-            data.validation,
-            device=device,
-            maximum_batches=spec.settings.max_validation_batches,
-        )
-        store.append_metric({"mode": "initialization", "validation": initial})
-
-        last_train = None
-        last_validation = initial
-        for epoch in range(start_epoch, spec.settings.num_epochs):
-            model.train()
-            loss_sum = 0.0
-            correct = 0
-            examples = 0
-            batches = 0
-            for batch_index, (batch_inputs, labels) in enumerate(
-                limited(data.train, spec.settings.max_batches)
-            ):
-                batch_inputs = batch_inputs.to(device=device, dtype=torch.float32)
-                labels = labels.to(device=device, dtype=torch.long)
-                optimizer.zero_grad(set_to_none=True)
-                logits = model.logits(batch_inputs)
-                loss = F.cross_entropy(logits, labels)
-                loss.backward()
-                optimizer.step()
-                loss_sum += float(loss.item()) * labels.shape[0]
-                correct += int((logits.argmax(dim=1) == labels).sum().item())
-                examples += int(labels.shape[0])
-                batches = batch_index + 1
-            global_step += batches
-            if examples == 0:
-                raise ValueError("Expected teacher training to process examples. Provided value: 0.")
-            last_train = {
-                "examples": examples,
-                "cross_entropy": loss_sum / examples,
-                "accuracy": correct / examples,
-            }
-            last_validation = _evaluate(
+        def validate(_epoch: int) -> dict[str, Any]:
+            return _evaluate(
                 model,
                 data.validation,
                 device=device,
                 maximum_batches=spec.settings.max_validation_batches,
             )
-            improved = selected_loss is None or (
-                last_validation["cross_entropy"] < selected_loss
+
+        initial = validate(-1)
+        store.append_metric({"mode": "initialization", "validation": initial})
+
+        def train_epoch(_epoch: int, step: int) -> tuple[dict[str, Any], int]:
+            trained, batches = _train_epoch(
+                model,
+                optimizer,
+                data.train,
+                device=device,
+                maximum_batches=spec.settings.max_batches,
             )
-            if improved:
-                selected_loss = float(last_validation["cross_entropy"])
-                selected_accuracy = float(last_validation["accuracy"])
-                selected_epoch = epoch
-                selected_weights = encode_named_weights(
-                    model.catalog,
-                    metadata={
-                        "experiment_id": spec.experiment_id,
-                        "architecture": "bias_free_relu_784_50_10",
-                        "selection_metric": "validation.cross_entropy",
-                        "selection_value": selected_loss,
-                        "selection_accuracy": selected_accuracy,
-                        "selection_epoch": selected_epoch,
-                    },
-                )
-                save_encoded_named_weights(weights_path, selected_weights, catalog=model.catalog)
-            if selected_weights is None or selected_epoch is None:
-                raise RuntimeError("Expected a selected teacher checkpoint after validation.")
+            return trained, step + batches
+
+        def payload(epoch: int, validation: dict[str, Any]) -> dict[str, Any]:
+            return encode_named_weights(
+                model.catalog,
+                metadata={
+                    "experiment_id": spec.experiment_id,
+                    "architecture": "bias_free_relu_784_50_10",
+                    "selection_metric": "validation.cross_entropy",
+                    "selection_value": float(validation["cross_entropy"]),
+                    "selection_accuracy": float(validation["accuracy"]),
+                    "selection_epoch": epoch,
+                },
+            )
+
+        def save_resume(completed: int, step: int) -> None:
             save_epoch_boundary_checkpoint(
                 resume_path,
                 catalog=model.catalog,
-                epoch=epoch + 1,
-                global_step=global_step,
+                epoch=completed,
+                global_step=step,
                 optimizer=optimizer,
                 progress_state={
-                    "selected_cross_entropy": selected_loss,
-                    "selected_accuracy": selected_accuracy,
-                    "selected_epoch": selected_epoch,
+                    "selected_cross_entropy": float(best.selection["cross_entropy"]),
+                    "selected_accuracy": float(best.selection["accuracy"]),
+                    "selected_epoch": best.epoch,
                 },
-                selected_weights=selected_weights,
+                selected_weights=best.payload,
                 dataloader_generators={"train": data.train_generator},
                 metadata={"experiment_id": spec.experiment_id},
             )
-            if (epoch + 1) % spec.settings.log_every == 0 or epoch + 1 == spec.settings.num_epochs:
-                store.append_metric(
-                    {
-                        "mode": "train",
-                        "epoch": epoch,
-                        "completed_epochs": epoch + 1,
-                        "global_step": global_step,
-                        "train": last_train,
-                        "validation": last_validation,
-                        "selected": improved,
-                        "selected_epoch": selected_epoch,
-                        "selected_cross_entropy": selected_loss,
-                    }
-                )
 
-        if selected_weights is None or selected_epoch is None or selected_accuracy is None:
-            raise RuntimeError("Expected training or resume to provide selected teacher weights.")
-        artifacts = (
-            store.artifact_record(weights_path, kind="selected_named_weights"),
-            store.artifact_record(resume_path, kind="epoch_boundary_resume"),
+        def record(result: EpochResult) -> dict[str, Any]:
+            return {
+                "mode": "train",
+                "epoch": result.epoch,
+                "completed_epochs": result.completed_epochs,
+                "global_step": result.global_step,
+                "train": result.train,
+                "validation": result.validation,
+                "selected": result.improved,
+                "selected_epoch": best.epoch,
+                "selected_cross_entropy": float(best.selection["cross_entropy"]),
+            }
+
+        last, _completed, _step = run_epochs(
+            store=store,
+            start_epoch=start_epoch,
+            num_epochs=spec.settings.num_epochs,
+            global_step=global_step,
+            log_every=spec.settings.log_every,
+            train_epoch=train_epoch,
+            validate=validate,
+            best=best,
+            selection=lambda validation: validation,
+            payload=payload,
+            save_resume=save_resume,
+            resume_path=resume_path,
+            record=record,
+            missing_selection="Expected a selected teacher checkpoint after validation.",
         )
-        store.complete(
-            metrics={
+        best.require("Expected training or resume to provide selected teacher weights.")
+        selected_accuracy = float(best.selection["accuracy"])
+        return (
+            {
                 "initial_validation": initial,
-                "last_train": last_train,
-                "last_validation": last_validation,
+                "last_train": None if last is None else last.train,
+                "last_validation": initial if last is None else last.validation,
                 "selected": {
-                    "epoch": selected_epoch,
-                    "cross_entropy": selected_loss,
+                    "epoch": best.epoch,
+                    "cross_entropy": float(best.selection["cross_entropy"]),
                     "accuracy": selected_accuracy,
                 },
                 "acceptance_gate": {
@@ -282,12 +303,14 @@ def run_train(request: "TrainRequest") -> int:
                     "passed": selected_accuracy >= spec.settings.minimum_validation_accuracy,
                 },
             },
-            artifacts=artifacts,
+            (
+                store.artifact_record(weights_path, kind="selected_named_weights"),
+                store.artifact_record(resume_path, kind="epoch_boundary_resume"),
+            ),
         )
-        return 0
-    except BaseException as error:
-        store.fail(error)
-        raise
+
+    run_phase(store, phase)
+    return 0
 
 
 def run_validate(request: "ValidateRequest") -> int:
