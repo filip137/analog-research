@@ -28,7 +28,7 @@ from experiments.mnist_relu_drn_reset.config import (
     ResetTrainSpec,
     ResetValidateSpec,
 )
-from experiments.mnist_shared import build_mnist_loaders, limited
+from experiments.mnist_shared import build_mnist_loaders, teacher_batches
 from experiments.schema import to_plain_data
 from model.resistive.interaction import DenseResistive, SignedDenseResistive
 from training.checkpoint import (
@@ -38,6 +38,14 @@ from training.checkpoint import (
     save_encoded_named_weights,
     save_epoch_boundary_checkpoint,
 )
+from training.core import engine
+from training.core.engine import (
+    EvaluationComponents,
+    ExperimentComponents,
+    GradientsReadyEvent,
+)
+from training.core.guards import FiniteGradientGuard
+from training.core.probes import PerBatchProbe
 from training.measured_trace import MeasuredTraceOptimizer
 
 if TYPE_CHECKING:
@@ -261,6 +269,63 @@ def _finalize_metrics(
     return result
 
 
+class SupervisionProbe:
+    """RESET supervision metrics, shared by training and evaluation passes.
+
+    ``batch_loss`` is the latest batch's mean objective, for the LR-safety
+    observer. ``diagnostic_gain`` adds the post-hoc calibrated KL.
+    """
+
+    name = "supervision"
+
+    def __init__(self, objective: str, *, diagnostic_gain: float | None = None) -> None:
+        self._objective = objective
+        self._diagnostic_gain = diagnostic_gain
+
+    def reset(self) -> None:
+        self._totals = _empty_totals()
+        self._calibrated_kl_sum = 0.0
+        self.batch_loss: float | None = None
+
+    def observe(self, event: Any) -> None:
+        targets = event.batch.targets
+        with torch.no_grad():
+            student_logits = event.components.cost_fn.student_logits()
+            batch = _batch_metrics(
+                student_logits,
+                targets.logits,
+                targets.labels,
+                objective=self._objective,
+            )
+            _add_totals(self._totals, batch)
+            self.batch_loss = float(batch["objective_sum"]) / int(batch["examples"])
+            if self._diagnostic_gain is not None:
+                teacher_log_prob = F.log_softmax(targets.logits, dim=1)
+                teacher_prob = teacher_log_prob.exp()
+                calibrated_log_prob = F.log_softmax(
+                    student_logits * self._diagnostic_gain,
+                    dim=1,
+                )
+                self._calibrated_kl_sum += float(
+                    (
+                        teacher_prob
+                        * (teacher_log_prob - calibrated_log_prob)
+                    ).sum().item()
+                )
+
+    def result(self) -> dict[str, Any]:
+        return _finalize_metrics(
+            self._totals,
+            objective=self._objective,
+            diagnostic_gain=self._diagnostic_gain,
+            calibrated_kl_sum=(
+                self._calibrated_kl_sum
+                if self._diagnostic_gain is not None
+                else None
+            ),
+        )
+
+
 def evaluate(
     stack: Any,
     teacher: BiasFreeReluTeacher,
@@ -270,54 +335,20 @@ def evaluate(
     sample_limit: int | None = None,
     diagnostic_gain: float | None = None,
 ) -> dict[str, Any]:
-    totals = _empty_totals()
-    calibrated_kl_sum = 0.0
+    probe = SupervisionProbe(stack.cost.objective, diagnostic_gain=diagnostic_gain)
     with torch.no_grad():
-        for inputs, labels in limited(loader, maximum_batches):
-            examples = int(totals["examples"])
-            if sample_limit is not None:
-                remaining = sample_limit - examples
-                if remaining <= 0:
-                    break
-                inputs = inputs[:remaining]
-                labels = labels[:remaining]
-            inputs = inputs.to(stack.device, dtype=torch.float32)
-            labels = labels.to(stack.device, dtype=torch.long)
-            teacher_logits = teacher.logits(inputs)
-            stack.network.set_input(inputs, reset=True)
-            stack.minimizer.compute_equilibrium()
-            stack.cost.set_batch(teacher_logits, labels)
-            student_logits = stack.cost.student_logits()
-            _add_totals(
-                totals,
-                _batch_metrics(
-                    student_logits,
-                    teacher_logits,
-                    labels,
-                    objective=stack.cost.objective,
-                ),
-            )
-            if diagnostic_gain is not None:
-                teacher_log_prob = F.log_softmax(teacher_logits, dim=1)
-                teacher_prob = teacher_log_prob.exp()
-                calibrated_log_prob = F.log_softmax(
-                    student_logits * diagnostic_gain,
-                    dim=1,
-                )
-                calibrated_kl_sum += float(
-                    (
-                        teacher_prob
-                        * (teacher_log_prob - calibrated_log_prob)
-                    ).sum().item()
-                )
-    return _finalize_metrics(
-        totals,
-        objective=stack.cost.objective,
-        diagnostic_gain=diagnostic_gain,
-        calibrated_kl_sum=(
-            calibrated_kl_sum if diagnostic_gain is not None else None
-        ),
-    )
+        result = engine.evaluate(
+            EvaluationComponents(stack.network, stack.cost, stack.minimizer),
+            teacher_batches(
+                loader,
+                teacher,
+                stack.device,
+                maximum_batches=maximum_batches,
+                sample_limit=sample_limit,
+            ),
+            probes=(probe,),
+        )
+    return result.probe_value(probe.name)
 
 
 def train_epoch(
@@ -332,55 +363,41 @@ def train_epoch(
     ]
     | None = None,
 ) -> tuple[dict[str, Any], int]:
-    totals = _empty_totals()
-    batches = 0
-    parameters = tuple(stack.bundle.energy.params())
-    names = tuple(binding.key for binding in stack.bundle.catalog.trainable)
-    for batch_index, (inputs, labels) in enumerate(limited(loader, maximum_batches)):
-        inputs = inputs.to(stack.device, dtype=torch.float32)
-        labels = labels.to(stack.device, dtype=torch.long)
-        with torch.no_grad():
-            teacher_logits = teacher.logits(inputs)
-        stack.network.set_input(inputs, reset=reset_input)
-        stack.minimizer.compute_equilibrium()
-        stack.cost.set_batch(teacher_logits, labels)
-        with torch.no_grad():
-            student_logits = stack.cost.student_logits()
-            batch = _batch_metrics(
-                student_logits,
-                teacher_logits,
-                labels,
-                objective=stack.cost.objective,
-            )
-            _add_totals(totals, batch)
-            batch_loss = float(batch["objective_sum"]) / int(batch["examples"])
-        stack.optimizer.zero_grad(set_to_none=True)
-        gradients = tuple(stack.differentiator.compute_gradient())
-        if len(gradients) != len(parameters) or len(names) != len(parameters):
-            raise RuntimeError(
-                "Expected one supervision gradient per trainable conductance "
-                "tensor. Provided value: "
-                f"gradients={len(gradients)}, parameters={len(parameters)}, "
-                f"names={len(names)}."
-            )
-        for name, parameter, gradient in zip(names, parameters, gradients):
-            if not torch.isfinite(gradient).all():
-                raise FloatingPointError(
-                    "Expected finite RESET-training gradients. "
-                    f"Provided value: parameter={name!r}, batch={batch_index}."
-                )
-            parameter.state.grad = gradient
-        if observer is not None:
-            observer(batch_loss, gradients, parameters)
-        stack.optimizer.step()
-        for parameter in parameters:
-            parameter.clamp_()
-        batches = batch_index + 1
-    metrics = _finalize_metrics(
-        totals,
-        objective=stack.cost.objective,
+    """One RESET training epoch; ``observer`` sees each batch's gradients.
+
+    The observer runs after the finite-gradient guard and before the update,
+    as ``observer(batch_loss, gradients, parameters)``.
+    """
+
+    probe = SupervisionProbe(stack.cost.objective)
+    handlers: list[Callable[[Any], None]] = [
+        FiniteGradientGuard(
+            tuple(binding.key for binding in stack.bundle.catalog.trainable),
+            label="RESET-training",
+        )
+    ]
+    if observer is not None:
+
+        def notify(event: Any) -> None:
+            if isinstance(event, GradientsReadyEvent):
+                observer(probe.batch_loss, event.gradients, event.components.parameters)
+
+        handlers.append(notify)
+    result = engine.train_epoch(
+        ExperimentComponents(
+            stack.network,
+            stack.cost,
+            stack.minimizer,
+            tuple(stack.bundle.energy.params()),
+            stack.differentiator,
+            stack.optimizer,
+        ),
+        teacher_batches(loader, teacher, stack.device, maximum_batches=maximum_batches),
+        probes=(probe,),
+        event_handlers=handlers,
+        reset_input=reset_input,
     )
-    return metrics, batches
+    return result.probe_value(probe.name), result.batch_count
 
 
 def _collect_logits(
@@ -388,23 +405,28 @@ def _collect_logits(
     teacher: BiasFreeReluTeacher,
     loader: Iterable,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    student_values = []
-    teacher_values = []
+    probe = PerBatchProbe(
+        "logits",
+        lambda event: (
+            event.components.cost_fn.student_logits().detach(),
+            event.batch.targets.logits.detach(),
+        ),
+    )
     with torch.no_grad():
-        for inputs, labels in loader:
-            inputs = inputs.to(stack.device, dtype=torch.float32)
-            labels = labels.to(stack.device, dtype=torch.long)
-            teacher_logits = teacher.logits(inputs)
-            stack.network.set_input(inputs, reset=True)
-            stack.minimizer.compute_equilibrium()
-            stack.cost.set_batch(teacher_logits, labels)
-            student_values.append(stack.cost.student_logits().detach())
-            teacher_values.append(teacher_logits.detach())
-    if not student_values:
+        result = engine.evaluate(
+            EvaluationComponents(stack.network, stack.cost, stack.minimizer),
+            teacher_batches(loader, teacher, stack.device),
+            probes=(probe,),
+        )
+    pieces = result.probe_value(probe.name)
+    if not pieces:
         raise ValueError(
             "Expected post-hoc calibration to process examples. Provided value: 0."
         )
-    return torch.cat(student_values), torch.cat(teacher_values)
+    return (
+        torch.cat([student for student, _teacher in pieces]),
+        torch.cat([teacher_logits for _student, teacher_logits in pieces]),
+    )
 
 
 def _posthoc_calibration(

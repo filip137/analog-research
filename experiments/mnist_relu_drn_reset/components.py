@@ -65,16 +65,10 @@ class PairedSupervision(Function):
             dtype=torch.long,
         )
 
-    def set_target(self, labels: torch.Tensor) -> None:
-        if self._teacher_logits is None:
-            raise RuntimeError(
-                "Expected teacher logits before setting supervision labels. "
-                "Provided value: none."
-            )
-        self._labels = labels.detach().to(
-            device=self._teacher_logits.device,
-            dtype=torch.long,
-        )
+    def set_target(self, targets: Any) -> None:
+        """Engine target hook: ``targets`` carries ``logits`` and ``labels``."""
+
+        self.set_batch(targets.logits, targets.labels)
 
     def student_logits(self) -> torch.Tensor:
         return paired_scores(self._layer.state)

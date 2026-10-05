@@ -6,14 +6,18 @@ from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from hashlib import sha256
-from itertools import islice, product
+from itertools import product
 import math
 from typing import Any
 
 import numpy as np
 import torch
 
+from experiments.mnist_shared import teacher_batches
 from model.variable.parameter import Bias, DenseWeight
+from training.core import engine
+from training.core.engine import ExperimentComponents, GradientsReadyEvent
+from training.core.guards import FiniteGradientGuard
 from training.measured_trace import MeasuredTraceOptimizer
 
 
@@ -392,46 +396,6 @@ def _parameter_topology(
     }
 
 
-def _prepare_gradients(
-    stack: Any,
-    teacher: Any,
-    inputs: torch.Tensor,
-    labels: torch.Tensor,
-    *,
-    training_reset_input: bool | None = None,
-) -> tuple[float, tuple[torch.Tensor, ...]]:
-    topology = _parameter_topology(
-        stack, training_reset_input=training_reset_input
-    )
-    inputs = inputs.to(stack.device, dtype=torch.float32)
-    labels = labels.to(stack.device, dtype=torch.long)
-    with torch.no_grad():
-        teacher_logits = teacher.logits(inputs)
-    stack.network.set_input(
-        inputs,
-        reset=topology["training_reset_input"],
-    )
-    stack.minimizer.compute_equilibrium()
-    stack.cost.set_batch(teacher_logits, labels)
-    with torch.no_grad():
-        loss = float(stack.cost.eval().mean().item())
-    gradients = tuple(stack.differentiator.compute_gradient())
-    names = topology["names"]
-    parameters = topology["parameters"]
-    if len(gradients) != len(parameters):
-        raise RuntimeError(
-            "Expected one supervision gradient per trainable conductance tensor. "
-            f"Provided value: gradients={len(gradients)}, parameters={len(parameters)}."
-        )
-    for name, gradient in zip(names, gradients):
-        if not torch.isfinite(gradient).all():
-            raise FloatingPointError(
-                "Expected finite gradients during LR selection. "
-                f"Provided value: parameter={name!r}."
-            )
-    return loss, gradients
-
-
 def _run_probe(
     stack: Any,
     teacher: Any,
@@ -470,15 +434,12 @@ def _run_probe(
     split_statistics: dict[str, Any] = {}
     tolerance = float(settings["stability_tolerance"])
     bias_quantile = float(settings["bias_quantile"])
-    for inputs, labels in islice(train_loader, checkpoints[-1]):
-        _loss, gradients = _prepare_gradients(
-            stack,
-            teacher,
-            inputs,
-            labels,
-            training_reset_input=training_reset_input,
-        )
-        gradient_by_name = dict(zip(names, gradients))
+
+    def measure(event: Any) -> None:
+        nonlocal used, stable, split_statistics
+        if not isinstance(event, GradientsReadyEvent):
+            return
+        gradient_by_name = dict(zip(names, event.gradients))
         for name in topology["rate_group_names"]:
             attached = topology["bias_to_weight"].get(name, name)
             grouped_gradient = tuple(
@@ -490,7 +451,7 @@ def _run_probe(
             )
         used += 1
         if used not in checkpoints:
-            continue
+            return
         half = used // 2
         split_statistics = {}
         unstable = []
@@ -511,8 +472,38 @@ def _run_probe(
             if difference > tolerance:
                 unstable.append(name)
         stable = not unstable
-        if stable:
-            break
+
+    # A gradient pass with no update. The loader stops before pulling the
+    # next batch once the estimate is stable at a checkpoint, and the
+    # parameters' gradients are left as they were before the probe.
+    parameters = topology["parameters"]
+    previous_gradients = [parameter.state.grad for parameter in parameters]
+    try:
+        engine.train_epoch(
+            ExperimentComponents(
+                stack.network,
+                stack.cost,
+                stack.minimizer,
+                parameters,
+                stack.differentiator,
+                None,
+            ),
+            teacher_batches(
+                train_loader,
+                teacher,
+                stack.device,
+                maximum_batches=checkpoints[-1],
+                stop=lambda: stable,
+            ),
+            event_handlers=(
+                FiniteGradientGuard(names, label="LR-selection"),
+                measure,
+            ),
+            reset_input=topology["training_reset_input"],
+        )
+    finally:
+        for parameter, gradient in zip(parameters, previous_gradients):
+            parameter.state.grad = gradient
     weight_units = {
         name: _quantile(samples[name][:used], 0.5)
         for name in topology["weight_names"]
