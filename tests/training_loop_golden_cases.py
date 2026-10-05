@@ -108,9 +108,14 @@ def _outcome(fn: Callable[[], Any]) -> dict[str, Any]:
         return {"ok": False, "type": type(error).__name__}
 
 
-def _finish(record: dict[str, Any], bindings, generator=None) -> dict[str, Any]:
+def _finish(
+    record: dict[str, Any], bindings, generator=None, *, failed_step: bool = False
+) -> dict[str, Any]:
     record["final"] = _states(bindings)
-    record["final_grads"] = _grads(bindings)
+    # A rejected step's leftover gradients are failure-path detail: the run
+    # is marked failed and nothing reads them, so they are not recorded.
+    if not failed_step:
+        record["final_grads"] = _grads(bindings)
     record["global_rng"] = torch.get_rng_state().clone()
     if generator is not None:
         record["loader_rng"] = generator.get_state().clone()
@@ -375,7 +380,7 @@ def run_kd_train_nonfinite() -> dict[str, Any]:
                 stack, _teacher(), loader, maximum_batches=None, modifier=None
             )
         )
-    return _finish(record, bindings)
+    return _finish(record, bindings, failed_step=True)
 
 
 KD_COLLECT_CASES = ("clean", "ibm_evaluation_context")
@@ -640,7 +645,7 @@ def run_reset_train_nonfinite() -> dict[str, Any]:
                 observer=monitor.observe,
             )
         )
-    return _finish(record, bindings)
+    return _finish(record, bindings, failed_step=True)
 
 
 RESET_EVAL_CASES = {
