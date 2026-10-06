@@ -439,7 +439,7 @@ def _fake_wan2022() -> None:
     reproducible programmed state and report, not AIHWKit itself.
     """
 
-    from experiments.small_network import runtime
+    from experiments.small_network import deployment
 
     def program_one(catalog, config):
         binding = catalog.by_key["base.dense_weight.0"]
@@ -458,8 +458,8 @@ def _fake_wan2022() -> None:
             }
         return {"layers": reports}
 
-    runtime.program_wan2022_base_conductance = program_one
-    runtime.program_wan2022_base_conductances = program_many
+    deployment.program_wan2022_base_conductance = program_one
+    deployment.program_wan2022_base_conductances = program_many
 
 
 def _base_weights(session: Session, label: str, payload: dict[str, Any]) -> Path:

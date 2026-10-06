@@ -1,9 +1,10 @@
 """Numerical composition for the versioned small-DRN experiment.
 
-This module is the only place where ``small_drn.v1`` configuration objects
-are translated into legacy datasets, energy functions, minimizers, gradient
-estimators, and optimizers.  Persistence and run lifecycle policy live in
-``runtime.py``; the generic training loop remains configuration-independent.
+This module translates ``small_drn.v1`` configuration objects into legacy
+datasets, energy functions, minimizers and gradient estimators; the
+hardware-aware modifier and the update backend come from ``backends.py``.
+Command lifecycles live in ``runtime.py``; the generic training loop remains
+configuration-independent.
 """
 
 from __future__ import annotations
@@ -18,6 +19,10 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset, Subset
 
+from experiments.small_network.backends import (
+    build_update_optimizer,
+    build_weight_modifier,
+)
 from experiments.small_network.config import CommonSettings, TrainSpec
 from labs.custom_minimizer import (
     CustomAnderssonMinimizer,
@@ -29,27 +34,15 @@ from model.function.cost import SquaredError, SquaredErrorPairedOutputs
 from model.function.network import Network
 from model.resistive.builders import ModelBundle, build_deep_resistive_energy
 from model.resistive.digital_low_rank import DigitalLowRankReadout
-from model.resistive.device_config import parse_device_programming_config
 from model.variable.parameter import Bias
-from training.add_normal import AddNormalConfig, build_add_normal_modifier
-from training.adam import AdamOptimizer
 from training.core.engine import EvaluationComponents, ExperimentComponents
 from training.core.modifier import ParameterModifier
-from training.core.optimizers import build_optimizer
 from training.core.sgd import (
     AugmentedFunction,
     Backprop,
     DirectReadoutGradient,
     EquilibriumProp,
 )
-from training.ibm_om_fp32_bounds import IbmOmFp32BoundsOptimizer
-from training.measured_trace import (
-    MeasuredCohortAOptimizer,
-    MeasuredCohortBOptimizer,
-    MeasuredCohortBLoRAOptimizer,
-)
-from training.program_verify import ProgramVerifyOptimizer
-from training.tiki_taka import parse_update_pipeline
 
 
 _CLASS_COUNTS = {"moons": 2, "yinyang": 3, "digits": 10, "mnist": 10}
@@ -587,32 +580,7 @@ def build_train_runtime(
     data = build_data(spec.common)
     energy = stack.bundle.energy
     cost_fn = stack.cost_fn
-    modifier: ParameterModifier | None = None
-    noisy_evaluation = False
-    modifier_settings = spec.settings.weight_modifier
-    if modifier_settings.type == "add_normal":
-        modifier_config = AddNormalConfig(
-            std_dev=float(modifier_settings.parameters["std_dev"]),
-            seed=modifier_settings.parameters["seed"],
-            noisy_evaluation=bool(
-                modifier_settings.parameters["noisy_evaluation"]
-            ),
-            scale_mode=str(modifier_settings.parameters["scale_mode"]),
-        )
-        modifier = build_add_normal_modifier(
-            stack.bundle.catalog.trainable_parameters,
-            modifier_config,
-            run_seed=spec.common.runtime.seed,
-        )
-        noisy_evaluation = (
-            modifier is not None and modifier_config.noisy_evaluation
-        )
-    elif modifier_settings.type != "none":
-        raise NotImplementedError(
-            "Expected the hardware-aware branch to use weight modifier "
-            "'none' or 'add_normal'. Provided value: "
-            f"{modifier_settings.type!r}."
-        )
+    modifier, noisy_evaluation = build_weight_modifier(spec, stack)
 
     inference_minimizer = _build_minimizer(
         spec.common,
@@ -677,122 +645,11 @@ def build_train_runtime(
         weight_rates=spec.settings.learning_rates,
         bias_rates=spec.settings.bias_learning_rates,
     )
-    update_pipeline = {
-        "type": spec.settings.update_backend.type,
-        **dict(spec.settings.update_backend.parameters),
-    }
-    program_verify_config = None
-    measured_parameters = None
-    om_bounds_parameters = None
-    if spec.settings.update_backend.type == "program_verify":
-        program_verify_config = parse_device_programming_config(
-            spec.settings.update_backend.parameters["device"],
-            path="config.modes.train.update_backend.parameters.device",
-        )
-        parsed_pipeline = None
-    elif spec.settings.update_backend.type in {
-        "measured_cohort_a",
-        "measured_cohort_b",
-        "measured_cohort_b_lora",
-    }:
-        if device_data_path is None:
-            raise ValueError(
-                "Expected --device-data for update backend "
-                f"{spec.settings.update_backend.type!r}. Provided value: None."
-            )
-        measured_parameters = spec.settings.update_backend.parameters
-        parsed_pipeline = None
-    elif spec.settings.update_backend.type == "direct_adam":
-        parsed_pipeline = None
-    elif spec.settings.update_backend.type == "ibm_om_fp32_bounds":
-        if device_data_path is None:
-            raise ValueError(
-                "Expected --device-data for update backend "
-                "'ibm_om_fp32_bounds'. Provided value: None."
-            )
-        om_bounds_parameters = spec.settings.update_backend.parameters
-        parsed_pipeline = None
-    else:
-        parsed_pipeline = parse_update_pipeline(update_pipeline)
-    if (
-        spec.common.model.adapter.type
-        in {"passive_low_rank", "passive_layerwise_low_rank"}
-        and parsed_pipeline is not None
-        and parsed_pipeline.aihwkit_preset is not None
-    ):
-        raise ValueError(
-            "Expected low-rank energy-adapter training to use direct updates "
-            "or the ideal-tensor Tiki-Taka backend. Provided value: "
-            f"aihwkit_preset={parsed_pipeline.aihwkit_preset!r}."
-        )
-    if spec.settings.update_backend.type == "direct_adam":
-        adam = spec.settings.update_backend.parameters
-        optimizer = AdamOptimizer(
-            energy,
-            cost_fn,
-            learning_rates,
-            betas=(float(adam["beta1"]), float(adam["beta2"])),
-            eps=float(adam["epsilon"]),
-            weight_decay=float(adam["weight_decay"]),
-            amsgrad=bool(adam["amsgrad"]),
-        )
-    elif om_bounds_parameters is not None and (
-        om_bounds_parameters["optimizer"]["type"] == "adam"
-    ):
-        adam = om_bounds_parameters["optimizer"]["parameters"]
-        optimizer = AdamOptimizer(
-            energy,
-            cost_fn,
-            learning_rates,
-            betas=(float(adam["beta1"]), float(adam["beta2"])),
-            eps=float(adam["epsilon"]),
-            weight_decay=float(adam["weight_decay"]),
-            amsgrad=bool(adam["amsgrad"]),
-        )
-    else:
-        sgd_parameters = (
-            om_bounds_parameters["optimizer"]["parameters"]
-            if om_bounds_parameters is not None
-            else {}
-        )
-        optimizer = build_optimizer(
-            energy,
-            cost_fn,
-            learning_rates,
-            update_pipeline=parsed_pipeline,
-            momentum=float(sgd_parameters.get("momentum", 0.0)),
-            weight_decay=float(sgd_parameters.get("weight_decay", 0.0)),
-        )
-    if program_verify_config is not None:
-        optimizer = ProgramVerifyOptimizer(
-            optimizer,
-            stack.bundle.catalog,
-            program_verify_config,
-        )
-    elif measured_parameters is not None:
-        measured_optimizer = {
-            "measured_cohort_a": MeasuredCohortAOptimizer,
-            "measured_cohort_b": MeasuredCohortBOptimizer,
-            "measured_cohort_b_lora": MeasuredCohortBLoRAOptimizer,
-        }[spec.settings.update_backend.type]
-        optimizer = measured_optimizer(
-            optimizer,
-            stack.bundle.catalog,
-            measured_parameters,
-            device_data_path,
-        )
-    elif om_bounds_parameters is not None:
-        optimizer = IbmOmFp32BoundsOptimizer(
-            optimizer,
-            stack.bundle.catalog,
-            om_bounds_parameters,
-            device_data_path,
-        )
-    resume_capability = (
-        "stateful_nondeterministic"
-        if parsed_pipeline is not None
-        and parsed_pipeline.aihwkit_preset is not None
-        else "exact"
+    optimizer, resume_capability = build_update_optimizer(
+        spec,
+        stack,
+        learning_rates,
+        device_data_path=device_data_path,
     )
     _reset_minimizer_statistics(inference_minimizer)
 
@@ -819,15 +676,6 @@ def build_train_runtime(
         runtime_state=LayerStateCheckpoint(stack.network.layers()),
         resume_capability=resume_capability,
     )
-
-
-def configured_resume_capability(spec: TrainSpec) -> str:
-    """Resolve capability before importing optional numerical backends."""
-
-    if spec.settings.update_backend.type != "tiki_taka":
-        return "exact"
-    preset = spec.settings.update_backend.parameters.get("aihwkit_preset")
-    return "stateful_nondeterministic" if preset is not None else "exact"
 
 
 def _build_minimizer(
@@ -1020,6 +868,5 @@ __all__ = [
     "build_model_stack",
     "build_train_runtime",
     "build_validation_runtime",
-    "configured_resume_capability",
     "seed_runtime",
 ]

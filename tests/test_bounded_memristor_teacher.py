@@ -10,7 +10,7 @@ from experiments import RunMode, resolve_experiment_config
 from experiments.schema import ConfigError
 from experiments.small_network.components import build_model_stack, seed_runtime
 from experiments.small_network.config import parse_small_drn_config
-from experiments.small_network.runtime import _selected_model_metadata
+from experiments.small_network.provenance import selected_model_metadata
 from model.variable.parameter import Bias
 
 
@@ -193,7 +193,7 @@ def test_teacher_checkpoint_metadata_records_model_local_semantics() -> None:
     seed_runtime(common.runtime.seed)
     stack = build_model_stack(common)
 
-    metadata = _selected_model_metadata(
+    metadata = selected_model_metadata(
         spec,
         SimpleNamespace(stack=stack),
     )

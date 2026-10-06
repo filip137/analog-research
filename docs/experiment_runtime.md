@@ -26,6 +26,15 @@ choices do not belong in model classes or generic training loops.
 | parameter modifier | `none`, `add_normal` | temporarily alter parameters during solver phases |
 | update backend | `direct`, `tiki_taka`, `program_verify`, `measured_cohort_a`, `measured_cohort_a_sign_sgd`, `measured_cohort_a_one_pulse_down`, `measured_cohort_b`, `measured_cohort_b_lora` | apply or accumulate the completed gradient; measured backends project trainable arrays onto assigned measured device curves; the signSGD variant discards gradient magnitude before its cohort-A projection, while the one-pulse-down variant permits only a local step toward lower conductance |
 
+The package follows a train run's stages. `components` builds the model,
+data, solver and gradient estimator; `backends` resolves the parameter
+modifier and update backend; `initialization` loads the run's one start
+source (resume, `--weights`, `--base-weights` or the seeded model);
+`deployment` performs a new run's one-time device programming and its
+pre-deployment and initial validations; `training` supplies the shared
+train-phase hooks and results; `validate` and `linspace` hold the
+fixed-weight diagnostics. `runtime` owns only the command lifecycles.
+
 LoRA is therefore not another name for Tiki-Taka. Passive low-rank recovery
 changes which parameters produce the effective model weights; Tiki-Taka
 changes how an already-computed gradient is accumulated and transferred. They

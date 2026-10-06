@@ -572,7 +572,7 @@ def test_digital_low_rank_programs_base_once_and_trains_only_readout(
         }
 
     monkeypatch.setattr(
-        "experiments.small_network.runtime."
+        "experiments.small_network.deployment."
         "program_wan2022_base_conductance",
         fake_program,
     )
@@ -657,7 +657,7 @@ def test_passive_layerwise_low_rank_programs_both_edges_once_and_freezes_base(
         }
 
     monkeypatch.setattr(
-        "experiments.small_network.runtime."
+        "experiments.small_network.deployment."
         "program_wan2022_base_conductances",
         fake_program,
     )

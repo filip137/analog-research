@@ -21,7 +21,7 @@ from experiments.mnist_relu_drn.runtime import (
 )
 from experiments.schema import ConfigError
 from experiments.small_network.components import build_model_stack, seed_runtime
-from experiments.small_network.runtime import _selected_model_metadata
+from experiments.small_network.provenance import selected_model_metadata
 from training.checkpoint import save_named_weights
 
 
@@ -54,7 +54,7 @@ def _write_teacher_checkpoint(path: Path, *, mutate_metadata=None) -> None:
     )
     seed_runtime(common.runtime.seed)
     stack = build_model_stack(common)
-    metadata = _selected_model_metadata(
+    metadata = selected_model_metadata(
         spec,
         SimpleNamespace(stack=stack),
     )

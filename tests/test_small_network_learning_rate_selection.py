@@ -480,7 +480,7 @@ def test_execute_train_reseeds_and_rebuilds_before_production(
     monkeypatch.setattr(small_runtime, "_expect_spec", lambda *_a, **_k: spec)
     monkeypatch.setattr(
         small_runtime,
-        "_validate_training_initialization",
+        "validate_training_initialization",
         lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
@@ -496,7 +496,7 @@ def test_execute_train_reseeds_and_rebuilds_before_production(
     monkeypatch.setattr(small_runtime, "seed_runtime", seed_runtime)
     monkeypatch.setattr(small_runtime, "build_train_runtime", build_runtime)
     monkeypatch.setattr(selection, "select_measured_learning_rates", select_rates)
-    monkeypatch.setattr(small_runtime, "_execute_training", execute)
+    monkeypatch.setattr(small_runtime, "execute_training", execute)
     monkeypatch.setattr(
         small_runtime,
         "atomic_write_json",

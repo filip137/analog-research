@@ -11,7 +11,7 @@ import torch
 from experiments import RunMode, resolve_experiment_config
 from experiments.schema import ConfigError
 from experiments.small_network.config import parse_small_drn_config
-from experiments.small_network.runtime import _validate_training_initialization
+from experiments.small_network.initialization import validate_training_initialization
 from model.resistive.builders import ParameterBinding, ParameterCatalog
 from model.variable.parameter import DenseWeight
 from training.adam import AdamOptimizer
@@ -212,13 +212,13 @@ def test_om_bounds_backend_requires_population_and_fresh_start() -> None:
         device_data=None,
     )
     with pytest.raises(ValueError, match="Expected --device-data"):
-        _validate_training_initialization(request, spec)
+        validate_training_initialization(request, spec)
 
     request.device_data = Path("population.npz")
-    _validate_training_initialization(request, spec)
+    validate_training_initialization(request, spec)
     request.weights = Path("weights.pt")
     with pytest.raises(ValueError, match="per-cell uniform distribution"):
-        _validate_training_initialization(request, spec)
+        validate_training_initialization(request, spec)
 
 
 def test_adam_adapter_matches_torch_and_resumes_exactly() -> None:
