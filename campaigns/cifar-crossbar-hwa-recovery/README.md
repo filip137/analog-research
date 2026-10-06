@@ -21,6 +21,8 @@ training or remote jobs.
 - [Dense pilot](series/001-dense/README.md), [ResNet mapping](series/002-mapping/README.md),
   [PCM adaptation](series/003-pcm/README.md), [full epochs and fault sweep](series/004-full/README.md),
   [OM controllers](series/005-om/README.md).
+- [Lifecycle definitions](lifecycles/README.md): standardized loops for new work,
+  starting with labelled smoke lifecycles that validate the workflow path.
 - [Migration audit](series/006-migration/results/exp-010.md) and
   [reproduction guide](../../docs/cifar_reproduction.md).
 - [Retained comparison tables](../../artifacts/cifar_recovery_five_stage_tables_20260920/calibrated_headline.md)

@@ -1,0 +1,169 @@
+{
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "lifecycle_id": "cifar10-om-conv4-smoke",
+  "question": {
+    "text": "Does the standardized lifecycle execute literal AIHWKit OM arrays, characterized-kernel HWA, closed-loop P&V and closed-loop pulse-Adam controls end to end?",
+    "decision": "Whether the lifecycle path is ready to define full OM loops; truncated cohorts are not scientific evidence.",
+    "primary_metric": "teacher_kl",
+    "evidence_class": "exploratory_model_based"
+  },
+  "network": {
+    "family": "cifar_resnet32_suffix",
+    "dataset": "cifar10",
+    "analog_convolutions": 4
+  },
+  "data": {
+    "data_seed": 20260917,
+    "hwa_images": 45000,
+    "recovery_images": 45000,
+    "development_images": 1000,
+    "evaluation": "test",
+    "max_examples": 128
+  },
+  "devices": {
+    "technology": "om",
+    "model": "aihwkit_1.1.0_reram_array_om",
+    "noise_scale": 1.0,
+    "assignment_seeds": [
+      271001
+    ],
+    "selection_seeds": [
+      211001
+    ],
+    "endpoint_seed_offset": 10000,
+    "policy": "repaired",
+    "variation_scale": 1.0,
+    "characterization": {
+      "bins": 41,
+      "samples": 512,
+      "fit_seed": 231001,
+      "heldout_seed": 231002
+    }
+  },
+  "defects": {
+    "placement": "bernoulli_per_active_cell",
+    "persistence": "permanent",
+    "cases": [
+      {
+        "kind": "none",
+        "rate_ppm": 0
+      },
+      {
+        "kind": "gmax",
+        "rate_ppm": 50000
+      }
+    ]
+  },
+  "deployment": {
+    "scaling": "per_layer_absmax",
+    "encoding": "single_cell_intrinsic_reference",
+    "tile_size": 512,
+    "read_noise": 0.0,
+    "calibration": "output_gain_bn_affine_classifier_bias"
+  },
+  "hwa": {
+    "noise_model": "om_endpoint_kernel",
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "learning_rate": 0.0001,
+    "lr_milestones": [],
+    "lr_decay": 1.0,
+    "epochs": 1,
+    "batch_size": 256,
+    "augment": true,
+    "seed": 41,
+    "selection": {
+      "every_epochs": 1,
+      "extension_epochs": 0
+    },
+    "arms": [
+      {
+        "id": "digital",
+        "method": "none"
+      },
+      {
+        "id": "standard_hwa",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "corruption": null,
+        "selection_cases": [
+          {
+            "kind": "none",
+            "rate_ppm": 0
+          }
+        ]
+      },
+      {
+        "id": "cdt_gmax",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "corruption": {
+          "kind": "gmax",
+          "rates_ppm": [
+            20000,
+            30000,
+            50000
+          ]
+        },
+        "selection_cases": [
+          {
+            "kind": "none",
+            "rate_ppm": 0
+          },
+          {
+            "kind": "gmax",
+            "rate_ppm": 50000
+          }
+        ]
+      }
+    ]
+  },
+  "program_verify": {
+    "method": "closed_loop",
+    "max_cycles": 128,
+    "tolerance_steps": 0.5,
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "onchip": {
+    "update_law": "om_closed_loop_pulse_adam",
+    "objective": "teacher_kl",
+    "learning_rate": 0.0001,
+    "calibration_learning_rate": 0.0003,
+    "epochs": 1,
+    "batch_size": 64,
+    "seed": 41,
+    "pulses_per_update": 1,
+    "tolerance_steps": 0.5,
+    "max_pulses_per_cell": 640,
+    "arms": [
+      {
+        "id": "none",
+        "weights": "hold",
+        "calibration": false
+      },
+      {
+        "id": "calibration",
+        "weights": "hold",
+        "calibration": true
+      },
+      {
+        "id": "rewrite",
+        "weights": "rewrite",
+        "calibration": true
+      },
+      {
+        "id": "onchip_weights",
+        "weights": "learn",
+        "calibration": false
+      },
+      {
+        "id": "onchip_calibration",
+        "weights": "learn",
+        "calibration": true
+      }
+    ]
+  }
+}

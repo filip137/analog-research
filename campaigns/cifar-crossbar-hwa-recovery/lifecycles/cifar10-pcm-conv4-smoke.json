@@ -1,0 +1,158 @@
+{
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "lifecycle_id": "cifar10-pcm-conv4-smoke",
+  "question": {
+    "text": "Does the standardized lifecycle execute digital, generic-HWA and stuck-at-Gmax CDT sources through Gaussian PCM deployment and matched on-chip controls end to end?",
+    "decision": "Whether the lifecycle path is ready to define full PCM loops; truncated cohorts are not scientific evidence.",
+    "primary_metric": "teacher_kl",
+    "evidence_class": "exploratory_model_based"
+  },
+  "network": {
+    "family": "cifar_resnet32_suffix",
+    "dataset": "cifar10",
+    "analog_convolutions": 4
+  },
+  "data": {
+    "data_seed": 20260917,
+    "hwa_images": 45000,
+    "recovery_images": 45000,
+    "development_images": 1000,
+    "evaluation": "test",
+    "max_examples": 128
+  },
+  "devices": {
+    "technology": "pcm",
+    "model": "gaussian_endpoint_li2023",
+    "noise_scale": 1.0,
+    "assignment_seeds": [
+      271001
+    ],
+    "selection_seeds": [
+      211001,
+      211002,
+      211003
+    ],
+    "endpoint_seed_offset": 10000
+  },
+  "defects": {
+    "placement": "bernoulli_per_physical_device",
+    "persistence": "permanent",
+    "cases": [
+      {
+        "kind": "none",
+        "rate_ppm": 0
+      },
+      {
+        "kind": "gmax",
+        "rate_ppm": 50000
+      }
+    ]
+  },
+  "deployment": {
+    "scaling": "per_layer_absmax",
+    "encoding": "differential_pair_25us",
+    "tile_size": 512,
+    "read_noise": 0.0,
+    "calibration": "output_gain_bn_affine_classifier_bias"
+  },
+  "hwa": {
+    "noise_model": "pcm_gaussian_endpoint",
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "learning_rate": 0.0001,
+    "lr_milestones": [],
+    "lr_decay": 1.0,
+    "epochs": 1,
+    "batch_size": 256,
+    "augment": true,
+    "seed": 41,
+    "selection": {
+      "every_epochs": 1,
+      "extension_epochs": 0
+    },
+    "arms": [
+      {
+        "id": "digital",
+        "method": "none"
+      },
+      {
+        "id": "standard_hwa",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "corruption": null,
+        "selection_cases": [
+          {
+            "kind": "none",
+            "rate_ppm": 0
+          }
+        ]
+      },
+      {
+        "id": "cdt_gmax",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "corruption": {
+          "kind": "gmax",
+          "rates_ppm": [
+            20000,
+            30000,
+            50000
+          ]
+        },
+        "selection_cases": [
+          {
+            "kind": "none",
+            "rate_ppm": 0
+          },
+          {
+            "kind": "gmax",
+            "rate_ppm": 50000
+          }
+        ]
+      }
+    ]
+  },
+  "program_verify": {
+    "method": "gaussian_endpoint",
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "onchip": {
+    "update_law": "pcm_endpoint_reprogramming",
+    "objective": "teacher_kl",
+    "learning_rate": 0.0001,
+    "calibration_learning_rate": 0.0003,
+    "epochs": 1,
+    "batch_size": 64,
+    "seed": 41,
+    "arms": [
+      {
+        "id": "none",
+        "weights": "hold",
+        "calibration": false
+      },
+      {
+        "id": "calibration",
+        "weights": "hold",
+        "calibration": true
+      },
+      {
+        "id": "rewrite",
+        "weights": "rewrite",
+        "calibration": true
+      },
+      {
+        "id": "onchip_weights",
+        "weights": "learn",
+        "calibration": false
+      },
+      {
+        "id": "onchip_calibration",
+        "weights": "learn",
+        "calibration": true
+      }
+    ]
+  }
+}

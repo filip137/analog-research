@@ -15,6 +15,7 @@ from experiments.definitions import EXPERIMENT_REGISTRY, RETIRED_EXPERIMENT_IDS
 
 ROOT = Path(__file__).resolve().parents[1]
 SUPPORTED = {
+    "crossbar_lifecycle.v1",
     "cifar10_ibm_om_crossbar.v1", "cifar_crossbar_fault_sweep.v1",
     "cifar_crossbar_full_epochs.v1", "cifar_om_closed_loop_lr.v1",
     "cifar_om_open_loop.v1", "cifar_pcm_fault_recovery.v1",
@@ -73,6 +74,7 @@ for name in (
     'experiments.cifar_crossbar.sweep_runtime',
     'experiments.cifar_crossbar.om_open_loop_runtime',
     'experiments.cifar_crossbar.closed_loop_lr_runtime',
+    'workflow.runtime',
 ):
     importlib.import_module(name)
 '''
@@ -91,7 +93,7 @@ def test_active_code_has_no_retired_module_imports():
         "experiments.mnist_analog_relu.runtime", "experiments.mnist_analog_relu.config",
         "training.tiki_taka", "training.star_drn",
     )
-    for directory in ("ebl", "experiments", "training", "campaigns", "labs/tools"):
+    for directory in ("ebl", "experiments", "training", "campaigns", "labs/tools", "workflow"):
         for path in (ROOT / directory).rglob("*.py"):
             for node in ast.walk(ast.parse(path.read_text())):
                 names = []

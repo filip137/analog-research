@@ -183,13 +183,16 @@ class StageSpec:
                 "teacher_weights",
                 "device_data",
                 "device_model",
+                "device_state",
+                "selection_receipt",
             }
         )
         if unknown_inputs:
             raise ValueError(
                 "Expected campaign stage.inputs keys to be drawn from "
-                "['device_data', 'device_model', 'resume', "
-                "'teacher_weights', 'weights']. Provided value: "
+                "['device_data', 'device_model', 'device_state', 'resume', "
+                "'selection_receipt', 'teacher_weights', 'weights']. "
+                "Provided value: "
                 "unknown keys "
                 f"{unknown_inputs!r} in {dict(raw_inputs)!r}."
             )

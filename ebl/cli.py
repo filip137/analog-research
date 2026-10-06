@@ -391,7 +391,7 @@ def _protocol_payload(definitions: Sequence[ExperimentDefinition]) -> dict:
     combinations = [item for definition in definitions for item in definition.combinations]
     ids = {definition.experiment_id for definition in definitions}
     train_inputs = []
-    if any(name.startswith("cifar_") for name in ids):
+    if any(name.startswith("cifar_") for name in ids) or "crossbar_lifecycle.v1" in ids:
         train_inputs.extend(["--device-data", "--device-model", "--teacher-weights", "--device-state", "--selection-receipt"])
     elif "mnist_ibm_om_crossbar_relu.v2" in ids:
         train_inputs.extend(["--teacher-weights", "--device-state", "--selection-receipt"])
@@ -571,7 +571,9 @@ def _default_train_handler(request: TrainRequest) -> Optional[int]:
     if request.definition.experiment_id == "cifar10_ibm_om_crossbar.v1":
         from experiments.cifar10_crossbar.runtime import run_train
         return run_train(request)
-    if request.definition.experiment_id == "cifar_om_closed_loop_lr.v1":
+    if request.definition.experiment_id == "crossbar_lifecycle.v1":
+        from workflow.runtime import run_train
+    elif request.definition.experiment_id == "cifar_om_closed_loop_lr.v1":
         from experiments.cifar_crossbar.closed_loop_lr_runtime import run_train
     elif request.definition.experiment_id == "cifar_om_open_loop.v1":
         from experiments.cifar_crossbar.om_open_loop_runtime import run_train

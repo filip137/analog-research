@@ -22,6 +22,11 @@ an output root. It creates a new native run bundle with resolved configuration,
 source/runtime identity, metrics and checkpoints. The CIFAR reproduction helper
 prints these commands using verified local inputs; see the guide for setup.
 
+New experimental loops are campaign **lifecycles**: one strict JSON definition
+states the question, devices and defects, then the deployment of the digital
+weights, HWA, program-and-verify and on-chip training. Each step calls a
+reusable function in `workflow/`; see the [lifecycle contract](docs/crossbar_lifecycle.md).
+
 OM recovery models physical pulse updates with held apparent-state forwards.
 The main PCM recovery studies use Gaussian endpoint reprogramming. Both compute
 gradients and optimizer state digitally. Calibration, weight-only recovery and
@@ -30,6 +35,7 @@ controls and physical update counts.
 
 ## Code and evidence
 
+- `workflow/`: the standard lifecycle stages and their strict schema.
 - `experiments/cifar_crossbar/`: ResNet mapping, HWA/CDT, deployment, recovery,
   strict configs, reports and input relocation.
 - `experiments/cifar10_crossbar/`: the separate dense CIFAR-10 experiment.
@@ -46,7 +52,7 @@ New work follows the [experiment workflow](docs/experiment_workflow.md).
 snapshots; current specifications and conclusions belong to campaign or pilot notes.
 
 See the [supported-scope guide](docs/crossbar_scope.md) and
-[runtime commands](docs/experiment_runtime.md) for the 13 retained experiment
+[runtime commands](docs/experiment_runtime.md) for the 14 registered experiment
 families. EP/DRN, LoRA and MNIST crossbar v1 execution code is available at
 pre-cleanup commit `16938bf`; historical scientific records remain in this tree.
 The framework originated in the

@@ -8,6 +8,7 @@ and controls. General EP/DRN and LoRA development belong to sibling worktrees.
 
 | Family | Purpose |
 | --- | --- |
+| `crossbar_lifecycle.v1` | One stage of a campaign lifecycle: devices/defects, mapping, HWA, P&V, on-chip training |
 | `cifar10_ibm_om_crossbar.v1` | Dense CIFAR-10 OM HWA and pulse recovery |
 | `cifar_resnet_suffix_recovery.v1` | CIFAR-10/100 ResNet-32 suffix HWA and recovery |
 | `cifar_pcm_fault_recovery.v1` | PCM faults and teacher-KL recovery |
@@ -30,6 +31,10 @@ and native parity use a separate AIHWKit 1.1.0 interpreter selected by
 
 ## Shared implementation
 
+- `workflow/`: the standard lifecycle. Campaign lifecycle definitions call one
+  reusable function per step (devices, deployment, HWA, P&V, on-chip); see
+  [the lifecycle contract](crossbar_lifecycle.md). New crossbar loops use it;
+  the historical `cifar_*` families stay frozen for reproduction.
 - `training/parameters.py`: tensor parameters, named bindings and catalogs.
 - `training/ibm_reram_hwa.py`: population sampling, fingerprints and NPZ storage.
 - `experiments/mnist_analog_relu/crossbar_common.py`: shared programming,

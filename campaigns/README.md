@@ -5,6 +5,9 @@
   source provenance, reproducible reports and a separate migration audit.
 
 Start small: one note in `pilots/<question>.md` owns a bounded question through review.
+Crossbar loops are specified as strict lifecycle definitions in `<campaign>/lifecycles/`
+([contract](../docs/crossbar_lifecycle.md)); the note links its lifecycle and keeps the
+decision rule, budget, handoff and interpretation.
 Use the [pilot template](../.agents/skills/experiment-loop/references/pilot.md).
 Promote sustained work into `<campaign>/README.md`, optional explorations/hypotheses,
 and series containing experiments/results. Preserve original pilot evidence by link.

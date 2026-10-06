@@ -15,6 +15,8 @@ implement crossbar features. Historical execution code is at `16938bf`; historic
 native evidence remains inspectable. Keep unrelated maintenance out of this tree.
 
 - `ebl/`: public CLI for train, validate, characterize, campaigns, studies and inspection.
+- `workflow/`: the standard lifecycle: strict schema and one reusable function per step
+  (devices/defects, deployment, HWA, P&V, on-chip), run as `crossbar_lifecycle.v1` stages.
 - `experiments/cifar_crossbar/`: ResNet suffix mapping, HWA/CDT, OM/PCM recovery and reports.
 - `experiments/cifar10_crossbar/`: separate dense 3072-256-10 CIFAR-10 experiments.
 - `experiments/mnist_analog_relu/`: staged MNIST v2 and shared crossbar helpers.
@@ -25,8 +27,8 @@ native evidence remains inspectable. Keep unrelated maintenance out of this tree
   explicit parameter catalogs and checkpoint codecs.
 - `labs/tools/`: CIFAR tables, analysis and plots; no alternate training surface.
 - `examples/`: exact configs; `studies/`: optional plans and reference receipts.
-- `campaigns/`: specifications, scientific results, generated navigation and the
-  subprocess-only orchestrator of explicit configs and inputs.
+- `campaigns/`: specifications (including `<campaign>/lifecycles/*.json`), scientific results,
+  generated navigation and the subprocess-only orchestrator of explicit configs and inputs.
 - `results/`, `artifacts/`, `data/`: ignored raw evidence, frozen sources and datasets.
 - `docs/`: active contracts and historical records; `tests/`: numerical and workflow checks.
 
@@ -88,6 +90,9 @@ Use the [experiment-loop skill](.agents/skills/experiment-loop/SKILL.md) and
 study/manifest lifecycles and conflicting external closeout-skill instructions.
 Start from the question and decision. Small pilots use one evolving note in
 `campaigns/pilots/`; sustained work uses campaign experiment/result notes.
+Define new crossbar loops as campaign lifecycles ([contract](docs/crossbar_lifecycle.md))
+linked from those notes. Extend `workflow/` stage functions instead of adding per-study
+runtimes; historical `cifar_*` families stay frozen for reproduction.
 
 Assigned execution authorizes implementation, proportional checks, launch,
 monitoring, collection, interpretation and understood retries within scope and

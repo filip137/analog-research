@@ -162,8 +162,37 @@ CIFAR10_CROSSBAR_V1 = ExperimentDefinition(
 )
 
 
+def parse_crossbar_lifecycle_stage(payload: Mapping[str, Any]) -> Any:
+    # workflow.lifecycle uses the experiments schema layer; import it lazily.
+    from workflow.lifecycle import parse_stage_config
+
+    return parse_stage_config(payload)
+
+
+def resolve_crossbar_lifecycle_stage(document: Any, mode: RunMode) -> Any:
+    from workflow.lifecycle import resolve_stage_config
+
+    return resolve_stage_config(document, mode)
+
+
+CROSSBAR_LIFECYCLE_V1 = ExperimentDefinition(
+    experiment_id="crossbar_lifecycle.v1",
+    schema_version=1,
+    description=(
+        "One stage of a campaign-owned crossbar lifecycle: cohorts, devices "
+        "and defects, HWA, program-and-verify deployment and matched on-chip "
+        "training of CIFAR ResNet-32 analog suffixes."
+    ),
+    supported_modes=(RunMode.TRAIN,),
+    parser=parse_crossbar_lifecycle_stage,
+    resolver=resolve_crossbar_lifecycle_stage,
+    combinations=(),
+)
+
+
 EXPERIMENT_REGISTRY: Dict[str, ExperimentDefinition] = {
     CIFAR10_CROSSBAR_V1.experiment_id: CIFAR10_CROSSBAR_V1,
+    CROSSBAR_LIFECYCLE_V1.experiment_id: CROSSBAR_LIFECYCLE_V1,
     'cifar_om_closed_loop_lr.v1': ExperimentDefinition(
         experiment_id='cifar_om_closed_loop_lr.v1',
         schema_version=1,

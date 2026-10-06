@@ -22,7 +22,8 @@ can still need implementation. Escalate scientific choices, not routine engineer
 ## Codifier
 
 Implement the specification faithfully; retain branch-specific scientific contracts.
-Use strict existing configs, explicit input hashes and appropriate runtime. Separate
+Use strict existing configs, explicit input hashes and appropriate runtime; crossbar
+loops are campaign lifecycles run by planned stages ([contract](../../../docs/crossbar_lifecycle.md)). Separate
 readiness, evidence integrity and additional scientific investigation. No automatic
 calibration/qualification sweeps. Make cases, target, budget, duration and output paths
 visible. Smoke proportionally, launch once and verify initial semantic progress.

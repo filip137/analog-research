@@ -29,6 +29,8 @@ resume and population schemas remain compatible.
 
 `campaign run --manifest ... --output-dir ...` orchestrates exact configs and
 explicit inputs through subprocesses, with dry runs and completed-stage reuse.
+Campaign lifecycles (`crossbar_lifecycle.v1`) are planned into such a manifest by
+`python -m workflow plan`; see the [lifecycle contract](crossbar_lifecycle.md).
 Optional `study prepare`, `study summarize` and `study finalize` commands retain
 study inspection and local review receipts. Current work follows the
 [experiment workflow](experiment_workflow.md); cleanup does not update global
