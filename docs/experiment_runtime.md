@@ -152,9 +152,12 @@ one epoch, validate, the selection record and payload, the resume progress
 state and the epoch metric. LR selection with its exact production restart
 is still family-owned, and IBM OM deployed recovery (`run_recovery_train`)
 is not yet a phase. `tests/test_run_lifecycle_golden.py` replays complete
-`ebl train` bundles bit-exactly against goldens captured before this move;
-`python tests/run_lifecycle_golden_cases.py verify CASE...` replays chosen
-cases.
+`ebl train` bundles bit-exactly against goldens captured before this move.
+The replay trains on real MNIST and measured traces (about ten minutes for
+all 31 cases), so it is opt-in: set `EBL_RUN_LIFECYCLE_GOLDENS=1`, and use
+`-k` to replay only some cases; `python tests/run_lifecycle_golden_cases.py
+verify CASE...` does the same without pytest. Run it before and after any
+change to a train phase.
 
 `training.lab.epoch.Trainer(components, loader, reset_input=...)` and
 `Evaluator(components, loader, reset_input=...)` bind loaders and statistics
