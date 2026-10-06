@@ -827,17 +827,17 @@ def all_cases() -> dict[str, Callable[[], Any]]:
     }
     for name in RESET_CASES:
         cases[f"reset/{name}"] = lambda name=name: run_reset(name)
-    cases["small/base"] = lambda: run_small_base(False)
-    cases["small/base_resume"] = lambda: run_small_base(True)
+    cases["base"] = lambda: run_small_base(False)
+    cases["base_resume"] = lambda: run_small_base(True)
     for name, relative in SMALL_SINGLE_CASES.items():
-        cases[f"small/{name}"] = lambda relative=relative: run_small_single(relative)
-    cases["small/om_fp32_bounds"] = run_small_om_bounds
-    cases["small/lora"] = lambda: run_small_adapter("lora.json")
-    cases["small/digital_lora_wan"] = lambda: (
+        cases[name] = lambda relative=relative: run_small_single(relative)
+    cases["om_fp32_bounds"] = run_small_om_bounds
+    cases["lora"] = lambda: run_small_adapter("lora.json")
+    cases["digital_lora_wan"] = lambda: (
         _fake_wan2022(),
         run_small_adapter("digital_lora_reram_wan2022_digits.json"),
     )[1]
-    cases["small/passive_layerwise_wan"] = lambda: (
+    cases["passive_layerwise_wan"] = lambda: (
         _fake_wan2022(),
         run_small_adapter("passive_layerwise_lora_reram_wan2022_digits.json"),
     )[1]
@@ -845,8 +845,8 @@ def all_cases() -> dict[str, Callable[[], Any]]:
         cases[f"kd/{name}"] = lambda steps=steps: _kd_chain(steps)
     for name in KD_OM_CASES:
         cases[f"kd/{name}"] = lambda name=name: run_kd_om(name)
-    cases["small/measured"] = run_small_measured
-    cases["small/program_verify"] = run_small_program_verify
+    cases["measured"] = run_small_measured
+    cases["program_verify"] = run_small_program_verify
     return cases
 
 
