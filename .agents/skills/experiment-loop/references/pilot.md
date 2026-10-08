@@ -7,11 +7,14 @@ What do we want to learn; which decision follows? Expected outcome and alternati
 
 ## Frozen comparison
 Cases, control/intervention, inputs and initialization, fixed factors, measurements,
-predeclared decision rule, evidence class, confounds, excluded claims.
+predeclared decision rule, evidence class, confounds, excluded claims. For a lifecycle:
+each Explorer-owned field (see SKILL.md) with its value, marked proposed or confirmed.
 
 ## Budget and execution
 Target, exact configs/commands, source/input identities, expected duration, compute
 and storage cap, retry allowance, deadline/stop rules, checkpoint retention, output paths.
+For a lifecycle: its path and digest, the `workflow describe` summary and the cost-probe
+measurements and extrapolation.
 
 ## Current execution and monitoring handoff
 Owner, handles, log/status/artifact paths, expected progress, cadence, last observation,

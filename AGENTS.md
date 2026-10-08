@@ -126,8 +126,12 @@ Strict configs and campaign lifecycles define inputs; historical
 
 ## Workflow and authority
 
-Every experiment follows the [experiment-loop skill](.agents/skills/experiment-loop/SKILL.md)
-(Explorer, Codifier, Monitor, Reviewer) under the [execution policy](docs/experiment_workflow.md).
+Precedence: the user, then this file (science), the [execution policy](docs/experiment_workflow.md)
+(process), the experiment-loop skill (procedure) and the experiment note (rules of one
+experiment). Every experiment follows the [experiment-loop skill](.agents/skills/experiment-loop/SKILL.md)
+(Explorer, Codifier, Monitor, Reviewer); the Explorer and Codifier procedures are its
+[explorer](.agents/skills/experiment-loop/references/explorer.md) and
+[codifier](.agents/skills/experiment-loop/references/codifier.md) references.
 Records follow the [artifact conventions](.agents/skills/experiment-loop/references/artifacts.md):
 a small pilot is one note from the [pilot template](.agents/skills/experiment-loop/references/pilot.md)
 in `campaigns/pilots/`; sustained work is a campaign with series, experiment and result

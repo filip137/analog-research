@@ -1,54 +1,62 @@
 ---
 name: experiment-loop
-description: Take bounded DRN and crossbar research questions through specification, execution, monitoring, evidence and interpretation.
+description: Take crossbar research questions in this worktree (OPT-125M on-chip recovery with corrupt devices; the CIFAR reference) from question to interpretation. Use when designing, specifying, setting up, launching, monitoring or reviewing any experiment or lifecycle.
 ---
 
 # Experiment loop
 
-Read root AGENTS.md and the assigned pilot/experiment record first. Enter at the
-appropriate role and reuse completed work. The [execution policy](../../../docs/experiment_workflow.md)
-owns authorization, resources, checks and storage; [artifact conventions](references/artifacts.md)
-own note structure. Use the existing ebl CLI and bundles, not a new launch schema.
+Read root AGENTS.md and the assigned pilot/experiment note first, enter at the
+appropriate role and reuse completed work. Precedence: the user, then AGENTS.md
+(science), the [execution policy](../../../docs/experiment_workflow.md) (authorization,
+resources, checks, storage), this skill (procedure) and the note (rules of one
+experiment). [Artifact conventions](references/artifacts.md) own note structure.
 Planning alone launches nothing; assigned execution continues through interpretation.
 
-## Explorer
+Each experiment has three records: the **note** says why (question, frozen
+comparison, decision rule, budget, handoff, verdict); the **lifecycle JSON** says
+what to compute ([contract](../../../docs/crossbar_lifecycle.md)); the native
+**bundles** record what happened.
 
-Clarify the question and decision with the user or existing assignment before choosing
-runs. State expected outcome, alternatives, comparison, held-fixed factors, measurements,
-decision rule, budget and stopping conditions. Use one evolving pilot note for small
-tests, without mandatory hypotheses or campaign scaffolding. An accepted specification
-can still need implementation. Escalate scientific choices, not routine engineering.
+## Roles
 
-## Codifier
+| Role | Starts when | Open | Produces |
+| --- | --- | --- | --- |
+| Explorer | a question has no frozen comparison | [references/explorer.md](references/explorer.md) | the note's question, frozen comparison, decision rule and budget caps |
+| Codifier | a frozen comparison must be implemented or run | [references/codifier.md](references/codifier.md) and the lifecycle contract | lifecycle file, cost probe, plan, launch and handoff |
+| Monitor | a run is launched | the note's handoff | observations, collected evidence |
+| Reviewer | evidence is collected | the note's frozen rule and evidence | verdict and next decision |
 
-Implement the specification faithfully; retain branch-specific scientific contracts.
-Use strict existing configs, explicit input hashes and appropriate runtime; crossbar
-loops are campaign lifecycles run by planned stages ([contract](../../../docs/crossbar_lifecycle.md)). Separate
-readiness, evidence integrity and additional scientific investigation. No automatic
-calibration/qualification sweeps. Make cases, target, budget, duration and output paths
-visible. Smoke proportionally, launch once and verify initial semantic progress.
-Resolve understood operational failures within the existing budget, preserve attempts,
-and rerun affected checks. Do not tune scientific settings as a retry.
+## Who decides each lifecycle field
 
-Update the current handoff in the owning note: cases, configs/commands, identities,
-process/session/scheduler handles, artifact/log paths, owner, expected progress/cadence,
-last/next check, deadline/remaining budget, inspect/collect commands, recovery boundaries
-and escalation route. Pass only changed handles and compact evidence at transitions.
+| Explorer decides (scientific) | Codifier decides (engineering) |
+| --- | --- |
+| question, decision and primary metric | seed values, keeping their roles disjoint |
+| `network`: model and number of analog decoder layers | cohort details within the declared sizes |
+| corpus, sequence length, cohort sizes, evaluation split | `deployment.tile_size` |
+| technology and P&V method | OM characterization bins and samples |
+| defect kinds and fractions (`defects.cases`) | `max_examples` for labelled smokes and probes |
+| HWA sources: noise strength, corruption awareness, selection cases | execution device, threads and output paths |
+| on-chip arms, update law, learning rates, epochs, write budget | the stage plan and runner commands |
+| number of assignment and selection arrays; compute, storage and time caps | |
+
+A field the note leaves open goes back to the Explorer; the Codifier never fills
+it. Learning rates come from a separate development lifecycle or a cited earlier
+result, frozen before the comparison runs.
 
 ## Monitor
 
 One owner per case. Short runs stay with the executing agent; delegate only when useful
 and permitted. A delegated owner acknowledges handles, deadline and next check and begins
-observing before ownership transfers. A detached launcher/future timestamp is insufficient.
-Observe artifact progress plus process state and bounded logs; avoid full dumps and
-duplicate polling. Escalate incidents to the Codifier and keep unaffected work observed.
-Do not improvise repairs, retries, cancellations or scientific changes as Monitor.
+observing before ownership transfers. Observe artifact progress plus process state and
+bounded logs; avoid full dumps and duplicate polling. Escalate incidents to the Codifier
+and keep unaffected work observed. Do not improvise repairs, retries, cancellations or
+scientific changes as Monitor.
 
-Collect and inspect explicit bundles with `python -m ebl runs inspect`; reconcile cases,
-failures/exclusions/replacements and measurements. Record factual validity and coverage
-separately. Reuse unchanged validation. Do not confuse process success, artifact integrity,
-complete coverage and scientific review. A truthful partial bundle can be reviewed.
-If continuous supervision is unavailable, explicitly report the gap and next action.
+Collect and inspect explicit bundles with `python -m ebl runs inspect` and
+`python -m workflow collect`; reconcile cases, failures/exclusions/replacements and
+measurements. Record factual validity and coverage separately. A truthful partial
+bundle can be reviewed. If continuous supervision is unavailable, report the gap and
+next action.
 
 ## Reviewer
 
@@ -57,17 +65,15 @@ from inference, label uncertainty/confounds and retrospective claims, and give a
 verdict plus next decision in the same pilot/result note. Negative science is not an
 operational failure. Retries are not replicates. Do not rerun to obtain a preferred answer.
 Refresh a full campaign's generated ledger when notes change; pilots need none.
-Never append historical global manifests or update human notes as an automatic closeout.
 
 ## Context and delegation
 
-Explorer reads question/context; Codifier reads the assigned specification and applicable
-execution/scientific contracts; Monitor reads the handoff; Reviewer reads the frozen rule
-and compact evidence. Load more only for unresolved facts. The coordinator alone delegates
-bounded assignments; workers return without spawning workers. Logical roles need not be
-separate agents. Match effort to complexity and available tools, keeping routine monitoring
-inexpensive. Do not create separate reports, registries or repeated validations to document
-a role transition. Preserve scientific evidence and material decisions, not tool-call diaries.
+Each role reads only what its row above names, plus the unresolved facts it needs.
+The coordinator alone delegates bounded assignments; workers return without spawning
+workers. Logical roles need not be separate agents. Match effort to complexity and keep
+routine monitoring inexpensive. Do not create separate reports, registries or repeated
+validations to document a role transition. Preserve scientific evidence and material
+decisions, not tool-call diaries.
 
 Adapted from the lean-experiment-workflow experiment-loop on 2026-09-25. Source host,
 GPU-sharing, overnight, Conv/BPTT and calibration assumptions are not imported permissions
