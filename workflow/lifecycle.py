@@ -2,7 +2,9 @@
 
 A lifecycle states one experimental loop: the question, the devices and their
 defects, then (i) deployment of the digital weights, (ii) hardware-aware
-training, (iii) program-and-verify and (iv) on-chip training. Every native
+training, (iii) program-and-verify and (iv) on-chip training. The network
+section selects a family (``cifar_resnet32_suffix`` or ``opt_mlp_suffix``),
+which fixes the data section, metrics and calibration scheme. Every native
 stage run embeds the complete normalized lifecycle in its resolved config.
 
 Validation runs before torch, datasets or devices are touched. Cross-section
@@ -29,6 +31,8 @@ EXPERIMENT_ID = "crossbar_lifecycle.v1"
 PROVENANCE_SCHEMA = "crossbar_lifecycle.provenance.v1"
 
 STAGE_KINDS = ("prepare", "devices", "hwa", "deploy", "onchip")
+CIFAR_FAMILY = "cifar_resnet32_suffix"
+OPT_FAMILY = "opt_mlp_suffix"
 # Converted layer3 convolutions (two per block) plus the always-analog classifier.
 SUFFIX_BY_CONVOLUTIONS = {
     0: "head",
@@ -39,9 +43,20 @@ SUFFIX_BY_CONVOLUTIONS = {
 CLASSES = {"cifar10": 10, "cifar100": 100}
 TRAINING_SPLIT = 45000
 DEVELOPMENT_SPLIT = 5000
+# Pinned OPT checkpoints: decoder layers, maximum sequence length and MLP shape.
+OPT_MODELS = {
+    "facebook/opt-125m": {"decoder_layers": 12, "max_positions": 2048, "hidden_size": 768, "ffn_dim": 3072}
+}
+# Each analog layer3 convolution is 64x64x3x3; the analog classifier is 64 x classes.
+CIFAR_CONVOLUTION_WEIGHTS = 64 * 64 * 9
+CIFAR_FEATURES = 64
 FAILURE_KINDS = ("open", "gmax", "random")
 OBJECTIVES = ("teacher_kl", "cross_entropy")
 CALIBRATION = "output_gain_bn_affine_classifier_bias"
+OPT_CALIBRATION = "output_gain_mlp_layer_norm_mlp_bias"
+# What each network family can report, calibrate and augment.
+PRIMARY_METRICS = {CIFAR_FAMILY: ("teacher_kl", "accuracy_percent"), OPT_FAMILY: ("teacher_kl", "perplexity")}
+CALIBRATIONS = {CIFAR_FAMILY: CALIBRATION, OPT_FAMILY: OPT_CALIBRATION}
 MAX_SEED = 2**31 - 1
 
 
@@ -85,6 +100,7 @@ TECHNOLOGIES = {
 
 _LIFECYCLE_ID = re.compile(r"[a-z0-9][a-z0-9._-]*\Z")
 _ARM_ID = re.compile(r"[a-z0-9][a-z0-9_]*\Z")
+_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
 
 # ---------------------------------------------------------------------------
@@ -200,8 +216,11 @@ def _question(raw: Any) -> Question:
     return Question(
         text=_text(raw["text"], "question.text"),
         decision=_text(raw["decision"], "question.decision"),
+        # The network family narrows the metric in _cross_validate.
         primary_metric=_choice(
-            raw["primary_metric"], "question.primary_metric", ("teacher_kl", "accuracy_percent")
+            raw["primary_metric"],
+            "question.primary_metric",
+            tuple(dict.fromkeys(m for metrics in PRIMARY_METRICS.values() for m in metrics)),
         ),
         evidence_class=_choice(
             raw["evidence_class"], "question.evidence_class", ("exploratory_model_based",)
@@ -211,6 +230,8 @@ def _question(raw: Any) -> Question:
 
 @dataclass(frozen=True)
 class Network:
+    """ResNet-32 with a frozen digital prefix and analog layer3 suffix convolutions."""
+
     family: str
     dataset: str
     analog_convolutions: int
@@ -223,6 +244,28 @@ class Network:
     def classes(self) -> int:
         return CLASSES[self.dataset]
 
+    @property
+    def analog_weights(self) -> int:
+        return self.analog_convolutions * CIFAR_CONVOLUTION_WEIGHTS + CIFAR_FEATURES * self.classes
+
+    @property
+    def binding_namespace(self) -> str:
+        """Namespace of the per-layer population, fault and programming seeds."""
+
+        return self.dataset
+
+    def describe(self) -> str:
+        return f"{self.dataset} ResNet-32, {self.analog_convolutions} analog convolutions + classifier"
+
+    def summary(self) -> dict:
+        return {"dataset": self.dataset, "analog_convolutions": self.analog_convolutions, "suffix": self.suffix}
+
+    def mapping_fields(self) -> dict:
+        return {"analog_convolutions": self.analog_convolutions}
+
+    def result_fields(self) -> dict:
+        return {"dataset": self.dataset, "analog_convolutions": self.analog_convolutions}
+
     def to_dict(self) -> dict:
         return {
             "family": self.family,
@@ -231,7 +274,72 @@ class Network:
         }
 
 
-def _network(raw: Any) -> Network:
+@dataclass(frozen=True)
+class OptNetwork:
+    """OPT decoder whose last ``analog_decoder_layers`` MLPs (fc1, fc2) are crossbars.
+
+    Embeddings, the earlier decoder layers, every attention block, LayerNorms,
+    biases and the tied LM head stay digital.
+    """
+
+    family: str
+    model: str
+    analog_decoder_layers: int
+
+    @property
+    def decoder_layers(self) -> int:
+        return OPT_MODELS[self.model]["decoder_layers"]
+
+    @property
+    def max_positions(self) -> int:
+        return OPT_MODELS[self.model]["max_positions"]
+
+    @property
+    def analog_weights(self) -> int:
+        spec = OPT_MODELS[self.model]
+        return self.analog_decoder_layers * 2 * spec["hidden_size"] * spec["ffn_dim"]
+
+    @property
+    def binding_namespace(self) -> str:
+        return self.model
+
+    def describe(self) -> str:
+        return f"{self.model}, analog fc1/fc2 in the last {self.analog_decoder_layers} of {self.decoder_layers} decoder layers"
+
+    def summary(self) -> dict:
+        return {
+            "model": self.model,
+            "analog_decoder_layers": self.analog_decoder_layers,
+            "analog_layer_indices": list(range(self.decoder_layers - self.analog_decoder_layers, self.decoder_layers)),
+        }
+
+    def mapping_fields(self) -> dict:
+        return {"analog_decoder_layers": self.analog_decoder_layers, "analog_modules": ["fc1", "fc2"]}
+
+    def result_fields(self) -> dict:
+        return {"model": self.model, "analog_decoder_layers": self.analog_decoder_layers}
+
+    def to_dict(self) -> dict:
+        return {"family": self.family, "model": self.model, "analog_decoder_layers": self.analog_decoder_layers}
+
+
+def _network(raw: Any) -> Network | OptNetwork:
+    if not isinstance(raw, Mapping):
+        raise config_error("network", "to be an object", raw)
+    family = _choice(raw.get("family"), "network.family", (CIFAR_FAMILY, OPT_FAMILY))
+    if family == OPT_FAMILY:
+        raw = _object(raw, "network", ("family", "model", "analog_decoder_layers"))
+        model = _choice(raw["model"], "network.model", tuple(OPT_MODELS))
+        return OptNetwork(
+            family=family,
+            model=model,
+            analog_decoder_layers=_integer(
+                raw["analog_decoder_layers"],
+                "network.analog_decoder_layers",
+                minimum=1,
+                maximum=OPT_MODELS[model]["decoder_layers"],
+            ),
+        )
     raw = _object(raw, "network", ("family", "dataset", "analog_convolutions"))
     convolutions = raw["analog_convolutions"]
     if type(convolutions) is not int or convolutions not in SUFFIX_BY_CONVOLUTIONS:
@@ -241,7 +349,7 @@ def _network(raw: Any) -> Network:
             convolutions,
         )
     return Network(
-        family=_choice(raw["family"], "network.family", ("cifar_resnet32_suffix",)),
+        family=family,
         dataset=_choice(raw["dataset"], "network.dataset", tuple(CLASSES)),
         analog_convolutions=convolutions,
     )
@@ -303,6 +411,93 @@ def _data(raw: Any) -> Data:
             maximum=DEVELOPMENT_SPLIT,
         ),
         evaluation=_choice(raw["evaluation"], "data.evaluation", ("test", "development")),
+        max_examples=_integer(raw["max_examples"], "data.max_examples"),
+    )
+
+
+@dataclass(frozen=True)
+class TextData:
+    """Token cohorts of one pinned corpus, cut into non-overlapping sequences.
+
+    HWA and recovery sequences are nested prefixes of the seeded shuffle of
+    the corpus train split; development and test sequences are the first
+    blocks of the validation and test splits. Test sequences exist exactly
+    when the lifecycle evaluates on test.
+    """
+
+    corpus: str
+    corpus_sha256: str
+    sequence_length: int
+    data_seed: int
+    hwa_sequences: int
+    recovery_sequences: int
+    development_sequences: int
+    test_sequences: int
+    evaluation: str
+    max_examples: int
+
+    @property
+    def smoke(self) -> bool:
+        return self.max_examples > 0
+
+    def cohort_size(self, name: str) -> int:
+        full = {
+            "hwa": self.hwa_sequences,
+            "training": self.recovery_sequences,
+            "development": self.development_sequences,
+            "test": self.test_sequences,
+        }[name]
+        return min(full, self.max_examples) if self.max_examples else full
+
+    def to_dict(self) -> dict:
+        return {
+            "corpus": {"name": self.corpus, "sha256": self.corpus_sha256},
+            "sequence_length": self.sequence_length,
+            "data_seed": self.data_seed,
+            "hwa_sequences": self.hwa_sequences,
+            "recovery_sequences": self.recovery_sequences,
+            "development_sequences": self.development_sequences,
+            "test_sequences": self.test_sequences,
+            "evaluation": self.evaluation,
+            "max_examples": self.max_examples,
+        }
+
+
+def _text_data(raw: Any, network: OptNetwork) -> TextData:
+    keys = (
+        "corpus",
+        "sequence_length",
+        "data_seed",
+        "hwa_sequences",
+        "recovery_sequences",
+        "development_sequences",
+        "test_sequences",
+        "evaluation",
+        "max_examples",
+    )
+    raw = _object(raw, "data", keys)
+    corpus = _object(raw["corpus"], "data.corpus", ("name", "sha256"))
+    digest = corpus["sha256"]
+    if not isinstance(digest, str) or not _SHA256.match(digest):
+        raise config_error("data.corpus.sha256", "to be a lowercase SHA-256 digest", digest)
+    evaluation = _choice(raw["evaluation"], "data.evaluation", ("test", "development"))
+    test = _integer(raw["test_sequences"], "data.test_sequences")
+    if (evaluation == "test") != (test > 0):
+        raise config_error(
+            "data.test_sequences", "to be positive exactly when data.evaluation is test", test
+        )
+    return TextData(
+        corpus=_identifier(corpus["name"], "data.corpus.name", _LIFECYCLE_ID),
+        corpus_sha256=digest,
+        sequence_length=_integer(
+            raw["sequence_length"], "data.sequence_length", minimum=2, maximum=network.max_positions
+        ),
+        data_seed=_integer(raw["data_seed"], "data.data_seed", maximum=MAX_SEED),
+        hwa_sequences=_integer(raw["hwa_sequences"], "data.hwa_sequences", minimum=1),
+        recovery_sequences=_integer(raw["recovery_sequences"], "data.recovery_sequences", minimum=1),
+        development_sequences=_integer(raw["development_sequences"], "data.development_sequences", minimum=1),
+        test_sequences=test,
+        evaluation=evaluation,
         max_examples=_integer(raw["max_examples"], "data.max_examples"),
     )
 
@@ -500,7 +695,8 @@ def _deployment(raw: Any, technology: str) -> Deployment:
         encoding=_choice(raw["encoding"], "deployment.encoding", (TECHNOLOGIES[technology].encoding,)),
         tile_size=_integer(raw["tile_size"], "deployment.tile_size", minimum=1),
         read_noise=_number(raw["read_noise"], "deployment.read_noise"),
-        calibration=_choice(raw["calibration"], "deployment.calibration", (CALIBRATION,)),
+        # The network family narrows the calibration scheme in _cross_validate.
+        calibration=_choice(raw["calibration"], "deployment.calibration", tuple(CALIBRATIONS.values())),
     )
 
 
@@ -867,8 +1063,8 @@ ARTIFACT_SECTIONS = {
 class Lifecycle:
     lifecycle_id: str
     question: Question
-    network: Network
-    data: Data
+    network: Network | OptNetwork
+    data: Data | TextData
     devices: Devices
     defects: Defects
     deployment: Deployment
@@ -902,7 +1098,20 @@ class Lifecycle:
 
 def _cross_validate(lifecycle: Lifecycle) -> None:
     devices, data, network = lifecycle.devices, lifecycle.data, lifecycle.network
-    if data.development_images % network.classes:
+    family = network.family
+    if lifecycle.question.primary_metric not in PRIMARY_METRICS[family]:
+        raise config_error(
+            "question.primary_metric",
+            f"to be one of {list(PRIMARY_METRICS[family])} for {family}",
+            lifecycle.question.primary_metric,
+        )
+    if lifecycle.deployment.calibration != CALIBRATIONS[family]:
+        raise config_error(
+            "deployment.calibration", f"to be {CALIBRATIONS[family]!r} for {family}", lifecycle.deployment.calibration
+        )
+    if family == OPT_FAMILY and lifecycle.hwa.augment:
+        raise config_error("hwa.augment", f"to be false; {family} defines no augmentation", True)
+    if family == CIFAR_FAMILY and data.development_images % network.classes:
         raise config_error(
             "data.development_images",
             f"to be a multiple of the {network.classes} {network.dataset} classes",
@@ -948,11 +1157,12 @@ def parse_lifecycle(payload: Any) -> Lifecycle:
         )
     devices = _devices(raw["devices"])
     technology = devices.technology
+    network = _network(raw["network"])
     lifecycle = Lifecycle(
         lifecycle_id=_identifier(raw["lifecycle_id"], "lifecycle_id", _LIFECYCLE_ID),
         question=_question(raw["question"]),
-        network=_network(raw["network"]),
-        data=_data(raw["data"]),
+        network=network,
+        data=_text_data(raw["data"], network) if network.family == OPT_FAMILY else _data(raw["data"]),
         devices=devices,
         defects=_defects(raw["defects"], technology),
         deployment=_deployment(raw["deployment"], technology),

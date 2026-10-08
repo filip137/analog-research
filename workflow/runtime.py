@@ -27,12 +27,12 @@ import torch
 
 from experiments.artifacts import RunStore, atomic_write_json, sha256_file
 from experiments.cifar_crossbar.model import state_hash, tensor_hash
-from experiments.cifar_crossbar.prepare import SOURCES
-from experiments.cifar_crossbar.runtime import evaluate, load, save
+from experiments.cifar_crossbar.runtime import load, save
 from workflow import data as data_stage
 from workflow import deployment, hwa, onchip, program_verify
 from workflow import devices as device_stage
 from workflow.lifecycle import EXPERIMENT_ID, StageConfig, provenance, verify_provenance
+from workflow.networks import family
 
 ROOT = Path(__file__).resolve().parents[1]
 INPUT_ROLES = (
@@ -62,6 +62,7 @@ class Stage:
         self.lifecycle = self.config.lifecycle
         self.selection = self.config.stage
         self.technology = self.lifecycle.devices.technology
+        self.family = family(self.lifecycle.network)
         self.teacher, teacher_sha256 = deployment.load_teacher(
             request.teacher_weights, self.lifecycle.network, device
         )
@@ -88,7 +89,7 @@ class Stage:
     def cache(self) -> dict:
         cache = self.checked("device_data", "feature_cache")
         data_stage.check_cache(cache, self.lifecycle)
-        return data_stage.to_device(cache, self.device)
+        return data_stage.to_device(cache, self.lifecycle, self.device)
 
     def device_bundle(self) -> dict:
         bundle = self.checked("device_model", "device_bundle")
@@ -100,24 +101,10 @@ class Stage:
 def prepare(stage: Stage):
     lifecycle = stage.lifecycle
     cache = data_stage.build_cache(stage.teacher, stage.network, lifecycle, stage.device)
-    split = data_stage.evaluation_split(lifecycle)
-    digital = evaluate(stage.network, cache[split], stage.device)
-    teacher_accuracy = float(
-        (cache[split]["teacher_logits"].argmax(1) == cache[split]["labels"]).float().mean() * 100
-    )
-    published = SOURCES[lifecycle.network.dataset][2]
-    if split == "test" and not lifecycle.data.smoke and abs(teacher_accuracy - published) > 0.25:
-        raise RuntimeError("Digital checkpoint accuracy does not reproduce the published source within 0.25 pp.")
+    result = stage.family.prepare_report(stage.teacher, stage.network, cache, lifecycle, stage.device)
     path = stage.run_dir / "checkpoints/cache.pt"
     save(path, {"provenance": provenance(lifecycle, "feature_cache"), "context": stage.context, **cache})
-    cohorts = {name: cache[name]["cohort"] for name in data_stage.FEATURE_SPLITS if name in cache}
-    cohorts["hwa"] = cache["hwa_cohort"]
-    result = {
-        "digital": digital,
-        "teacher_accuracy_percent": teacher_accuracy,
-        "published_accuracy_percent": published,
-        "cohorts": cohorts,
-    }
+    result["cohorts"] = data_stage.cohorts(cache, lifecycle)
     return result, [("feature_cache", path)]
 
 
@@ -168,7 +155,7 @@ def train_hwa(stage: Stage):
         device=stage.device,
     )
     stage.network.load_state_dict(outcome["model"])
-    clean = evaluate(stage.network, cache["development"], stage.device)
+    clean = stage.family.evaluate(stage.network, cache["development"], stage.device)
     path = stage.run_dir / "checkpoints/source.pt"
     save(
         path,
@@ -192,6 +179,7 @@ def train_hwa(stage: Stage):
 
 def deploy(stage: Stage):
     lifecycle, network, device = stage.lifecycle, stage.network, stage.device
+    evaluate = stage.family.evaluate
     arm, seed = stage.selection.hwa_arm, stage.selection.array_seed
     cache = stage.cache()
     bundle = stage.device_bundle()
@@ -223,7 +211,7 @@ def deploy(stage: Stage):
             "identity": identity,
             "programming": programming,
             "initial": initial,
-            "deployment_drop_pp": clean[split]["accuracy_percent"] - initial[split]["accuracy_percent"],
+            **stage.family.deployment_summary(clean[split], initial[split]),
         }
         print(json.dumps({"case": case.label, "teacher_kl": initial[split]["teacher_kl"]}), flush=True)
     path = stage.run_dir / "checkpoints/deployment.pt"
@@ -267,6 +255,7 @@ def train_onchip(stage: Stage):
     if not torch.equal(target, network.q.detach()):
         raise ValueError("Expected deployment targets mapped from the deployed source model.")
     rows, index, artifacts = [], {}, []
+    presentations, metrics = stage.family.PRESENTATIONS, stage.family.SUMMARY_METRICS
     for case in lifecycle.defects.cases:
         deployed = p0["cases"][case.label]
         index[case.label] = {}
@@ -322,7 +311,7 @@ def train_onchip(stage: Stage):
                     "final": final,
                     "curve": outcome["curve"],
                     "cost": outcome["curve"][-1]["cost"] if outcome["curve"] else {},
-                    "image_presentations": outcome["curve"][-1]["image_presentations"] if outcome["curve"] else 0,
+                    presentations: outcome["curve"][-1][presentations] if outcome["curve"] else 0,
                     "initial_apparent_sha256": outcome["initial_apparent_sha256"],
                     "final_apparent_sha256": outcome["final_apparent_sha256"],
                     "state_sha256": state_sha256,
@@ -339,8 +328,8 @@ def train_onchip(stage: Stage):
             {
                 "case": row["case"],
                 "onchip_arm": row["onchip_arm"],
-                "initial": {k: row["initial"][split][k] for k in ("teacher_kl", "accuracy_percent")},
-                "final": {k: row["final"][split][k] for k in ("teacher_kl", "accuracy_percent")},
+                "initial": {k: row["initial"][split][k] for k in metrics},
+                "final": {k: row["final"][split][k] for k in metrics},
                 "cost": row["cost"],
             }
             for row in rows
@@ -442,8 +431,8 @@ def run_train(request) -> int:
             lifecycle_id=lifecycle.lifecycle_id,
             lifecycle_sha256=lifecycle.digest(),
             technology=stage.technology,
-            dataset=lifecycle.network.dataset,
-            analog_convolutions=lifecycle.network.analog_convolutions,
+            network_family=lifecycle.network.family,
+            **lifecycle.network.result_fields(),
             evidence_class=lifecycle.question.evidence_class,
             smoke_only=lifecycle.data.smoke,
             prefix_sha256=prefix,

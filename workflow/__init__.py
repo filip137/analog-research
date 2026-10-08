@@ -9,7 +9,9 @@ Each lifecycle stage calls one reusable function here:
 - ``workflow.program_verify``: programming, verify cycles and relaxation;
 - ``workflow.onchip``: same-array on-chip training and matched controls.
 
-``workflow.lifecycle`` is the strict stdlib-only schema, ``workflow.runtime``
+``workflow.networks`` holds one module per network family (ResNet-32 CIFAR
+suffix, OPT with analog decoder MLPs); the stages reach the network only
+through it. ``workflow.lifecycle`` is the strict stdlib-only schema, ``workflow.runtime``
 the native ``ebl train`` entry point for one stage and ``workflow.plan`` the
 generator of stage configs and an ``ebl campaign run`` manifest. This package
 keeps its import light: numerical modules load only when a stage runs.

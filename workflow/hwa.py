@@ -15,7 +15,7 @@ persistent-device trajectory:
 
 Checkpoints are selected by mean development teacher KL over the arm's
 ``selection_cases`` on independent selection arrays programmed with the
-lifecycle's P&V. Final arrays and test images are never used.
+lifecycle's P&V. Final arrays and test data are never used.
 """
 
 from __future__ import annotations
@@ -25,14 +25,12 @@ import math
 import time
 
 import torch
-from torch.nn import functional as F
 
 from experiments.cifar_crossbar.devices import clone_cpu
 from experiments.cifar_crossbar.hwa_fault_runtime import sampled_weights
-from experiments.cifar_crossbar.runtime import evaluate
 from experiments.cifar_crossbar.sweep_devices import MixedOmSampler
 from workflow import program_verify
-from workflow.data import training_images
+from workflow.networks import family
 
 
 def selection_score(network, cache, lifecycle, populations, cases, device) -> dict:
@@ -40,17 +38,20 @@ def selection_score(network, cache, lifecycle, populations, cases, device) -> di
 
     rows = []
     target = network.q.detach()
+    network_family = family(lifecycle.network)
     for case in cases:
         values = []
         for seed in lifecycle.devices.selection_seeds:
             array = program_verify.fresh(lifecycle, network.layout, seed, case, populations, device)
             program_verify.program(array, target, lifecycle)
-            values.append(evaluate(network, cache, device, q=array.read()))
+            values.append(network_family.evaluate(network, cache, device, q=array.read()))
         rows.append(
             {
                 "case": case.label,
-                "teacher_kl": sum(v["teacher_kl"] for v in values) / len(values),
-                "accuracy_percent": sum(v["accuracy_percent"] for v in values) / len(values),
+                **{
+                    metric: sum(v[metric] for v in values) / len(values)
+                    for metric in network_family.SUMMARY_METRICS
+                },
             }
         )
     return {"teacher_kl": sum(r["teacher_kl"] for r in rows) / len(rows), "cases": rows}
@@ -84,7 +85,8 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
     pristine = clone_cpu(network.state_dict())
     if not arm.trains:
         return {"model": pristine, "fit": {"kind": "digital_teacher", "method": "none", "status": "complete"}}
-    hwa, data, dataset = lifecycle.hwa, lifecycle.data, lifecycle.network.dataset
+    hwa, data = lifecycle.hwa, lifecycle.data
+    network_family = family(lifecycle.network)
     populations = device_bundle.get("populations")
     network.enable_calibration(True)
     network.q.requires_grad_(True)
@@ -94,8 +96,8 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
     rate_generator = torch.Generator().manual_seed(hwa.seed + 20000)
     rates = arm.corruption.rates_ppm if arm.corruption else ()
     histogram = {str(rate): 0 for rate in rates}
-    raw = cache["hwa_raw"].to(device)
-    labels = cache["hwa_labels"].to(device)
+    inputs = network_family.hwa_inputs(cache, device)
+    examples = network_family.hwa_examples(inputs)
     prefix = network.prefix_hash()
     best, history, rejected = None, [], None
     limit, epoch, started = hwa.epochs, 0, time.monotonic()
@@ -104,14 +106,13 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
             for group in optimizer.param_groups:
                 group["lr"] = hwa.learning_rate * hwa.lr_factor(epoch)
             data_rng = torch.Generator(device=device).manual_seed(data.data_seed + epoch)
-            order = torch.randperm(len(raw), generator=data_rng, device=device)
+            order = torch.randperm(examples, generator=data_rng, device=device)
             network.train()
-            for batch, begin in enumerate(range(0, len(raw), hwa.batch_size)):
+            for batch, begin in enumerate(range(0, examples, hwa.batch_size)):
                 index = order[begin : begin + hwa.batch_size]
-                x = training_images(raw[index], dataset, data_rng, hwa.augment)
-                with torch.no_grad():
-                    target = teacher(x).softmax(1) if hwa.objective == "teacher_kl" else None
-                    features = network.features(x)
+                features, teacher_logits, labels = network_family.hwa_batch(
+                    inputs, index, data_rng, network, teacher, lifecycle
+                )
                 kind, rate = "open", 0.0
                 if arm.corruption:
                     ppm = rates[int(torch.randint(len(rates), (), generator=rate_generator))]
@@ -120,11 +121,7 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
                 q = sample(network.q, kind, rate)
                 optimizer.zero_grad(set_to_none=True)
                 logits = network.forward_features(features, q)
-                loss = (
-                    F.kl_div(logits.log_softmax(1), target, reduction="batchmean")
-                    if target is not None
-                    else F.cross_entropy(logits, labels[index])
-                )
+                loss = network_family.objective(logits, teacher_logits, labels, hwa.objective)
                 if not bool(torch.isfinite(loss)):
                     rejected = {"epoch": epoch, "batch": batch, "reason": "nonfinite HWA objective"}
                     break

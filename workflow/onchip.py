@@ -23,12 +23,11 @@ import json
 import time
 
 import torch
-from torch.nn import functional as F
 
 from experiments.cifar_crossbar.devices import clone_cpu
 from experiments.cifar_crossbar.model import tensor_hash
-from experiments.cifar_crossbar.runtime import evaluate
 from workflow import devices as device_stage
+from workflow.networks import family
 
 
 def _adam_command(writer, gradient):
@@ -163,15 +162,10 @@ def make_writer(array, lifecycle):
     raise ValueError(f"Expected an OM pulse update law. Provided value: {onchip.update_law!r}.")
 
 
-def objective(logits, teacher_logits, labels, name):
-    if name == "teacher_kl":
-        return F.kl_div(logits.log_softmax(1), teacher_logits.softmax(1), reduction="batchmean")
-    return F.cross_entropy(logits, labels)
-
-
 def evaluations(network, array, cache, lifecycle, device) -> dict:
     """Held apparent-state metrics, plus the named OM persistent diagnostic."""
 
+    evaluate = family(lifecycle.network).evaluate
     q = array.read()
     split = lifecycle.data.evaluation
     values = {"development": evaluate(network, cache["development"], device, q=q)}
@@ -187,6 +181,7 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
     """Run one on-chip arm from the array's current (P0) state."""
 
     onchip, data = lifecycle.onchip, lifecycle.data
+    network_family = family(lifecycle.network)
     technology = lifecycle.devices.technology
     om = technology == "om"
     learn, rewrite = arm.weights == "learn", arm.weights == "rewrite"
@@ -217,15 +212,13 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
     for epoch in range(1, (onchip.epochs if arm.trains else 0) + 1):
         started = time.monotonic()
         order = torch.randperm(
-            len(training["labels"]), generator=torch.Generator().manual_seed(data.data_seed + epoch)
+            network_family.examples(training), generator=torch.Generator().manual_seed(data.data_seed + epoch)
         )
         network.train()
         loss_sum = 0.0
         for batch, begin in enumerate(range(0, len(order), onchip.batch_size)):
             index = order[begin : begin + onchip.batch_size]
-            x = training["features"][index].to(device)
-            t = training["teacher_logits"][index].to(device)
-            y = training["labels"][index].to(device)
+            x, t, y = network_family.batch(network, training, index, device)
             network.zero_grad(set_to_none=True)
             if optimizer:
                 optimizer.zero_grad(set_to_none=True)
@@ -234,7 +227,7 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                 q = observed.requires_grad_(learn)
             else:
                 q = master + (observed - master).detach() if learn else observed
-            loss = objective(network.forward_features(x, q), t, y, onchip.objective)
+            loss = network_family.objective(network.forward_features(x, q), t, y, onchip.objective)
             if not bool(torch.isfinite(loss)):
                 raise FloatingPointError("Nonfinite on-chip training objective.")
             loss.backward()
@@ -283,7 +276,7 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
         row = {
             "epoch": epoch,
             "train_loss_mean": loss_sum / len(order),
-            "image_presentations": epoch * len(order),
+            network_family.PRESENTATIONS: epoch * len(order),
             "cost": cost,
             **evaluations(network, array, cache, lifecycle, device),
             "epoch_seconds": time.monotonic() - started,

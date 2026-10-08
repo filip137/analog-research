@@ -1,4 +1,4 @@
-"""Lifecycle helper commands: describe, check, plan and collect.
+"""Lifecycle helper commands: describe, check, plan, collect and corpus.
 
 None of these commands launches training. Execution goes through the public
 ``python -m ebl campaign run`` (or ``python -m ebl train`` per stage).
@@ -9,30 +9,33 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 from pathlib import Path
 import sys
 
 from experiments.artifacts import sha256_file
+from experiments.cifar_crossbar.runtime import save
 from experiments.schema import ConfigError
-from workflow.lifecycle import EXPERIMENT_ID, load_lifecycle, parse_execution, stage_selections
+from workflow.lifecycle import EXPERIMENT_ID, OPT_MODELS, load_lifecycle, parse_execution, stage_selections
 from workflow.plan import build_plan, commands, default_python, write_plan
 
 ROOT = Path(__file__).resolve().parents[1]
+# Saved final on-chip state per analog weight and trajectory: upper values measured on
+# the CIFAR suffix (OM ~68, PCM ~34 bytes) and a tiny OPT OM run (67-88 bytes).
+STATE_BYTES_PER_WEIGHT = {"om": 90, "pcm": 35}
 
 
 def summary(lifecycle) -> dict:
     devices, hwa, onchip = lifecycle.devices, lifecycle.hwa, lifecycle.onchip
     stages = stage_selections(lifecycle)
+    trajectories = len(hwa.arms) * len(devices.assignment_seeds) * len(lifecycle.defects.cases) * len(onchip.arms)
     return {
         "lifecycle_id": lifecycle.lifecycle_id,
         "lifecycle_sha256": lifecycle.digest(),
         "question": lifecycle.question.text,
         "decision": lifecycle.question.decision,
-        "network": {
-            "dataset": lifecycle.network.dataset,
-            "analog_convolutions": lifecycle.network.analog_convolutions,
-            "suffix": lifecycle.network.suffix,
-        },
+        "network": {"family": lifecycle.network.family, **lifecycle.network.summary()},
+        "network_description": lifecycle.network.describe(),
         "devices": {
             "technology": devices.technology,
             "model": devices.model,
@@ -45,7 +48,11 @@ def summary(lifecycle) -> dict:
         "program_verify": lifecycle.program_verify.to_dict(),
         "onchip": {"update_law": onchip.update_law, "arms": [arm.to_dict() for arm in onchip.arms]},
         "stage_runs": {kind: sum(s.kind == kind for s in stages) for kind in ("prepare", "devices", "hwa", "deploy", "onchip")},
-        "trajectories": len(hwa.arms) * len(devices.assignment_seeds) * len(lifecycle.defects.cases) * len(onchip.arms),
+        "trajectories": trajectories,
+        "analog_weights": lifecycle.network.analog_weights,
+        "onchip_state_gb_estimate": round(
+            trajectories * lifecycle.network.analog_weights * STATE_BYTES_PER_WEIGHT[devices.technology] / 1e9, 2
+        ),
         "smoke_only": lifecycle.data.smoke,
     }
 
@@ -58,10 +65,7 @@ def _describe(args) -> int:
     print(f"{value['lifecycle_id']}  ({value['lifecycle_sha256'][:12]})")
     print(f"question: {value['question']}")
     print(f"decision: {value['decision']}")
-    print(
-        f"network: {value['network']['dataset']} ResNet-32, {value['network']['analog_convolutions']} analog "
-        "convolutions + classifier"
-    )
+    print(f"network: {value['network_description']}")
     print(
         f"devices: {value['devices']['technology']} ({value['devices']['model']}); assignments "
         f"{value['devices']['assignment_seeds']}; selection arrays {value['devices']['selection_seeds']}"
@@ -71,6 +75,10 @@ def _describe(args) -> int:
     print(f"program/verify: {json.dumps(value['program_verify'], sort_keys=True)}")
     print(f"on-chip: {value['onchip']['update_law']}; arms " + ", ".join(a["id"] for a in value["onchip"]["arms"]))
     print(f"stage runs: {value['stage_runs']}; trajectories: {value['trajectories']}")
+    print(
+        f"analog weights: {value['analog_weights']:,}; final on-chip states ~{value['onchip_state_gb_estimate']} GB "
+        "(estimate; measure with a cost probe)"
+    )
     if value["smoke_only"]:
         print("smoke: truncated cohorts; not scientific evidence")
     return 0
@@ -125,6 +133,8 @@ def _rows(run_dir: Path, result: dict) -> list[dict]:
     rows = []
     for row in json.loads(path.read_text()):
         split = "test" if "test" in row["final"] else "development"
+        # Every metric the family reports as a number, at clean, deployed and final state.
+        metrics = sorted(k for k, v in row["final"][split].items() if isinstance(v, (int, float)))
         flat = {
             "lifecycle_id": row["lifecycle_id"],
             "technology": row["technology"],
@@ -135,13 +145,8 @@ def _rows(run_dir: Path, result: dict) -> list[dict]:
             "weights": row["weights"],
             "calibration": row["calibration"],
             "evaluation": split,
-            "clean_accuracy_percent": row["clean"][split]["accuracy_percent"],
-            "initial_accuracy_percent": row["initial"][split]["accuracy_percent"],
-            "final_accuracy_percent": row["final"][split]["accuracy_percent"],
-            "clean_teacher_kl": row["clean"][split]["teacher_kl"],
-            "initial_teacher_kl": row["initial"][split]["teacher_kl"],
-            "final_teacher_kl": row["final"][split]["teacher_kl"],
-            "image_presentations": row["image_presentations"],
+            **{f"{state}_{k}": row[state][split][k] for state in ("clean", "initial", "final") for k in metrics},
+            **{k: row[k] for k in ("image_presentations", "sequence_presentations") if k in row},
             "failed_devices": row["identity"]["failed_devices"],
             "hwa_convergence_review_required": row["hwa_convergence_review_required"],
             "run_dir": str(run_dir),
@@ -182,6 +187,29 @@ def _collect(args) -> int:
     return 0
 
 
+def _corpus(args) -> int:
+    from workflow.networks.opt_mlp import build_corpus
+
+    root = args.root or (Path(os.environ["EBL_CORPUS_ROOT"]) if os.environ.get("EBL_CORPUS_ROOT") else None)
+    if root is None:
+        raise ValueError("Expected --root or EBL_CORPUS_ROOT for the corpus directory.")
+    path = root.resolve() / f"{args.name}.pt"
+    if path.exists():
+        raise ValueError(f"Expected a new corpus name; {path} already exists.")
+    corpus = build_corpus(
+        model=args.model,
+        model_dir=args.model_dir,
+        texts={"train": args.train, "validation": args.validation, "test": args.test},
+    )
+    save(path, corpus)
+    print(json.dumps({
+        "path": str(path),
+        "tokens": {split: len(stream) for split, stream in corpus["splits"].items()},
+        "lifecycle_data_corpus": {"name": args.name, "sha256": sha256_file(path)},
+    }, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m workflow", description=__doc__)
     commands_ = parser.add_subparsers(dest="command", required=True)
@@ -206,6 +234,15 @@ def build_parser() -> argparse.ArgumentParser:
     collect.add_argument("roots", type=Path, nargs="+")
     collect.add_argument("--output", type=Path, required=True)
     collect.set_defaults(handler=_collect)
+    corpus = commands_.add_parser("corpus", help="tokenize train/validation/test text into a pinned OPT corpus")
+    corpus.add_argument("--name", required=True, help="corpus name; written as <root>/<name>.pt")
+    corpus.add_argument("--model", default="facebook/opt-125m", choices=sorted(OPT_MODELS))
+    corpus.add_argument("--model-dir", type=Path, required=True, help="local snapshot with the tokenizer files")
+    corpus.add_argument("--train", type=Path, required=True)
+    corpus.add_argument("--validation", type=Path, required=True)
+    corpus.add_argument("--test", type=Path, required=True)
+    corpus.add_argument("--root", type=Path, help="corpus directory (default: EBL_CORPUS_ROOT)")
+    corpus.set_defaults(handler=_corpus)
     return parser
 
 

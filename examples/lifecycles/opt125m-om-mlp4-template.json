@@ -1,0 +1,175 @@
+{
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "lifecycle_id": "opt125m-om-mlp4-template",
+  "question": {
+    "text": "Template: OPT-125M with crossbar fc1/fc2 in the last four decoder layers on literal AIHWKit OM arrays, a gmax corruption case, HWA sources and the five matched on-chip arms.",
+    "decision": "None; copy into campaigns/<campaign>/lifecycles/ and set the question, decision, corpus, cohorts, defect cases, arms and budget from the experiment note before running.",
+    "primary_metric": "teacher_kl",
+    "evidence_class": "exploratory_model_based"
+  },
+  "network": {
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m",
+    "analog_decoder_layers": 4
+  },
+  "data": {
+    "corpus": {
+      "name": "replace-with-corpus-name",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "sequence_length": 256,
+    "data_seed": 20261007,
+    "hwa_sequences": 4096,
+    "recovery_sequences": 4096,
+    "development_sequences": 64,
+    "test_sequences": 256,
+    "evaluation": "test",
+    "max_examples": 8
+  },
+  "devices": {
+    "technology": "om",
+    "model": "aihwkit_1.1.0_reram_array_om",
+    "noise_scale": 1.0,
+    "assignment_seeds": [
+      271001
+    ],
+    "selection_seeds": [
+      211001
+    ],
+    "endpoint_seed_offset": 10000,
+    "policy": "repaired",
+    "variation_scale": 1.0,
+    "characterization": {
+      "bins": 41,
+      "samples": 512,
+      "fit_seed": 231001,
+      "heldout_seed": 231002
+    }
+  },
+  "defects": {
+    "placement": "bernoulli_per_active_cell",
+    "persistence": "permanent",
+    "cases": [
+      {
+        "kind": "none",
+        "rate_ppm": 0
+      },
+      {
+        "kind": "gmax",
+        "rate_ppm": 20000
+      }
+    ]
+  },
+  "deployment": {
+    "scaling": "per_layer_absmax",
+    "encoding": "single_cell_intrinsic_reference",
+    "tile_size": 512,
+    "read_noise": 0.0,
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias"
+  },
+  "hwa": {
+    "noise_model": "om_endpoint_kernel",
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "learning_rate": 0.0001,
+    "lr_milestones": [],
+    "lr_decay": 1.0,
+    "epochs": 1,
+    "batch_size": 8,
+    "augment": false,
+    "seed": 41,
+    "selection": {
+      "every_epochs": 1,
+      "extension_epochs": 0
+    },
+    "arms": [
+      {
+        "id": "digital",
+        "method": "none"
+      },
+      {
+        "id": "standard_hwa",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "corruption": null,
+        "selection_cases": [
+          {
+            "kind": "none",
+            "rate_ppm": 0
+          }
+        ]
+      },
+      {
+        "id": "cdt_gmax",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "corruption": {
+          "kind": "gmax",
+          "rates_ppm": [
+            20000,
+            30000,
+            50000
+          ]
+        },
+        "selection_cases": [
+          {
+            "kind": "none",
+            "rate_ppm": 0
+          },
+          {
+            "kind": "gmax",
+            "rate_ppm": 50000
+          }
+        ]
+      }
+    ]
+  },
+  "program_verify": {
+    "method": "closed_loop",
+    "max_cycles": 128,
+    "tolerance_steps": 0.5,
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "onchip": {
+    "update_law": "om_closed_loop_pulse_adam",
+    "objective": "teacher_kl",
+    "learning_rate": 0.0001,
+    "calibration_learning_rate": 0.0003,
+    "epochs": 1,
+    "batch_size": 8,
+    "seed": 41,
+    "pulses_per_update": 1,
+    "tolerance_steps": 0.5,
+    "max_pulses_per_cell": 640,
+    "arms": [
+      {
+        "id": "none",
+        "weights": "hold",
+        "calibration": false
+      },
+      {
+        "id": "calibration",
+        "weights": "hold",
+        "calibration": true
+      },
+      {
+        "id": "rewrite",
+        "weights": "rewrite",
+        "calibration": true
+      },
+      {
+        "id": "onchip_weights",
+        "weights": "learn",
+        "calibration": false
+      },
+      {
+        "id": "onchip_calibration",
+        "weights": "learn",
+        "calibration": true
+      }
+    ]
+  }
+}

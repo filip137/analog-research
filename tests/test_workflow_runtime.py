@@ -11,23 +11,20 @@ from pathlib import Path
 import pytest
 import torch
 
-from campaigns.runner import _validate_run_result
-from ebl.cli import TrainRequest
-from experiments.definitions import get_definition
 from workflow import data as data_stage
 from workflow import deployment, runtime
 from workflow import devices as device_stage
 from workflow.__main__ import main as workflow_main
-from workflow.lifecycle import (
-    EXPERIMENT_ID,
-    Execution,
-    StageConfig,
-    StageSelection,
-    parse_lifecycle,
-    stage_inputs,
-    stage_selections,
+from workflow.lifecycle import StageSelection, parse_lifecycle
+from workflow_helpers import (
+    lifecycle_document,
+    network_for,
+    om_raw,
+    request_for,
+    run_lifecycle,
+    run_stage,
+    synthetic_cache,
 )
-from workflow_helpers import lifecycle_document, network_for, om_raw, synthetic_cache
 
 
 def smoke(name, **changes):
@@ -65,45 +62,6 @@ def teacher_weights(monkeypatch, tmp_path):
     path = tmp_path / "teacher.pt"
     path.write_bytes(b"synthetic teacher")
     return path
-
-
-def request_for(lc, selection, inputs, output_dir):
-    return TrainRequest(
-        definition=get_definition(EXPERIMENT_ID),
-        spec=StageConfig(stage=selection, execution=Execution("cpu", 1, False), lifecycle=lc),
-        config_path=Path("stage.json"),
-        output_dir=output_dir,
-        weights=inputs.get("weights"),
-        resume=None,
-        command=("pytest",),
-        device_data=inputs.get("device_data"),
-        device_model=inputs.get("device_model"),
-        teacher_weights=inputs.get("teacher_weights"),
-        device_state=inputs.get("device_state"),
-    )
-
-
-def run_stage(lc, selection, results, teacher, root):
-    inputs = {}
-    for role, upstream in stage_inputs(selection).items():
-        if upstream is None:
-            inputs[role] = teacher
-        else:
-            run_dir, result = results[upstream[0]]
-            [artifact] = [a for a in result["artifacts"] if a["kind"] == upstream[1]]
-            inputs[role] = run_dir / artifact["path"]
-    output = root / selection.stage_id
-    assert runtime.run_train(request_for(lc, selection, inputs, output)) == 0
-    [run_dir] = sorted(output.iterdir())
-    result = dict(_validate_run_result(run_dir / "result.json"))
-    return run_dir, result
-
-
-def run_lifecycle(lc, teacher, root):
-    results = {}
-    for selection in stage_selections(lc):
-        results[selection.stage_id] = run_stage(lc, selection, results, teacher, root)
-    return results
 
 
 @pytest.mark.parametrize("name", ["cifar10-pcm-conv4-smoke", "cifar10-pcm-conv4-drift-smoke", "cifar10-om-conv4-smoke"])

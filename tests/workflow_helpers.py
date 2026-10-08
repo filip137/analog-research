@@ -5,10 +5,21 @@ from pathlib import Path
 
 import torch
 
+from campaigns.runner import _validate_run_result
+from ebl.cli import TrainRequest
 from experiments.cifar_crossbar.model import CifarResNet32, CrossbarSuffix
 from experiments.cifar_crossbar.sweep_devices import binding_seed
-from workflow import program_verify
-from workflow.lifecycle import DefectCase, parse_lifecycle
+from experiments.definitions import get_definition
+from workflow import program_verify, runtime
+from workflow.lifecycle import (
+    EXPERIMENT_ID,
+    DefectCase,
+    Execution,
+    StageConfig,
+    parse_lifecycle,
+    stage_inputs,
+    stage_selections,
+)
 
 LIFECYCLES = Path(__file__).resolve().parents[1] / "campaigns/cifar-crossbar-hwa-recovery/lifecycles"
 GMAX = DefectCase("gmax", 50000)
@@ -110,3 +121,45 @@ def deployed(lc, network, target, case, populations, seed=271001):
     array = program_verify.fresh(lc, network.layout, seed, case, populations, "cpu")
     report = program_verify.program(array, target, lc)
     return array, report
+
+
+# --- native stage runs ---------------------------------------------------------
+
+
+def request_for(lc, selection, inputs, output_dir):
+    return TrainRequest(
+        definition=get_definition(EXPERIMENT_ID),
+        spec=StageConfig(stage=selection, execution=Execution("cpu", 1, False), lifecycle=lc),
+        config_path=Path("stage.json"),
+        output_dir=output_dir,
+        weights=inputs.get("weights"),
+        resume=None,
+        command=("pytest",),
+        device_data=inputs.get("device_data"),
+        device_model=inputs.get("device_model"),
+        teacher_weights=inputs.get("teacher_weights"),
+        device_state=inputs.get("device_state"),
+    )
+
+
+def run_stage(lc, selection, results, teacher, root):
+    inputs = {}
+    for role, upstream in stage_inputs(selection).items():
+        if upstream is None:
+            inputs[role] = teacher
+        else:
+            run_dir, result = results[upstream[0]]
+            [artifact] = [a for a in result["artifacts"] if a["kind"] == upstream[1]]
+            inputs[role] = run_dir / artifact["path"]
+    output = root / selection.stage_id
+    assert runtime.run_train(request_for(lc, selection, inputs, output)) == 0
+    [run_dir] = sorted(output.iterdir())
+    result = dict(_validate_run_result(run_dir / "result.json"))
+    return run_dir, result
+
+
+def run_lifecycle(lc, teacher, root):
+    results = {}
+    for selection in stage_selections(lc):
+        results[selection.stage_id] = run_stage(lc, selection, results, teacher, root)
+    return results

@@ -12,7 +12,6 @@ from pathlib import Path
 import sys
 
 from experiments.artifacts import content_hash, sha256_file
-from experiments.cifar_crossbar.prepare import SOURCES
 from workflow.lifecycle import (
     STAGE_OUTPUTS,
     Execution,
@@ -21,6 +20,7 @@ from workflow.lifecycle import (
     stage_inputs,
     stage_selections,
 )
+from workflow.networks import family
 
 ROOT = Path(__file__).resolve().parents[1]
 PLAN_SCHEMA = "crossbar_lifecycle.plan.v1"
@@ -42,9 +42,9 @@ def build_plan(
 
     teacher_weights = teacher_weights.resolve()
     digest = sha256_file(teacher_weights)
-    if digest != SOURCES[lifecycle.network.dataset][1]:
+    if digest != family(lifecycle.network).pinned_digest(lifecycle.network):
         raise ValueError(
-            f"Expected the pinned public {lifecycle.network.dataset} ResNet-32 teacher. "
+            f"Expected the pinned teacher checkpoint of {lifecycle.network.describe()}. "
             f"Provided value: {teacher_weights} with SHA-256 {digest}."
         )
     files: dict[str, bytes] = {}

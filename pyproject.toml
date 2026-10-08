@@ -26,6 +26,7 @@ include = [
   "labs.tools",
   "training",
   "workflow",
+  "workflow.networks",
 ]
 exclude = [
   "labs.MNIST_network_data*",

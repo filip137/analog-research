@@ -154,7 +154,7 @@ class PcmEndpointArray:
 def fresh_array(lifecycle, layout, assignment_seed, case, populations, device):
     """Construct one assignment under one defect case, before programming."""
 
-    devices, dataset = lifecycle.devices, lifecycle.network.dataset
+    devices, dataset = lifecycle.devices, lifecycle.network.binding_namespace
     endpoint = devices.endpoint_seed(assignment_seed)
     if devices.technology == "pcm":
         return PcmEndpointArray(
@@ -272,7 +272,7 @@ def native_sample(*, kind, size, seed, policy, variation, output: Path) -> dict:
 def sample_populations(lifecycle, layout, scratch: Path, sampler=None) -> dict:
     """Layer-bound OM populations for every array plus characterization cells."""
 
-    devices, dataset = lifecycle.devices, lifecycle.network.dataset
+    devices, dataset = lifecycle.devices, lifecycle.network.binding_namespace
     sampler = native_sample if sampler is None else sampler
     scratch.mkdir(parents=True, exist_ok=True)
 

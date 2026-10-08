@@ -9,7 +9,7 @@ import pytest
 from campaigns.schema import CampaignSpec
 from experiments.definitions import load_experiment_config, parse_experiment_config
 from experiments.schema import ConfigError
-from workflow import plan as plan_module
+from workflow.networks import cifar_resnet32
 from workflow.__main__ import main as workflow_main
 from workflow.lifecycle import (
     ARTIFACT_SECTIONS,
@@ -187,7 +187,7 @@ def test_plan_writes_runner_manifest_and_registered_stage_configs(tmp_path, monk
     teacher.write_bytes(b"synthetic teacher")
     from experiments.artifacts import sha256_file
 
-    monkeypatch.setitem(plan_module.SOURCES, "cifar10", ("teacher.pt", sha256_file(teacher), 93.53))
+    monkeypatch.setitem(cifar_resnet32.SOURCES, "cifar10", ("teacher.pt", sha256_file(teacher), 93.53))
     output = tmp_path / "plan"
     assert workflow_main(["plan", str(PCM), "--teacher-weights", str(teacher), "--output", str(output)]) == 0
     manifest = json.loads((output / "campaign.json").read_text())

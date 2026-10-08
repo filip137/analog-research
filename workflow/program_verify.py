@@ -124,7 +124,7 @@ def configure(array, lifecycle, assignment_seed):
     if lifecycle.devices.technology != "pcm" or relaxation.model != "pcm_drift":
         raise ValueError("Expected PCM drift as the only supported relaxation law.")
     seed = binding_seed(
-        lifecycle.devices.endpoint_seed(assignment_seed), lifecycle.network.dataset, "pcm_drift"
+        lifecycle.devices.endpoint_seed(assignment_seed), lifecycle.network.binding_namespace, "pcm_drift"
     )
     array.relaxation = PcmDrift(
         relaxation.seconds,
