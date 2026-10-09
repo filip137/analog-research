@@ -67,8 +67,13 @@ as deployment.
 Each logical weight uses two physical CMO devices (`active_reference_pair`):
 an **active** device and a **reference** device. This is the same `q = a − r`
 read as the OM technology, but here the reference is a real programmed device.
-Each analog matrix is scaled by its own absolute maximum to q in [-1, 1].
-Then:
+Each analog matrix is scaled to q in [-1, 1], either by its own absolute
+maximum (`per_layer_absmax`) or by each output channel's absolute maximum
+(`per_output_channel_absmax`, the CMO template default). On OPT-125M,
+per-channel scaling matters. A typical channel's largest weight is only
+9–25 % of its matrix's outlier maximum, so under per-matrix scaling the CMO
+error alone is 0.4–1.0× each channel's weight RMS; per-channel scaling
+brings it to 0.07–0.11×. Then:
 
 - the active device is programmed to G_a\* = 48.6 + 39.6 · q µS, so
   q = -1, 0 and 1 map to 9, 48.6 and 88.2 µS;

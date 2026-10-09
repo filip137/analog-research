@@ -58,6 +58,7 @@ it is open to your change before launch.
 | Metric | `teacher_kl` primary; perplexity, cross-entropy, next-token accuracy and teacher agreement also reported | confirmed |
 | Sequences and cohorts | Length 256. HWA: 8,192 train sequences (2.10 M tokens). Development: the first 256 validation sequences. Test: the first 1,024 test sequences (262 K tokens). Adaptation and evaluation tokens are disjoint by split | proposed |
 | Device | CMO, 2 % P&V (`gaussian_endpoint`), `active_reference_pair`. 256×256 physical arrays, 48 per die: 144 arrays and 3 dies per MLP. No relaxation, no read noise | confirmed |
+| Mapping | `per_output_channel_absmax`: each output channel scaled by its own abs-max, with a fixed digital output scale per channel (AIHWKit column-wise; Analog Foundation Models mapping). See "Why per-channel mapping" below | confirmed 2026-10-09 |
 | Evaluation defects | `none` plus `random` at 10,000–50,000 ppm in steps of 10,000, i.e. 0, 1, 2, 3, 4 and 5 %. Independent placement (both concentrations `null`). Exact totals per MLP over active and reference devices; random stuck values in 9–88.2 µS | confirmed |
 | HWA sources | `pretrained` (method `none`). `standard_hwa`: noise_std 0.03, `output_channel_abs_max`, no corruption. `cdt_random_3pct`: the same noise plus temporary corruption `random` at 30,000 ppm | confirmed |
 | HWA noise convention | Analog Foundation Models eq. 3: W̃[j,:] = W[j,:] + 0.03 · maxᵢ\|W[j,i]\| · ε for output channel j, fresh every minibatch. 3 % is a fixed, literature-motivated choice, not tuned | confirmed |
@@ -82,6 +83,21 @@ it is open to your change before launch.
   - If every rate selects epoch 0 (no improvement on development), escalate
     instead of continuing.
 
+**Why per-channel mapping.** This was measured on the pinned teacher before
+any run. Under per-matrix scaling, a typical output channel's largest weight
+is only 9–25 % of its matrix's outlier maximum. Medians over channels, as a
+multiple of each channel's weight RMS:
+
+| Error source | Per-matrix scaling | Per-output-channel scaling |
+| --- | --- | --- |
+| CMO 2 % P&V (pair) | 0.41–0.99 | 0.07–0.11 |
+| 3 % per-channel HWA noise | 0.10–0.16 | 0.10–0.16 |
+| 1 % random stuck devices | 1.7–4.1 | 0.31–0.46 |
+| 5 % random stuck devices | 3.8–9.1 | 0.70–1.02 |
+
+Per-matrix scaling would leave the HWA noise 3–7× below the device error and
+would saturate at 1 % stuck devices.
+
 **Known deviations from the Analog Foundation Models recipe (not tested).**
 - Our backward pass goes through the noisy weights, as in the AIHWKit modifier
   and Rasch et al. 2023; that paper uses noise-free weights in the backward
@@ -97,10 +113,10 @@ it is open to your change before launch.
 [`campaigns/opt-cmo-corruption/lifecycles/`](../../../lifecycles/README.md), with
 short digests from `python -m workflow check`:
 
-- `opt125m-cmo-l3-exp1-probe` (`63bce8b3f44a`): cost probe, not evidence;
-- `opt125m-cmo-l3-lrdev-lr1e-5` (`741d68311e81`);
-- `opt125m-cmo-l3-lrdev-lr3e-5` (`7db8226a5d3f`);
-- `opt125m-cmo-l3-lrdev-lr1e-4` (`3ba018b76fbb`);
+- `opt125m-cmo-l3-exp1-probe` (`d561549270c7`): cost probe, not evidence;
+- `opt125m-cmo-l3-lrdev-lr1e-5` (`0407dd1b3589`);
+- `opt125m-cmo-l3-lrdev-lr3e-5` (`1ebaa3797d00`);
+- `opt125m-cmo-l3-lrdev-lr1e-4` (`197b5ee650ed`);
 - `opt125m-cmo-l3-exp1`: written after Stage 1a, with every field above and
   the frozen learning rate.
 
@@ -140,6 +156,8 @@ in `tests/test_workflow_cmo.py`):
 - Compact CMO deployments: a programmed-once array is stored as identities
   and rebuilt from its target, with hash verification. Deployment storage per
   case drops from about 12 to about 0 bytes per weight.
+- `deployment.scaling: per_output_channel_absmax` (OPT family): per-channel
+  targets with a fixed digital output scale per channel.
 
 ## Metrics and decision
 

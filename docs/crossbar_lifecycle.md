@@ -115,9 +115,18 @@ exploratory model-based evidence, never as fabricated-hardware measurements
 ### (i) Deployment of the digital weights
 
 The pretrained teacher stays complete; everything outside the analog matrices is
-frozen and digital. Each analog matrix is flattened to `[out, in]` and divided
-by its own absolute maximum (`per_layer_absmax`), giving targets `q` in
-`[-1, 1]`. It is then split into `tile_size` tiles whose input slices are summed
+frozen and digital. Each analog matrix is flattened to `[out, in]` and scaled
+to targets `q` in `[-1, 1]`, in one of two ways:
+
+- `per_layer_absmax` divides the matrix by its own absolute maximum, with one
+  digital output scale per matrix.
+- `per_output_channel_absmax` (OPT family only) divides each output channel
+  by its own absolute maximum, with a fixed digital output scale per channel.
+  This is the AIHWKit column-wise convention, and it keeps outlier weights
+  from compressing every other channel into a small part of the conductance
+  range.
+
+Each matrix is then split into `tile_size` tiles whose input slices are summed
 digitally. `read_noise` adds per-tile MVM output noise. Each stage writes
 `mapping.json`, which records tiles, scales, the frozen-parameter hash and the
 physical device count.

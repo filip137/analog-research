@@ -395,6 +395,28 @@ def test_template_is_valid_and_round_trips():
     assert parse_lifecycle(lc.to_dict()) == lc
 
 
+def test_per_output_channel_scaling_maps_every_channel_to_full_scale():
+    teacher = tiny_teacher()
+    lc = small()
+    assert lc.deployment.scaling == "per_output_channel_absmax"
+    network = deployment.build_network(teacher, lc)
+    for spec in network.layout:
+        rows = network.q.detach()[spec.offset : spec.offset + spec.size].reshape(spec.shape).abs().amax(1)
+        assert torch.allclose(rows, torch.ones_like(rows))
+    tokens = torch.randint(0, 64, (3, 9), generator=torch.Generator().manual_seed(3))
+    student, reference = network(tokens), teacher(tokens)[:, :-1]
+    assert torch.allclose(student, reference, atol=1e-4)
+    receipt = deployment.mapping_receipt(network, lc)
+    assert receipt["scaling"] == "per_output_channel_absmax" and "channel_scales_sha256" in receipt
+    assert "channel_scales" in network.state_dict()
+    matrix = deployment.build_network(teacher, small(**{"deployment.scaling": "per_layer_absmax"}))
+    assert "channel_scales" not in matrix.state_dict()
+    with pytest.raises(ConfigError, match="deployment.scaling"):
+        parse_lifecycle(
+            changed(lifecycle_document("cifar10-pcm-conv4-smoke"), "deployment.scaling", "per_output_channel_absmax")
+        )
+
+
 def test_hierarchical_keys_belong_to_cmo_only():
     pcm = lifecycle_document("cifar10-pcm-conv4-smoke")
     with pytest.raises(ConfigError, match="defects fields"):

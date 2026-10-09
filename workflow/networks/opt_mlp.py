@@ -32,6 +32,7 @@ from experiments.artifacts import sha256_file
 from experiments.cifar_crossbar.data import cohort_receipt
 from experiments.cifar_crossbar.model import MatrixSpec, state_hash, tensor_hash
 from experiments.cifar_crossbar.runtime import load
+from workflow.lifecycle import SCALINGS
 
 SPLITS = ("hwa", "training", "development", "test")
 SUMMARY_METRICS = ("teacher_kl", "perplexity")
@@ -156,18 +157,28 @@ class OptMlpSuffix(nn.Module):
     The teacher is held by reference, not registered, so state dicts contain
     only the crossbar targets and the calibration parameters: per-matrix output
     gains, the MLP biases and the LayerNorm in front of each analog MLP.
+
+    ``scaling`` maps each matrix to normalized targets in [-1, 1]: by its own
+    abs-max (``per_layer_absmax``, one digital output scale per matrix) or by
+    each output channel's abs-max (``per_output_channel_absmax``, a fixed
+    digital output scale per channel, the AIHWKit column-wise convention).
     """
 
-    def __init__(self, teacher: OptDecoder, analog_layers: int, tile_size: int = 512):
+    def __init__(
+        self, teacher: OptDecoder, analog_layers: int, tile_size: int = 512, scaling: str = "per_layer_absmax"
+    ):
         super().__init__()
         depth = len(teacher.layers)
         if not 1 <= analog_layers <= depth or tile_size < 1:
             raise ValueError("Expected between one and all decoder layers and a positive tile size.")
+        if scaling not in SCALINGS:
+            raise ValueError(f"Expected a scaling in {SCALINGS}. Provided value: {scaling!r}.")
+        self.scaling = scaling
         self.start, self.tile_size = depth - analog_layers, tile_size
         self.suffix = f"last_{analog_layers}_decoder_mlps"
         self._frozen = (teacher,)
         self.layout: list[MatrixSpec] = []
-        values, biases, offset = [], [], 0
+        values, biases, rows, offset = [], [], [], 0
         for i in range(self.start, depth):
             for name in ("fc1", "fc2"):
                 module = teacher.layers[i].get_submodule(name)
@@ -176,11 +187,22 @@ class OptMlpSuffix(nn.Module):
                 self.layout.append(
                     MatrixSpec(f"decoder.layers.{i}.{name}", tuple(weight.shape), offset, weight.numel(), scale)
                 )
-                values.append(weight.flatten() / scale)
+                if scaling == "per_output_channel_absmax":
+                    row = weight.abs().amax(1).clamp_min(1e-12)
+                    rows.append(row)
+                    values.append((weight / row[:, None]).flatten())
+                else:
+                    values.append(weight.flatten() / scale)
                 biases.append(nn.Parameter(module.bias.detach().clone()))
                 offset += weight.numel()
         self.q = nn.Parameter(torch.cat(values))
         self.register_buffer("scales", torch.tensor([x.scale for x in self.layout], device=self.q.device))
+        if rows:
+            # Fixed digital output scale of every output channel, concatenated in layout order.
+            self.register_buffer("channel_scales", torch.cat(rows))
+            self.channel_offsets = [0]
+            for spec in self.layout:
+                self.channel_offsets.append(self.channel_offsets[-1] + spec.shape[0])
         self.output_gains = nn.Parameter(torch.ones(len(self.layout), device=self.q.device))
         self.mlp_biases = nn.ParameterList(biases)
         self.mlp_norms = nn.ModuleList(
@@ -244,7 +266,11 @@ class OptMlpSuffix(nn.Module):
                     )
                 accum = part if accum is None else accum + part
             columns.append(accum)
-        result = torch.cat(columns, dim=1) * self.scales[index] * self.output_gains[index] + self.mlp_biases[index]
+        if self.scaling == "per_output_channel_absmax":
+            scale = self.channel_scales[self.channel_offsets[index] : self.channel_offsets[index + 1]]
+        else:
+            scale = self.scales[index]
+        result = torch.cat(columns, dim=1) * scale * self.output_gains[index] + self.mlp_biases[index]
         return result.reshape(*x.shape[:-1], spec.shape[0])
 
     def forward_features(self, hidden, q=None):
@@ -283,6 +309,11 @@ class OptMlpSuffix(nn.Module):
                 for s in self.layout
             ],
             "logical_weights": self.q.numel(),
+            **(
+                {"channel_scales_sha256": tensor_hash(self.channel_scales)}
+                if self.scaling == "per_output_channel_absmax"
+                else {}
+            ),
             "logical_tiles": tiles,
             "tile_capacity": self.tile_size**2,
             "prefix_sha256": self.prefix_hash(),
@@ -314,7 +345,8 @@ def load_teacher(path, network, device):
 
 
 def build_network(teacher, lifecycle) -> OptMlpSuffix:
-    return OptMlpSuffix(teacher, lifecycle.network.analog_decoder_layers, lifecycle.deployment.tile_size)
+    deployment = lifecycle.deployment
+    return OptMlpSuffix(teacher, lifecycle.network.analog_decoder_layers, deployment.tile_size, deployment.scaling)
 
 
 # --- token corpus and cohorts ---------------------------------------------------

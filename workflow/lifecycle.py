@@ -58,6 +58,9 @@ CMO_FAILURE_KINDS = ("open", "gmin", "gmax", "random")
 HIERARCHICAL = "hierarchical_die_array"
 # P&V acceptance ranges (percent) of the AIHWKit 1.1.0 CMO programming fit.
 CMO_ACCEPTANCE_PERCENT = (0.2, 2.0)
+# Weight-to-target scaling: each matrix by its abs-max, or each output channel by
+# its own abs-max with a fixed digital output scale per channel (OPT family only).
+SCALINGS = ("per_layer_absmax", "per_output_channel_absmax")
 # HWA noise model: Gaussian weight noise of ``hwa.noise_std`` relative to the
 # matrix full scale (1 after per-layer abs-max scaling) or to each output
 # channel's current abs-max (the Analog Foundation Models convention).
@@ -759,7 +762,7 @@ class Deployment:
 def _deployment(raw: Any, technology: str) -> Deployment:
     raw = _object(raw, "deployment", ("scaling", "encoding", "tile_size", "read_noise", "calibration"))
     return Deployment(
-        scaling=_choice(raw["scaling"], "deployment.scaling", ("per_layer_absmax",)),
+        scaling=_choice(raw["scaling"], "deployment.scaling", SCALINGS),
         encoding=_choice(raw["encoding"], "deployment.encoding", (TECHNOLOGIES[technology].encoding,)),
         tile_size=_integer(raw["tile_size"], "deployment.tile_size", minimum=1),
         read_noise=_number(raw["read_noise"], "deployment.read_noise"),
@@ -1219,6 +1222,10 @@ def _cross_validate(lifecycle: Lifecycle) -> None:
     if lifecycle.deployment.calibration != CALIBRATIONS[family]:
         raise config_error(
             "deployment.calibration", f"to be {CALIBRATIONS[family]!r} for {family}", lifecycle.deployment.calibration
+        )
+    if family != OPT_FAMILY and lifecycle.deployment.scaling != "per_layer_absmax":
+        raise config_error(
+            "deployment.scaling", f"to be 'per_layer_absmax' for {family}", lifecycle.deployment.scaling
         )
     if family == OPT_FAMILY and lifecycle.hwa.augment:
         raise config_error("hwa.augment", f"to be false; {family} defines no augmentation", True)
