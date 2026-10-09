@@ -29,11 +29,13 @@ changed" in the note. Never add a per-study runtime or bypass the stages.
   (`sha256sum`). If absent, build it from the note's text files with
   `python -m workflow corpus --name <name> --model-dir <snapshot> --train ... --validation ... --test ...`
   and copy the printed digest into the note and the lifecycle.
-- OM populations: `EBL_AIHWKIT_PYTHON` must name the AIHWKit 1.1.0 interpreter.
+- OM populations: `EBL_AIHWKIT_PYTHON` must name the AIHWKit 1.1.0 interpreter
+  (OM only; CMO and PCM are analytic).
 
 ## 4. Lifecycle file
 
-Copy `examples/lifecycles/opt125m-om-mlp4-template.json` to
+Copy `examples/lifecycles/opt125m-cmo-mlp4-template.json` (the CMO working device;
+`opt125m-om-mlp4-template.json` only for a declared OM regime) to
 `campaigns/<campaign>/lifecycles/<lifecycle_id>.json` (file name equals the id).
 
 - Explorer fields: transcribe verbatim from the note.

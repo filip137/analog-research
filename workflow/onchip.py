@@ -13,8 +13,11 @@ curves and the final evaluation -- uses the current held post-write apparent
 state. Update laws: PCM endpoint reprogramming of a digital master
 (straight-through on the apparent state); OM closed-loop pulse Adam (an
 accumulated digital target verified with up to ``pulses_per_update`` pulses);
-OM open-loop pulse Adam (stochastic one-pulse rounding, no verify reads).
-``max_pulses_per_cell`` caps on-chip writes per cell; ``null`` is uncapped.
+OM open-loop pulse Adam (stochastic one-pulse rounding, no verify reads);
+CMO idealized-write Adam (one noisy write per active device and step on the
+held state, no master, no verify and no retry; reference devices are never
+written). ``max_pulses_per_cell`` caps OM
+on-chip writes per cell; ``null`` is uncapped.
 """
 
 from __future__ import annotations
@@ -143,8 +146,44 @@ class OpenLoopPulseAdam:
         )
 
 
+class IdealizedWriteAdam:
+    """Digital Adam applied as one idealized CMO write per device and step.
+
+    Every device with a nonzero command receives G <- G + dG + sigma(G + dG) xi
+    (``training.reram_cmo``). There is no digital master, no verify read and
+    no retry, so earlier write errors persist in the held state.
+    """
+
+    contract = "crossbar_lifecycle.cmo_idealized_write_adam.v1"
+
+    def __init__(self, array, *, learning_rate):
+        self.array, self.learning_rate = array, float(learning_rate)
+        template = array.read()
+        self.first = torch.zeros_like(template)
+        self.second = torch.zeros_like(template)
+        self.step_index = 0
+
+    @torch.no_grad()
+    def step(self, gradient):
+        command = _adam_command(self, gradient)
+        # A zero-learning-rate control must not write.
+        if self.learning_rate == 0:
+            return
+        self.array.write(command)
+
+    def state_dict(self):
+        return clone_cpu(
+            {
+                "contract": [self.contract, self.learning_rate],
+                "first": self.first,
+                "second": self.second,
+                "step_index": self.step_index,
+            }
+        )
+
+
 def make_writer(array, lifecycle):
-    """The declared OM update law for a weight-learning arm."""
+    """The declared OM or CMO update law for a weight-learning arm."""
 
     onchip = lifecycle.onchip
     if onchip.update_law == "om_closed_loop_pulse_adam":
@@ -159,7 +198,9 @@ def make_writer(array, lifecycle):
         return OpenLoopPulseAdam(
             array.port(), learning_rate=onchip.learning_rate, cap=onchip.max_pulses_per_cell, seed=onchip.seed
         )
-    raise ValueError(f"Expected an OM pulse update law. Provided value: {onchip.update_law!r}.")
+    if onchip.update_law == "cmo_idealized_write_adam":
+        return IdealizedWriteAdam(array, learning_rate=onchip.learning_rate)
+    raise ValueError(f"Expected an OM or CMO writer update law. Provided value: {onchip.update_law!r}.")
 
 
 def evaluations(network, array, cache, lifecycle, device) -> dict:
@@ -183,18 +224,20 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
     onchip, data = lifecycle.onchip, lifecycle.data
     network_family = family(lifecycle.network)
     technology = lifecycle.devices.technology
-    om = technology == "om"
+    om, cmo = technology == "om", technology == "cmo"
+    # OM and CMO learn through a writer on the held state; PCM reprograms a master.
+    direct = om or cmo
     learn, rewrite = arm.weights == "learn", arm.weights == "rewrite"
     network.enable_calibration(arm.calibration)
     network.q.requires_grad_(False)
     master = torch.nn.Parameter(target.clone(), requires_grad=learn)
     groups = []
-    if learn and not om:
+    if learn and not direct:
         groups.append({"params": [master], "lr": onchip.learning_rate})
     if arm.calibration:
         groups.append({"params": network.calibration_parameters(), "lr": onchip.calibration_learning_rate})
     optimizer = torch.optim.Adam(groups) if groups else None
-    writer = make_writer(array, lifecycle) if learn and om else None
+    writer = make_writer(array, lifecycle) if learn and direct else None
     tolerance = (
         array.nominal_step * onchip.tolerance_steps
         if om and onchip.update_law == "om_closed_loop_pulse_adam"
@@ -202,6 +245,7 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
     )
     cap = onchip.max_pulses_per_cell if om else None
     baseline = array.cost()
+    baseline_writes = array.write_counts().clone() if cmo else None
     fixed = device_stage.fixed_state(array, technology)
     prefix = network.prefix_hash()
     initial_hash = tensor_hash(array.read())
@@ -223,7 +267,7 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
             if optimizer:
                 optimizer.zero_grad(set_to_none=True)
             observed = array.read().detach().clone()
-            if om:
+            if direct:
                 q = observed.requires_grad_(learn)
             else:
                 q = master + (observed - master).detach() if learn else observed
@@ -239,6 +283,9 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                 with torch.no_grad():
                     master.clamp_(-1, 1)
                 array.program(master.detach())
+            elif rewrite and cmo:
+                # Matched to learning: only active devices are rewritten.
+                array.program(target, reference=False)
             elif rewrite and not om:
                 array.program(target)
             elif rewrite:
@@ -273,6 +320,13 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                 max_onchip_cell_pulses=int(count.max()),
                 probability_clipped=writer.probability_clipped if writer else 0,
             )
+        if cmo:
+            writes = array.write_counts() - baseline_writes
+            cost.update(
+                touched_devices=int((writes > 0).sum()),
+                max_onchip_device_writes=int(writes.max()),
+                out_of_range_devices=array.out_of_range(),
+            )
         row = {
             "epoch": epoch,
             "train_loss_mean": loss_sum / len(order),
@@ -306,12 +360,15 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
     }
 
 
-def restore(network, array, source_model, state, technology) -> None:
-    """Rebuild a final on-chip state from its source model and saved tensors."""
+def restore(network, array, source_model, state, technology, target=None) -> None:
+    """Rebuild a final on-chip state from its source model and saved tensors.
+
+    ``target`` rebuilds a compact CMO deployment state (an arm that never wrote).
+    """
 
     network.load_state_dict(source_model)
     with torch.no_grad():
         parameters = dict(network.named_parameters())
         for name, value in state["calibration"].items():
             parameters[name].copy_(value.to(parameters[name].device))
-    device_stage.load_array_state(array, state["array"], technology)
+    device_stage.load_array_state(array, state["array"], technology, target)

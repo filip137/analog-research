@@ -1,0 +1,167 @@
+{
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "lifecycle_id": "opt125m-cmo-mlp4-template",
+  "question": {
+    "text": "Template: OPT-125M with crossbar fc1/fc2 in the last four decoder layers on IBM CMO/HfOx ReRAM (2 % program-and-verify fit), the four hierarchical fault scenarios at a 5 % synthetic mean (independent, array, die, both), HWA sources and the five matched on-chip arms.",
+    "decision": "None; copy into campaigns/<campaign>/lifecycles/ and set the question, decision, corpus, cohorts, defect cases, HWA noise, arms and budget from the experiment note before running. The HWA noise follows the Analog Foundation Models convention (3 % of each output channel's abs-max).",
+    "primary_metric": "teacher_kl",
+    "evidence_class": "exploratory_model_based"
+  },
+  "network": {
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m",
+    "analog_decoder_layers": 4
+  },
+  "data": {
+    "corpus": {
+      "name": "replace-with-corpus-name",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "sequence_length": 256,
+    "data_seed": 20261007,
+    "hwa_sequences": 4096,
+    "recovery_sequences": 4096,
+    "development_sequences": 64,
+    "test_sequences": 256,
+    "evaluation": "test",
+    "max_examples": 8
+  },
+  "devices": {
+    "technology": "cmo",
+    "model": "aihwkit_1.1.0_reram_cmo",
+    "noise_scale": 1.0,
+    "assignment_seeds": [
+      271001
+    ],
+    "selection_seeds": [
+      211001
+    ],
+    "endpoint_seed_offset": 10000
+  },
+  "defects": {
+    "placement": "hierarchical_die_array",
+    "persistence": "permanent",
+    "arrays_per_die": 48,
+    "cases": [
+      {
+        "kind": "none",
+        "rate_ppm": 0,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 50000,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 50000,
+        "die_concentration": null,
+        "array_concentration": 118
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 50000,
+        "die_concentration": 118,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 50000,
+        "die_concentration": 118,
+        "array_concentration": 118
+      }
+    ]
+  },
+  "deployment": {
+    "scaling": "per_layer_absmax",
+    "encoding": "active_reference_pair",
+    "tile_size": 256,
+    "read_noise": 0.0,
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias"
+  },
+  "hwa": {
+    "noise_model": "additive_gaussian_weight",
+    "noise_std": 0.03,
+    "noise_scaling": "output_channel_abs_max",
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "learning_rate": 0.0001,
+    "lr_milestones": [],
+    "lr_decay": 1.0,
+    "epochs": 1,
+    "batch_size": 8,
+    "augment": false,
+    "seed": 41,
+    "selection": {
+      "every_epochs": 1,
+      "extension_epochs": 0
+    },
+    "arms": [
+      {
+        "id": "digital",
+        "method": "none"
+      },
+      {
+        "id": "standard_hwa",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "corruption": null,
+        "selection_cases": [
+          {
+            "kind": "none",
+            "rate_ppm": 0,
+            "die_concentration": null,
+            "array_concentration": null
+          }
+        ]
+      }
+    ]
+  },
+  "program_verify": {
+    "method": "gaussian_endpoint",
+    "acceptance_percent": 2.0,
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "onchip": {
+    "update_law": "cmo_idealized_write_adam",
+    "objective": "teacher_kl",
+    "learning_rate": 0.0001,
+    "calibration_learning_rate": 0.0003,
+    "epochs": 1,
+    "batch_size": 8,
+    "seed": 41,
+    "arms": [
+      {
+        "id": "none",
+        "weights": "hold",
+        "calibration": false
+      },
+      {
+        "id": "calibration",
+        "weights": "hold",
+        "calibration": true
+      },
+      {
+        "id": "rewrite",
+        "weights": "rewrite",
+        "calibration": true
+      },
+      {
+        "id": "onchip_weights",
+        "weights": "learn",
+        "calibration": false
+      },
+      {
+        "id": "onchip_calibration",
+        "weights": "learn",
+        "calibration": true
+      }
+    ]
+  }
+}

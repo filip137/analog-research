@@ -7,15 +7,19 @@ Declared methods:
   +/- ``tolerance_steps`` nominal steps once toward its target.
 - ``open_loop_nominal`` (OM): pulse counts from the nominal soft-bounds
   inverse, starting at RESET. No verify reads and no device identities.
-- ``gaussian_endpoint`` (PCM): one Gaussian endpoint per programming request;
-  permanent failures are not repaired by writes.
+- ``gaussian_endpoint`` (PCM, CMO): one Gaussian endpoint per device and
+  programming request, with the technology's own error law. PCM permanent
+  failures are not repaired by writes. CMO endpoints use the declared
+  ``acceptance_percent`` fit and are not clamped; the report counts devices
+  whose held conductance lies outside the 9-88.2 uS range.
 
 Relaxation (PCM only) is the AIHWKit 1.1.0 PCM drift law with 1/f read noise
 after ``seconds`` and optional per-tile global drift compensation. It yields
 one held apparent state per programming event, so every later forward of that
 state -- gradients, selection and evaluation -- sees the same relaxed array.
 IBM OM relaxation, retention and drift are not modelled (see
-``docs/ibm_reram_program_verify_noise_model.md``).
+``docs/ibm_reram_program_verify_noise_model.md``); neither is CMO drift or
+read noise (see ``docs/reram_cmo_device.md``).
 """
 
 from __future__ import annotations
@@ -154,6 +158,8 @@ def program(array, target, lifecycle) -> dict:
         array.program(target)
         after = array.cost()
         report = {"cycles": 0, "verify_reads": 0, **{k: after[k] - before[k] for k in after}}
+        if lifecycle.devices.technology == "cmo":
+            report.update(acceptance_percent=pv.acceptance_percent, out_of_range_devices=array.out_of_range())
     elif pv.method == "closed_loop":
         report = verify_pulses(
             array.port(),

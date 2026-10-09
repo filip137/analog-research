@@ -32,10 +32,10 @@ what to compute ([contract](../../../docs/crossbar_lifecycle.md)); the native
 | --- | --- |
 | question, decision and primary metric | seed values, keeping their roles disjoint |
 | `network`: model and number of analog decoder layers | cohort details within the declared sizes |
-| corpus, sequence length, cohort sizes, evaluation split | `deployment.tile_size` |
+| corpus, sequence length, cohort sizes, evaluation split | `deployment.tile_size` (except under CMO hierarchical defects, where it is the physical array size) |
 | technology and P&V method | OM characterization bins and samples |
-| defect kinds and fractions (`defects.cases`) | `max_examples` for labelled smokes and probes |
-| HWA sources: noise strength, corruption awareness, selection cases | execution device, threads and output paths |
+| defect kinds and fractions (`defects.cases`); for CMO the die/array concentrations, `arrays_per_die` and array size | `max_examples` for labelled smokes and probes |
+| HWA sources: noise strength (and CMO `hwa.noise_std`), corruption awareness, selection cases | execution device, threads and output paths |
 | on-chip arms, update law, learning rates, epochs, write budget | the stage plan and runner commands |
 | number of assignment and selection arrays; compute, storage and time caps | |
 

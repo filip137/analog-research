@@ -28,16 +28,16 @@ equivalence with the latest historical loops (see [Equivalence](#equivalence-wit
 | Decision rule, budget, handoff | the linked experiment or pilot note (unchanged [workflow](experiment_workflow.md)) |
 | Measurements and interpretation | the result or pilot note |
 | Schema (stdlib only) | `workflow/lifecycle.py` |
-| (a) Devices and defects | `workflow/devices.py`: `fresh_array`, `sample_populations`, `array_identity` |
+| (a) Devices and defects | `workflow/devices.py`: `fresh_array`, `sample_populations`, `array_identity`, `CmoArray`; CMO device law in `training/reram_cmo.py` ([contract](reram_cmo_device.md)) |
 | (i) Deployment of digital weights | `workflow/deployment.py`: `build_network`, `mapping_receipt`, `targets` |
 | (ii) HWA | `workflow/hwa.py`: `train_source`, `selection_score` |
 | (iii) Program-and-verify | `workflow/program_verify.py`: `fresh`, `program`, `characterize_endpoints`, `PcmDrift` |
-| (iv) On-chip training | `workflow/onchip.py`: `train_arm`, `ClosedLoopPulseAdam`, `OpenLoopPulseAdam` |
+| (iv) On-chip training | `workflow/onchip.py`: `train_arm`, `ClosedLoopPulseAdam`, `OpenLoopPulseAdam`, `IdealizedWriteAdam` |
 | Network families | `workflow/networks/`: `opt_mlp.py`, `cifar_resnet32.py` (one module each, same functions) |
 | Cohorts and caches | `workflow/data.py`, dispatching to the family |
 | One native stage run | `workflow/runtime.py`, reached through `python -m ebl train` |
 | Plan, check, collect, corpus | `python -m workflow` (`workflow/plan.py`, `workflow/__main__.py`) |
-| OPT template | `examples/lifecycles/opt125m-om-mlp4-template.json` (copy into a campaign; not an experiment) |
+| OPT templates | `examples/lifecycles/opt125m-cmo-mlp4-template.json` (CMO, the working device) and `opt125m-om-mlp4-template.json` (OM reference); copy into a campaign; not experiments |
 
 ## The definition
 
@@ -50,12 +50,12 @@ normalized before hashing.
 | `question` | `text`, `decision`, `primary_metric` (OPT: `teacher_kl` or `perplexity`; CIFAR: `teacher_kl` or `accuracy_percent`), `evidence_class` (`exploratory_model_based`) |
 | `network` | OPT: `family`, `model` (`facebook/opt-125m`), `analog_decoder_layers` (1–12, counted from the last layer). CIFAR: `family`, `dataset`, `analog_convolutions` (0, 2, 4 or 8, plus the classifier) |
 | `data` | OPT: pinned `corpus` (name and SHA-256), `sequence_length`, split seed, HWA, recovery, development and test sequence counts, `evaluation`, `max_examples`. CIFAR: split seed, HWA, recovery and development image counts, `evaluation`, `max_examples`. `max_examples` is non-zero only for labelled smokes |
-| `devices` | technology and device model, write-noise scale, array identities and, for OM, population policy, variation and endpoint characterization |
+| `devices` | technology (`om`, `pcm`, `cmo`) and device model, write-noise scale, array identities and, for OM, population policy, variation and endpoint characterization |
 | `defects` | placement, persistence and the defect `cases` |
 | `deployment` (i) | scaling, encoding, tile size, MVM read noise, calibration scheme (fixed per family) |
-| `hwa` (ii) | shared optimizer, objective, schedule, epochs, augmentation (CIFAR only), seed and selection rule, plus source `arms` |
-| `program_verify` (iii) | method, verify cycles and window, relaxation |
-| `onchip` (iv) | update law, objective, learning rates, epochs, seed, write budget and matched `arms` |
+| `hwa` (ii) | noise model (and `noise_std`, `noise_scaling` for CMO), shared optimizer, objective, schedule, epochs, augmentation (CIFAR only), seed and selection rule, plus source `arms` |
+| `program_verify` (iii) | method, verify cycles and window (OM), acceptance range (CMO), relaxation |
+| `onchip` (iv) | update law, objective, learning rates, epochs, seed, write budget and matched `arms`; or `null` for a deployment-only loop with no on-chip stage |
 
 ### (a) Question, devices and defects
 
@@ -74,17 +74,39 @@ A defect case is `{"kind": "none" | "open" | "gmax" | "random", "rate_ppm": n}`.
 corruption fractions is a list of cases in one lifecycle. All cases of one assignment share that array's
 identity, so they are matched conditions, not independent arrays. Defects are
 `permanent`: the runtime verifies after every epoch that writes did not change
-them. Placement depends on the technology:
+them. Placement depends on the technology.
 
-| | OM (`aihwkit_1.1.0_reram_array_om`) | PCM (`gaussian_endpoint_li2023`) |
-| --- | --- | --- |
-| Encoding | one active cell, `q=a-r` with its intrinsic reference | 25 uS differential pair |
-| Defect placement | Bernoulli per active cell; stuck at a fraction of the cell's own bounds | Bernoulli per physical device (either or both banks); stuck at 0, 25 uS or uniform |
-| Populations | literal AIHWKit 1.1.0 cells, repaired baseline (`EBL_AIHWKIT_PYTHON`) | analytic |
-| HWA noise model | `om_endpoint_kernel`: residual tables of the declared P&V law on independent characterization cells | `pcm_gaussian_endpoint` |
-| P&V methods | `closed_loop`, `open_loop_nominal` | `gaussian_endpoint` |
-| Relaxation | `none` (OM retention and drift are not modelled) | `none` or `pcm_drift` |
-| On-chip laws | `om_closed_loop_pulse_adam`, `om_open_loop_pulse_adam` | `pcm_endpoint_reprogramming` |
+CMO (IBM CMO/HfOx ReRAM, the working device for OPT; [device contract](reram_cmo_device.md))
+uses `hierarchical_die_array` placement:
+
+- **Arrays and dies:** a physical array is `tile_size` × `tile_size`
+  devices. A weight's active and reference devices sit on adjacent rows of
+  one array, so each deployment tile spans two arrays.
+  `defects.arrays_per_die` consecutive arrays of one MLP form a die, and dies
+  never straddle MLPs.
+- **Case format:** every case also carries `die_concentration` and
+  `array_concentration`, either `null` (no variation at that level) or a
+  positive Beta concentration:
+  `{"kind": "random", "rate_ppm": 50000, "die_concentration": 118, "array_concentration": null}`.
+- **Rates:** die rates are drawn from Beta(μκ_d, (1−μ)κ_d), and array rates
+  from Beta(p_d κ_a, (1−p_d) κ_a) around their die's rate.
+- **Exact totals:** exactly `rate_ppm`/10⁶ of each MLP's physical devices
+  fail, active and reference alike. They are allocated to arrays in
+  proportion to the array rates.
+- **Kinds:** `open` (0 µS), `gmin`, `gmax` or `random` (uniform in range,
+  the default).
+- **Labels:** a case's label appends `_d<κ_d>` and `_a<κ_a>` for the finite
+  levels.
+
+| | OM (`aihwkit_1.1.0_reram_array_om`) | PCM (`gaussian_endpoint_li2023`) | CMO (`aihwkit_1.1.0_reram_cmo`) |
+| --- | --- | --- | --- |
+| Encoding | one active cell, `q=a-r` with its intrinsic reference | 25 uS differential pair | an active device in 9–88.2 uS and a reference device at 48.6 uS per weight, `q=a-r` (`active_reference_pair`) |
+| Defect placement | Bernoulli per active cell; stuck at a fraction of the cell's own bounds | Bernoulli per physical device (either or both banks); stuck at 0, 25 uS or uniform | `hierarchical_die_array`: Beta die and array rates, exact total per MLP; stuck at 0 µS, G_min, G_max or uniform |
+| Populations | literal AIHWKit 1.1.0 cells, repaired baseline (`EBL_AIHWKIT_PYTHON`) | analytic | analytic |
+| HWA noise model | `om_endpoint_kernel`: residual tables of the declared P&V law on independent characterization cells | `pcm_gaussian_endpoint` | `additive_gaussian_weight`: Gaussian weight noise of `hwa.noise_std` per matrix or per output channel; temporary stuck active/reference devices for corruption-aware arms |
+| P&V methods | `closed_loop`, `open_loop_nominal` | `gaussian_endpoint` | `gaussian_endpoint` with `acceptance_percent` 2.0 (or 0.2) |
+| Relaxation | `none` (OM retention and drift are not modelled) | `none` or `pcm_drift` | `none` (CMO drift and read noise are not modelled yet) |
+| On-chip laws | `om_closed_loop_pulse_adam`, `om_open_loop_pulse_adam` | `pcm_endpoint_reprogramming` | `cmo_idealized_write_adam` |
 
 These are hardware-derived fitted models and presets. Label results as
 exploratory model-based evidence, never as fabricated-hardware measurements
@@ -136,11 +158,24 @@ Each arm is a source that later stages deploy:
 - `method: hwa` trains an FP32 digital master off-chip: the normalized weights
   plus the calibration parameters. It trains on apparent hardware views drawn
   fresh every minibatch, with a straight-through gradient.
-- `noise_strength` sets how noise-aware the training is. It scales the endpoint
-  model; 0 trains on clean digital weights.
+- `noise_strength` sets how noise-aware the training is. It scales the
+  technology's HWA noise model; 0 trains on clean digital weights.
+  - PCM and OM use their endpoint models.
+  - CMO uses `additive_gaussian_weight`: q + `noise_std`·`noise_strength`·s·ξ.
+    `hwa.noise_scaling` sets s:
+    - `matrix_full_scale`: s = 1, the matrix's abs-max after per-layer
+      scaling;
+    - `output_channel_abs_max`: s is each output channel's current
+      abs-max, maxᵢ|q[j,i]|, as in eq. 3 of the Analog Foundation Models
+      paper.
+
+    `hwa.noise_std` and `hwa.noise_scaling` are required for CMO and
+    rejected otherwise.
 - `corruption` sets corruption awareness. It adds temporary failure masks at a
   rate drawn per minibatch from `rates_ppm`, and those masks are never the
-  deployed fault map.
+  deployed fault map. For CMO, the active and the reference device of every
+  pair are stuck i.i.d. at that rate, with the `kind`'s stuck value, after the
+  weight noise.
 - Checkpoint selection takes the minimum mean development teacher KL over the
   arm's `selection_cases`, measured on the selection arrays after the
   lifecycle's own P&V, including relaxation. Selection runs at epoch 0 and every
@@ -157,8 +192,11 @@ Each arm is a source that later stages deploy:
   accepted and exhausted cells, verify reads, pulses and residuals.
 - `open_loop_nominal` derives pulse counts from RESET using the nominal
   soft-bounds inverse. It uses no verify reads and no device identities.
-- `gaussian_endpoint` makes one PCM endpoint draw per request. Permanent
-  failures stay failed.
+- `gaussian_endpoint` makes one endpoint draw per device and request.
+  - PCM: permanent failures stay failed.
+  - CMO: G = G\* + σ(G\*)·ξ with the fitted σ of the declared
+    `acceptance_percent`. The draw is not truncated to the acceptance window
+    and not clamped to 9–88.2 µS; the report counts `out_of_range_devices`.
 - `relaxation: {"model": "pcm_drift", "seconds": t, "compensation": bool}`
   applies the AIHWKit 1.1.0 PCM drift law with 1/f read noise at time `t`, with
   optional per-tile global drift compensation. The law is the same one used in
@@ -198,8 +236,17 @@ post-write apparent state. The update laws are:
   `pulses_per_update` pulses inside `tolerance_steps`.
 - `om_open_loop_pulse_adam` applies stochastic one-pulse rounding with no
   verify reads, and so admits no verified rewrite control.
+- `cmo_idealized_write_adam` writes the digital Adam step directly into the
+  held state, once per active device and step: G_a ← G_a + ΔG + σ(G_a+ΔG)·ξ
+  on every healthy active device with ΔG ≠ 0. Reference devices are never
+  written.
+  - There is no master, no verify read and no retry, so write errors persist.
+  - Its `rewrite` arm reprograms the active devices to the frozen targets
+    every step.
+  - Costs: `device_writes`, `device_programs`, `touched_devices`,
+    `max_onchip_device_writes`, `verify_reads` (0) and `out_of_range_devices`.
 
-`max_pulses_per_cell` caps on-chip writes per cell; `null` means uncapped. Every
+`max_pulses_per_cell` caps OM on-chip writes per cell; `null` means uncapped. Every
 arm starts from the same P0, model, minibatch order and seeds. Each final
 state is saved and replayed exactly. The persistent OM state is reported only
 as a named diagnostic.
@@ -213,6 +260,9 @@ as a named diagnostic.
 | `hwa__<arm>` | per HWA arm | teacher, `feature_cache`, `device_bundle` | `hwa_source` |
 | `deploy__<arm>__<seed>` | per arm × assignment | + `hwa_source` | `deployment`: P0 for every defect case |
 | `onchip__<arm>__<seed>` | per arm × assignment | + `deployment` | `measurements`, `onchip_states`, one `onchip_state.<case>.<arm>` per trajectory |
+
+With `onchip: null` the loop stops after `deploy`. A later lifecycle with the
+same upstream sections can reuse those deployments as its on-chip inputs.
 
 Each stage is one `ebl train` run with exactly the inputs listed. Artifact
 kinds are unique, so the existing campaign runner chains stages by kind.
@@ -235,11 +285,19 @@ Storage: every trajectory keeps its final state for exact replay. For the
 CIFAR suffix with four analog convolutions that is about 5 MB (PCM) or 10 MB (OM)
 per trajectory. OPT OM states take roughly 70–90 bytes per analog weight
 (measured on a tiny run), so about 0.3–0.4 GB per analog decoder layer and
-trajectory; the template's 30 trajectories at four layers need roughly 45 GB.
+trajectory; the OM template's 30 trajectories at four layers need roughly 45 GB.
+CMO states measured 24–32.3 tensor bytes per analog weight on a tiny OPT run,
+about 0.15 GB per analog decoder layer and trajectory.
 Add one P0 bundle per HWA arm and assignment, and the OM populations of every
-assignment and selection array in the device bundle. `python -m workflow
+assignment and selection array in the device bundle.
+
+A CMO array that was programmed once and never written is stored compactly.
+The state holds its fault and apparent-state hashes, and it is rebuilt by
+reprogramming the saved target on the same execution-device type, then
+verified. CMO P0 bundles therefore hold only the model and target, about
+8 bytes per weight, and arms that never write add almost nothing. `python -m workflow
 describe` prints the analog weight count and this final-state estimate
-(trajectories × weights × 90 bytes for OM, 35 for PCM). Budget it before launch,
+(trajectories × weights × 90 bytes for OM, 35 for PCM and CMO). Budget it before launch,
 and measure memory, throughput and actual sizes on a smoke run with one or two
 analog layers before scaling the number of layers.
 
@@ -276,8 +334,10 @@ and its execution settings, so each bundle's `config.resolved.json` holds every
 setting. `plan` also writes a runner manifest and a summary. A single stage can
 run directly with `python -m ebl train --config <stage>.json` and the listed
 inputs. `collect` flattens the on-chip measurements into one row per
-assignment, case and arm. It flags duplicated coverage from retries and never
-pools it.
+assignment, case and arm (`rows.json`/`.csv`). It also writes the deployments,
+one row per HWA source, assignment and case, with clean and deployed metrics
+(`deployments.json`/`.csv`). It flags duplicated coverage from retries and
+never pools it.
 
 ## Equivalence with the historical families
 
@@ -310,24 +370,41 @@ lifecycle on a tiny OPT with all five on-chip arms, exact replay and `collect`.
 The decoder was also checked once against Hugging Face on the real OPT-125M
 weights (maximum logit difference 1e-5, identical top-1 tokens).
 
+CMO has no historical loop to match bit for bit. Instead,
+`tests/test_workflow_cmo.py` checks:
+
+- the σ coefficients against AIHWKit 1.1.0 `ReRamCMONoiseModel`;
+- the active-minus-reference read;
+- unclamped, untruncated and held P&V endpoints;
+- the exact idealized write law and the persistence of write errors;
+- state replay;
+- the constant-σ HWA weight noise;
+- the schema rejections;
+- a complete tiny-OPT CMO lifecycle with all five arms, exact replay and
+  `collect`.
+
 ## Not yet supported
 
 - OPT models other than `facebook/opt-125m`; analog attention projections;
   analog MLPs that are not the last contiguous decoder layers.
-- Defect rates that differ between analog matrices or layers.
+- Mean defect rates that differ between analog matrices or layers. CMO
+  varies rates across dies and arrays around one declared mean.
 - Dense CIFAR-10 and MNIST networks.
 - Hyperparameter grids inside one arm; select them with a development lifecycle
   and freeze the choice.
 - Resume of interrupted stages.
 - OM relaxation, and drift-aware HWA noise.
+- CMO drift, the CMO read-noise term, hierarchical (die/array) corruption
+  during HWA, row- or column-structured faults inside an array, and reassignment of fault
+  patterns to other layers; see the [CMO device contract](reram_cmo_device.md).
 - The legacy PCM pulse plant.
 - Repeated endpoint realizations of one assignment.
 - Per-epoch on-chip checkpoints; only final states are kept.
-- Device-independent PCM endpoint draws. As in the historical
-  `GaussianEndpointArray`, programming noise uses the execution device's
-  generator, so CPU and CUDA runs of one lifecycle realize different PCM
-  endpoints. Fault maps and OM trajectories (counter-keyed per cell) are
-  device-independent.
+- Device-independent PCM and CMO endpoint draws. As in the historical
+  `GaussianEndpointArray`, programming noise (and CMO write noise) uses the
+  execution device's generator, so CPU and CUDA runs of one lifecycle realize
+  different endpoints. Fault maps and OM trajectories (counter-keyed per cell)
+  are device-independent.
 
 ## Extension points
 

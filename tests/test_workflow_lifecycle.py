@@ -56,8 +56,8 @@ def test_campaign_lifecycles_parse_and_round_trip(path):
     assert parse_lifecycle(json.loads(json.dumps(lifecycle.to_dict()))).digest() == lifecycle.digest()
 
 
-def test_campaign_has_lifecycles_for_both_technologies():
-    assert {load_lifecycle(p).devices.technology for p in LIFECYCLES} == {"om", "pcm"}
+def test_campaign_lifecycles_cover_every_technology():
+    assert {load_lifecycle(p).devices.technology for p in LIFECYCLES} == {"om", "pcm", "cmo"}
 
 
 @pytest.mark.parametrize(

@@ -21,6 +21,8 @@ from workflow.networks import FAMILIES, family
 DEVICES_PER_WEIGHT = {
     "differential_pair_25us": 2,
     "single_cell_intrinsic_reference": 1,
+    # CMO: an active device and a mid-range reference device per weight.
+    "active_reference_pair": 2,
 }
 
 

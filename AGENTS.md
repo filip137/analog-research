@@ -37,7 +37,7 @@ adapters. Historical execution code is at `16938bf`. Keep unrelated maintenance 
 - `campaigns/`: notes, lifecycle definitions (`<campaign>/lifecycles/*.json`), results,
   generated navigation and the subprocess-only orchestrator.
 - `examples/`, `studies/`, `labs/tools/`: exact configs (including the OPT lifecycle
-  template in `examples/lifecycles/`), legacy plans, CIFAR analysis.
+  templates in `examples/lifecycles/`), legacy plans, CIFAR analysis.
 - `results/`, `artifacts/`, `data/`: ignored raw evidence, frozen sources and datasets.
 - `docs/`: active contracts and historical records; `tests/`: numerical and workflow checks.
 
@@ -53,7 +53,7 @@ explicitly assigned regime.
 The lifecycle family `opt_mlp_suffix` implements this. The number of analog
 MLPs (`network.analog_decoder_layers`), the corruption kinds and fractions
 (`defects.cases`), the HWA sources and the on-chip arms are lifecycle settings:
-varying them never needs new code. Start from `examples/lifecycles/opt125m-om-mlp4-template.json`
+varying them never needs new code. Start from `examples/lifecycles/opt125m-cmo-mlp4-template.json`
 and follow [the lifecycle contract](docs/crossbar_lifecycle.md); its extension
 points name where any genuinely missing capability goes. Record the analog layers
 and logical weight count with every result.
@@ -64,23 +64,35 @@ primary metric (teacher KL or perplexity) are Explorer choices, declared in the
 experiment note and the lifecycle before running; the corpus is pre-tokenized
 with `python -m workflow corpus` and pinned by SHA-256. Adaptation and evaluation
 tokens never overlap. Measure memory, throughput and storage on one or two
-analog layers before scaling: OM cost grows with every analog weight.
+analog layers before scaling: device-state cost grows with every analog weight.
 
 ## Corrupt devices
 
 Defects are permanent physical faults defined by the lifecycle `defects` section:
-kind (`open`, `gmax`, `random`), rate and placement per physical device. All arms of
+kind (`open`, `gmax`, `random`, and for CMO `gmin`), rate and placement per physical device. All arms of
 one assignment share that array's fault map, so they are matched conditions, not
 independent arrays. Writes never repair a defect; verify persistence. Corruption
 masks used in HWA training are temporary and are never the deployed fault map.
 Report results per assignment and defect case; do not pool across defect rates.
+CMO faults are placed hierarchically ([CMO device contract](docs/reram_cmo_device.md)):
+
+- die and array fault rates are drawn from Beta distributions whose
+  concentrations set die-to-die and array-to-array variation;
+- the fault total is exact per MLP, so scenarios at the same mean differ only
+  in how the faults are distributed;
+- the stuck value (`kind`) is an experimental variable, with `random` as the
+  default.
+
+The rates and their spreads are synthetic, not measured CMO statistics.
+Report results per scenario.
 
 ## Scientific and physical contracts
 
 Separate architecture, deterministic mapping, stochastic programming, defects,
 off-chip adaptation, same-array learning and fresh-array transfer. Distinguish OM
-incremental pulses, Gaussian PCM endpoint reprogramming and PCM drift. Gradients
-and optimizer state are digital. Calibration alone is a no-weight-write control.
+incremental pulses, idealized CMO incremental writes, Gaussian PCM endpoint
+reprogramming and PCM drift. Gradients and optimizer state are digital.
+Calibration alone is a no-weight-write control.
 
 Crossbar MVMs use effective state `q=a-r` and digital nonlinearities. Their accuracy
 is not a physically loaded passive-network result. Every device-facing forward
@@ -109,11 +121,27 @@ exact replay contract.
 
 ## Data and initialization
 
-Initial OPT tests use IBM optimized-material (OM) ReRAM: literal AIHWKit 1.1.0
-cells (`devices.technology: "om"`), one active cell per weight read as `q=a-r`
-against its intrinsic reference, closed-loop or open-loop-nominal P&V and
-`om_closed_loop_pulse_adam`/`om_open_loop_pulse_adam` on-chip laws. OM retention
-and drift are not modelled. Gaussian PCM is a later, separately declared regime.
+The OPT experiments use IBM CMO/HfOx ReRAM (`devices.technology: "cmo"`), as
+specified in the [CMO device contract](docs/reram_cmo_device.md):
+
+- the Falcone et al. (2025) 2 % program-and-verify fit as released in AIHWKit
+  1.1.0 `ReRamCMONoiseModel`, over 9–88.2 µS;
+- two devices per weight, read as `q=a-r`: an active device, and a reference
+  device programmed to mid-range;
+- either device can be corrupted;
+- one unclamped Gaussian endpoint per device at deployment, held afterwards;
+- HWA injects Gaussian weight noise on every minibatch: `hwa.noise_std`, per
+  matrix or per output channel (the Analog Foundation Models convention),
+  declared per experiment;
+- corruption-aware HWA arms add temporary i.i.d. stuck active and reference
+  devices;
+- the `cmo_idealized_write_adam` on-chip law: one noisy write per active
+  device and step on the held state, with no verify and no retry, so write
+  errors persist.
+
+CMO drift and read noise are disabled initially. IBM optimized-material
+(OM) ReRAM (`"om"`: literal AIHWKit cells, pulse P&V and pulse laws) and
+Gaussian PCM (`"pcm"`) remain supported, separately declared regimes.
 Label results exploratory and model-based, not fabricated-hardware measurements. Follow
 [synapse-data provenance rules](docs/synapse_data.md) for measured evidence; do not
 substitute datasets, preprocessing, tokenization or cohorts between matched arms.

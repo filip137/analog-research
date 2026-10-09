@@ -30,16 +30,27 @@ exists, state what differs.
 Walk every Explorer field of the ownership table in [SKILL.md](../SKILL.md). Mark
 each choice `proposed` or `confirmed by user`; the user confirms the material ones:
 corpus, metric, number of analog layers, defect regime, comparison arms and budget.
-Starting proposals for OPT, from `examples/lifecycles/opt125m-om-mlp4-template.json`:
+Starting proposals for OPT, from `examples/lifecycles/opt125m-cmo-mlp4-template.json`:
 
 - network: `opt_mlp_suffix`, `analog_decoder_layers` N (1–2 for a first probe);
-- technology `om`, closed-loop P&V as in the template;
-- defects: a `none` case plus the chosen fractions of one kind per question,
-  e.g. `gmax` at 10000, 20000, 50000 ppm; one list, never pooled;
-- HWA sources: `digital` and `standard_hwa`; add `cdt_<kind>` only when
-  corruption-aware training is part of the question;
+- technology `cmo` (the working device; [contract](../../../../docs/reram_cmo_device.md)),
+  `gaussian_endpoint` P&V at `acceptance_percent` 2.0, no relaxation;
+- defects: a `none` case plus the four hierarchical scenarios of the template:
+  - independent, array, die and both, at a 5 % synthetic mean, with κ = ∞ or 118
+    (about 2 percentage points at each level);
+  - `random` stuck values;
+  - 256×256 arrays (`deployment.tile_size`) and 48 arrays per die, which gives
+    three dies per MLP.
+
+  Choose the mean, the concentrations and the stuck `kind` per question, in one
+  list that is never pooled. If 5 % destroys performance, lower the mean before
+  testing recovery;
+- HWA sources: `digital` and `standard_hwa`, with the CMO `hwa.noise_std`
+  (constant-σ Gaussian weight noise) declared in the note; add `cdt_<kind>` only
+  when corruption-aware training is part of the question and the technology
+  supports it (not yet CMO);
 - on-chip arms: the five standard ones (`none`, `calibration`, `rewrite`,
-  `onchip_weights`, `onchip_calibration`), `om_closed_loop_pulse_adam`;
+  `onchip_weights`, `onchip_calibration`), `cmo_idealized_write_adam`;
 - arrays: one assignment for a labelled pilot, at least three for any claim;
   selection arrays separate from assignments;
 - metric: `teacher_kl` primary, perplexity reported; corpus, sequence length and

@@ -5,13 +5,17 @@ a digital FP32 master (normalized suffix weights plus the calibration
 parameters) on sampled apparent hardware views -- an off-chip update, not a
 persistent-device trajectory:
 
-- noise awareness: ``noise_strength`` scales the declared endpoint model
-  (analytic Gaussian PCM programming noise, or OM residual tables of the
-  lifecycle's own P&V law) drawn fresh every minibatch with a
-  straight-through gradient; 0 trains on the clean digital weights;
+- noise awareness: ``noise_strength`` scales the declared noise model --
+  analytic Gaussian PCM programming noise, OM residual tables of the
+  lifecycle's own P&V law, or (CMO) Gaussian weight noise of ``hwa.noise_std``
+  relative to the matrix full scale or to each output channel's current
+  abs-max (the Analog Foundation Models convention) -- drawn fresh every
+  minibatch with a straight-through gradient; 0 trains on the clean digital
+  weights;
 - corruption awareness: optional temporary Bernoulli failure masks at a rate
-  drawn per minibatch from ``corruption.rates_ppm``. They never become a
-  deployed fault map.
+  drawn per minibatch from ``corruption.rates_ppm`` (for CMO, on the active
+  and the reference device of every pair, after the weight noise). They never
+  become a deployed fault map.
 
 Checkpoints are selected by mean development teacher KL over the arm's
 ``selection_cases`` on independent selection arrays programmed with the
@@ -29,7 +33,9 @@ import torch
 from experiments.cifar_crossbar.devices import clone_cpu
 from experiments.cifar_crossbar.hwa_fault_runtime import sampled_weights
 from experiments.cifar_crossbar.sweep_devices import MixedOmSampler
+from training import reram_cmo
 from workflow import program_verify
+from workflow.lifecycle import ADDITIVE_GAUSSIAN
 from workflow.networks import family
 
 
@@ -57,7 +63,17 @@ def selection_score(network, cache, lifecycle, populations, cases, device) -> di
     return {"teacher_kl": sum(r["teacher_kl"] for r in rows) / len(rows), "cases": rows}
 
 
-def endpoint_sampler(lifecycle, arm, device_bundle, device):
+def channel_abs_max(q, layout):
+    """Each weight's output-channel abs-max: rows of every [out, in] analog matrix."""
+
+    parts = []
+    for spec in layout:
+        matrix = q[spec.offset : spec.offset + spec.size].reshape(spec.shape[0], -1)
+        parts.append(matrix.abs().amax(1, keepdim=True).expand_as(matrix).reshape(-1))
+    return torch.cat(parts)
+
+
+def endpoint_sampler(lifecycle, arm, device_bundle, device, layout=None):
     """Per-minibatch apparent-weight sampler of the declared noise model."""
 
     seed = lifecycle.hwa.seed + 10000
@@ -66,6 +82,23 @@ def endpoint_sampler(lifecycle, arm, device_bundle, device):
 
         def sample(q, kind, rate):
             return sampled_weights(q, generator, arm.noise_strength, kind, rate)[0]
+
+        return sample
+    if lifecycle.hwa.noise_model == ADDITIVE_GAUSSIAN:
+        generator = torch.Generator(device=device).manual_seed(seed)
+        sigma = lifecycle.hwa.noise_std * arm.noise_strength
+        per_channel = lifecycle.hwa.noise_scaling == "output_channel_abs_max"
+        if per_channel and layout is None:
+            raise ValueError("Expected the analog layout for output-channel noise scaling.")
+
+        def sample(q, kind, rate):
+            with torch.no_grad():
+                value = q.detach()
+                scale = channel_abs_max(value, layout) if per_channel else 1.0
+                noisy = value + sigma * scale * torch.randn(q.shape, generator=generator, device=q.device)
+                if rate:
+                    noisy = reram_cmo.corrupt_weights(noisy, generator, kind, rate)
+            return q + (noisy - q).detach()
 
         return sample
     kernels = device_bundle["kernels"]
@@ -92,7 +125,7 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
     network.q.requires_grad_(True)
     parameters = [network.q] + network.calibration_parameters()
     optimizer = torch.optim.Adam(parameters, lr=hwa.learning_rate)
-    sample = endpoint_sampler(lifecycle, arm, device_bundle, device)
+    sample = endpoint_sampler(lifecycle, arm, device_bundle, device, layout=network.layout)
     rate_generator = torch.Generator().manual_seed(hwa.seed + 20000)
     rates = arm.corruption.rates_ppm if arm.corruption else ()
     histogram = {str(rate): 0 for rate in rates}

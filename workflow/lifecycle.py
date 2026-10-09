@@ -9,8 +9,9 @@ stage run embeds the complete normalized lifecycle in its resolved config.
 
 Validation runs before torch, datasets or devices are touched. Cross-section
 rules keep matched controls matched by construction: one device technology
-fixes the HWA noise model, programming method, relaxation law and on-chip
-update law, and every weight-learning arm needs its no-weight-write control.
+fixes the HWA noise model, programming method, relaxation law, on-chip update
+law and admissible defect kinds, and every weight-learning arm needs its
+no-weight-write control.
 """
 
 from __future__ import annotations
@@ -51,6 +52,17 @@ OPT_MODELS = {
 CIFAR_CONVOLUTION_WEIGHTS = 64 * 64 * 9
 CIFAR_FEATURES = 64
 FAILURE_KINDS = ("open", "gmax", "random")
+# CMO stuck values: 0 uS (open), G_min, G_max, or one uniform value in range per device.
+CMO_FAILURE_KINDS = ("open", "gmin", "gmax", "random")
+# Hierarchical placement: die and array fault rates, an exact fault total per group.
+HIERARCHICAL = "hierarchical_die_array"
+# P&V acceptance ranges (percent) of the AIHWKit 1.1.0 CMO programming fit.
+CMO_ACCEPTANCE_PERCENT = (0.2, 2.0)
+# HWA noise model: Gaussian weight noise of ``hwa.noise_std`` relative to the
+# matrix full scale (1 after per-layer abs-max scaling) or to each output
+# channel's current abs-max (the Analog Foundation Models convention).
+ADDITIVE_GAUSSIAN = "additive_gaussian_weight"
+NOISE_SCALINGS = ("matrix_full_scale", "output_channel_abs_max")
 OBJECTIVES = ("teacher_kl", "cross_entropy")
 CALIBRATION = "output_gain_bn_affine_classifier_bias"
 OPT_CALIBRATION = "output_gain_mlp_layer_norm_mlp_bias"
@@ -67,6 +79,8 @@ class Technology:
     device_model: str
     encoding: str
     defect_placement: str
+    failure_kinds: tuple[str, ...]
+    corruption_aware_hwa: bool
     hwa_noise_model: str
     program_methods: tuple[str, ...]
     relaxation_models: tuple[str, ...]
@@ -80,6 +94,8 @@ TECHNOLOGIES = {
         device_model="aihwkit_1.1.0_reram_array_om",
         encoding="single_cell_intrinsic_reference",
         defect_placement="bernoulli_per_active_cell",
+        failure_kinds=FAILURE_KINDS,
+        corruption_aware_hwa=True,
         hwa_noise_model="om_endpoint_kernel",
         program_methods=("closed_loop", "open_loop_nominal"),
         relaxation_models=("none",),
@@ -91,10 +107,30 @@ TECHNOLOGIES = {
         device_model="gaussian_endpoint_li2023",
         encoding="differential_pair_25us",
         defect_placement="bernoulli_per_physical_device",
+        failure_kinds=FAILURE_KINDS,
+        corruption_aware_hwa=True,
         hwa_noise_model="pcm_gaussian_endpoint",
         program_methods=("gaussian_endpoint",),
         relaxation_models=("none", "pcm_drift"),
         update_laws=("pcm_endpoint_reprogramming",),
+    ),
+    # IBM CMO/HfOx ReRAM (Falcone et al. 2025; AIHWKit 1.1.0 ReRamCMONoiseModel):
+    # unclamped Gaussian P&V endpoints in 9-88.2 uS, an active and a mid-range
+    # reference device per weight (q = a - r), idealized noisy on-chip writes. HWA
+    # injects declared Gaussian weight noise (``hwa.noise_std``) and, for
+    # corruption-aware arms, temporary i.i.d. stuck devices on both devices of
+    # each pair. Deployed stuck devices follow a die/array hierarchy.
+    # Drift and read noise are not modelled yet (docs/reram_cmo_device.md).
+    "cmo": Technology(
+        device_model="aihwkit_1.1.0_reram_cmo",
+        encoding="active_reference_pair",
+        defect_placement=HIERARCHICAL,
+        failure_kinds=CMO_FAILURE_KINDS,
+        corruption_aware_hwa=True,
+        hwa_noise_model=ADDITIVE_GAUSSIAN,
+        program_methods=("gaussian_endpoint",),
+        relaxation_models=("none",),
+        update_laws=("cmo_idealized_write_adam",),
     ),
 }
 
@@ -611,10 +647,21 @@ def _devices(raw: Any) -> Devices:
 class DefectCase:
     kind: str
     rate_ppm: int
+    # Hierarchical placement only: Beta concentrations of the die and array
+    # fault rates; None is infinite (no variation at that level).
+    die_concentration: Optional[float] = None
+    array_concentration: Optional[float] = None
+    hierarchical: bool = False
 
     @property
     def label(self) -> str:
-        return "nominal" if self.kind == "none" else f"{self.kind}_{self.rate_ppm}ppm"
+        if self.kind == "none":
+            return "nominal"
+        label = f"{self.kind}_{self.rate_ppm}ppm"
+        for prefix, value in (("d", self.die_concentration), ("a", self.array_concentration)):
+            if value is not None:
+                label += f"_{prefix}{value:g}"
+        return label
 
     @property
     def rate(self) -> float:
@@ -626,20 +673,34 @@ class DefectCase:
         return "open" if self.kind == "none" else self.kind
 
     def to_dict(self) -> dict:
-        return {"kind": self.kind, "rate_ppm": self.rate_ppm}
+        value = {"kind": self.kind, "rate_ppm": self.rate_ppm}
+        if self.hierarchical:
+            value.update(die_concentration=self.die_concentration, array_concentration=self.array_concentration)
+        return value
 
 
-def _case(raw: Any, path: str) -> DefectCase:
-    raw = _object(raw, path, ("kind", "rate_ppm"))
-    kind = _choice(raw["kind"], f"{path}.kind", ("none",) + FAILURE_KINDS)
+def _case(raw: Any, path: str, failure_kinds, hierarchical: bool = False) -> DefectCase:
+    concentrations = ("die_concentration", "array_concentration")
+    raw = _object(raw, path, ("kind", "rate_ppm") + (concentrations if hierarchical else ()))
+    kind = _choice(raw["kind"], f"{path}.kind", ("none",) + tuple(failure_kinds))
     rate = _integer(raw["rate_ppm"], f"{path}.rate_ppm", maximum=1_000_000)
     if (kind == "none") != (rate == 0):
         raise config_error(path, "to use kind 'none' exactly when rate_ppm is 0", dict(raw))
-    return DefectCase(kind, rate)
+    if not hierarchical:
+        return DefectCase(kind, rate)
+    values = {
+        key: None if raw[key] is None else _number(raw[key], f"{path}.{key}", positive=True)
+        for key in concentrations
+    }
+    if kind == "none" and any(value is not None for value in values.values()):
+        raise config_error(path, "to use null concentrations for kind 'none'", dict(raw))
+    return DefectCase(kind, rate, hierarchical=True, **values)
 
 
-def _cases(raw: Any, path: str) -> tuple[DefectCase, ...]:
-    cases = tuple(_case(item, f"{path}[{i}]") for i, item in enumerate(_list(raw, path)))
+def _cases(raw: Any, path: str, failure_kinds, hierarchical: bool = False) -> tuple[DefectCase, ...]:
+    cases = tuple(
+        _case(item, f"{path}[{i}]", failure_kinds, hierarchical) for i, item in enumerate(_list(raw, path))
+    )
     if len(set(cases)) != len(cases):
         raise config_error(path, "to contain unique defect cases", raw)
     return cases
@@ -650,23 +711,30 @@ class Defects:
     placement: str
     persistence: str
     cases: tuple[DefectCase, ...]
+    # Hierarchical placement only: consecutive physical arrays (deployment
+    # tiles) per die, filled within each group (an OPT decoder layer's MLP).
+    arrays_per_die: Optional[int] = None
 
     def to_dict(self) -> dict:
-        return {
-            "placement": self.placement,
-            "persistence": self.persistence,
-            "cases": [case.to_dict() for case in self.cases],
-        }
+        value = {"placement": self.placement, "persistence": self.persistence}
+        if self.arrays_per_die is not None:
+            value["arrays_per_die"] = self.arrays_per_die
+        value["cases"] = [case.to_dict() for case in self.cases]
+        return value
 
 
 def _defects(raw: Any, technology: str) -> Defects:
-    raw = _object(raw, "defects", ("placement", "persistence", "cases"))
+    allowed = TECHNOLOGIES[technology]
+    hierarchical = allowed.defect_placement == HIERARCHICAL
+    keys = ("placement", "persistence", "cases") + (("arrays_per_die",) if hierarchical else ())
+    raw = _object(raw, "defects", keys)
     return Defects(
-        placement=_choice(
-            raw["placement"], "defects.placement", (TECHNOLOGIES[technology].defect_placement,)
-        ),
+        placement=_choice(raw["placement"], "defects.placement", (allowed.defect_placement,)),
         persistence=_choice(raw["persistence"], "defects.persistence", ("permanent",)),
-        cases=_cases(raw["cases"], "defects.cases"),
+        cases=_cases(raw["cases"], "defects.cases", allowed.failure_kinds, hierarchical),
+        arrays_per_die=(
+            _integer(raw["arrays_per_die"], "defects.arrays_per_die", minimum=1) if hierarchical else None
+        ),
     )
 
 
@@ -735,7 +803,7 @@ class HwaArm:
         }
 
 
-def _hwa_arm(raw: Any, path: str) -> HwaArm:
+def _hwa_arm(raw: Any, path: str, technology: Technology) -> HwaArm:
     if not isinstance(raw, Mapping):
         raise config_error(path, "to be an object", raw)
     method = _choice(raw.get("method"), f"{path}.method", ("none", "hwa"))
@@ -745,6 +813,10 @@ def _hwa_arm(raw: Any, path: str) -> HwaArm:
     raw = _object(raw, path, ("id", "method", "noise_strength", "corruption", "selection_cases"))
     corruption = None
     if raw["corruption"] is not None:
+        if not technology.corruption_aware_hwa:
+            raise config_error(
+                f"{path}.corruption", "to be null; the technology has no corruption-aware HWA", raw["corruption"]
+            )
         c = _object(raw["corruption"], f"{path}.corruption", ("kind", "rates_ppm"))
         rates = tuple(
             _integer(rate, f"{path}.corruption.rates_ppm[{i}]", minimum=1, maximum=1_000_000)
@@ -754,13 +826,18 @@ def _hwa_arm(raw: Any, path: str) -> HwaArm:
             raise config_error(
                 f"{path}.corruption.rates_ppm", "to be unique increasing positive rates", list(rates)
             )
-        corruption = Corruption(_choice(c["kind"], f"{path}.corruption.kind", FAILURE_KINDS), rates)
+        corruption = Corruption(_choice(c["kind"], f"{path}.corruption.kind", technology.failure_kinds), rates)
     return HwaArm(
         arm_id=_identifier(raw["id"], f"{path}.id"),
         method=method,
         noise_strength=_number(raw["noise_strength"], f"{path}.noise_strength"),
         corruption=corruption,
-        selection_cases=_cases(raw["selection_cases"], f"{path}.selection_cases"),
+        selection_cases=_cases(
+            raw["selection_cases"],
+            f"{path}.selection_cases",
+            technology.failure_kinds,
+            technology.defect_placement == HIERARCHICAL,
+        ),
     )
 
 
@@ -779,6 +856,8 @@ class Hwa:
     selection_every: int
     extension_epochs: int
     arms: tuple[HwaArm, ...]
+    noise_std: Optional[float] = None
+    noise_scaling: Optional[str] = None
 
     def arm(self, arm_id: str) -> HwaArm:
         for arm in self.arms:
@@ -790,8 +869,11 @@ class Hwa:
         return self.lr_decay ** sum(epoch > milestone for milestone in self.lr_milestones)
 
     def shared_dict(self) -> dict:
+        noise = {"noise_model": self.noise_model}
+        if self.noise_std is not None:
+            noise.update(noise_std=self.noise_std, noise_scaling=self.noise_scaling)
         return {
-            "noise_model": self.noise_model,
+            **noise,
             "objective": self.objective,
             "optimizer": self.optimizer,
             "learning_rate": self.learning_rate,
@@ -826,6 +908,9 @@ def _hwa(raw: Any, technology: str) -> Hwa:
         "selection",
         "arms",
     )
+    noise_model = TECHNOLOGIES[technology].hwa_noise_model
+    if noise_model == ADDITIVE_GAUSSIAN:
+        keys += ("noise_std", "noise_scaling")
     raw = _object(raw, "hwa", keys)
     selection = _object(raw["selection"], "hwa.selection", ("every_epochs", "extension_epochs"))
     epochs = _integer(raw["epochs"], "hwa.epochs", minimum=1)
@@ -835,13 +920,19 @@ def _hwa(raw: Any, technology: str) -> Hwa:
     )
     if tuple(sorted(set(milestones))) != milestones:
         raise config_error("hwa.lr_milestones", "to be unique increasing epochs", list(milestones))
-    arms = tuple(_hwa_arm(item, f"hwa.arms[{i}]") for i, item in enumerate(_list(raw["arms"], "hwa.arms")))
+    arms = tuple(
+        _hwa_arm(item, f"hwa.arms[{i}]", TECHNOLOGIES[technology])
+        for i, item in enumerate(_list(raw["arms"], "hwa.arms"))
+    )
     if len({arm.arm_id for arm in arms}) != len(arms):
         raise config_error("hwa.arms", "to have unique ids", [arm.arm_id for arm in arms])
+    extra = {}
+    if noise_model == ADDITIVE_GAUSSIAN:
+        # Standard deviation in normalized weight units (full scale 1); arms scale it.
+        extra["noise_std"] = _number(raw["noise_std"], "hwa.noise_std", positive=True)
+        extra["noise_scaling"] = _choice(raw["noise_scaling"], "hwa.noise_scaling", NOISE_SCALINGS)
     return Hwa(
-        noise_model=_choice(
-            raw["noise_model"], "hwa.noise_model", (TECHNOLOGIES[technology].hwa_noise_model,)
-        ),
+        noise_model=_choice(raw["noise_model"], "hwa.noise_model", (noise_model,)),
         objective=_choice(raw["objective"], "hwa.objective", OBJECTIVES),
         optimizer=_choice(raw["optimizer"], "hwa.optimizer", ("adam",)),
         learning_rate=_number(raw["learning_rate"], "hwa.learning_rate", positive=True),
@@ -854,6 +945,7 @@ def _hwa(raw: Any, technology: str) -> Hwa:
         selection_every=_integer(selection["every_epochs"], "hwa.selection.every_epochs", minimum=1),
         extension_epochs=_integer(selection["extension_epochs"], "hwa.selection.extension_epochs"),
         arms=arms,
+        **extra,
     )
 
 
@@ -875,11 +967,14 @@ class ProgramVerify:
     relaxation: Relaxation
     max_cycles: Optional[int] = None
     tolerance_steps: Optional[float] = None
+    acceptance_percent: Optional[float] = None
 
     def to_dict(self) -> dict:
         value = {"method": self.method}
         if self.method == "closed_loop":
             value.update(max_cycles=self.max_cycles, tolerance_steps=self.tolerance_steps)
+        if self.acceptance_percent is not None:
+            value["acceptance_percent"] = self.acceptance_percent
         value["relaxation"] = self.relaxation.to_dict()
         return value
 
@@ -890,6 +985,8 @@ def _program_verify(raw: Any, technology: str) -> ProgramVerify:
     allowed = TECHNOLOGIES[technology]
     method = _choice(raw.get("method"), "program_verify.method", allowed.program_methods)
     keys = ("method", "relaxation") + (("max_cycles", "tolerance_steps") if method == "closed_loop" else ())
+    if technology == "cmo":
+        keys += ("acceptance_percent",)
     raw = _object(raw, "program_verify", keys)
     relaxation_raw = raw["relaxation"]
     if not isinstance(relaxation_raw, Mapping):
@@ -913,6 +1010,15 @@ def _program_verify(raw: Any, technology: str) -> ProgramVerify:
             max_cycles=_integer(raw["max_cycles"], "program_verify.max_cycles", minimum=1),
             tolerance_steps=_number(raw["tolerance_steps"], "program_verify.tolerance_steps", positive=True),
         )
+    if technology == "cmo":
+        acceptance = _number(raw["acceptance_percent"], "program_verify.acceptance_percent", positive=True)
+        if acceptance not in CMO_ACCEPTANCE_PERCENT:
+            raise config_error(
+                "program_verify.acceptance_percent",
+                f"to be a fitted CMO acceptance range in {list(CMO_ACCEPTANCE_PERCENT)}",
+                raw["acceptance_percent"],
+            )
+        extra["acceptance_percent"] = acceptance
     return ProgramVerify(method=method, relaxation=relaxation, **extra)
 
 
@@ -1070,7 +1176,8 @@ class Lifecycle:
     deployment: Deployment
     hwa: Hwa
     program_verify: ProgramVerify
-    onchip: Onchip
+    # None: a deployment-only loop with no on-chip stage.
+    onchip: Optional[Onchip]
 
     @property
     def technology(self) -> Technology:
@@ -1081,7 +1188,7 @@ class Lifecycle:
             "schema": SCHEMA,
             "schema_version": SCHEMA_VERSION,
             "lifecycle_id": self.lifecycle_id,
-            **{name: getattr(self, name).to_dict() for name in SECTIONS},
+            **{name: self._section(name) for name in SECTIONS},
         }
 
     def digest(self) -> str:
@@ -1090,7 +1197,11 @@ class Lifecycle:
     def section_digest(self, name: str) -> str:
         if name not in SECTIONS:
             raise ValueError(f"Expected a lifecycle section. Provided value: {name!r}.")
-        return content_hash(getattr(self, name).to_dict())
+        return content_hash(self._section(name))
+
+    def _section(self, name: str):
+        value = getattr(self, name)
+        return None if value is None else value.to_dict()
 
     def hwa_arm_digest(self, arm_id: str) -> str:
         return content_hash({"shared": self.hwa.shared_dict(), "arm": self.hwa.arm(arm_id).to_dict()})
@@ -1168,7 +1279,7 @@ def parse_lifecycle(payload: Any) -> Lifecycle:
         deployment=_deployment(raw["deployment"], technology),
         hwa=_hwa(raw["hwa"], technology),
         program_verify=_program_verify(raw["program_verify"], technology),
-        onchip=_onchip(raw["onchip"], technology),
+        onchip=None if raw["onchip"] is None else _onchip(raw["onchip"], technology),
     )
     _cross_validate(lifecycle)
     return lifecycle
@@ -1317,7 +1428,7 @@ def stage_selections(lifecycle: Lifecycle) -> list[StageSelection]:
 
     stages = [StageSelection("prepare"), StageSelection("devices")]
     stages += [StageSelection("hwa", arm.arm_id) for arm in lifecycle.hwa.arms]
-    for kind in ("deploy", "onchip"):
+    for kind in ("deploy", "onchip") if lifecycle.onchip is not None else ("deploy",):
         stages += [
             StageSelection(kind, arm.arm_id, seed)
             for arm in lifecycle.hwa.arms

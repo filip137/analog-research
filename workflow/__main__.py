@@ -21,14 +21,15 @@ from workflow.plan import build_plan, commands, default_python, write_plan
 
 ROOT = Path(__file__).resolve().parents[1]
 # Saved final on-chip state per analog weight and trajectory: upper values measured on
-# the CIFAR suffix (OM ~68, PCM ~34 bytes) and a tiny OPT OM run (67-88 bytes).
-STATE_BYTES_PER_WEIGHT = {"om": 90, "pcm": 35}
+# the CIFAR suffix (OM ~68, PCM ~34 bytes) and tiny OPT runs (OM 67-88, CMO 24-32.3 bytes).
+STATE_BYTES_PER_WEIGHT = {"om": 90, "pcm": 35, "cmo": 35}
 
 
 def summary(lifecycle) -> dict:
     devices, hwa, onchip = lifecycle.devices, lifecycle.hwa, lifecycle.onchip
     stages = stage_selections(lifecycle)
-    trajectories = len(hwa.arms) * len(devices.assignment_seeds) * len(lifecycle.defects.cases) * len(onchip.arms)
+    deployments = len(hwa.arms) * len(devices.assignment_seeds) * len(lifecycle.defects.cases)
+    trajectories = 0 if onchip is None else deployments * len(onchip.arms)
     return {
         "lifecycle_id": lifecycle.lifecycle_id,
         "lifecycle_sha256": lifecycle.digest(),
@@ -46,7 +47,10 @@ def summary(lifecycle) -> dict:
         "deployment": lifecycle.deployment.to_dict(),
         "hwa_arms": [arm.to_dict() for arm in hwa.arms],
         "program_verify": lifecycle.program_verify.to_dict(),
-        "onchip": {"update_law": onchip.update_law, "arms": [arm.to_dict() for arm in onchip.arms]},
+        "onchip": (
+            None if onchip is None else {"update_law": onchip.update_law, "arms": [arm.to_dict() for arm in onchip.arms]}
+        ),
+        "deployed_cases": deployments,
         "stage_runs": {kind: sum(s.kind == kind for s in stages) for kind in ("prepare", "devices", "hwa", "deploy", "onchip")},
         "trajectories": trajectories,
         "analog_weights": lifecycle.network.analog_weights,
@@ -73,8 +77,14 @@ def _describe(args) -> int:
     print(f"defects: {', '.join(value['defect_cases'])}")
     print("hwa arms: " + ", ".join(arm["id"] for arm in value["hwa_arms"]))
     print(f"program/verify: {json.dumps(value['program_verify'], sort_keys=True)}")
-    print(f"on-chip: {value['onchip']['update_law']}; arms " + ", ".join(a["id"] for a in value["onchip"]["arms"]))
-    print(f"stage runs: {value['stage_runs']}; trajectories: {value['trajectories']}")
+    if value["onchip"] is None:
+        print("on-chip: none (deployment-only loop)")
+    else:
+        print(f"on-chip: {value['onchip']['update_law']}; arms " + ", ".join(a["id"] for a in value["onchip"]["arms"]))
+    print(
+        f"stage runs: {value['stage_runs']}; deployed cases: {value['deployed_cases']}; "
+        f"trajectories: {value['trajectories']}"
+    )
     print(
         f"analog weights: {value['analog_weights']:,}; final on-chip states ~{value['onchip_state_gb_estimate']} GB "
         "(estimate; measure with a cost probe)"
@@ -157,8 +167,53 @@ def _rows(run_dir: Path, result: dict) -> list[dict]:
     return rows
 
 
-def _collect(args) -> int:
+def _deployment_rows(run_dir: Path, result: dict) -> list[dict]:
+    """One row per assignment and defect case of a deploy stage: clean and deployed metrics."""
+
+    metrics = result["metrics"]
+    clean = metrics["clean"]
+    split = "test" if "test" in clean else "development"
     rows = []
+    for label, case in metrics["cases"].items():
+        deployed = case["initial"][split]
+        names = sorted(k for k, v in deployed.items() if isinstance(v, (int, float)))
+        rows.append(
+            {
+                "lifecycle_id": metrics["lifecycle_id"],
+                "technology": metrics["technology"],
+                "hwa_arm": metrics["stage"]["hwa_arm"],
+                "array_seed": metrics["array_seed"],
+                "case": label,
+                **{f"defect_{k}": v for k, v in case.get("case", {}).items()},
+                "evaluation": split,
+                **{f"clean_{k}": clean[split][k] for k in names},
+                **{f"deployed_{k}": deployed[k] for k in names},
+                "failed_devices": case["identity"]["failed_devices"],
+                "out_of_range_devices": case["programming"].get("out_of_range_devices"),
+                "hwa_convergence_review_required": metrics["hwa_convergence_review_required"],
+                "run_dir": str(run_dir),
+            }
+        )
+    return rows
+
+
+def _write_rows(rows: list[dict], key_fields: tuple[str, ...], output: Path, name: str) -> int:
+    keys = [tuple(row[k] for k in key_fields) for row in rows]
+    for row, key in zip(rows, keys):
+        # Retries are not replicates: duplicated coverage is flagged, not pooled.
+        row["duplicate_coverage"] = keys.count(key) > 1
+    (output / f"{name}.json").write_text(json.dumps(rows, indent=2, sort_keys=True) + "\n")
+    if rows:
+        fields = sorted({key for row in rows for key in row})
+        with (output / f"{name}.csv").open("w", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(rows)
+    return sum(row["duplicate_coverage"] for row in rows)
+
+
+def _collect(args) -> int:
+    rows, deployments = [], []
     for root in args.roots:
         for result_path in sorted(Path(root).rglob("result.json")):
             result = json.loads(result_path.read_text())
@@ -166,24 +221,20 @@ def _collect(args) -> int:
                 result.get("schema") != "ebl.run"
                 or result.get("experiment_id") != EXPERIMENT_ID
                 or result.get("status") != "complete"
-                or result["metrics"].get("stage", {}).get("kind") != "onchip"
             ):
                 continue
-            rows.extend(_rows(result_path.parent, result))
-    keys = [(r["lifecycle_id"], r["hwa_arm"], r["array_seed"], r["case"], r["onchip_arm"]) for r in rows]
-    for row, key in zip(rows, keys):
-        # Retries are not replicates: duplicated coverage is flagged, not pooled.
-        row["duplicate_coverage"] = keys.count(key) > 1
+            kind = result["metrics"].get("stage", {}).get("kind")
+            if kind == "onchip":
+                rows.extend(_rows(result_path.parent, result))
+            elif kind == "deploy":
+                deployments.extend(_deployment_rows(result_path.parent, result))
     args.output.mkdir(parents=True, exist_ok=True)
-    (args.output / "rows.json").write_text(json.dumps(rows, indent=2, sort_keys=True) + "\n")
-    if rows:
-        fields = sorted({key for row in rows for key in row})
-        with (args.output / "rows.csv").open("w", newline="") as stream:
-            writer = csv.DictWriter(stream, fieldnames=fields)
-            writer.writeheader()
-            writer.writerows(rows)
-    print(json.dumps({"rows": len(rows), "duplicates": sum(r["duplicate_coverage"] for r in rows),
-                      "output": str(args.output)}))
+    duplicates = _write_rows(rows, ("lifecycle_id", "hwa_arm", "array_seed", "case", "onchip_arm"), args.output, "rows")
+    deployment_duplicates = _write_rows(
+        deployments, ("lifecycle_id", "hwa_arm", "array_seed", "case"), args.output, "deployments"
+    )
+    print(json.dumps({"rows": len(rows), "duplicates": duplicates, "deployments": len(deployments),
+                      "deployment_duplicates": deployment_duplicates, "output": str(args.output)}))
     return 0
 
 

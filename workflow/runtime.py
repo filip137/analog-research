@@ -135,7 +135,7 @@ def devices(stage: Stage):
             raise RuntimeError("The held-out OM endpoint characterization failed its adequacy gate.")
     else:
         save(path, bundle)
-    result["populations"] = device_stage.population_receipt(bundle["populations"])
+    result["populations"] = device_stage.population_receipt(bundle["populations"], stage.technology)
     return result, [("device_bundle", path)]
 
 
@@ -208,6 +208,7 @@ def deploy(stage: Stage):
             "array": device_stage.array_state(array, stage.technology),
         }
         summary[case.label] = {
+            "case": case.to_dict(),
             "identity": identity,
             "programming": programming,
             "initial": initial,
@@ -263,7 +264,7 @@ def train_onchip(stage: Stage):
             started = time.monotonic()
             network.load_state_dict(p0["model"])
             array = program_verify.fresh(lifecycle, network.layout, seed, case, bundle["populations"], device)
-            device_stage.load_array_state(array, deployed["array"], stage.technology)
+            device_stage.load_array_state(array, deployed["array"], stage.technology, target)
             if tensor_hash(array.read()) != deployed["programming"]["apparent_sha256"]:
                 raise RuntimeError("Expected the exact deployed apparent state before on-chip training.")
             outcome = onchip.train_arm(
@@ -283,7 +284,8 @@ def train_onchip(stage: Stage):
             save(stage.run_dir / relative, {"p0_sha256": p0_sha256, "case": case.to_dict(), "arm": arm.to_dict(), **state})
             # Exact replay: the saved state alone must reproduce the final metrics.
             replay = program_verify.fresh(lifecycle, network.layout, seed, case, bundle["populations"], device)
-            onchip.restore(network, replay, p0["model"], load(stage.run_dir / relative), stage.technology)
+            saved = load(stage.run_dir / relative)
+            onchip.restore(network, replay, p0["model"], saved, stage.technology, target)
             if onchip.evaluations(network, replay, cache, lifecycle, device) != final:
                 raise RuntimeError("Saved final on-chip state did not replay its metrics exactly.")
             if outcome["curve"] and outcome["curve"][-1][split] != final[split]:

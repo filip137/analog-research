@@ -206,6 +206,12 @@ and
   repository enables the AIHWKit class's read term but omits those two
   circuit-level effects.
 
+In the crossbar lifecycle, CMO is the working device for the OPT experiments
+(`devices.technology: "cmo"`, 2 % P&V, an active and a mid-range reference
+device per weight); see the [CMO device contract](reram_cmo_device.md).
+AIHWKit's default `acceptance_range=2e-2` is not a coefficient key and silently
+selects the 0.2 % fit; pass `acceptance_range=2` for the 2 % law.
+
 The MNIST floor mechanism and mitigation study is documented in
 [Finite conductance floors in DRNs](conductance_floor_mitigation.md). The
 earlier digits device screen remains a local ignored artifact documented in
