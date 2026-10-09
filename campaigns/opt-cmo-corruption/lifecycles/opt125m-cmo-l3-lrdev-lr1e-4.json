@@ -1,0 +1,111 @@
+{
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "lifecycle_id": "opt125m-cmo-l3-lrdev-lr1e-4",
+  "question": {
+    "text": "Experiment 1 learning-rate development: standard HWA (3 % per-output-channel Gaussian weight noise) of OPT-125M with CMO fc1/fc2 in the last three decoder layers at Adam learning rate 1e-4; selection development KL averaged over 0 % and 3 % random stuck devices on two selection arrays.",
+    "decision": "Freeze the Adam learning rate of both Experiment 1 HWA arms: the candidate with the lowest selected development KL (see campaigns/opt-cmo-corruption/series/001-hwa-robustness/experiments/exp-001-hwa-source-robustness.md). No test data and no Experiment 1 assignment arrays are used.",
+    "primary_metric": "teacher_kl",
+    "evidence_class": "exploratory_model_based"
+  },
+  "network": {
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m",
+    "analog_decoder_layers": 3
+  },
+  "data": {
+    "corpus": {
+      "name": "wikitext-2-raw-v1",
+      "sha256": "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01"
+    },
+    "sequence_length": 256,
+    "data_seed": 20261008,
+    "hwa_sequences": 8192,
+    "recovery_sequences": 8192,
+    "development_sequences": 256,
+    "test_sequences": 0,
+    "evaluation": "development",
+    "max_examples": 0
+  },
+  "devices": {
+    "technology": "cmo",
+    "model": "aihwkit_1.1.0_reram_cmo",
+    "noise_scale": 1.0,
+    "assignment_seeds": [
+      281001
+    ],
+    "selection_seeds": [
+      211001,
+      211002
+    ],
+    "endpoint_seed_offset": 10000
+  },
+  "defects": {
+    "placement": "hierarchical_die_array",
+    "persistence": "permanent",
+    "arrays_per_die": 48,
+    "cases": [
+      {
+        "kind": "none",
+        "rate_ppm": 0,
+        "die_concentration": null,
+        "array_concentration": null
+      }
+    ]
+  },
+  "deployment": {
+    "scaling": "per_layer_absmax",
+    "encoding": "active_reference_pair",
+    "tile_size": 256,
+    "read_noise": 0.0,
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias"
+  },
+  "hwa": {
+    "noise_model": "additive_gaussian_weight",
+    "noise_std": 0.03,
+    "noise_scaling": "output_channel_abs_max",
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "learning_rate": 0.0001,
+    "lr_milestones": [],
+    "lr_decay": 1.0,
+    "epochs": 4,
+    "batch_size": 8,
+    "augment": false,
+    "seed": 41,
+    "selection": {
+      "every_epochs": 1,
+      "extension_epochs": 2
+    },
+    "arms": [
+      {
+        "id": "standard_hwa",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "corruption": null,
+        "selection_cases": [
+          {
+            "kind": "none",
+            "rate_ppm": 0,
+            "die_concentration": null,
+            "array_concentration": null
+          },
+          {
+            "kind": "random",
+            "rate_ppm": 30000,
+            "die_concentration": null,
+            "array_concentration": null
+          }
+        ]
+      }
+    ]
+  },
+  "program_verify": {
+    "method": "gaussian_endpoint",
+    "acceptance_percent": 2.0,
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "onchip": null
+}
