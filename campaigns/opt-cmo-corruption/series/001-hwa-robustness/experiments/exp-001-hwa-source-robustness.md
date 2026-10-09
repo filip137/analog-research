@@ -63,14 +63,15 @@ it is open to your change before launch.
 | HWA sources | `pretrained` (method `none`). `standard_hwa`: noise_std 0.03, `output_channel_abs_max`, no corruption. `cdt_random_3pct`: the same noise plus temporary corruption `random` at 30,000 ppm | confirmed |
 | HWA noise convention | Analog Foundation Models eq. 3: W̃[j,:] = W[j,:] + 0.03 · maxᵢ\|W[j,i]\| · ε for output channel j, fresh every minibatch. 3 % is a fixed, literature-motivated choice, not tuned | confirmed |
 | Training corruption | Each minibatch, every physical device (active and reference) of every pair is stuck i.i.d. with p = 0.03, at a uniform value in 9–88.2 µS, applied after the noise. Temporary; never a deployed fault map. The 3 % noise level and the 3 % training rate are separate parameters | confirmed |
-| HWA optimizer | Adam, teacher-KL objective, learning rate frozen by Stage 1a, no schedule. 4 epochs over the HWA cohort, batch 32 (8,192 tokens, 1,024 steps), seed 41, data seed 20261008. Both arms use the same minibatch order and noise draws once per minibatch | rate: confirmed approach; batch 32: confirmed 2026-10-09; epochs: proposed |
-| Checkpoint selection | Both trained arms use the same rule: the minimum mean development teacher KL over `none` and `random` 30,000 ppm, on selection arrays 211001 and 211002 after real CMO P&V. It runs at epoch 0 and every epoch, with one 2-epoch extension if the best falls in the final 20 %. Test data are never used | proposed |
+| HWA optimizer | Adam, teacher-KL objective, learning rate frozen by Stage 1a, no schedule. 20 epochs over the HWA cohort, batch 32 (8,192 tokens, 256 steps per epoch), seed 41, data seed 20261008. Both arms use the same minibatch order and noise draws once per minibatch | rate: confirmed approach; batch 32 and 20 epochs: confirmed 2026-10-09 |
+| Checkpoint selection | Both trained arms use the same rule: the minimum mean development teacher KL over `none` and `random` 30,000 ppm, on selection arrays 211001 and 211002 after real CMO P&V. It runs at epoch 0 and every 2 epochs, with one 10-epoch extension if the best falls in the final 20 %. Test data are never used | confirmed 2026-10-09 |
 | Hardware realizations | Five independent assignments, 271001–271005. Each has its own fault maps and programming noise; the six rates of one assignment are matched conditions on one array identity | proposed |
 | On-chip training | None. This is a deployment-only loop (`onchip: null`); a later recovery lifecycle can reuse these deployments | confirmed |
 | Programming model | Identical across all sources and evaluations: AIHWKit 1.1.0 CMO 2 % fit, `noise_scale` 1 | confirmed |
 
 **Stage 1a: learning-rate development.**
-- Standard HWA only, at Adam 1e-5, 3e-5 and 1e-4, in three lifecycles.
+- Standard HWA only, at Adam 3e-5, 1e-4 and 3e-4 (the `lrdev-e20-*`
+  lifecycles), in three lifecycles.
   Each is Experiment 1 with only the `standard_hwa` arm and its candidate
   rate.
 - Every section an HWA source depends on matches Experiment 1 (checked by
@@ -121,9 +122,10 @@ would saturate at 1 % stuck devices.
 short digests from `python -m workflow check`:
 
 - `opt125m-cmo-l3-exp1-probe` (`c4d6416e2da6`): cost probe, not evidence; 32 sequences, one batch;
-- `opt125m-cmo-l3-lrdev-lr1e-5` (`d8535303dc3d`);
-- `opt125m-cmo-l3-lrdev-lr3e-5` (`b672026ad6b7`);
-- `opt125m-cmo-l3-lrdev-lr1e-4` (`23509070fc7f`);
+- `opt125m-cmo-l3-lrdev-e20-lr3e-5` (`440c4626be9a`), `-lr1e-4`
+  (`f03d363da0b8`) and `-lr3e-4` (`22ac0ec9d2df`): Stage 1a, 20 epochs;
+- `opt125m-cmo-l3-lrdev-lr1e-5` (`d8535303dc3d`), `-lr3e-5` (`b672026ad6b7`)
+  and `-lr1e-4` (`23509070fc7f`): the superseded first Stage 1a, 4 epochs;
 - `opt125m-cmo-l3-exp1`: written after Stage 1a, with every field above and
   the frozen learning rate.
 
@@ -254,3 +256,64 @@ above.
    and write the result note.
 
 **Monitoring owner:** the executing agent; runs are short.
+
+### Current handoff (2026-10-09)
+
+**Staging.** Source commit `1d4f493`, shipped as git bundle
+`hwa-1d4f493.bundle` (SHA-256 `d6f517c3…`) and cloned clean on each target.
+The teacher (`2d74da66…`) and corpus (`33e95834…`) were verified by SHA-256
+on every target.
+
+| Target | Root | Environment | Tests |
+| --- | --- | --- | --- |
+| `fifi` (RTX 5090) | `~/analog-research/opt-cmo-exp1/` | `~/miniconda3/envs/py312`, PyTorch 2.11.0+cu128 | workflow suites: 136 passed, 2 skipped |
+| `riri` (RTX 5090) | same | same. **The clock is about 2 h slow**, so its run timestamps are 2 h early | 136 passed, 2 skipped |
+| Jean Zay V100 | `$SCRATCH/opt-cmo-exp1/` = `/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/` | `module load pytorch-gpu/py3/2.5.0` (PyTorch 2.5.0) | CMO, OPT, lifecycle: 105 passed, 2 skipped |
+
+**Launchers** live outside the clone, in `<root>/launch/`, so the clone stays clean:
+- `run_lifecycle.sh` and `run_lifecycle.slurm` run a whole lifecycle;
+- `run_stages.py` (`9061d734…`) runs only named stages through
+  `python -m ebl train`, resolving inputs from the plan or from completed
+  stages;
+- `stage1a.sh` (`9f6bc72d…`).
+
+Logs are in `<root>/logs/`. Runs go to
+`<root>/hwa-1d4f493/results/lifecycles/<id>/{plan,runs}`.
+
+**Probe on `fifi`** (complete; not evidence). Four stages in 16 s:
+- `prepare`: 1.6 s; gate KL −2.9e-9.
+- `devices`: 1.1 s.
+- `hwa`: 3.6 s for one step at batch 32 and two selection points of about
+  1 s each; peak memory 13.4 GB.
+- `deploy`: 2.4 s; 2.4 GB.
+- Bundles: HWA source 55 MB, deployment 109 MB.
+
+**Probe on Jean Zay** (complete; not evidence).
+- Job 822034 failed after 6 s, before any stage, because `git` is missing
+  on compute nodes. Both SLURM wrappers now `module load git/2.53.0`
+  (`run_lifecycle.slurm` `107d1ba7…`, `run_stages.slurm` `4a201a4b…`).
+- Retry job 822625 completed in 1 min 46 s:
+  - `prepare`: 9.3 s;
+  - `devices`: 8.3 s;
+  - `hwa`: 21.1 s and 13.4 GB, about 6× the 5090;
+  - `deploy`: 13.5 s and 2.4 GB, about 6× the 5090.
+- Extrapolated, a full deployment (clean plus 6 cases on 1,024 test
+  sequences) takes about 10 min on a V100, inside the 2 h dev limit.
+
+**Stage 1a, first attempt (superseded).** Four epochs plus a 2-epoch
+extension, at 1e-5, 3e-5 and 1e-4. It ran 13:11–13:19 on `fifi` and `riri`,
+about 220 s per rate. All three runs completed. Selected development KL:
+
+| Rate | Epoch 0 | 2 | 4 | 6 | Selected |
+| --- | --- | --- | --- | --- | --- |
+| 1e-5 | 0.5741 | 0.5166 | 0.4967 | 0.4827 | epoch 6 |
+| 3e-5 | 0.5741 | 0.4816 | 0.4559 | 0.4383 | epoch 6 |
+| 1e-4 | 0.5741 | 0.4352 | 0.4040 | 0.3856 | epoch 6 |
+
+- Every run was still improving at its final epoch and carries
+  `convergence_review_required`, which would make Experiment 1
+  inconclusive by its own validity rule.
+- The gain is almost all at 3 % stuck devices (KL 1.135 → 0.759 at 1e-4);
+  at 0 % it is small (0.0132 → 0.0121).
+- On 2026-10-09 the user replaced it with 20 epochs and the grid 3e-5, 1e-4,
+  3e-4. The 4-epoch sources are not used by Experiment 1.
