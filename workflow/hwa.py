@@ -17,6 +17,10 @@ persistent-device trajectory:
   and the reference device of every pair, after the weight noise). They never
   become a deployed fault map.
 
+An epoch is one pass over the HWA cohort unless ``hwa.sequences_per_epoch``
+streams it: each epoch then takes the next sequences of seeded passes over a
+large cohort (``stream_order``), keeping the selection cadence per step budget.
+
 Checkpoints are selected by mean development teacher KL over the arm's
 ``selection_cases`` on independent selection arrays programmed with the
 lifecycle's P&V. Final arrays and test data are never used.
@@ -61,6 +65,26 @@ def selection_score(network, cache, lifecycle, populations, cases, device) -> di
             }
         )
     return {"teacher_kl": sum(r["teacher_kl"] for r in rows) / len(rows), "cases": rows}
+
+
+STREAM_SEED_OFFSET = 1_000_000
+
+
+def stream_order(examples: int, per_epoch: int, epoch: int, seed: int, device) -> torch.Tensor:
+    """Epoch ``epoch``'s slice of an endless stream of seeded passes over a cohort.
+
+    Pass k is a permutation of the cohort seeded by ``seed + STREAM_SEED_OFFSET + k``;
+    epoch e (from 1) takes stream positions [(e-1)·per_epoch, e·per_epoch). Every
+    sequence appears once per pass, and a pass boundary may fall inside an epoch.
+    """
+
+    begin, end = (epoch - 1) * per_epoch, epoch * per_epoch
+    parts = []
+    for k in range(begin // examples, (end - 1) // examples + 1):
+        generator = torch.Generator(device=device).manual_seed(seed + STREAM_SEED_OFFSET + k)
+        order = torch.randperm(examples, generator=generator, device=device)
+        parts.append(order[max(begin - k * examples, 0) : min(end - k * examples, examples)])
+    return torch.cat(parts)
 
 
 def channel_abs_max(q, layout):
@@ -131,6 +155,8 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
     histogram = {str(rate): 0 for rate in rates}
     inputs = network_family.hwa_inputs(cache, device)
     examples = network_family.hwa_examples(inputs)
+    streamed = hwa.sequences_per_epoch is not None
+    per_epoch = min(hwa.sequences_per_epoch, examples) if streamed else examples
     prefix = network.prefix_hash()
     best, history, rejected = None, [], None
     limit, epoch, started = hwa.epochs, 0, time.monotonic()
@@ -139,9 +165,12 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
             for group in optimizer.param_groups:
                 group["lr"] = hwa.learning_rate * hwa.lr_factor(epoch)
             data_rng = torch.Generator(device=device).manual_seed(data.data_seed + epoch)
-            order = torch.randperm(examples, generator=data_rng, device=device)
+            if streamed:
+                order = stream_order(examples, per_epoch, epoch, data.data_seed, device)
+            else:
+                order = torch.randperm(examples, generator=data_rng, device=device)
             network.train()
-            for batch, begin in enumerate(range(0, examples, hwa.batch_size)):
+            for batch, begin in enumerate(range(0, per_epoch, hwa.batch_size)):
                 index = order[begin : begin + hwa.batch_size]
                 features, teacher_logits, labels = network_family.hwa_batch(
                     inputs, index, data_rng, network, teacher, lifecycle
@@ -212,4 +241,10 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
         "history": history,
         "selection": "minimum mean development teacher KL over selection cases and selection arrays",
     }
+    if streamed:
+        fit["stream"] = {
+            "sequences_per_epoch": per_epoch,
+            "cohort_sequences": examples,
+            "passes": fit["epochs_run"] * per_epoch / examples,
+        }
     return {"model": best["model"], "fit": fit}

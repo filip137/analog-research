@@ -861,6 +861,9 @@ class Hwa:
     arms: tuple[HwaArm, ...]
     noise_std: Optional[float] = None
     noise_scaling: Optional[str] = None
+    # None: every epoch is one pass over the HWA cohort. Otherwise each epoch is
+    # the next ``sequences_per_epoch`` of an endless stream of seeded passes.
+    sequences_per_epoch: Optional[int] = None
 
     def arm(self, arm_id: str) -> HwaArm:
         for arm in self.arms:
@@ -875,8 +878,10 @@ class Hwa:
         noise = {"noise_model": self.noise_model}
         if self.noise_std is not None:
             noise.update(noise_std=self.noise_std, noise_scaling=self.noise_scaling)
+        stream = {} if self.sequences_per_epoch is None else {"sequences_per_epoch": self.sequences_per_epoch}
         return {
             **noise,
+            **stream,
             "objective": self.objective,
             "optimizer": self.optimizer,
             "learning_rate": self.learning_rate,
@@ -914,6 +919,8 @@ def _hwa(raw: Any, technology: str) -> Hwa:
     noise_model = TECHNOLOGIES[technology].hwa_noise_model
     if noise_model == ADDITIVE_GAUSSIAN:
         keys += ("noise_std", "noise_scaling")
+    if isinstance(raw, Mapping) and "sequences_per_epoch" in raw:
+        keys += ("sequences_per_epoch",)
     raw = _object(raw, "hwa", keys)
     selection = _object(raw["selection"], "hwa.selection", ("every_epochs", "extension_epochs"))
     epochs = _integer(raw["epochs"], "hwa.epochs", minimum=1)
@@ -934,6 +941,8 @@ def _hwa(raw: Any, technology: str) -> Hwa:
         # Standard deviation in normalized weight units (full scale 1); arms scale it.
         extra["noise_std"] = _number(raw["noise_std"], "hwa.noise_std", positive=True)
         extra["noise_scaling"] = _choice(raw["noise_scaling"], "hwa.noise_scaling", NOISE_SCALINGS)
+    if "sequences_per_epoch" in raw:
+        extra["sequences_per_epoch"] = _integer(raw["sequences_per_epoch"], "hwa.sequences_per_epoch", minimum=1)
     return Hwa(
         noise_model=_choice(raw["noise_model"], "hwa.noise_model", (noise_model,)),
         objective=_choice(raw["objective"], "hwa.objective", OBJECTIVES),
@@ -1229,6 +1238,13 @@ def _cross_validate(lifecycle: Lifecycle) -> None:
         )
     if family == OPT_FAMILY and lifecycle.hwa.augment:
         raise config_error("hwa.augment", f"to be false; {family} defines no augmentation", True)
+    streamed = lifecycle.hwa.sequences_per_epoch
+    if streamed is not None and family != OPT_FAMILY:
+        raise config_error("hwa.sequences_per_epoch", f"to be absent; {family} streams no cohort", streamed)
+    if streamed is not None and streamed > data.hwa_sequences:
+        raise config_error(
+            "hwa.sequences_per_epoch", f"to be at most data.hwa_sequences ({data.hwa_sequences})", streamed
+        )
     if family == CIFAR_FAMILY and data.development_images % network.classes:
         raise config_error(
             "data.development_images",

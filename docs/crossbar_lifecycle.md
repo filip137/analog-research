@@ -194,6 +194,14 @@ Each arm is a source that later stages deploy:
   is extended once by `selection.extension_epochs`; if it is still late, the
   source records `convergence_review_required` and later stages propagate the
   flag. Final arrays and test data are never used for selection.
+- `sequences_per_epoch` (optional, OPT family only) streams a large HWA cohort.
+  Without it an epoch is one pass over `data.hwa_sequences`. With it, epoch e
+  takes stream positions [(e−1)·S, e·S) of an endless series of seeded passes
+  (pass k is a permutation seeded by `data.data_seed + 1,000,000 + k`), so every
+  sequence appears once per pass and a pass boundary may fall inside an epoch.
+  Selection still runs every `selection.every_epochs`, so a fixed step budget
+  keeps its selection cadence whatever the cohort size. The fit records the
+  number of passes. Leaving it out keeps a lifecycle's digests unchanged.
 
 ### (iii) Program-and-verify: cycles and relaxation
 

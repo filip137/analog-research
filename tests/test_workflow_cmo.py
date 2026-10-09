@@ -353,6 +353,32 @@ def test_hwa_noise_scales_with_each_output_channel_abs_max():
     assert torch.allclose(hwa.channel_abs_max(q, layout)[: 400 * 200], rows.reshape(-1))
 
 
+def test_streamed_epochs_visit_every_sequence_once_per_pass():
+    # 10 sequences, 4 per epoch: passes end inside epochs 3 and 5.
+    epochs = [hwa.stream_order(10, 4, epoch, 7, "cpu") for epoch in range(1, 6)]
+    assert all(len(order) == 4 for order in epochs)
+    stream = torch.cat(epochs)
+    assert sorted(stream[:10].tolist()) == sorted(stream[10:20].tolist()) == list(range(10))
+    assert not torch.equal(stream[:10], stream[10:20])
+    # Each epoch is a pure function of its index, so a resumed run takes the same slice.
+    assert torch.equal(hwa.stream_order(10, 4, 3, 7, "cpu"), epochs[2])
+    assert not torch.equal(hwa.stream_order(10, 4, 1, 8, "cpu"), epochs[0])
+
+
+def test_streamed_epochs_are_optional_and_leave_digests_unchanged():
+    plain = small()
+    assert plain.hwa.sequences_per_epoch is None and "sequences_per_epoch" not in plain.hwa.shared_dict()
+    streamed = small(**{"hwa.sequences_per_epoch": 4096})
+    assert streamed.hwa.shared_dict()["sequences_per_epoch"] == 4096
+    assert parse_lifecycle(streamed.to_dict()) == streamed
+    assert streamed.section_digest("hwa") != plain.section_digest("hwa")
+    assert streamed.section_digest("data") == plain.section_digest("data")
+    with pytest.raises(ConfigError, match="hwa.sequences_per_epoch"):
+        small(**{"hwa.sequences_per_epoch": plain.data.hwa_sequences + 1})
+    with pytest.raises(ConfigError, match="hwa.sequences_per_epoch"):
+        small(**{"hwa.sequences_per_epoch": 0})
+
+
 def test_corruption_aware_hwa_sticks_active_and_reference_devices():
     q = torch.full((40_000,), 0.25)
     generator = torch.Generator().manual_seed(4)
@@ -608,3 +634,26 @@ def test_deployment_only_cdt_lifecycle_runs_and_collects_deployments(cmo_inputs,
     failed = {r["case"]: r["failed_devices"] for r in rows}
     assert failed == {"nominal": 0, "random_10000ppm": 2 * round(0.01 * 2048), "random_50000ppm": 2 * round(0.05 * 2048)}
     assert all("deployed_teacher_kl" in r and "clean_perplexity" in r and not r["duplicate_coverage"] for r in rows)
+
+
+def test_streamed_hwa_takes_the_next_sequences_each_epoch(cmo_inputs, tmp_path):
+    weights, digest = cmo_inputs
+    lc = small(
+        **{
+            "data.corpus": {"name": "synthetic", "sha256": digest},
+            "data.sequence_length": 9,
+            "data.max_examples": 8,
+            "defects.cases": [case_doc(), case_doc("random", 50000)],
+            "hwa.batch_size": 4,
+            "hwa.sequences_per_epoch": 3,
+            "onchip": None,
+        }
+    )
+    results = run_lifecycle(lc, weights, tmp_path / "runs")
+    fit = results["hwa__standard_hwa"][1]["metrics"]["fit"]
+    assert fit["status"] == "complete"
+    assert fit["stream"] == {
+        "sequences_per_epoch": 3,
+        "cohort_sequences": 8,
+        "passes": fit["epochs_run"] * 3 / 8,
+    }

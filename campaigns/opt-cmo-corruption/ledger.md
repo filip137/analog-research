@@ -4,13 +4,14 @@
 
 Sources: campaign experiment metadata and reviewer-written result notes. No raw evidence or live job state is inferred.
 
-Counts: running=1.
+Counts: complete=1, running=1.
 
 ## Experiments
 
 | Experiment | State | Hypotheses | Recorded observations |
 |---|---|---|---|
-| [exp-001 — Experiment 1: standard versus corruption-aware HWA under 0-5 % stuck CMO devices](series/001-hwa-robustness/experiments/exp-001-hwa-source-robustness.md) | running | None declared | No result recorded. |
+| [exp-001 — Experiment 1: standard versus corruption-aware HWA under 0-5 % stuck CMO devices](series/001-hwa-robustness/experiments/exp-001-hwa-source-robustness.md) | complete | None declared | [validated-local](series/001-hwa-robustness/results/exp-001.md): OPT-125M with 3 or 6 CMO MLPs, no retraining: both HWA sources beat the pretrained model at 1-5 % stuck devices on all 5 arrays; standard HWA wins at 0-1 %, corruption-aware HWA from 2-3 % up |
+| [exp-002 — Experiment 1b: L6 HWA sources distilled on 50 M teacher-generated tokens, with stronger noise and an overestimated fault rate](series/001-hwa-robustness/experiments/exp-002-hwa-synthetic-data.md) | running | None declared | No result recorded. |
 
 ## Hypothesis evidence
 
