@@ -338,3 +338,25 @@ epochs (20 plus the extension) in about 1,010 s. Selected development KL:
   longer budget or explicitly accepting fixed-budget sources; that goes back
   to the user.
 - 3e-5 runs on `fifi` after 3e-4.
+
+All four 20-epoch rates completed by about 14:25. Each selected its final
+epoch, 30, so all are flagged:
+
+| Rate | Epoch 30 dev KL | KL at 0 % / 3 % stuck |
+| --- | --- | --- |
+| 3e-5 | 0.3611 | 0.0113 / 0.711 |
+| 1e-4 | 0.2938 | 0.0108 / 0.577 |
+| 3e-4 | 0.2216 | 0.0114 / 0.432 |
+| 1e-3 | 0.1453 | 0.0128 / 0.278 |
+
+- At 1e-3 the improvement slows (KL at 3 % dropped 0.093 from epoch 10 to
+  20, then 0.055 from 20 to 30) but has not stagnated. Training loss went
+  0.0184 → 0.0164 → 0.0142.
+- At 1e-3, clean KL first rose (0.0132 → 0.0167 at epoch 2) and recovered
+  by about epoch 22. Higher rates trade a little clean fidelity for
+  corruption robustness. The selection score is dominated by the 3 % term.
+- The user then chose one run at 5e-3 for exactly 50 epochs
+  (`lrdev-e50-lr5e-3`, `0877aa975ade`, on `fifi`). It tests whether HWA
+  converges within 50 epochs at a higher rate. Two decisions stay open:
+  Experiment 1's final rate and budget, and whether standard HWA is
+  selected on 0 % only.
