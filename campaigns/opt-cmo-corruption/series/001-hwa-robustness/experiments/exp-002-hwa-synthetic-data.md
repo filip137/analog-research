@@ -196,7 +196,48 @@ reduction of at least 10 %. It is applied to these comparisons:
 **Monitoring owner:** the executing agent, through the local watcher and
 bounded checks of logs and run records.
 
-### Current handoff (2026-10-09)
+### Current handoff (2026-10-09, 22:50)
 
-Pending launch: see the order above. Handles are recorded here as they are
-created.
+**Source commit:** `2f00620`, shipped as `hwa-2f00620.bundle` (SHA-256
+`33539c61…`). Clean clones sit on `fifi` (`~/analog-research/opt-cmo-exp1/hwa-2f00620`)
+and Jean Zay (`$SCRATCH/opt-cmo-exp1/hwa-2f00620`). On both hosts the corpus
+(`ce58085a…`) was verified by SHA-256.
+
+**Tests.**
+- Local: workflow suites, 147 passed and 1 skipped.
+- `fifi` clone: CMO, OPT and lifecycle suites, 117 passed and 2 skipped.
+- Experiment 1 lifecycle digests are unchanged (`60ad6b9c1df6`,
+  `20c5f48423d0`).
+
+**Smoke** (`fifi`, complete; not evidence).
+- `prepare` took 9 s, `devices` 9 s.
+- Two streamed epochs of `cdt_random_5pct`: 88 s including two selections,
+  about 42 s per epoch as in Experiment 1. Peak GPU memory was about 18 GB.
+- The stream record is as expected: 8,192 sequences per epoch from a
+  195,226-sequence cohort (0.084 passes), and all 512 steps at 50,000 ppm.
+- Development KL went from 1.462 to 0.301.
+
+**Reproduction precondition.** The Jean Zay `prepare` gives the test cohort
+token hash `fc0171fa…` and digital prediction hash `baad9e2d…`, identical to
+Experiment 1 L6. Digital perplexity is 46.602.
+
+| Work | Where | Handle | State at 22:50 |
+| --- | --- | --- | --- |
+| Four trainings, in order `standard_hwa`, `standard_hwa_6pct`, `cdt_random_3pct`, `cdt_random_5pct` | `fifi` (RTX 5090, PyTorch 2.11) | tmux `opt-exp1b-l6`, `logs/exp1b-l6-fifi.log` | running from 22:41; about 37 min each, expected done about 01:10 |
+| Shared stages (`prepare`, `devices`, `hwa__pretrained`) | Jean Zay job 844142 | `logs/x1b-l6-shared-844142.out` | complete (1 min 43 s) |
+| `pretrained` deployments (5 arrays) | Jean Zay job 844143 | `logs/x1b-l6-pre-844143.out` | running |
+| Ship each source, verify its hash, submit its 5 deployments (one dev job per arm, 45 min limit); then wait for all jobs, inspect and collect on Jean Zay, inspect on `fifi`, copy rows and training metrics back | local watcher `watch.sh` (job temp dir), log `exp1b/watch.log` | background task | waiting for `hwa__standard_hwa` |
+
+**Watcher details.**
+- It stops with `FAIL` on any of:
+  - the `fifi` chain ending without a source;
+  - a hash mismatch;
+  - a failed `sbatch`;
+  - a Jean Zay job that does not complete.
+- It writes to local
+  `results/lifecycles/opt125m-cmo-l6-exp1b/{collected,hwa-metrics}/`.
+- Helpers: `launch/source_record.py` on `fifi` and
+  `launch/inspect_collect.sh` on Jean Zay.
+
+**Next:** when the watcher reports `DONE`, check both inspect outputs, then
+the reproduction check, then write `results/exp-002.md`.
