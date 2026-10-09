@@ -1,7 +1,7 @@
 ---
 id: "exp-001"
 title: "Experiment 1: standard versus corruption-aware HWA under 0-5 % stuck CMO devices"
-status: "planned"
+status: "running"
 hypotheses: []
 ---
 # exp-001: Experiment 1, standard versus corruption-aware HWA
@@ -63,17 +63,24 @@ it is open to your change before launch.
 | HWA sources | `pretrained` (method `none`). `standard_hwa`: noise_std 0.03, `output_channel_abs_max`, no corruption. `cdt_random_3pct`: the same noise plus temporary corruption `random` at 30,000 ppm | confirmed |
 | HWA noise convention | Analog Foundation Models eq. 3: W̃[j,:] = W[j,:] + 0.03 · maxᵢ\|W[j,i]\| · ε for output channel j, fresh every minibatch. 3 % is a fixed, literature-motivated choice, not tuned | confirmed |
 | Training corruption | Each minibatch, every physical device (active and reference) of every pair is stuck i.i.d. with p = 0.03, at a uniform value in 9–88.2 µS, applied after the noise. Temporary; never a deployed fault map. The 3 % noise level and the 3 % training rate are separate parameters | confirmed |
-| HWA optimizer | Adam, teacher-KL objective, learning rate frozen by Stage 1a, no schedule. 4 epochs over the HWA cohort, batch 8, seed 41, data seed 20261008. Both arms use the same minibatch order | rate: confirmed approach; epochs, batch: proposed |
+| HWA optimizer | Adam, teacher-KL objective, learning rate frozen by Stage 1a, no schedule. 4 epochs over the HWA cohort, batch 32 (8,192 tokens, 1,024 steps), seed 41, data seed 20261008. Both arms use the same minibatch order and noise draws once per minibatch | rate: confirmed approach; batch 32: confirmed 2026-10-09; epochs: proposed |
 | Checkpoint selection | Both trained arms use the same rule: the minimum mean development teacher KL over `none` and `random` 30,000 ppm, on selection arrays 211001 and 211002 after real CMO P&V. It runs at epoch 0 and every epoch, with one 2-epoch extension if the best falls in the final 20 %. Test data are never used | proposed |
 | Hardware realizations | Five independent assignments, 271001–271005. Each has its own fault maps and programming noise; the six rates of one assignment are matched conditions on one array identity | proposed |
 | On-chip training | None. This is a deployment-only loop (`onchip: null`); a later recovery lifecycle can reuse these deployments | confirmed |
 | Programming model | Identical across all sources and evaluations: AIHWKit 1.1.0 CMO 2 % fit, `noise_scale` 1 | confirmed |
 
 **Stage 1a: learning-rate development.**
-- Standard HWA only, at Adam 1e-5, 3e-5 and 1e-4, in three otherwise
-  identical lifecycles.
-- They use the development split only (`evaluation: development`) and their
-  own array 281001.
+- Standard HWA only, at Adam 1e-5, 3e-5 and 1e-4, in three lifecycles.
+  Each is Experiment 1 with only the `standard_hwa` arm and its candidate
+  rate.
+- Every section an HWA source depends on matches Experiment 1 (checked by
+  digest). The winning run is therefore reused as Experiment 1's standard
+  source and is not retrained.
+- Only the `prepare`, `devices` and `hwa__standard_hwa` stages of these
+  lifecycles run, and their deploy stages are never run. HWA uses only
+  training data; selection uses only the development split and the
+  selection arrays. Test data and the Experiment 1 assignment arrays are
+  therefore untouched until the rate is frozen.
 - Selection is the same as above.
 - **Rule (proposed):**
   - Freeze the rate with the lowest selected development KL, for both HWA arms.
@@ -113,17 +120,31 @@ would saturate at 1 % stuck devices.
 [`campaigns/opt-cmo-corruption/lifecycles/`](../../../lifecycles/README.md), with
 short digests from `python -m workflow check`:
 
-- `opt125m-cmo-l3-exp1-probe` (`d561549270c7`): cost probe, not evidence;
-- `opt125m-cmo-l3-lrdev-lr1e-5` (`0407dd1b3589`);
-- `opt125m-cmo-l3-lrdev-lr3e-5` (`1ebaa3797d00`);
-- `opt125m-cmo-l3-lrdev-lr1e-4` (`197b5ee650ed`);
+- `opt125m-cmo-l3-exp1-probe` (`c4d6416e2da6`): cost probe, not evidence; 32 sequences, one batch;
+- `opt125m-cmo-l3-lrdev-lr1e-5` (`d8535303dc3d`);
+- `opt125m-cmo-l3-lrdev-lr3e-5` (`b672026ad6b7`);
+- `opt125m-cmo-l3-lrdev-lr1e-4` (`23509070fc7f`);
 - `opt125m-cmo-l3-exp1`: written after Stage 1a, with every field above and
   the frozen learning rate.
 
 `python -m workflow describe` on the Experiment 1 draft gives these stage
 runs: prepare 1, devices 1, HWA 3, deploy 15, on-chip 0. That is 90 deployed
-cases over 14,155,776 analog weights. Each Stage 1a lifecycle has prepare 1,
-devices 1, HWA 1 and deploy 1.
+cases over 14,155,776 analog weights. Of each Stage 1a lifecycle, only
+prepare, devices and one HWA stage run.
+
+**Placement.** Each comparison stays on one platform.
+- All HWA trainings run on 5090 hosts, as single stages
+  (`python -m ebl train --config <stage>.json` with explicit inputs) in a clean
+  clone of the commit, with PyTorch 2.11 and CUDA 12.8. That covers the
+  three Stage 1a rates and Experiment 1's `cdt_random_3pct`.
+- All 15 deployments and the `pretrained` source run on Jean Zay V100s
+  (`umg@v100`, `qos_gpu-dev`, one job per deployment), with
+  `pytorch-gpu/py3/2.5.0`, in `$SCRATCH`. `$WORK` is not used: the umg WORK
+  inode quota is 97.5 % full.
+- HWA checkpoints travel from the 5090 host to Jean Zay through this
+  machine.
+- Compact deployments are rebuilt by hash on their own platform, so on-chip
+  recovery that reuses them must also run on Jean Zay V100s.
 
 **Teacher and corpus.**
 
@@ -192,9 +213,12 @@ Perplexity is reported too. Rows come from `deployments.csv` (`deployed_*`,
 
 ## Budget, stop and expected outputs
 
-- **Target (proposed, needs your authorization):** the local RTX 3090
-  (`cuda:0`). It is currently shared with another job at about 40 %
-  utilization, and using it would be GPU sharing.
+- **Targets:** the [standing compute targets](../../../../../docs/experiment_workflow.md#standing-compute-targets)
+  of 2026-10-09.
+  - HWA trainings on idle RTX 5090 hosts (`trex`, `riri`, `fifi`,
+    `loulou`): at most two from 08:00 to 22:00, any idle one overnight.
+  - Deployments on Jean Zay V100s with `umg@v100` and `qos_gpu-dev`.
+  - All deployments of one comparison run on one GPU type and environment.
 - **Compute cap (proposed):** 12 GPU-hours for the probe, Stage 1a and
   Experiment 1 together. Wall-clock time is unknown until the probe runs.
   Escalate if the probe extrapolation exceeds the cap.
@@ -214,15 +238,19 @@ Perplexity is reported too. Rows come from `deployments.csv` (`deployed_*`,
 
 ## Execution and monitoring handoff
 
-**State:** planned. No stage has run. The probe and the three Stage 1a plans
-are written under `results/lifecycles/<id>/plan` and dry-run checked.
+**State:** running. Execution was authorized on 2026-10-09 for the targets
+above.
 
-**Next actions:**
-1. Your confirmation of the proposed fields, and authorization to use the
-   shared local GPU.
-2. Run the probe and record time, memory and storage per stage here.
-3. Run Stage 1a and freeze the learning rate.
-4. Write and plan `opt125m-cmo-l3-exp1` and launch it in a persistent
-   session.
+**Order:**
+1. Stage the commit, teacher and corpus on `riri`, `fifi` and Jean Zay
+   `$SCRATCH`, with SHA-256 checks and CMO tests on each.
+2. Run the probe on `riri` and on one V100 dev job. Record time, memory and
+   storage per stage here, and recheck the placement against them.
+3. Stage 1a on 5090s, at most two by day. Freeze the learning rate by the
+   rule.
+4. Write `opt125m-cmo-l3-exp1`. Train `cdt_random_3pct` on a 5090 while
+   the `pretrained` and `standard_hwa` deployments run on V100s.
+5. Deploy `cdt_random_3pct` on V100s, copy every bundle back, `collect`,
+   and write the result note.
 
 **Monitoring owner:** the executing agent; runs are short.

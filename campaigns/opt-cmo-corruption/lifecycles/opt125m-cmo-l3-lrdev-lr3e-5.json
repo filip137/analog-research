@@ -3,8 +3,8 @@
   "schema_version": 1,
   "lifecycle_id": "opt125m-cmo-l3-lrdev-lr3e-5",
   "question": {
-    "text": "Experiment 1 learning-rate development: standard HWA (3 % per-output-channel Gaussian weight noise) of OPT-125M with CMO fc1/fc2 in the last three decoder layers at Adam learning rate 3e-5; selection development KL averaged over 0 % and 3 % random stuck devices on two selection arrays.",
-    "decision": "Freeze the Adam learning rate of both Experiment 1 HWA arms: the candidate with the lowest selected development KL (see campaigns/opt-cmo-corruption/series/001-hwa-robustness/experiments/exp-001-hwa-source-robustness.md). No test data and no Experiment 1 assignment arrays are used.",
+    "text": "Experiment 1 Stage 1a: standard HWA (3 % per-output-channel Gaussian weight noise) of OPT-125M with CMO fc1/fc2 in the last three decoder layers at Adam learning rate 3e-5; selection development KL averaged over 0 % and 3 % random stuck devices on two selection arrays. Only the prepare, devices and hwa stages run; deploy stages are never run from this lifecycle.",
+    "decision": "Freeze the Adam learning rate of both Experiment 1 HWA arms: the candidate with the lowest selected development KL (see campaigns/opt-cmo-corruption/series/001-hwa-robustness/experiments/exp-001-hwa-source-robustness.md). The winner's standard HWA source is reused by Experiment 1.",
     "primary_metric": "teacher_kl",
     "evidence_class": "exploratory_model_based"
   },
@@ -23,8 +23,8 @@
     "hwa_sequences": 8192,
     "recovery_sequences": 8192,
     "development_sequences": 256,
-    "test_sequences": 0,
-    "evaluation": "development",
+    "test_sequences": 1024,
+    "evaluation": "test",
     "max_examples": 0
   },
   "devices": {
@@ -32,7 +32,11 @@
     "model": "aihwkit_1.1.0_reram_cmo",
     "noise_scale": 1.0,
     "assignment_seeds": [
-      281001
+      271001,
+      271002,
+      271003,
+      271004,
+      271005
     ],
     "selection_seeds": [
       211001,
@@ -48,6 +52,36 @@
       {
         "kind": "none",
         "rate_ppm": 0,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 10000,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 20000,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 30000,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 40000,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 50000,
         "die_concentration": null,
         "array_concentration": null
       }
@@ -70,7 +104,7 @@
     "lr_milestones": [],
     "lr_decay": 1.0,
     "epochs": 4,
-    "batch_size": 8,
+    "batch_size": 32,
     "augment": false,
     "seed": 41,
     "selection": {

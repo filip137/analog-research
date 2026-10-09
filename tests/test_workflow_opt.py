@@ -103,6 +103,14 @@ def test_clean_suffix_reproduces_teacher_and_keeps_state_lean(layers):
     assert len(suffix.calibration_parameters()) == 1 + 2 * layers + 2 * layers
 
 
+def test_untiled_matmul_equals_the_tiled_sum_without_read_noise():
+    network = opt_mlp.OptMlpSuffix(tiny_teacher(), 2, 8)
+    x = torch.randn(5, 16, generator=torch.Generator().manual_seed(2))
+    untiled = network._matrix(x, 0, network.q)
+    network.read_noise = 1e-30  # forces the tiled path; the added noise is far below FP32 resolution
+    assert torch.allclose(untiled, network._matrix(x, 0, network.q), atol=1e-6)
+
+
 def test_training_never_changes_the_frozen_digital_teacher():
     teacher = tiny_teacher()
     suffix = opt_mlp.OptMlpSuffix(teacher, 2, tile_size=8)

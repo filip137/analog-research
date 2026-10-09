@@ -3,7 +3,7 @@
   "schema_version": 1,
   "lifecycle_id": "opt125m-cmo-l3-exp1-probe",
   "question": {
-    "text": "Cost probe (not evidence): Experiment 1 settings with the corruption-aware HWA arm, one assignment, 0 % and 5 % random stuck devices, 8 sequences and one epoch per stage.",
+    "text": "Cost probe (not evidence): Experiment 1 settings with the corruption-aware HWA arm, one assignment, 0 % and 5 % random stuck devices, 32 sequences (one batch) and one epoch per stage.",
     "decision": "Measure time, GPU memory and storage per stage for the budget in campaigns/opt-cmo-corruption/series/001-hwa-robustness/experiments/exp-001-hwa-source-robustness.md.",
     "primary_metric": "teacher_kl",
     "evidence_class": "exploratory_model_based"
@@ -25,7 +25,7 @@
     "development_sequences": 256,
     "test_sequences": 1024,
     "evaluation": "test",
-    "max_examples": 8
+    "max_examples": 32
   },
   "devices": {
     "technology": "cmo",
@@ -76,7 +76,7 @@
     "lr_milestones": [],
     "lr_decay": 1.0,
     "epochs": 1,
-    "batch_size": 8,
+    "batch_size": 32,
     "augment": false,
     "seed": 41,
     "selection": {

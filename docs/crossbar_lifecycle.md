@@ -127,7 +127,9 @@ to targets `q` in `[-1, 1]`, in one of two ways:
   range.
 
 Each matrix is then split into `tile_size` tiles whose input slices are summed
-digitally. `read_noise` adds per-tile MVM output noise. Each stage writes
+digitally. `read_noise` adds per-tile MVM output noise. Without read noise, the
+OPT family computes each matrix as one matmul, which equals the tiled sum up to
+FP32 summation order. Each stage writes
 `mapping.json`, which records tiles, scales, the frozen-parameter hash and the
 physical device count.
 

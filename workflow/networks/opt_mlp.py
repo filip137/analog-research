@@ -253,24 +253,29 @@ class OptMlpSuffix(nn.Module):
         spec = self.layout[index]
         matrix = q[spec.offset : spec.offset + spec.size].reshape(spec.shape)
         flat = x.reshape(-1, spec.shape[1])
-        columns = []
-        for output in range(0, spec.shape[0], self.tile_size):
-            accum = None
-            for row in range(0, spec.shape[1], self.tile_size):
-                part = flat[:, row : row + self.tile_size] @ matrix[
-                    output : output + self.tile_size, row : row + self.tile_size
-                ].T
-                if self.read_noise:
+        if self.read_noise:
+            columns = []
+            for output in range(0, spec.shape[0], self.tile_size):
+                accum = None
+                for row in range(0, spec.shape[1], self.tile_size):
+                    part = flat[:, row : row + self.tile_size] @ matrix[
+                        output : output + self.tile_size, row : row + self.tile_size
+                    ].T
                     part = part + self.read_noise * torch.randn(
                         part.shape, device=part.device, generator=self.read_generator
                     )
-                accum = part if accum is None else accum + part
-            columns.append(accum)
+                    accum = part if accum is None else accum + part
+                columns.append(accum)
+            product = torch.cat(columns, dim=1)
+        else:
+            # Tiles matter only for per-tile read noise; without it the tiled
+            # sum is one matmul (equal up to FP32 summation order).
+            product = flat @ matrix.T
         if self.scaling == "per_output_channel_absmax":
             scale = self.channel_scales[self.channel_offsets[index] : self.channel_offsets[index + 1]]
         else:
             scale = self.scales[index]
-        result = torch.cat(columns, dim=1) * scale * self.output_gains[index] + self.mlp_biases[index]
+        result = product * scale * self.output_gains[index] + self.mlp_biases[index]
         return result.reshape(*x.shape[:-1], spec.shape[0])
 
     def forward_features(self, hidden, q=None):

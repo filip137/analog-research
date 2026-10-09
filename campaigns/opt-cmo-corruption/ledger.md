@@ -4,13 +4,13 @@
 
 Sources: campaign experiment metadata and reviewer-written result notes. No raw evidence or live job state is inferred.
 
-Counts: planned=1.
+Counts: running=1.
 
 ## Experiments
 
 | Experiment | State | Hypotheses | Recorded observations |
 |---|---|---|---|
-| [exp-001 — Experiment 1: standard versus corruption-aware HWA under 0-5 % stuck CMO devices](series/001-hwa-robustness/experiments/exp-001-hwa-source-robustness.md) | planned | None declared | No result recorded. |
+| [exp-001 — Experiment 1: standard versus corruption-aware HWA under 0-5 % stuck CMO devices](series/001-hwa-robustness/experiments/exp-001-hwa-source-robustness.md) | running | None declared | No result recorded. |
 
 ## Hypothesis evidence
 
