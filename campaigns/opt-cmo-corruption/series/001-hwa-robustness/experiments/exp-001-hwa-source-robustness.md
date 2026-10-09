@@ -123,7 +123,8 @@ short digests from `python -m workflow check`:
 
 - `opt125m-cmo-l3-exp1-probe` (`c4d6416e2da6`): cost probe, not evidence; 32 sequences, one batch;
 - `opt125m-cmo-l3-lrdev-e20-lr3e-5` (`440c4626be9a`), `-lr1e-4`
-  (`f03d363da0b8`) and `-lr3e-4` (`22ac0ec9d2df`): Stage 1a, 20 epochs;
+  (`f03d363da0b8`), `-lr3e-4` (`22ac0ec9d2df`) and `-lr1e-3` (`eaa28558f366`,
+  the edge extension): Stage 1a, 20 epochs;
 - `opt125m-cmo-l3-lrdev-lr1e-5` (`d8535303dc3d`), `-lr3e-5` (`b672026ad6b7`)
   and `-lr1e-4` (`23509070fc7f`): the superseded first Stage 1a, 4 epochs;
 - `opt125m-cmo-l3-exp1`: written after Stage 1a, with every field above and
@@ -317,3 +318,23 @@ about 220 s per rate. All three runs completed. Selected development KL:
   at 0 % it is small (0.0132 → 0.0121).
 - On 2026-10-09 the user replaced it with 20 epochs and the grid 3e-5, 1e-4,
   3e-4. The 4-epoch sources are not used by Experiment 1.
+
+**Stage 1a, 20 epochs** (commit `76dc3bf`; launched 13:45 on `fifi` and
+`riri`). The 1e-4 and 3e-4 runs completed at 14:02, each using all 30
+epochs (20 plus the extension) in about 1,010 s. Selected development KL:
+
+| Rate | Epoch 0 | 10 | 20 | 30 | Selected | KL at 0 % / 3 % stuck |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1e-4 | 0.5741 | 0.3594 | 0.3215 | 0.2938 | epoch 30 | 0.0108 / 0.577 |
+| 3e-4 | 0.5741 | 0.2986 | 0.2505 | 0.2216 | epoch 30 | 0.0114 / 0.432 |
+
+- Both runs were still improving and are flagged.
+- No overfitting: the held-out development KL fell in step with the training
+  loss (0.0231 → 0.0157 at 3e-4), and the 0 % KL did not degrade.
+- 3e-4 won at the edge of the grid, so the rule adds 1e-3 at the same
+  budget (`lrdev-e20-lr1e-3`, on `riri`). The user confirmed this on
+  2026-10-09.
+- If 1e-3 is still improving at its last epoch, the remaining choice is a
+  longer budget or explicitly accepting fixed-budget sources; that goes back
+  to the user.
+- 3e-5 runs on `fifi` after 3e-4.
