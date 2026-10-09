@@ -32,6 +32,7 @@ itself.
 | Target | Allowed use |
 | --- | --- |
 | RTX 5090 hosts `trex`, `riri`, `fifi`, `loulou` (one GPU each, by SSH) | **08:00–22:00 Paris time:** at most two 5090s in use by our jobs at once. **22:00–08:00:** any idle 5090; jobs beyond two must finish, or be stopped, by 08:00. Use only a GPU that is idle when the job starts, and never run beside another user's process |
+| RTX 3090 hosts `nom-cool-1` and `nom-cool-2` | Any GPU that is idle when the job starts (granted 2026-10-09); never run beside another user's process |
 | Jean Zay V100 | Account `umg@v100` (not `fmu`). Prefer QoS `qos_gpu-dev`: 2 h wall time, 32 GPUs and 10 queued jobs per user. Use a longer QoS only when a stage cannot fit in 2 h, and say so first. Compute nodes have no internet access, so stage every input |
 
 ## Records

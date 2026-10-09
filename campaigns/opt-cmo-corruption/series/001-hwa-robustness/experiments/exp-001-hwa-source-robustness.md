@@ -53,7 +53,7 @@ it is open to your change before launch.
 
 | Field | Setting | Status |
 | --- | --- | --- |
-| Network | `opt_mlp_suffix`, `facebook/opt-125m` at revision `27dcfa74`. fc1/fc2 of decoder layers 9–11 on CMO arrays: 14,155,776 weights, 28,311,552 devices | confirmed |
+| Network | `opt_mlp_suffix`, `facebook/opt-125m` at revision `27dcfa74`, at two sizes. **L3**: fc1/fc2 of decoder layers 9–11 on CMO arrays, 14,155,776 weights (28,311,552 devices). **L6**: layers 6–11, 28,311,552 weights (56,623,104 devices). L6 reuses every L3 setting; its HWA rate was tuned on L3 | L3: confirmed; L6 added 2026-10-09 |
 | Corpus | `wikitext-2-raw-v1`, SHA-256 `33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01`. Built from Hugging Face `Salesforce/wikitext` at revision `b08601e04326c79dfdd32d625aee71d232d685c3`, the raw split lines concatenated. Tokens: 2,391,885 train, 247,290 validation, 283,288 test | confirmed |
 | Metric | `teacher_kl` primary; perplexity, cross-entropy, next-token accuracy and teacher agreement also reported | confirmed |
 | Sequences and cohorts | Length 256. HWA: 8,192 train sequences (2.10 M tokens). Development: the first 256 validation sequences. Test: the first 1,024 test sequences (262 K tokens). Adaptation and evaluation tokens are disjoint by split | proposed |
@@ -63,8 +63,8 @@ it is open to your change before launch.
 | HWA sources | `pretrained` (method `none`). `standard_hwa`: noise_std 0.03, `output_channel_abs_max`, no corruption. `cdt_random_3pct`: the same noise plus temporary corruption `random` at 30,000 ppm | confirmed |
 | HWA noise convention | Analog Foundation Models eq. 3: W̃[j,:] = W[j,:] + 0.03 · maxᵢ\|W[j,i]\| · ε for output channel j, fresh every minibatch. 3 % is a fixed, literature-motivated choice, not tuned | confirmed |
 | Training corruption | Each minibatch, every physical device (active and reference) of every pair is stuck i.i.d. with p = 0.03, at a uniform value in 9–88.2 µS, applied after the noise. Temporary; never a deployed fault map. The 3 % noise level and the 3 % training rate are separate parameters | confirmed |
-| HWA optimizer | Adam, teacher-KL objective, learning rate frozen by Stage 1a, no schedule. 20 epochs over the HWA cohort, batch 32 (8,192 tokens, 256 steps per epoch), seed 41, data seed 20261008. Both arms use the same minibatch order and noise draws once per minibatch | rate: confirmed approach; batch 32 and 20 epochs: confirmed 2026-10-09 |
-| Checkpoint selection | Both trained arms use the same rule: the minimum mean development teacher KL over `none` and `random` 30,000 ppm, on selection arrays 211001 and 211002 after real CMO P&V. It runs at epoch 0 and every 2 epochs, with one 10-epoch extension if the best falls in the final 20 %. Test data are never used | confirmed 2026-10-09 |
+| HWA optimizer | Adam at **5e-3**, teacher-KL objective, no schedule, for **exactly 50 epochs** over the HWA cohort. Batch 32 (8,192 tokens, 256 steps per epoch), seed 41, data seed 20261008. This is a fixed budget: the 5e-3 run was still improving slightly at epoch 50 (see Stage 1a). Both arms use the same minibatch order and noise draws once per minibatch | confirmed 2026-10-09 |
+| Checkpoint selection | Both trained arms use the same rule: the minimum mean development teacher KL over `none` and `random` 30,000 ppm, on selection arrays 211001 and 211002 after real CMO P&V. It runs at epoch 0 and every 2 epochs, with no extension. Test data are never used. This rule also chose 5e-3, so "standard HWA" here is robustness-tuned generic-noise HWA, not naive HWA. Selected on clean hardware alone, the best rate would have been 1e-4. A clean-selected reference source was considered and dropped; add it only if a result depends on the distinction | confirmed 2026-10-09 |
 | Hardware realizations | Five independent assignments, 271001–271005. Each has its own fault maps and programming noise; the six rates of one assignment are matched conditions on one array identity | proposed |
 | On-chip training | None. This is a deployment-only loop (`onchip: null`); a later recovery lifecycle can reuse these deployments | confirmed |
 | Programming model | Identical across all sources and evaluations: AIHWKit 1.1.0 CMO 2 % fit, `noise_scale` 1 | confirmed |
@@ -127,21 +127,27 @@ short digests from `python -m workflow check`:
   the edge extension): Stage 1a, 20 epochs;
 - `opt125m-cmo-l3-lrdev-lr1e-5` (`d8535303dc3d`), `-lr3e-5` (`b672026ad6b7`)
   and `-lr1e-4` (`23509070fc7f`): the superseded first Stage 1a, 4 epochs;
-- `opt125m-cmo-l3-exp1`: written after Stage 1a, with every field above and
-  the frozen learning rate.
+- `opt125m-cmo-l3-lrdev-e50-lr5e-3` (`0877aa975ade`): the 50-epoch 5e-3 run;
+  its source is L3's `standard_hwa`, reused with matching digests;
+- `opt125m-cmo-l3-exp1` (`60ad6b9c1df6`) and `opt125m-cmo-l6-exp1`
+  (`20c5f48423d0`): Experiment 1 proper.
 
-`python -m workflow describe` on the Experiment 1 draft gives these stage
-runs: prepare 1, devices 1, HWA 3, deploy 15, on-chip 0. That is 90 deployed
-cases over 14,155,776 analog weights. Of each Stage 1a lifecycle, only
-prepare, devices and one HWA stage run.
+`python -m workflow describe` gives each Experiment 1 lifecycle prepare 1,
+devices 1, HWA 3, deploy 15 and on-chip 0: 90 deployed cases over
+14,155,776 (L3) or 28,311,552 (L6) analog weights. Of each Stage 1a
+lifecycle, only prepare, devices and one HWA stage run.
 
 **Placement.** Each comparison stays on one platform.
-- All HWA trainings run on 5090 hosts, as single stages
+- HWA trainings run as single stages
   (`python -m ebl train --config <stage>.json` with explicit inputs) in a clean
-  clone of the commit, with PyTorch 2.11 and CUDA 12.8. That covers the
-  three Stage 1a rates and Experiment 1's `cdt_random_3pct`.
-- All 15 deployments and the `pretrained` source run on Jean Zay V100s
-  (`umg@v100`, `qos_gpu-dev`, one job per deployment), with
+  clone of the commit. Both trained sources of one network size share one
+  environment:
+  - L3 on RTX 5090s with PyTorch 2.11: all Stage 1a runs, the 5e-3 standard
+    source (`fifi`) and `cdt_random_3pct` (`riri`).
+  - L6 on RTX 3090s with PyTorch 2.5.1 (CUDA 12.1): `standard_hwa` on
+    `nom-cool-1` and `cdt_random_3pct` on `nom-cool-2`.
+- All deployments of both sizes, and the `pretrained` sources, run on Jean
+  Zay V100s (`umg@v100`, `qos_gpu-dev`), with
   `pytorch-gpu/py3/2.5.0`, in `$SCRATCH`. `$WORK` is not used: the umg WORK
   inode quota is 97.5 % full.
 - HWA checkpoints travel from the 5090 host to Jean Zay through this
@@ -211,8 +217,13 @@ Perplexity is reported too. Rows come from `deployments.csv` (`deployed_*`,
 - Report each HWA arm's selected epoch and `convergence_review_required`. A
   selected epoch 0 means HWA did not improve on development; report it as such.
 - No nonfinite values.
-- Inconclusive: a flagged selection, or fewer than 5 complete assignments.
+- Fixed budget (changed 2026-10-09). Both trained arms run exactly 50 epochs
+  at 5e-3. A source whose selected epoch is the last is reported as
+  "fixed budget, still improving", with its last-10-epoch improvement. That
+  does not make the experiment inconclusive.
+- Inconclusive: fewer than 5 complete assignments for a source and size.
   Partial coverage stays labelled partial.
+- L3 and L6 are reported separately and never pooled.
 
 ## Budget, stop and expected outputs
 
