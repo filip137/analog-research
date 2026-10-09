@@ -1,7 +1,7 @@
 ---
 id: "exp-001"
 title: "Experiment 1: standard versus corruption-aware HWA under 0-5 % stuck CMO devices"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-001: Experiment 1, standard versus corruption-aware HWA
@@ -252,8 +252,8 @@ Perplexity is reported too. Rows come from `deployments.csv` (`deployed_*`,
 
 ## Execution and monitoring handoff
 
-**State:** running. Execution was authorized on 2026-10-09 for the targets
-above.
+**State:** complete (2026-10-09). Result: [exp-001](../results/exp-001.md).
+Execution was authorized on 2026-10-09 for the targets above.
 
 **Order:**
 1. Stage the commit, teacher and corpus on `riri`, `fifi` and Jean Zay
@@ -371,3 +371,67 @@ epoch, 30, so all are flagged:
   converges within 50 epochs at a higher rate. Two decisions stay open:
   Experiment 1's final rate and budget, and whether standard HWA is
   selected on 0 % only.
+
+### Experiment 1 proper: execution (2026-10-09, from 17:20)
+
+Commit `18d0f12` is staged on every host and Jean Zay. Lifecycles
+`opt125m-cmo-l3-exp1` (`60ad6b9c1df6`) and `opt125m-cmo-l6-exp1`
+(`20c5f48423d0`).
+
+| Work | Where | Handle | State at 17:36 |
+| --- | --- | --- | --- |
+| L3 `standard_hwa` source | reused: `fifi` run `lrdev-e50-lr5e-3`, `source.pt` SHA-256 `31174f73…` (matches its recorded artifact) | copied to `$SCRATCH/opt-cmo-exp1/sources/l3-standard_hwa-source.pt` | done |
+| L3 `cdt_random_3pct` training | `riri` (RTX 5090, PyTorch 2.11) | tmux `opt-exp1-l3-cdt`, `logs/exp1-l3-cdt-riri.log` | running, about 34 s per epoch |
+| L6 `standard_hwa` training | `nom-cool-1` (RTX 3090, PyTorch 2.5.1) | detached PID 3903940, `logs/exp1-l6-std-nomcool1.log` | running |
+| L6 `cdt_random_3pct` training | `riri` (RTX 5090, PyTorch 2.11), chained by `launch/chain_after.sh` after the L3 training (PID 3072885) | tmux `opt-exp1-l6-cdt`, `logs/exp1-l6-cdt-riri.log` | waiting |
+| L3 and L6 shared stages (`prepare`, `devices`, `hwa__pretrained`) | Jean Zay jobs 832297 and 832298 | `logs/x1-l*-shared-*.out` | complete; prepare gate KL −2.6e-9 (L3) and −2.8e-9 (L6) |
+| L3 `pretrained` deployments (5 arrays) | Jean Zay job 832300 | `logs/x1-l3-pre-*.out` | running |
+| L3 `standard_hwa` deployments (5) | Jean Zay job 832301; `--input deploy__standard_hwa__<seed>:weights=…/l3-standard_hwa-source.pt` | `logs/x1-l3-std-*.out` | running |
+| L6 `pretrained` deployments (5) | Jean Zay job 832302 | `logs/x1-l6-pre-*.out` | running |
+
+**Planned placement change.** The L6 `cdt_random_3pct` training was planned
+for `nom-cool-2`, the local RTX 3090.
+- On that machine CUDA cannot initialize for this user: `cuInit` returns
+  `CUDA_ERROR_NOT_INITIALIZED`. This was checked from a sandboxed shell, an
+  unsandboxed shell and the user's terminal.
+- The driver (575.57.08) and the CUDA library match, compute mode is
+  Default, the GPU is not excluded, there are no Xid errors and no
+  namespace or seccomp restriction applies. A trace shows every system call
+  succeeding until the driver refuses to create the context.
+- Three failed attempts are kept as `exp1-l6-cdt-nomcool2.attempt{2,3}-*.log`;
+  attempt 1's log was overwritten by attempt 2.
+- The training was first chained on `nom-cool-1` after L6 standard. At
+  17:38, at the user's direction, it moved to `riri` (5090) after the L3
+  training, because it finishes hours earlier there. The cancelled chain's
+  log is `exp1-l6-cdt-nomcool1.cancelled-moved-to-riri.log`. Fixing
+  `nom-cool-2` likely needs a GPU reset or driver reload (a reboot), which
+  is the user's decision.
+- **Recorded deviation:** the two L6 sources trained in different
+  environments: `standard_hwa` on an RTX 3090 with PyTorch 2.5.1,
+  `cdt_random_3pct` on an RTX 5090 with PyTorch 2.11. That affects only
+  floating-point rounding of a single training run per source. Every
+  deployment runs on Jean Zay V100s.
+
+**Next:** when each training finishes, copy its `source.pt` to Jean Zay,
+verify its hash against the run's artifact record, and submit its 5
+deployments (one dev job per source and size). Then `collect` both
+lifecycles, copy everything back, and write the result note.
+
+**Closed (2026-10-09).** All trainings finished:
+- L3 `cdt_random_3pct` on `riri`: epoch 40 of 50 selected, dev KL 0.0557;
+- L6 `cdt_random_3pct` on `riri`: epoch 50, dev KL 0.111;
+- L6 `standard_hwa` on `nom-cool-1`: epoch 50, dev KL 0.103.
+
+Each `source.pt` was hash-checked on Jean Zay and deployed: dev jobs 836254
+(L3 corruption-aware), 836255 (L6 corruption-aware) and 836919 (L6
+standard), all COMPLETED.
+
+`ebl runs inspect --verify-artifacts --require-complete` passed for all 18
+bundles of each lifecycle. `workflow collect` produced 90 deployment rows per
+lifecycle with no duplicates. Only the collected `deployments.{json,csv}` were
+copied back to local `results/lifecycles/<id>/collected/`. The user declined
+copying the bundles back, so they stay on Jean Zay `$SCRATCH` and on the
+training hosts.
+
+Nothing is running. The next decision (which sources carry forward to
+Experiment 2) is in the result note.
