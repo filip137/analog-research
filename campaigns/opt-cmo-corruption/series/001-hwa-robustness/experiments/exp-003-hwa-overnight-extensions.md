@@ -122,6 +122,25 @@ the job's temp directory. Each watcher:
 
 Each stops with `FAIL` on an unexpected state.
 
-### Current handoff (2026-10-09)
+### Current handoff (2026-10-09, 23:00)
 
-Handles are recorded below as they are created.
+**Source commit:** `69f6b47`, shipped as a git bundle. Clean clones
+`hwa-69f6b47` are staged on `fifi`, `nom-cool-1`, `riri`, `loulou`, `trex`
+and Jean Zay. On every host the corpus (`ce58085a…`) and the teacher
+(`2d74da66…`) were verified by SHA-256. All four lifecycles are planned on
+Jean Zay.
+
+| Work | Where | Handle | State at 23:00 |
+| --- | --- | --- | --- |
+| C: four L3 trainings (`standard_hwa`, `standard_hwa_6pct`, `cdt_random_3pct`, `cdt_random_5pct`) | `nom-cool-1` (RTX 3090) | detached PID 3984068 (`logs/exp1c-l3-nomcool1.pid`), log `logs/exp1c-l3-nomcool1.log` | running from 22:54 |
+| A then B (`standard_hwa_9pct`, `cdt_random_mixed`; then decay `standard_hwa`, `cdt_random_3pct`) | `fifi` (RTX 5090), `launch/chain_exp1c_fifi.sh`. It waits for the Experiment 1b chain and an idle GPU | tmux `opt-exp1c-l6`, log `logs/exp1c-l6-fifi.log` | waiting for Experiment 1b (about 01:10) |
+| D: two seed-2 trainings | the first idle RTX 5090 among `fifi`, `riri`, `loulou`, `trex`, between 22:00 and 06:15 | local `dispatch_d.sh` (log `exp1b/dispatch-d.log`); on launch, tmux `opt-exp1c-seed2` | polling every 5 min; nothing idle at 23:00 |
+| Jean Zay shared jobs | A 844412, B 844413, C 844414 (with `hwa__pretrained`), D 844415 | `logs/x1c-*-shared-*.out` | all complete |
+| C `pretrained` deployments | Jean Zay 844416 | `logs/x1c-c-pre-844416.out` | running |
+| Deploy pipelines | local `pipeline.sh`, one per lifecycle (logs `exp1b/pipeline-{a,b,c}.log`); D's runs inside the dispatcher | background tasks | waiting for sources |
+
+**Next:**
+- When each pipeline reports `DONE`, check the inspect outputs under
+  `results/lifecycles/<id>/collected/`.
+- Write `results/exp-003.md` with every part that completed. A part that
+  never launched is labelled not run.

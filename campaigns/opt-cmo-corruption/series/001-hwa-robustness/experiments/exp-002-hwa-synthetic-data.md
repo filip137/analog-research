@@ -1,7 +1,7 @@
 ---
 id: "exp-002"
 title: "Experiment 1b: L6 HWA sources distilled on 50 M teacher-generated tokens, with stronger noise and an overestimated fault rate"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-002: Experiment 1b, HWA on teacher-generated text (L6)
@@ -168,7 +168,7 @@ reduction of at least 10 %. It is applied to these comparisons:
 
 ## Execution and monitoring handoff
 
-**State:** running. The launch was authorized on 2026-10-09 (about 22:30):
+**State:** complete (2026-10-10, 01:25); result: [exp-002](../results/exp-002.md). The launch was authorized on 2026-10-09 (about 22:30):
 "Launch tonight after smoke".
 
 **Lifecycles:** `opt125m-cmo-l6-exp1b` (`f30138e57e24`) and the smoke
