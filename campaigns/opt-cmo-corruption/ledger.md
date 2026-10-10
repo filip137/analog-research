@@ -4,7 +4,7 @@
 
 Sources: campaign experiment metadata and reviewer-written result notes. No raw evidence or live job state is inferred.
 
-Counts: complete=2, running=2.
+Counts: complete=3, running=1.
 
 ## Experiments
 
@@ -13,7 +13,7 @@ Counts: complete=2, running=2.
 | [exp-001 — Experiment 1: standard versus corruption-aware HWA under 0-5 % stuck CMO devices](series/001-hwa-robustness/experiments/exp-001-hwa-source-robustness.md) | complete | None declared | [validated-local](series/001-hwa-robustness/results/exp-001.md): OPT-125M with 3 or 6 CMO MLPs, no retraining: both HWA sources beat the pretrained model at 1-5 % stuck devices on all 5 arrays; standard HWA wins at 0-1 %, corruption-aware HWA from 2-3 % up |
 | [exp-002 — Experiment 1b: L6 HWA sources distilled on 50 M teacher-generated tokens, with stronger noise and an overestimated fault rate](series/001-hwa-robustness/experiments/exp-002-hwa-synthetic-data.md) | complete | None declared | [validated-local](series/001-hwa-robustness/results/exp-002.md): L6 HWA on 50 M teacher-generated tokens: much worse WikiText-2 test fidelity than WikiText-trained HWA (2-2.5x KL at 0 %); HWA still essential at 1-5 %; corruption-aware crossover moves to 4 %; 6 % noise and 5 % training corruption are not material improvements |
 | [exp-003 — Experiment 1c: overnight extensions of Experiment 1b (9 % noise, mixed-rate corruption, LR decay, L3, training seed)](series/001-hwa-robustness/experiments/exp-003-hwa-overnight-extensions.md) | running | None declared | No result recorded. |
-| [exp-004 — Experiment 1d: cross-domain evaluation of WikiText-trained and generated-text-trained L6 HWA sources](series/001-hwa-robustness/experiments/exp-004-cross-domain-evaluation.md) | running | None declared | No result recorded. |
+| [exp-004 — Experiment 1d: cross-domain evaluation of WikiText-trained and generated-text-trained L6 HWA sources](series/001-hwa-robustness/experiments/exp-004-cross-domain-evaluation.md) | complete | None declared | [validated-local](series/001-hwa-robustness/results/exp-004.md): Training corpus x test domain (L6): pure domain specialization - each corpus wins on its own test domain at every rate (34-150 % lower KL); corruption-aware HWA's high-rate advantage holds in-domain (from 3 %) but largely vanishes out of domain |
 
 ## Hypothesis evidence
 

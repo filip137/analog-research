@@ -1,7 +1,7 @@
 ---
 id: "exp-004"
 title: "Experiment 1d: cross-domain evaluation of WikiText-trained and generated-text-trained L6 HWA sources"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-004: Experiment 1d, training corpus × test domain (L6)
@@ -93,3 +93,20 @@ lifecycles are planned on Jean Zay.
 | Shared jobs | Jean Zay 850483 (WikiText-trained), 850484 (generated-text-trained) | `logs/x1d-*-shared-*.out` | submitted |
 | `pretrained` deployments | Jean Zay 850485, 850486 | `logs/x1d-*-pre-*.out` | dependent on the shared jobs |
 | Deploy pipelines | local `pipeline2.sh` (logs `exp1b/pipeline-1d-{wiki,synth}.log`) | background tasks | waiting for sources |
+
+**Updates.**
+- **03:40.** Both WikiText-trained sources finished on `riri`, about
+  33 min each, and were deployed as Jean Zay 851215 and 851970.
+- **Tensor-identity guard:** the retrained `cdt_random_3pct` is
+  tensor-identical to Experiment 1 L6 `cdt_random_3pct` (compared on `riri`,
+  every tensor `torch.equal`). Its generated-text test scores are therefore
+  those of the exact Experiment 1 weights.
+- `standard_hwa` has no same-platform original: Experiment 1's was trained on
+  a 3090.
+
+- **05:04, complete.** Generated-text-trained sources deployed as Jean Zay
+  852590 and 853334. Both are tensor-identical to Experiment 1b's.
+  - Inspect passed for both lifecycles: 18 + 18 Jean Zay bundles and the
+    `riri` bundles.
+  - Collect: 90 + 90 rows, no duplicates.
+  - Result: [exp-004](../results/exp-004.md).

@@ -196,15 +196,24 @@ Jean Zay.
 - **B, complete (03:41).** Deployments: Jean Zay 850950 and 851748.
   - Inspect passed for all 12 Jean Zay bundles and the `fifi` bundles.
   - 60 rows collected.
-- **E, queued (02:45).** Commit `31c7652`, Jean Zay shared job 850552.
-  - Runs on `fifi` in tmux `opt-exp1c-e`, after `opt-exp1c-l6` ends and the
-    GPU is idle; log `logs/exp1c-e-fifi.log`.
-  - Pipeline log `exp1b/pipeline-e.log`.
-- **C, in progress.** `standard_hwa` was deployed as Jean Zay 846442.
-- **Experiment 1b's watcher fault** affected C as well. Its first collection
-  failed silently because the helper sourced `/etc/profile` under `set -u`.
-  Jean Zay's `launch/inspect_collect.sh` was fixed at 01:20, before any
-  Experiment 1c pipeline reached it.
+- **E, complete (04:52).** Commit `31c7652`, Jean Zay shared job 850552.
+  Ran on `fifi` (tmux `opt-exp1c-e`, `logs/exp1c-e-fifi.log`) from about
+  03:27, after part B. Deployments: Jean Zay 852314 and 853043.
+  - Inspect passed for all 12 Jean Zay bundles and the `fifi` bundles.
+  - 60 rows collected.
+- **C, complete (04:23).** All four L3 trainings ran on `nom-cool-1`, about
+  79 min each. Deployments: Jean Zay 846442, 849115, 851003 and 852507, plus
+  `pretrained` 844416.
+  - Inspect passed for all 28 Jean Zay bundles and the `nom-cool-1` bundles.
+  - 150 rows collected, no duplicates.
+- **F, queued (03:45).** Commit `8ce23e3`, Jean Zay shared job 852015.
+  - Runs on `riri` in tmux `opt-exp1c-f` after Experiment 1d's chain; log
+    `logs/exp1c-f-riri.log`.
+  - Pipeline log `exp1b/pipeline-f.log`.
+- **Experiment 1b's watcher fault** (its first collection failed silently,
+  because the helper sourced `/etc/profile` under `set -u`) did not affect
+  Experiment 1c. Jean Zay's `launch/inspect_collect.sh` was fixed at 01:20,
+  before any Experiment 1c pipeline reached it.
 
 **Next:**
 - When each pipeline reports `DONE`, check the inspect outputs under
