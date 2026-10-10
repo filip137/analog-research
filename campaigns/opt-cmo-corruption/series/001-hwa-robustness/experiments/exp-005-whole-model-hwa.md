@@ -1,6 +1,6 @@
 ---
 id: "exp-005"
-title: "Experiment 1e: matched HWA scopes with cosine decay"
+title: "Experiment 1e: HWA scopes and digital learning-rate development"
 status: "running"
 hypotheses: []
 ---
@@ -61,6 +61,9 @@ Strict definitions: `campaigns/opt-cmo-corruption/lifecycles/opt125m-cmo-l6-exp1
 Preparation: `campaigns/opt-cmo-corruption/launch/exp1e_digital_lr.py`.
 Local evidence: `results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr/`.
 Remote source/results: `/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-lr-20261011/`.
+The corrected reporting revision uses the separate
+`/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-values-20261011/` checkout;
+the first path retains the original canaries unchanged.
 New phase ID: `opt-cmo-exp1e-digital-lr-20261011`. Bound the incremental phase to
 **10 GPU-hours, 16 GB storage and 8 hours from first admission**, including readiness,
 failed attempts and any authorized operational retry. Full-worker hard cap 3 h;
@@ -926,3 +929,64 @@ Charged GPU time is 8.0377 h, plus about 1.1324 h of active allocation
 20.746 GB against 40 GB. The original 07:17:43 Paris deadline
 and all prior charges are preserved. Exact observations are in the cosine
 evidence root’s `readiness/progress-20261011-0010*.json`.
+
+### Current digital-LR handoff, 2026-10-11 01:54 Paris
+
+The four full development jobs are released under the original phase budget.
+Two are running after warm-up with finite native metrics; two wait for those
+GPUs. The whole transformer trains in every case; the zero-rate endpoint holds
+the additional digital values fixed. Analog/calibration peak and floor remain
+5e-3 and 1e-3 in all four.
+
+| Digital peak | Job ID | Host/state | Attempt |
+|---|---|---|---|
+| 0 | `opt125m-cmo-l6-exp1e-digital-lr0-values` | fifi, running | `d07ae74a340c4e74a6c9825f0d2196d3` |
+| 1e-4 | `opt125m-cmo-l6-exp1e-digital-lr1em4-values` | loulou, running | `c085c7fee1b24d1cbcd56dd80bd120a0` |
+| 1e-5 | `opt125m-cmo-l6-exp1e-digital-lr1em5-values` | queued for fifi/loulou | none |
+| 1e-3 | `opt125m-cmo-l6-exp1e-digital-lr1em3-values` | queued for fifi/loulou | none |
+
+Tmux sessions are `<job-id>-<attempt>` from the table. At handoff the worker PIDs
+are 980807 (fifi) and 711694 (loulou). Logs are
+`/home/filip/analog-research/opt-cmo-exp1/worker-receipts/b0150a717b6f993eae12f20fee55e7f0a4b42716/<job-id>/<attempt>/run.log`.
+The source is clean revision `b0150a717b6f993eae12f20fee55e7f0a4b42716`.
+Exact native manifest, worker spec, result-root paths and all preparation hashes
+are in `prepared/values/{fifi,loulou}.json` under the local evidence root. Queue
+specs are in `prepared/values/executions/`; they use the clean local
+`controller-values/` checkout for completion hooks. The four original unstarted
+job specs were cancelled with zero attempts and zero charges; they remain
+preserved in the ledger, with an explicit replacement receipt. They are not
+additional scientific trials.
+
+The phase manifest remains
+`8edf3ee91d0a6a1beca1f612f803f4358400055208ec016ef55d20450bb0f852`.
+Its immutable handoff gate passed all three native canaries, full artifact
+inspection, compact collection and the signed-zero correction. The corrected
+zero canary again matched the analog canary's development score exactly and
+reported unchanged numerical digital values. The original source was tested with
+273 passing workflow/collection checks (one skip); the reporting regression and
+focused tests passed 66 checks. Readiness cost is **0.108891 GPU-hours**.
+
+One `run-watch-queue.service` still owns every job, with a fresh heartbeat and
+no host errors. At 01:53:40 Paris it had observed both full workers at update
+206 with the expected independent group rates. Service PID 342022; native
+observations and preserved ownership are recorded in `readiness/full-handoff.json`.
+Live restart retained exact worker PID/start/boot identities, and duplicate
+preparation created no additional attempts. Incident 6 records the reporting
+defect; its bounded read-only investigator completed and its immutable snapshot,
+diagnosis and recommendation were verified. It recommended the completed canary
+gate and no scientific changes. The earlier injected incident test remains intact.
+
+Full jobs retain measured HWA expectation 6,500 s and a three-hour hard cap;
+queueing is not a stall. The next campaign semantic poll is within five minutes.
+The **10 GPU-hour and 16 GB caps** are unchanged, with observed storage about
+3.226 GB before main artifacts grew. The original first-admission deadline is
+**09:36:58 Paris**; readiness repairs did not reset it. Expected completion of
+both waves, validation and collection is **05:20–05:50 Paris**, subject to GPU
+availability for the second wave.
+
+The completion hook runs `campaigns.lifecycle_collect` in explicit source-only
+mode, then writes `collected/digital-lr-review.json`. It recommends no rate until
+all four candidate collections pass; the Reviewer compares their development
+results with `reference-sources.json` and records the scientific decision here
+and in the result note. No held-out test evaluation or further grid extension
+is authorized by this handoff. Leave the shared service running after completion.
