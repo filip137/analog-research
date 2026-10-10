@@ -1,7 +1,7 @@
 ---
 id: "exp-005"
 title: "Experiment 1e: develop whole-model HWA, then compare matched scopes"
-status: "planned"
+status: "running"
 hypotheses: []
 ---
 # exp-005: whole-transformer HWA
@@ -18,7 +18,7 @@ On 2026-10-10 the user lifted the weekend two-GPU admission cap and authorized a
 higher compute allowance; the bounded campaign allowance is now 16 GPU-hours.
 The six-cell grid below is the recommended default offered to the user, using the
 previously discussed 1e-5/1e-4/1e-3 range. Later scientific changes require review.
-Implementation and readiness checks are in progress; no scientific candidates have launched yet.
+Both readiness smokes passed. The calibrated handoff gate is open and all six full scientific candidates are released to the persistent queue.
 
 ## Frozen focused comparison
 
@@ -191,6 +191,60 @@ without duplicate launches; preserved budgets/incidents; tamper/invalid-metric a
 failed-gate checks; tmux detach/terminal receipts; watchdog and lease expiry tests.
 The future Slurm phase stays disabled until its adapter and live canary pass.
 
-Current state: scheduler/service/tmux implementation and readiness validation in
-progress. No production job IDs or tmux handles have been issued yet. Replace this
-paragraph with the verified live handoff before transferring execution ownership.
+### Current execution and monitoring handoff (2026-10-10)
+
+Owner: persistent `run-watch-queue.service` on nom-cool-2, with user lingering
+and `WatchdogSec=660`. It owns every case; interactive agents are implementation
+helpers, not execution owners. Training source is commit `237de7d49b05fd485a817f73d8b46d3cc30e4592`;
+controller-only reservation repair is `bdbee05`.
+
+Durable queue campaign: `opt-cmo-exp1e-development-20261010`.
+Manifest SHA-256: `e8c2b404b808786a8daad7edf474a74568eb76014161334ea2a930764b8619b7`.
+The eight job IDs equal their lifecycle IDs. Native plans, slices and input/config
+hashes are in the four host receipts under the local
+`results/lifecycles/opt125m-cmo-l6-exp1e-development/hosts/` directory.
+The exact job specifications and campaign contract are under its `queue/` directory.
+
+Remote checkout on each host:
+`/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-development-20261010a`.
+Worker receipts/logs are under
+`/home/filip/analog-research/opt-cmo-exp1/worker-receipts/237de7d49b05fd485a817f73d8b46d3cc30e4592/<job-id>/<attempt-token>/`.
+Tmux sessions are named `<job-id>-<attempt-token>` and retain the terminal pane.
+Use `ssh -F ~/.ssh/config -t HOST tmux attach -t SESSION` to attach.
+
+Current scientific execution: `opt125m-cmo-l6-exp1e-dev-linear-lr1em4` is running
+on loulou, attempt `01eede827d1a4cd7af528580992c7bc6`; the other five candidates
+are queued for idle prepared RTX 5090s. Exact tmux session:
+`opt125m-cmo-l6-exp1e-dev-linear-lr1em4-01eede827d1a4cd7af528580992c7bc6`.
+The full-trial handoff gate is recorded in `readiness/handoff-gate.json`.
+At 09:28:44 UTC the service observed the live worker (PID 527684, recorded
+boot/start identity), finite loss 0.08011 at update 206, and completed warm-up.
+The next regular campaign check is due around 09:33:44 UTC. The complete live
+observation, ownership and remaining-budget receipt is `readiness/live-handoff.json`.
+At release, smokes consumed 282.57 GPU-seconds (0.0785 GPU-hours), leaving
+15.9215 GPU-hours including the first candidate's 1.5-hour reservation.
+
+The initial smokes both executed on loulou after fifi became occupied by another
+user. Step attempt: `3568591cb3c943b1b8633530c3efd11c`; linear attempt:
+`d5fbd9d96016443e8781cc39b45b4e5c`. The linear placement amendment was recorded
+before any attempt and preserved its exact configuration and budget.
+
+The campaign window started at 09:19:34 UTC (11:19:34 Paris) and closes at
+21:19:34 UTC (23:19:34 Paris). Full candidates have 90-minute allowances;
+smoke measurements project about 50–60 minutes each. Preparation and CMO devices
+complete in seconds; HWA metrics advance roughly every 100 updates, with selection
+every 512. Training startup/stall thresholds are 600 seconds, with a 3,600-second expected
+case duration. The handoff receipt freezes this measured calibration.
+
+Readiness evidence and active-restart receipts are under the local `readiness/`
+directory. Full-hash validation and compact collection are native queue phases;
+failed collection retries do not retrain. Remaining budgets, leases, events and
+incident reports persist in `~/.local/state/run-watch/queue/queue.sqlite3`.
+`systemctl --user status run-watch-queue.service` verifies the controller;
+`python -m campaigns.execution_service status` exposes durable observations.
+The service heartbeat is `~/.local/state/run-watch/queue/service-status.json`.
+
+The automatic collector writes `collected/index.json` and
+`collected/review/development.{json,md}` plus PNG/PDF curves. Its report always
+leaves the broader comparison at `awaiting_scientific_review`. No broader jobs
+are registered. Slurm execution is disabled for this focused phase.
