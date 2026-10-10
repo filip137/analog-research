@@ -617,3 +617,30 @@ eight complete) and separately records zero of two duration cases in
 `collected/review/duration/duration.{json,md}`. Separate duration plots will be
 created when evidence arrives. Both sections retain the scientific-review gate;
 no broader recipes or deployment rows have been released.
+
+### Live duration handoff, 2026-10-10 18:08 Paris
+
+Both 1e-2 predecessors completed validation and collection. The automatic
+dispatcher then launched exactly one attempt for each duration case at 16:56
+Paris:
+
+| Host | Duration case | Attempt |
+|---|---|---|
+| fifi / RTX 5090 | step 1e-3, tail4pass | `c82f05e4104d4c528b41a120864fd4e7` |
+| loulou / RTX 5090 | step 5e-3, tail4pass | `d99f78c4ba8c40e2ade57b2c160b6103` |
+
+The watchdog has observed both workers and supervisors with valid metrics;
+its heartbeat is fresh, with no host errors or new incidents. Direct artifact
+reads showed 17,509 and 17,765 of 25,600 updates respectively. Both emitted
+finite selection metrics through update 17,408. Measured tail throughput
+projects training completion near 18:38–18:40, with validation and collection
+expected by approximately 18:40–18:45 Paris. The later start reflects the
+1e-2 step candidate's longer runtime, not a dispatch interruption.
+
+Charged completed work is 11.9285 GPU-hours; the active pair has consumed about
+2.3241 additional GPU-hours and retains its six-hour hard reservation. The
+unreserved allowance is 2.0715 GPU-hours against the cumulative 20-hour cap.
+Observed storage is 32.9006 GB against 36 GB. Existing tmux session naming,
+five-minute supervision and the original deadline are unchanged. The result
+note records the complete ten-case outcome and explicitly partial duration
+observations; no broader jobs have been submitted.
