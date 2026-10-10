@@ -825,3 +825,26 @@ interpretation remains partial until all required coverage has been reviewed.
 Verified handoff evidence: `readiness/handoff-tests.json`, `handoff-gate.json`,
 `live-handoff.json` and `dispatch-handoff.json` under
 `results/lifecycles/opt125m-cmo-l6-exp1e-cosine/`.
+
+
+### Current cosine handoff, 2026-10-11 00:10 Paris
+
+Six of seven main jobs are complete, validated and collected (five trained
+sources plus pretrained), covering 180/210 deployment rows. Only
+`exp1e-cosine-standard_hwa_9pct` is active on loulou, attempt
+`db7bc812848943f8a40c163db783a7bb`; direct native observation reached update
+24,777/25,600 with finite metrics and live worker/supervisor. Fifi has no remaining
+campaign allocation. The active tmux session is
+`exp1e-cosine-standard_hwa_9pct-db7bc812848943f8a40c163db783a7bb`.
+
+The shared watchdog remains active, with a fresh heartbeat and no host errors.
+No new operational incidents or retries occurred. Collection and the automatic
+full-coverage comparison remain armed for the final source; expected finish is
+around 00:20 Paris. The result note records partial paired findings without
+changing the frozen protocol or dispatching any further experiment.
+
+Charged GPU time is 8.0377 h, plus about 1.1324 h of active allocation
+(9.1700 h estimated total against 18 h); observed storage is
+20.746 GB against 40 GB. The original 07:17:43 Paris deadline
+and all prior charges are preserved. Exact observations are in the cosine
+evidence root’s `readiness/progress-20261011-0010*.json`.
