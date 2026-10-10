@@ -37,8 +37,12 @@ Both readiness smokes passed. The calibrated handoff gate is open and all six fu
 | Held fixed | Adam defaults, no weight decay or gradient clipping; current q bounds [-1,1]; teacher-KL objective; HWA seed 41 and data seed 20261008 |
 | Selection | Minimum mean development KL across healthy and 3% random-stuck cases, using selection arrays 211001 and 211002; evaluate at initialization and every 512 updates |
 
-Training has exactly the same batches and noise stream across the six cells.
-The rate and decay family are the only intended interventions. Schedule factors
+All cells retain the same corpus, cohorts, seeds and noise distributions. On
+2026-10-10 the user explicitly waived exact cross-GPU batch/noise matching
+("i dont care about the matching check") and authorized continuing this grid
+on both GPU models. Realized batch orders and noise differ between 3090s and
+5090s; record host/GPU with each result. No portable-RNG restart is requested.
+The rate and decay family are the intended interventions. Schedule factors
 are evaluated before each one-based optimizer update: warm-up is s/W; linear
 decay is (T-s)/(T-W); step decay changes only for s > 10,240.
 
@@ -147,8 +151,8 @@ All four RTX 5090 hosts (fifi, loulou, riri, trex) are eligible when idle, with 
 user's weekend fleet-cap override. Prefer the already compatible PyTorch 2.11
 hosts, one worker per GPU. Do not disturb or share with existing jobs. The user
 also explicitly authorized nom-cool-1 and the local nom-cool-2 RTX 3090s on
-2026-10-10. The local full-batch smoke fits, but full 3090 admission is held by
-the cross-hardware randomness failure described below. Jean Zay is held for the later
+2026-10-10. Both full-batch smokes passed and full 3090 admission is enabled
+under the user's explicit matching waiver below. Jean Zay is held for the later
 deployment phase and requires its own validated adapter and production canary.
 
 Measure full-batch peak memory, throughput, and actual storage during the 512-update
@@ -231,7 +235,7 @@ user. Step attempt: `3568591cb3c943b1b8633530c3efd11c`; linear attempt:
 `d5fbd9d96016443e8781cc39b45b4e5c`. The linear placement amendment was recorded
 before any attempt and preserved its exact configuration and budget.
 
-## Additional RTX 3090 readiness and scientific hold
+## Additional RTX 3090 readiness and admission
 
 Both added GPUs are healthy outside the interactive sandbox. Stage the same
 training source and pinned inputs in the dedicated checkout above, with an
@@ -259,7 +263,7 @@ session; its hashes and the exact required placement `PATH` are recorded in
 `readiness/3090/nom-cool-1-tmux-fix.json`. Future nom-cool-1 placements must retain
 that PATH. One classified pre-start operational retry uses the original
 readiness allowance and campaign budget; it grants no full scientific admission.
-The retry is running with attempt `262ff8d09a454354943964610f842919`, in tmux
+The retry completed and passed collection with attempt `262ff8d09a454354943964610f842919`, in tmux
 session `opt125m-cmo-l6-exp1e-dev-linear-lr1em4-smoke-262ff8d09a454354943964610f842919`.
 Use the isolated runtime's `bin/tmux` to attach on nom-cool-1. The fresh service
 observation and restart-recovery receipt is `readiness/3090/live-handoff.json`.
@@ -271,28 +275,47 @@ HWA noise despite equal seeds and Torch/CUDA versions. Permanent CPU-generated
 fault maps remain matched. The current CUDA sampling implementation therefore
 does not satisfy the frozen matched-randomness contract across GPU models.
 
-Do not add full 3090 placements to the current grid. Incident 2,
-`cross_hardware_randomness_mismatch`, has a durable bounded read-only investigator
-report. The existing 5090 trial continues and the five pending scientific cases
-retain their 5090 placements. The user has been asked to choose between retaining
-that grid and explicitly restarting a matched grid with versioned portable
-randomness on all authorized GPUs. A portable profile must pass complete tensor
-hash checks across targets and preserve legacy bundle replay; seeds or matching
-prefixes alone are insufficient. No scientific configuration has been changed.
-The immutable `rtx3090_matched_randomness` gate records `passed: false`; the
-original 5090 handoff gate remains unchanged.
+The user explicitly instructed continuing despite this matching check. Both
+3090s are now placements for all five previously unlaunched scientific cases;
+the running 5090 case continues unchanged. Incident 2 and its failed diagnostic
+gate remain preserved, with an append-only user waiver bound to that exact
+gate receipt. Controller revision `4b2c66e` honors this waiver; all numerical,
+artifact, budget and other validation requirements remain enforced. The previous
+gate also blocked queued 5090 jobs because it was applied campaign-wide; the
+waiver removes that unintended block. Do not restart or retune this grid to
+obtain identical random streams. The authorization, old/new job specs, measured
+runtime amendments and calibration are in
+`readiness/3090/full-admission-user-waiver.json`.
+
+Full trials admitted after the user waiver:
+
+| Host | Candidate | Attempt |
+|---|---|---|
+| nom-cool-1, RTX 3090 | step, 1e-4 | `f7e698abff434db7b1f2f7834bf8d895` |
+| local nom-cool-2, RTX 3090 | linear, 1e-5 | `080f40c75ed84fdd9869f3a7a5c20bc5` |
+| fifi, RTX 5090 | step, 1e-5 | `f138205dded54b32afcf0d065dcd6df8` |
+
+The original loulou linear-1e-4 attempt continues. Sessions are named
+`<lifecycle-id>-<attempt>`; `tmux ls` lists them (on nom-cool-1 use
+`~/analog-research/opt-cmo-exp1/runtime-exp1e-cu128/bin/tmux`). The remaining
+two 1e-3 candidates stay queued under the same resource and budget accounting.
+Fresh worker observations and preserved waiver after restart are recorded in
+`readiness/3090/full-trials-live-handoff.json`.
 
 Measured 3090 throughput projects to roughly 2–2.5 hours for 12,800 updates.
-If full 3090 training is later admitted, record a measured wall-time amendment;
-the current 90-minute worker limit is insufficient. Readiness success is not
-permission to change the update budget, batch size or checkpoint-selection rule.
+The new 3090 worker wrappers permit 10,800 seconds (three hours), with 9,000
+seconds expected runtime. Pending job allowances are three hours within the
+same 16 GPU-hour campaign cap. The measured memory reservation is 21,500 MiB
+plus 1,024 MiB headroom. Existing 5090 worker wrappers retain their 90-minute
+timeout. Update counts, batch size and checkpoint selection are unchanged.
 
 The campaign window started at 09:19:34 UTC (11:19:34 Paris) and closes at
-21:19:34 UTC (23:19:34 Paris). Full candidates have 90-minute allowances;
-smoke measurements project about 50–60 minutes each. Preparation and CMO devices
+21:19:34 UTC (23:19:34 Paris). The 5090 smoke measurements project about
+50–60 minutes per candidate; 3090 calibration is recorded above. Preparation and CMO devices
 complete in seconds; HWA metrics advance roughly every 100 updates, with selection
 every 512. Training startup/stall thresholds are 600 seconds, with a 3,600-second expected
-case duration. The handoff receipt freezes this measured calibration.
+case duration on 5090s. The handoff receipt freezes this measured calibration;
+the additive target calibration uses 9,000 seconds for either 3090.
 
 Readiness evidence and active-restart receipts are under the local `readiness/`
 directory. Full-hash validation and compact collection are native queue phases;
