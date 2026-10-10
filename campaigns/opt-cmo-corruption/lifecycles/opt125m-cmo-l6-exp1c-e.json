@@ -1,0 +1,171 @@
+{
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "lifecycle_id": "opt125m-cmo-l6-exp1c-e",
+  "question": {
+    "text": "Experiment 1c-E: on the Experiment 1b L6 setup, does the noise ladder continue at 12 % per-channel noise, and do 3 % temporary stuck devices still add robustness on top of 9 % noise?",
+    "decision": "Which HWA recipe to use for on-chip recovery sources (see campaigns/opt-cmo-corruption/series/001-hwa-robustness/experiments/exp-003-hwa-overnight-extensions.md).",
+    "primary_metric": "teacher_kl",
+    "evidence_class": "exploratory_model_based"
+  },
+  "network": {
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m",
+    "analog_decoder_layers": 6
+  },
+  "data": {
+    "corpus": {
+      "name": "opt125m-synthetic-50m",
+      "sha256": "ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984"
+    },
+    "sequence_length": 256,
+    "data_seed": 20261008,
+    "hwa_sequences": 195226,
+    "recovery_sequences": 8192,
+    "development_sequences": 256,
+    "test_sequences": 1024,
+    "evaluation": "test",
+    "max_examples": 0
+  },
+  "devices": {
+    "technology": "cmo",
+    "model": "aihwkit_1.1.0_reram_cmo",
+    "noise_scale": 1.0,
+    "assignment_seeds": [
+      271001,
+      271002,
+      271003,
+      271004,
+      271005
+    ],
+    "selection_seeds": [
+      211001,
+      211002
+    ],
+    "endpoint_seed_offset": 10000
+  },
+  "defects": {
+    "placement": "hierarchical_die_array",
+    "persistence": "permanent",
+    "arrays_per_die": 48,
+    "cases": [
+      {
+        "kind": "none",
+        "rate_ppm": 0,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 10000,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 20000,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 30000,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 40000,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 50000,
+        "die_concentration": null,
+        "array_concentration": null
+      }
+    ]
+  },
+  "deployment": {
+    "scaling": "per_output_channel_absmax",
+    "encoding": "active_reference_pair",
+    "tile_size": 256,
+    "read_noise": 0.0,
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias"
+  },
+  "hwa": {
+    "noise_model": "additive_gaussian_weight",
+    "noise_std": 0.03,
+    "noise_scaling": "output_channel_abs_max",
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "learning_rate": 0.005,
+    "lr_milestones": [],
+    "lr_decay": 1.0,
+    "epochs": 50,
+    "sequences_per_epoch": 8192,
+    "batch_size": 32,
+    "augment": false,
+    "seed": 41,
+    "selection": {
+      "every_epochs": 2,
+      "extension_epochs": 0
+    },
+    "arms": [
+      {
+        "id": "standard_hwa_12pct",
+        "method": "hwa",
+        "noise_strength": 4.0,
+        "corruption": null,
+        "selection_cases": [
+          {
+            "kind": "none",
+            "rate_ppm": 0,
+            "die_concentration": null,
+            "array_concentration": null
+          },
+          {
+            "kind": "random",
+            "rate_ppm": 30000,
+            "die_concentration": null,
+            "array_concentration": null
+          }
+        ]
+      },
+      {
+        "id": "cdt_random_3pct_noise9",
+        "method": "hwa",
+        "noise_strength": 3.0,
+        "corruption": {
+          "kind": "random",
+          "rates_ppm": [
+            30000
+          ]
+        },
+        "selection_cases": [
+          {
+            "kind": "none",
+            "rate_ppm": 0,
+            "die_concentration": null,
+            "array_concentration": null
+          },
+          {
+            "kind": "random",
+            "rate_ppm": 30000,
+            "die_concentration": null,
+            "array_concentration": null
+          }
+        ]
+      }
+    ]
+  },
+  "program_verify": {
+    "method": "gaussian_endpoint",
+    "acceptance_percent": 2.0,
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "onchip": null
+}

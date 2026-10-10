@@ -81,6 +81,15 @@ the generated-text-trained one on the generated test:
 - **Storage:** about 1 GB.
 - **Monitoring:** the local pipeline watchers, as in exp-003.
 
-### Current handoff (2026-10-10)
+### Current handoff (2026-10-10, 02:35)
 
-Launching; handles are recorded below.
+**Source commit:** `59f8170`. Clean clones `hwa-59f8170` are on `riri` and
+Jean Zay. Both corpora were verified by SHA-256 on both hosts, and both
+lifecycles are planned on Jean Zay.
+
+| Work | Where | Handle | State at 02:35 |
+| --- | --- | --- | --- |
+| Four trainings (WikiText `standard_hwa`, `cdt_random_3pct`; then generated-text `standard_hwa`, `cdt_random_3pct`) | `riri` | tmux `opt-exp1d`, logs `logs/exp1d-{wiki,synth}-riri.log` | running from 02:33. Epoch-0 development KL 1.4964 equals Experiment 1 L6 |
+| Shared jobs | Jean Zay 850483 (WikiText-trained), 850484 (generated-text-trained) | `logs/x1d-*-shared-*.out` | submitted |
+| `pretrained` deployments | Jean Zay 850485, 850486 | `logs/x1d-*-pre-*.out` | dependent on the shared jobs |
+| Deploy pipelines | local `pipeline2.sh` (logs `exp1b/pipeline-1d-{wiki,synth}.log`) | background tasks | waiting for sources |

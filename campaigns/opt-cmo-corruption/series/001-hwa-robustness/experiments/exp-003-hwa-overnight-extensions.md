@@ -74,6 +74,30 @@ pooled.
   08:00.
 - An unlaunched part is reported as not run, not as a negative result.
 
+## Part E (added 2026-10-10, 02:40, before its results)
+
+**Motivation.** Part A found standard HWA at 9 % noise in the best set at
+every rate from 1 % to 5 %. Read directly against 3 % corruption-aware HWA
+(an exploratory pairing, not predeclared), it is materially better at 0–1 %
+and within 5.3 % at 2–5 %.
+
+**Lifecycle:** `opt125m-cmo-l6-exp1c-e`, with the same shared HWA settings as
+Experiment 1b. Two arms:
+- `standard_hwa_12pct`: `noise_strength` 4.0, i.e. 12 %;
+- `cdt_random_3pct_noise9`: 9 % noise plus 3 % random stuck devices.
+
+**Rule (frozen before results):**
+- `standard_hwa_12pct` against `standard_hwa_9pct` and `cdt_random_3pct`.
+- `cdt_random_3pct_noise9` against `standard_hwa_9pct` and
+  `cdt_random_3pct`.
+- The per-rate best set over every L6 generated-text source.
+
+**Expected outcome.** 12 % noise costs more at 0 % (more than 10 % against
+9 %) and gains little at 4–5 %. The combination sits close to 9 % noise.
+
+**Placement.** On `fifi`, after part B, starting about 04:15 and taking about
+75 min. Deployments on Jean Zay.
+
 ## Placement, budget and stopping
 
 - **A then B** on `fifi`, chained after Experiment 1b's four trainings. That
