@@ -329,3 +329,30 @@ The automatic collector writes `collected/index.json` and
 `collected/review/development.{json,md}` plus PNG/PDF curves. Its report always
 leaves the broader comparison at `awaiting_scientific_review`. No broader jobs
 are registered. Slurm execution is disabled for this focused phase.
+
+### Live handoff, 2026-10-10 13:06 Paris
+
+Linear 1e-4 on loulou and step 1e-5 on fifi are complete, collected and
+validated; partial scientific interpretation is in the result note. Both 3090
+trials continue with finite metrics. The final two candidates were admitted:
+
+| Host | Candidate | Attempt |
+|---|---|---|
+| fifi, RTX 5090 | linear, 1e-3 | `09a9d8e4acb14c9089e3baef3ecd1137` |
+| loulou, RTX 5090 | step, 1e-3 | `1f71c30ed2ac45cca765a43b90df8e6f` |
+
+Controller `782cd5c` supports audited storage estimate amendments. A completed
+full case occupies 918,639,322 bytes, so the six training cases now reserve
+1,000,000,000 bytes each instead of the preliminary 1,500,000,000. The original
+manifest, 30 GB cap, GPU/time budgets, all scientific inputs and active attempts
+are preserved. This removes an overly conservative admission block after the
+two 3090 runtimes were staged. The measured evidence, old/new reservations and
+preservation checks are in `readiness/full-storage-calibration.json`; 64 service
+tests passed, including restart recovery and rejection of stale estimates.
+
+At measured throughput, the new 5090 trials should finish near 14:00 Paris and
+the 3090 trials near 14:25–14:40. These are estimates, subject to validation and
+host performance. The persistent watchdog continues to own all four attempts.
+After a controller restart, it observed all four live workers and supervisors,
+finite training metrics, and unchanged attempt tokens. The durable receipt is
+`readiness/full-storage-live-handoff.json`; no duplicate launches occurred.
