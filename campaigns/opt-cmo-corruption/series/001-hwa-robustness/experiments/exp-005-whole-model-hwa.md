@@ -356,3 +356,15 @@ host performance. The persistent watchdog continues to own all four attempts.
 After a controller restart, it observed all four live workers and supervisors,
 finite training metrics, and unchanged attempt tokens. The durable receipt is
 `readiness/full-storage-live-handoff.json`; no duplicate launches occurred.
+
+### Current status, 2026-10-10 14:03 Paris
+
+Both 1e-3 candidates completed native validation and collection; fifi and
+loulou are now free of this campaign's workers. Four of six candidates are
+complete. Only step 1e-4 on nom-cool-1 and linear 1e-5 locally remain active,
+under their existing attempt tokens and tmux sessions. The 13:59 semantic
+observation shows 9,573/12,800 and 10,341/12,800 updates respectively, with finite
+metrics and live workers. The 14:02 watchdog heartbeat is fresh, without host
+errors or new incidents. Measured throughput projects local completion near
+14:25 and nom-cool-1 near 14:35–14:40 Paris, including a small validation margin.
+No full candidates remain queued; the broader comparison remains unsubmitted.
