@@ -933,6 +933,58 @@ def _hwa_arm(raw: Any, path: str, technology: Technology) -> HwaArm:
 
 
 @dataclass(frozen=True)
+class HwaLrSchedule:
+    """A fixed optimizer-update budget; update numbers are one-based."""
+
+    kind: str
+    total_steps: int
+    warmup_steps: int
+    milestone_step: Optional[int] = None
+    decay_factor: Optional[float] = None
+
+    def factor(self, step: int) -> float:
+        if not 0 <= step <= self.total_steps:
+            raise ValueError(f"Expected HWA update in [0, {self.total_steps}]. Provided value: {step!r}.")
+        if self.warmup_steps and step <= self.warmup_steps:
+            return step / self.warmup_steps
+        if self.kind == "linear_warmup_decay":
+            return (self.total_steps - step) / (self.total_steps - self.warmup_steps)
+        return 1.0 if step <= self.milestone_step else self.decay_factor
+
+    def boundary_steps(self) -> set[int]:
+        steps = {0, 1, self.warmup_steps, self.warmup_steps + 1, self.total_steps}
+        if self.milestone_step is not None:
+            steps.update((self.milestone_step, self.milestone_step + 1))
+        return steps
+
+    def to_dict(self) -> dict:
+        value = {"kind": self.kind, "total_steps": self.total_steps, "warmup_steps": self.warmup_steps}
+        if self.kind == "warmup_step_decay":
+            value.update(milestone_step=self.milestone_step, decay_factor=self.decay_factor)
+        return value
+
+
+def _hwa_lr_schedule(raw: Any) -> HwaLrSchedule:
+    path = "hwa.lr_schedule"
+    if not isinstance(raw, Mapping):
+        raise config_error(path, "to be an object", raw)
+    kind = _choice(raw.get("kind"), f"{path}.kind", ("linear_warmup_decay", "warmup_step_decay"))
+    keys = ("kind", "total_steps", "warmup_steps")
+    if kind == "warmup_step_decay":
+        keys += ("milestone_step", "decay_factor")
+    raw = _object(raw, path, keys)
+    total = _integer(raw["total_steps"], f"{path}.total_steps", minimum=1)
+    warmup = _integer(raw["warmup_steps"], f"{path}.warmup_steps", maximum=total - 1)
+    extra = {}
+    if kind == "warmup_step_decay":
+        extra["milestone_step"] = _integer(
+            raw["milestone_step"], f"{path}.milestone_step", minimum=warmup + 1, maximum=total - 1
+        )
+        extra["decay_factor"] = _number(raw["decay_factor"], f"{path}.decay_factor", positive=True, maximum=1.0)
+    return HwaLrSchedule(kind, total, warmup, **extra)
+
+
+@dataclass(frozen=True)
 class Hwa:
     noise_model: str
     objective: str
@@ -952,6 +1004,8 @@ class Hwa:
     # None: every epoch is one pass over the HWA cohort. Otherwise each epoch is
     # the next ``sequences_per_epoch`` of an endless stream of seeded passes.
     sequences_per_epoch: Optional[int] = None
+    # Omitted for historical epoch schedules, preserving their source identities.
+    lr_schedule: Optional[HwaLrSchedule] = None
 
     def arm(self, arm_id: str) -> HwaArm:
         for arm in self.arms:
@@ -967,9 +1021,11 @@ class Hwa:
         if self.noise_std is not None:
             noise.update(noise_std=self.noise_std, noise_scaling=self.noise_scaling)
         stream = {} if self.sequences_per_epoch is None else {"sequences_per_epoch": self.sequences_per_epoch}
+        schedule = {} if self.lr_schedule is None else {"lr_schedule": self.lr_schedule.to_dict()}
         return {
             **noise,
             **stream,
+            **schedule,
             "objective": self.objective,
             "optimizer": self.optimizer,
             "learning_rate": self.learning_rate,
@@ -1009,6 +1065,8 @@ def _hwa(raw: Any, technology: str) -> Hwa:
         keys += ("noise_std", "noise_scaling")
     if isinstance(raw, Mapping) and "sequences_per_epoch" in raw:
         keys += ("sequences_per_epoch",)
+    if isinstance(raw, Mapping) and "lr_schedule" in raw:
+        keys += ("lr_schedule",)
     raw = _object(raw, "hwa", keys)
     selection = _object(raw["selection"], "hwa.selection", ("every_epochs", "extension_epochs"))
     epochs = _integer(raw["epochs"], "hwa.epochs", minimum=1)
@@ -1031,6 +1089,8 @@ def _hwa(raw: Any, technology: str) -> Hwa:
         extra["noise_scaling"] = _choice(raw["noise_scaling"], "hwa.noise_scaling", NOISE_SCALINGS)
     if "sequences_per_epoch" in raw:
         extra["sequences_per_epoch"] = _integer(raw["sequences_per_epoch"], "hwa.sequences_per_epoch", minimum=1)
+    if "lr_schedule" in raw:
+        extra["lr_schedule"] = _hwa_lr_schedule(raw["lr_schedule"])
     return Hwa(
         noise_model=_choice(raw["noise_model"], "hwa.noise_model", (noise_model,)),
         objective=_choice(raw["objective"], "hwa.objective", OBJECTIVES),
@@ -1349,6 +1409,24 @@ def _cross_validate(lifecycle: Lifecycle) -> None:
         raise config_error(
             "hwa.sequences_per_epoch", f"to be at most data.hwa_sequences ({data.hwa_sequences})", streamed
         )
+    hwa = lifecycle.hwa
+    if hwa.lr_schedule is not None:
+        if hwa.lr_milestones or hwa.lr_decay != 1.0 or hwa.extension_epochs:
+            raise config_error(
+                "hwa.lr_schedule",
+                "to use neutral legacy settings: lr_milestones [], lr_decay 1 and selection.extension_epochs 0",
+                hwa.shared_dict(),
+            )
+        examples = data.cohort_size("hwa")
+        per_epoch = min(streamed, examples) if streamed is not None else examples
+        steps = hwa.epochs * ((per_epoch + hwa.batch_size - 1) // hwa.batch_size)
+        if hwa.lr_schedule.total_steps != steps:
+            raise config_error(
+                "hwa.lr_schedule.total_steps",
+                f"to match the full training budget ({steps} updates, including any data.max_examples cap); "
+                "declare a separate schedule for a diagnostic smoke",
+                hwa.lr_schedule.total_steps,
+            )
     if family == CIFAR_FAMILY and data.development_images % network.classes:
         raise config_error(
             "data.development_images",

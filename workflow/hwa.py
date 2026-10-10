@@ -26,6 +26,8 @@ weights see noise and corruption; the frozen teacher stays the KL target.
 An epoch is one pass over the HWA cohort unless ``hwa.sequences_per_epoch``
 streams it: each epoch then takes the next sequences of seeded passes over a
 large cohort (``stream_order``), keeping the selection cadence per step budget.
+An optional ``hwa.lr_schedule`` scales every optimizer group before each update
+and requires an exact, fixed update budget, including for diagnostic smokes.
 
 Checkpoints are selected by mean development teacher KL over the arm's
 ``selection_cases`` on independent selection arrays programmed with the
@@ -168,13 +170,31 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
     examples = network_family.hwa_examples(inputs)
     streamed = hwa.sequences_per_epoch is not None
     per_epoch = min(hwa.sequences_per_epoch, examples) if streamed else examples
+    schedule, global_step = hwa.lr_schedule, 0
+    if schedule is not None:
+        expected_examples = data.cohort_size("hwa")
+        expected_steps = hwa.epochs * ((per_epoch + hwa.batch_size - 1) // hwa.batch_size)
+        if examples != expected_examples or expected_steps != schedule.total_steps:
+            raise ValueError(
+                f"HWA cache/budget mismatch: loaded {examples} examples and {expected_steps} updates; "
+                f"declared {expected_examples} examples and {schedule.total_steps} updates. "
+                "A diagnostic smoke must declare its own exact schedule."
+            )
+        for group in optimizer.param_groups:
+            group["lr"] = group["base_lr"] * schedule.factor(0)
+        store.append_metric({
+            "stage": "hwa_schedule", "arm": arm.arm_id, "global_step": 0,
+            "lr_schedule": schedule.to_dict(),
+            "learning_rates": [group["lr"] for group in optimizer.param_groups],
+        })
     prefix = network.prefix_hash()
     best, history, rejected = None, [], None
     limit, epoch, started = hwa.epochs, 0, time.monotonic()
     while epoch <= limit:
         if epoch:
-            for group in optimizer.param_groups:
-                group["lr"] = group["base_lr"] * hwa.lr_factor(epoch)
+            if schedule is None:
+                for group in optimizer.param_groups:
+                    group["lr"] = group["base_lr"] * hwa.lr_factor(epoch)
             data_rng = torch.Generator(device=device).manual_seed(data.data_seed + epoch)
             if streamed:
                 order = stream_order(examples, per_epoch, epoch, data.data_seed, device)
@@ -199,12 +219,21 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
                     rejected = {"epoch": epoch, "batch": batch, "reason": "nonfinite HWA objective"}
                     break
                 loss.backward()
+                if schedule is not None:
+                    for group in optimizer.param_groups:
+                        group["lr"] = group["base_lr"] * schedule.factor(global_step + 1)
                 optimizer.step()
+                global_step += 1
                 with torch.no_grad():
                     network.q.clamp_(-1, 1)
-                if batch % 100 == 0:
+                if batch % 100 == 0 or (schedule is not None and global_step in schedule.boundary_steps()):
+                    progress = {} if schedule is None else {
+                        "global_step": global_step,
+                        "learning_rates": [group["lr"] for group in optimizer.param_groups],
+                    }
                     store.append_metric(
-                        {"stage": "hwa", "arm": arm.arm_id, "epoch": epoch, "batch": batch, "loss": float(loss.detach())}
+                        {"stage": "hwa", "arm": arm.arm_id, "epoch": epoch, "batch": batch,
+                         "loss": float(loss.detach()), **progress}
                     )
             if rejected:
                 break
@@ -217,6 +246,8 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
                 rejected = {"epoch": epoch, "reason": "nonfinite selection score"}
                 break
             item = {"epoch": epoch, "elapsed_seconds": time.monotonic() - started, **score}
+            if schedule is not None:
+                item.update(global_step=global_step, learning_rates=[group["lr"] for group in optimizer.param_groups])
             history.append(item)
             store.append_metric({"stage": "hwa_selection", "arm": arm.arm_id, **item})
             print(json.dumps({"arm": arm.arm_id, "epoch": epoch, "teacher_kl": score["teacher_kl"]}), flush=True)
@@ -232,6 +263,8 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
             limit += hwa.extension_epochs
             store.append_metric({"stage": "hwa", "arm": arm.arm_id, "extended_to_epoch": limit})
         epoch += 1
+    if schedule is not None and not rejected and global_step != schedule.total_steps:
+        raise RuntimeError(f"HWA completed {global_step} updates; expected exactly {schedule.total_steps}.")
     if arm.scope == "model":
         network.enable_digital(False)
     if network.prefix_hash() != prefix:
@@ -254,6 +287,14 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
         "history": history,
         "selection": "minimum mean development teacher KL over selection cases and selection arrays",
     }
+    if schedule is not None:
+        fit["lr_schedule"] = {
+            **schedule.to_dict(),
+            "step_convention": "one-based; learning rates applied before optimizer.step",
+            "steps_run": global_step,
+            "base_learning_rates": [group["base_lr"] for group in optimizer.param_groups],
+            "final_learning_rates": [group["lr"] for group in optimizer.param_groups],
+        }
     if arm.scope == "model":
         digital = {k: v for k, v in best["model"].items() if k.startswith("digital.")}
         fit["scope"] = {

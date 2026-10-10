@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
+import threading
+import time
 from types import SimpleNamespace
 
 import campaigns.runner as runner
@@ -258,9 +261,11 @@ def test_campaign_refuses_changed_contract_for_existing_id(
     assert resolved_path.read_bytes() == original
 
 
+@pytest.mark.parametrize("streaming", [False, True])
 def test_failure_skips_dependents_but_not_independent_stages(
     tmp_path: Path,
     monkeypatch,
+    streaming,
 ) -> None:
     for name in ("fail", "dependent", "independent"):
         (tmp_path / f"{name}.json").write_text("{}")
@@ -313,7 +318,12 @@ def test_failure_skips_dependents_but_not_independent_stages(
         _complete_result(output_dir / "run")
         return SimpleNamespace(returncode=0, stdout="ok", stderr="")
 
-    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    if streaming:
+        monkeypatch.setenv("EBL_CAMPAIGN_STREAM", "1")
+        monkeypatch.setattr(runner, "_stream_stage", fake_run)
+    else:
+        monkeypatch.delenv("EBL_CAMPAIGN_STREAM", raising=False)
+        monkeypatch.setattr(runner.subprocess, "run", fake_run)
     records = runner.run_campaign(
         spec,
         output_root=tmp_path / "outputs",
@@ -880,3 +890,58 @@ def test_preflight_requires_target_python_to_be_executable(
 
     with pytest.raises(ValueError, match="existing executable"):
         runner._preflight(target, allow_dirty=False)
+
+
+def test_stream_stage_persists_and_displays_output_before_exit(tmp_path, monkeypatch):
+    import io
+
+    stdout, stderr = io.StringIO(), io.StringIO()
+    monkeypatch.setattr(runner.sys, "stdout", stdout)
+    monkeypatch.setattr(runner.sys, "stderr", stderr)
+    program = (
+        "import os,time; from pathlib import Path; "
+        "os.write(1,b'first\\n'); os.write(2,b'warning\\n'); "
+        "deadline=time.monotonic()+5\n"
+        "while not Path('release').exists() and time.monotonic()<deadline: time.sleep(.02)\n"
+        "os.write(1,b'\\xc3'); time.sleep(.02); os.write(1,b'\\xa9\\n'); raise SystemExit(7)"
+    )
+    result = []
+    thread = threading.Thread(target=lambda: result.append(runner._stream_stage(
+        [sys.executable, "-u", "-c", program], cwd=tmp_path, attempt=tmp_path)))
+    thread.start()
+    try:
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and ("first\n" not in stdout.getvalue() or "warning\n" not in stderr.getvalue()):
+            time.sleep(.02)
+        assert thread.is_alive(), "stage must still be executing when output becomes visible"
+        assert stdout.getvalue() == "first\n"
+        assert stderr.getvalue() == "warning\n"
+        assert (tmp_path / "stdout.log").read_bytes() == b"first\n"
+        assert (tmp_path / "stderr.log").read_bytes() == b"warning\n"
+    finally:
+        (tmp_path / "release").touch()
+        thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert result[0].returncode == 7
+    assert result[0].stdout == "first\né\n"
+    assert result[0].stderr == "warning\n"
+    assert (tmp_path / "stdout.log").read_bytes() == b"first\n\xc3\xa9\n"
+    assert stdout.getvalue() == result[0].stdout
+
+
+def test_stream_stage_drains_both_pipes_after_display_disconnect(tmp_path, monkeypatch):
+    class Detached:
+        def write(self, _value):
+            raise BrokenPipeError("user detached")
+
+        def flush(self):
+            pass
+
+    monkeypatch.setattr(runner.sys, "stdout", Detached())
+    monkeypatch.setattr(runner.sys, "stderr", Detached())
+    payload_size = 262144
+    program = f"import os; os.write(2,b'e'*{payload_size}); os.write(1,b'o'*{payload_size})"
+    result = runner._stream_stage([sys.executable, "-u", "-c", program], cwd=tmp_path, attempt=tmp_path)
+    assert result.returncode == 0
+    assert (tmp_path / "stdout.log").read_bytes() == b"o" * payload_size
+    assert (tmp_path / "stderr.log").read_bytes() == b"e" * payload_size

@@ -195,6 +195,33 @@ Each arm is a source that later stages deploy:
   is extended once by `selection.extension_epochs`; if it is still late, the
   source records `convergence_review_required` and later stages propagate the
   flag. Final arrays and test data are never used for selection.
+- `lr_schedule` (optional) fixes the learning-rate schedule in optimizer
+  updates rather than epochs. Omitting it preserves the historical
+  `lr_milestones`/`lr_decay` behavior and all existing source digests. When it is
+  present, set `lr_milestones: []`, `lr_decay: 1` and
+  `selection.extension_epochs: 0`; the training budget cannot extend.
+
+  ```json
+  {"kind": "linear_warmup_decay", "total_steps": 12800, "warmup_steps": 205}
+  ```
+
+  The same factor scales every optimizer group's base rate (including
+  `digital_learning_rate`) **before** one-based update s. For warm-up length W,
+  updates 1 through W use s/W. `linear_warmup_decay` then uses (T−s)/(T−W),
+  reaching exactly zero on update T. `warmup_step_decay` additionally requires
+  `milestone_step` M and `decay_factor` d: it holds the peak through update M,
+  then uses d for updates M+1 through T. Require 0 ≤ W < T, W < M < T and
+  0 < d ≤ 1. An explicit W=0 disables warm-up.
+
+  `total_steps` must equal `epochs` × ceil(effective examples per epoch /
+  `batch_size`), including partial minibatches and any `sequences_per_epoch`
+  or `data.max_examples` cap. Diagnostic smokes must declare their own shorter
+  schedule; the runtime never rescales or truncates a production schedule.
+  It also checks the loaded HWA cohort size before training. Metric records
+  expose `global_step` and actual group `learning_rates` at ordinary cadence,
+  selection and schedule boundaries. The fit records the resolved schedule,
+  completed updates, base rates and final rates. Nonfinite rejection retains
+  its actual completed-update count and remains an invalid source.
 - `scope` (optional, OPT family only) sets which parameters an arm trains.
   - `analog` (the default, and omitted from the arm) trains the analog
     weights and their calibration parameters: the analog layers' MLP biases,

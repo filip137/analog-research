@@ -1,0 +1,155 @@
+{
+  "data": {
+    "corpus": {
+      "name": "opt125m-synthetic-50m",
+      "sha256": "ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984"
+    },
+    "data_seed": 20261008,
+    "development_sequences": 256,
+    "evaluation": "development",
+    "hwa_sequences": 195226,
+    "max_examples": 0,
+    "recovery_sequences": 8192,
+    "sequence_length": 256,
+    "test_sequences": 0
+  },
+  "defects": {
+    "arrays_per_die": 48,
+    "cases": [
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "none",
+        "rate_ppm": 0
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 10000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 20000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 30000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 40000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 50000
+      }
+    ],
+    "persistence": "permanent",
+    "placement": "hierarchical_die_array"
+  },
+  "deployment": {
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias",
+    "encoding": "active_reference_pair",
+    "read_noise": 0.0,
+    "scaling": "per_output_channel_absmax",
+    "tile_size": 256
+  },
+  "devices": {
+    "assignment_seeds": [
+      271001,
+      271002,
+      271003,
+      271004,
+      271005
+    ],
+    "endpoint_seed_offset": 10000,
+    "model": "aihwkit_1.1.0_reram_cmo",
+    "noise_scale": 1.0,
+    "selection_seeds": [
+      211001,
+      211002
+    ],
+    "technology": "cmo"
+  },
+  "hwa": {
+    "arms": [
+      {
+        "corruption": null,
+        "digital_learning_rate": 1e-05,
+        "id": "standard_hwa_model",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "scope": "model",
+        "selection_cases": [
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "none",
+            "rate_ppm": 0
+          },
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "random",
+            "rate_ppm": 30000
+          }
+        ]
+      }
+    ],
+    "augment": false,
+    "batch_size": 32,
+    "epochs": 50,
+    "learning_rate": 1e-05,
+    "lr_decay": 1.0,
+    "lr_milestones": [],
+    "lr_schedule": {
+      "decay_factor": 0.1,
+      "kind": "warmup_step_decay",
+      "milestone_step": 10240,
+      "total_steps": 12800,
+      "warmup_steps": 205
+    },
+    "noise_model": "additive_gaussian_weight",
+    "noise_scaling": "output_channel_abs_max",
+    "noise_std": 0.03,
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "seed": 41,
+    "selection": {
+      "every_epochs": 2,
+      "extension_epochs": 0
+    },
+    "sequences_per_epoch": 8192
+  },
+  "lifecycle_id": "opt125m-cmo-l6-exp1e-dev-step-lr1em5",
+  "network": {
+    "analog_decoder_layers": 6,
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m"
+  },
+  "onchip": null,
+  "program_verify": {
+    "acceptance_percent": 2.0,
+    "method": "gaussian_endpoint",
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "question": {
+    "decision": "Recommend a common LR/schedule for the matched scope/recipe experiment; review before release. See campaigns/opt-cmo-corruption/series/001-hwa-robustness/experiments/exp-005-whole-model-hwa.md.",
+    "evidence_class": "exploratory_model_based",
+    "primary_metric": "teacher_kl",
+    "text": "Standard 3% whole-transformer HWA: peak Adam LR 1e-05, step decay, 1.6% warm-up on synthetic text; compare development KL at matched update budget."
+  },
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1
+}

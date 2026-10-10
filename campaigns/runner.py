@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import codecs
 from hashlib import sha256
 import json
 import math
 import os
 from pathlib import Path, PurePosixPath
+import selectors
 import subprocess
+import sys
 from typing import Any, Mapping
 
 from campaigns.schema import CampaignSpec, InputRef, StageSpec, TargetSpec
@@ -783,6 +786,43 @@ def _establish_campaign_contract(
     atomic_write_json(path, record)
 
 
+def _stream_stage(command: list[str], *, cwd: Path, attempt: Path) -> subprocess.CompletedProcess:
+    """Tee stage output without changing its two durable log streams.
+
+    Opt-in through EBL_CAMPAIGN_STREAM=1; the historical capture path stays
+    unchanged. Drain both pipes concurrently so a noisy stderr cannot deadlock
+    stdout. Log bytes are written before terminal output and survive a detach.
+    """
+    stdout_path, stderr_path = attempt / "stdout.log", attempt / "stderr.log"
+    with stdout_path.open("wb", buffering=0) as stdout_log, stderr_path.open("wb", buffering=0) as stderr_log:
+        with subprocess.Popen(command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child:
+            with selectors.DefaultSelector() as selector:
+                for pipe, log, terminal in ((child.stdout, stdout_log, sys.stdout),
+                                            (child.stderr, stderr_log, sys.stderr)):
+                    selector.register(pipe, selectors.EVENT_READ,
+                                      (log, terminal, codecs.getincrementaldecoder("utf-8")("replace")))
+                while selector.get_map():
+                    for key, _ in selector.select():
+                        payload = os.read(key.fd, 65536)
+                        log, terminal, decoder = key.data
+                        if payload:
+                            log.write(payload)
+                        else:
+                            selector.unregister(key.fileobj)
+                        visible = decoder.decode(payload, final=not payload)
+                        try:
+                            terminal.write(visible)
+                            terminal.flush()
+                        except (BrokenPipeError, OSError):
+                            # Display failure must not interrupt an otherwise
+                            # healthy stage or truncate its durable logs.
+                            pass
+            code = child.wait()
+    return subprocess.CompletedProcess(command, code,
+                                       stdout_path.read_text(encoding="utf-8", errors="replace"),
+                                       stderr_path.read_text(encoding="utf-8", errors="replace"))
+
+
 def run_campaign(
     spec: CampaignSpec,
     *,
@@ -930,21 +970,24 @@ def run_campaign(
             records[stage.stage_id] = record
             continue
 
-        completed = subprocess.run(
-            command,
-            cwd=targets[stage.target_id].worktree,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        (attempt / "stdout.log").write_text(
-            completed.stdout,
-            encoding="utf-8",
-        )
-        (attempt / "stderr.log").write_text(
-            completed.stderr,
-            encoding="utf-8",
-        )
+        if os.environ.get("EBL_CAMPAIGN_STREAM") == "1":
+            completed = _stream_stage(command, cwd=targets[stage.target_id].worktree, attempt=attempt)
+        else:
+            completed = subprocess.run(
+                command,
+                cwd=targets[stage.target_id].worktree,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            (attempt / "stdout.log").write_text(
+                completed.stdout,
+                encoding="utf-8",
+            )
+            (attempt / "stderr.log").write_text(
+                completed.stderr,
+                encoding="utf-8",
+            )
         run_result: Path | None = None
         if completed.returncode == 0:
             try:
