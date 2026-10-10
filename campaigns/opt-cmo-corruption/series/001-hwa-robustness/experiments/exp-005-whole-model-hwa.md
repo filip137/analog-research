@@ -582,3 +582,38 @@ New host/case plans and pinned configs go under each worker's ignored
 Native outputs stay in each case root and compact exports join the existing
 `collected/` index, with a separate duration section in its review. The original
 manifest, earlier lifecycle files and completed artifacts remain immutable.
+
+The two duration cases were admitted to the persistent queue at 16:09 Paris
+under controller `c859f5b`. All four host/case planning dry runs passed, as did
+81 experiment tests and 88 service tests. The original twelve grid/smoke
+lifecycle files remain byte-identical. The append-only extension SHA-256 is
+`429953c5adffd6d58bae8d650e28b362ef4a04654ea275401bc1df2f1484c9a9`.
+Its receipt and admission audit are `readiness/tail4pass/extension.json` and
+`admission.json` in the evidence root.
+
+At the verified handoff, both new cases are **queued**, with no attempts or GPU
+allocations. Each depends on both 1e-2 cases plus its completed short-run
+reference; the dispatcher explicitly reports waiting for dependency validation.
+The restarted watchdog observed both existing 1e-2 workers and supervisors at
+update 4,965 with finite metrics, preserving their exact attempt tokens. Its
+heartbeat was fresh, with no host errors or new incidents. The original
+manifest, charges, deadline, matching waiver and incident history were retained;
+reapplying the extension was idempotent. Effective limits are 20 GPU-hours,
+36 GB and the unchanged 12-hour window. Already charged work is 10.0269 GPU-hours;
+the active pair reserves 3 GPU-hours, leaving 6.9731 unreserved GPU-hours, enough
+for both new three-hour hard allowances. Storage observed was 31.0634 GB.
+
+The single monitoring owner remains enabled `run-watch-queue.service`, with
+five-minute semantic checks, bounded read-only incident investigation and its
+11-minute systemd watchdog. New cases use their own 7,200-second expected runtime,
+not the earlier 3,600-second calibration. Queue and restart-preservation evidence
+is in `readiness/tail4pass/live-handoff.json`. Once dependencies pass, tmux
+sessions will be named `<duration-case-id>-<attempt>` on fifi/loulou; use
+`ssh fifi tmux ls` or `ssh loulou tmux ls` to find them. Expected start remains
+16:40–16:50 Paris, with completion roughly 18:25–18:40 if current throughput holds.
+
+The compact review preserves the original ten-case LR comparison (currently
+eight complete) and separately records zero of two duration cases in
+`collected/review/duration/duration.{json,md}`. Separate duration plots will be
+created when evidence arrives. Both sections retain the scientific-review gate;
+no broader recipes or deployment rows have been released.
