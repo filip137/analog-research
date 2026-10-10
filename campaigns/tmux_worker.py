@@ -25,12 +25,14 @@ from __future__ import annotations
 import argparse
 import array
 import contextlib
+import ctypes
 import fcntl
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
+import platform
 import re
 import selectors
 import shlex
@@ -178,11 +180,129 @@ def lease_valid(spec: dict, directory: Path) -> bool:
 
 
 def cancel(spec: dict, directory: Path) -> dict:
+    if not directory.is_dir():
+        raise ValueError("Cannot cancel an unknown attempt")
+    # A service restart and an outer queue timeout can request cancellation at
+    # once. Serialize orphan recovery so neither can overwrite a final receipt.
+    with (directory / "cancel.lock").open("a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _cancel_locked(spec, directory)
+
+
+def _cancel_locked(spec: dict, directory: Path) -> dict:
     observation = observe(spec, directory)
     if observation.get("missing"):
         raise ValueError("Cannot cancel an unknown attempt")
     atomic(directory / "cancel.json", {"attempt_id": spec["attempt_id"], "at": time.time()})
+    if observation["worker_alive"] and not observation["supervisor_alive"]:
+        receipt = observation["receipt"]
+        worker = receipt.get("worker")
+        # A recovered controller may act only on the exact original session
+        # leader. An old boot, recycled PID, or leaderless group needs manual
+        # reconciliation; never turn a stale numeric PGID into a kill target.
+        if (not alive(worker) or worker["pid"] != worker["pgid"]
+                or worker["sid"] != worker["pid"]):
+            raise RuntimeError("Orphan group lacks a live verified owner; refusing cancellation")
+        receipt["orphan_cancellation"] = {"owner": identity(os.getpid()), "requested_at": time.time(),
+                                          "reason": "supervisor_missing_with_live_worker", "complete": False}
+        atomic(directory / "receipt.json", receipt)
+        try:
+            stop_orphan_group(worker, spec["termination_grace_seconds"])
+        except BaseException as exc:
+            receipt["orphan_cancellation"]["error"] = f"{type(exc).__name__}: {exc}"
+            atomic(directory / "receipt.json", receipt)
+            raise
+        receipt["orphan_cancellation"]["complete"] = True
+        elapsed = (time.monotonic() - receipt["started_monotonic"] if "started_monotonic" in receipt
+                   else time.time() - receipt["started_at"])
+        receipt.update(state="supervision_lost", finished_at=time.time(), elapsed_seconds=max(0, elapsed),
+                       exit_code=None)
+        atomic(directory / "receipt.json", receipt)
+        return {"cancel_requested": True, "orphan_stopped": True, "state": receipt["state"]}
     return {"cancel_requested": True}
+
+
+def stop_orphan_group(owner: dict, grace: float) -> None:
+    """Stop only verified members of a continuously identified owned session.
+
+    pidfds prevent individual PID reuse between verification and signalling.
+    Newly observed group members are accepted only while a previously verified
+    member still holds that group identity; otherwise stop rather than guess.
+    """
+    if not alive(owner) or owner["pid"] != owner["pgid"] or owner["sid"] != owner["pid"]:
+        raise RuntimeError("Orphan process identity changed before cancellation")
+    known = {owner["pid"]: owner}
+
+    def members():
+        current = {}
+        for pid in group_members(owner["pgid"]):
+            value = identity(pid)
+            if value is not None:
+                if value["boot_id"] != owner["boot_id"] or value["sid"] != owner["sid"]:
+                    raise RuntimeError("Orphan group identity changed")
+                current[pid] = value
+        new = {pid: value for pid, value in current.items() if known.get(pid) != value}
+        if new and not any(known.get(pid) == value for pid, value in current.items()):
+            raise RuntimeError("Orphan group ownership became ambiguous")
+        known.update(new)
+        return current
+
+    def send(value, sig):
+        try:
+            descriptor = _pidfd_open(value["pid"])
+        except ProcessLookupError:
+            return
+        try:
+            if identity(value["pid"]) == value:
+                with contextlib.suppress(ProcessLookupError):
+                    _pidfd_send_signal(descriptor, sig)
+        finally:
+            os.close(descriptor)
+
+    for sig, wait in ((signal.SIGTERM, grace), (signal.SIGKILL, 2)):
+        deadline = time.monotonic() + wait
+        signalled = set()
+        while True:
+            current = members()
+            if not current:
+                return
+            for value in current.values():
+                key = (value["pid"], value["start_ticks"])
+                if key not in signalled:
+                    send(value, sig)
+                    signalled.add(key)
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(.02)
+    if members():
+        raise RuntimeError("Verified orphan group did not stop")
+
+
+def _pidfd_syscall(number, *arguments):
+    # Older Conda builds omit Python/glibc pidfd wrappers even on modern lab
+    # kernels. Linux x86-64 and arm64 assign these two syscall numbers equally.
+    # Unsupported platforms fail closed; never fall back to unchecked PIDs.
+    if sys.platform != "linux" or platform.machine() not in {"x86_64", "aarch64"}:
+        raise RuntimeError("Safe orphan cancellation requires Linux pidfd support")
+    library = ctypes.CDLL(None, use_errno=True)
+    library.syscall.restype = ctypes.c_long
+    result = library.syscall(ctypes.c_long(number), *arguments)
+    if result < 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error))
+    return result
+
+
+def _pidfd_open(pid):
+    if hasattr(os, "pidfd_open"):
+        return os.pidfd_open(pid)
+    return _pidfd_syscall(434, ctypes.c_int(pid), ctypes.c_uint(0))
+
+
+def _pidfd_send_signal(descriptor, sig):
+    if hasattr(signal, "pidfd_send_signal"):
+        return signal.pidfd_send_signal(descriptor, sig)
+    return _pidfd_syscall(424, ctypes.c_int(descriptor), ctypes.c_int(sig), ctypes.c_void_p(), ctypes.c_uint(0))
 
 
 def inherited_fds() -> list[int]:
@@ -296,6 +416,7 @@ def supervise(directory: Path) -> int:
         if receipt["state"] != "starting":
             return 75
         receipt["supervisor"] = identity(os.getpid())
+        receipt["started_monotonic"] = started
         atomic(directory / "receipt.json", receipt)
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:

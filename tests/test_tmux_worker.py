@@ -176,6 +176,43 @@ def test_bridge_term_propagates_cancel_and_waits_for_worker(spec_factory):
             process.wait(timeout=3)
 
 
+@pytest.mark.skipif(shutil.which("tmux") is None, reason="tmux is required")
+def test_controller_cancels_verified_orphan_after_supervisor_sigkill(spec_factory):
+    _, spec, directory = spec_factory(
+        "import subprocess,sys,time; "
+        "subprocess.Popen([sys.executable,'-c','import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(30)']); "
+        "print('descendant started',flush=True); time.sleep(30)")
+    unrelated = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True)
+    try:
+        worker.launch(spec, directory)
+        running = wait_for(spec, directory, lambda x: x["receipt"]["state"] == "running" and
+                           len(worker.group_members(x["receipt"]["worker"]["pgid"])) == 2)
+        os.kill(running["receipt"]["supervisor"]["pid"], signal.SIGKILL)
+        wait_for(spec, directory, lambda x: x["worker_alive"] and not x["supervisor_alive"])
+        result = worker.cancel(spec, directory)
+        assert result["orphan_stopped"] is True
+        status = terminal(spec, directory)
+        assert status["receipt"]["state"] == "supervision_lost"
+        assert status["receipt"]["orphan_cancellation"]["complete"] is True
+        assert status["receipt"]["elapsed_seconds"] > 0
+        assert not worker.group_members(running["receipt"]["worker"]["pgid"])
+        assert unrelated.poll() is None
+        assert worker.launch(spec, directory)["existing"] is True
+    finally:
+        unrelated.terminate()
+        unrelated.wait(timeout=3)
+
+
+def test_orphan_cancellation_rejects_changed_identity_without_signalling(monkeypatch):
+    current = worker.identity(os.getpid())
+    stale = dict(current, start_ticks=current["start_ticks"] - 1)
+    monkeypatch.setattr(worker, "_pidfd_send_signal", lambda *args: pytest.fail("stale identity was signalled"))
+    with pytest.raises(RuntimeError, match="identity changed"):
+        worker.stop_orphan_group(stale, .1)
+    with pytest.raises(RuntimeError, match="identity changed"):
+        worker.stop_orphan_group(dict(current, boot_id="another boot"), .1)
+
+
 def test_lease_fails_closed_on_other_boot_future_timestamp_and_malformed_receipt(spec_factory):
     _, spec, directory = spec_factory("pass")
     directory.mkdir(parents=True)

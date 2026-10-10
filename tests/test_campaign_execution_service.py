@@ -12,6 +12,7 @@ from campaigns.execution_service import (
     prepare_job, scheduler_type, storage_probe, validate_manifest,
     service_dropin,
     translate_remote_deadlines, CampaignTransport,
+    merge_terminal_worker_receipt,
 )
 
 
@@ -353,3 +354,18 @@ def test_base_flat_directory_stall_does_not_override_calibrated_campaign_monitor
                         "alive": True, "progress_token": "unchanged"}}}}, now[0])
     assert scheduler.store.job("one")["state"] == "running"
     assert scheduler.store.job("one")["spec"]["stale_seconds"] != float("inf")
+
+
+def test_bridge_failure_charges_continuing_tmux_runtime_without_claiming_validity():
+    observed = {"receipt": {"state": "failed", "started_at": 1000, "elapsed_seconds": 10}, "alive": False}
+    worker = {"worker_alive": False, "supervisor_alive": False,
+              "receipt": {"state": "complete", "started_at": 1002, "elapsed_seconds": 600}}
+    merged = merge_terminal_worker_receipt(observed, worker)
+    assert merged["receipt"]["state"] == "failed"
+    assert merged["receipt"]["elapsed_seconds"] == 602
+
+
+def test_uncertain_or_live_tmux_prevents_terminal_charge():
+    observed = {"receipt": {"state": "failed", "started_at": 1000, "elapsed_seconds": 10}, "alive": False}
+    assert merge_terminal_worker_receipt(dict(observed), {"worker_alive": True})["alive"]
+    assert "probe_error" in merge_terminal_worker_receipt(dict(observed), {"worker_alive": False, "receipt": {"state": "starting"}})

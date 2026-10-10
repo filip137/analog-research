@@ -618,6 +618,31 @@ def storage_probe(paths):
     return {"storage_bytes": total}
 
 
+def merge_terminal_worker_receipt(observed, worker):
+    """Keep compute charged through tmux termination after an outer bridge dies.
+
+    The queue's failed status is preserved: tmux success alone does not imply
+    that the outer validation command ran. Both timestamps below originated on
+    the same host; only their difference contributes to measured duration.
+    """
+    receipt = worker.get("receipt") or {}
+    if worker.get("worker_alive") or worker.get("supervisor_alive"):
+        observed["alive"] = True
+        return observed
+    if receipt.get("state") not in {"complete", "failed", "timeout", "cancelled", "supervision_lost"}:
+        observed["probe_error"] = "tmux terminal identity and receipt are unconfirmed"
+        return observed
+    elapsed = receipt.get("elapsed_seconds")
+    if isinstance(elapsed, bool) or not isinstance(elapsed, (int, float)) or not math.isfinite(elapsed) or elapsed < 0:
+        observed["probe_error"] = "tmux terminal elapsed duration is unavailable"
+        return observed
+    outer = observed["receipt"]
+    startup = max(0, receipt.get("started_at", outer["started_at"]) - outer["started_at"])
+    outer["elapsed_seconds"] = max(outer.get("elapsed_seconds", 0), elapsed + startup)
+    observed["campaign_worker_terminal"] = worker
+    return observed
+
+
 def scheduler_type(queue_module):
     class CampaignScheduler(queue_module.Scheduler):
         def __init__(self, cfg, transport=None, clock=time.time):
@@ -636,6 +661,24 @@ def scheduler_type(queue_module):
                 observed = self.observations.get(attempt["target"], {}).get("attempts", {}).get(attempt["token"])
                 if row and observed and not observed.get("probe_error"):
                     observed["progress_token"] = row["progress_token"]
+                case = self.campaigns.case(attempt["job_id"])
+                if not case or not observed or observed.get("probe_error") or observed.get("missing"):
+                    continue
+                if observed.get("alive") or observed.get("reservation_held"):
+                    continue
+                if observed.get("receipt", {}).get("state") not in {"complete", "failed", "timeout", "cancelled", "rejected"}:
+                    continue
+                job = self.store.job(attempt["job_id"])
+                placement = job["spec"]["placements"][attempt["target"]]
+                if not placement.get("campaign_worker_spec") or observed["receipt"]["state"] == "rejected":
+                    continue
+                try:
+                    target = self.cfg["targets"][attempt["target"]]
+                    worker = remote_command(self.cfg, attempt["target"], [target["python"], "-m", "campaigns.tmux_worker", "status",
+                        "--spec", placement["campaign_worker_spec"], "--attempt", attempt["token"]], cwd=placement["workdir"])
+                    merge_terminal_worker_receipt(observed, worker)
+                except Exception as exc:
+                    observed["probe_error"] = "cannot reconcile terminal tmux accounting: " + str(exc)[:500]
             return self.observations
 
         def reconcile(self, observations, now):
@@ -697,7 +740,17 @@ def scheduler_type(queue_module):
                     observed["artifacts"] = remote_command(self.cfg, attempt["target"],
                         [target["python"], "-m", "campaigns.execution_service", "probe-artifacts", placement["campaign_result_root"]], cwd=placement["workdir"])
                     receipt = observed.get("receipt") or {}
-                    if observed.get("worker_alive") or observed.get("supervisor_alive"):
+                    if observed.get("worker_alive") and not observed.get("supervisor_alive"):
+                        self.attention(job["id"], "tmux supervisor missing while its worker remains alive", now)
+                        self.campaigns.incident(job["id"], "worker_supervision_lost",
+                            {"attempt": attempt["token"], "worker": receipt.get("worker"),
+                             "reason": "lease enforcement is unavailable; do not treat this as healthy or retry"})
+                        # The tmux adapter rechecks PID/start/boot/group identity
+                        # and fails closed if ownership is uncertain. This stops
+                        # an unbounded orphan; it never retries scientific work.
+                        observed["orphan_cancellation"] = remote_command(self.cfg, attempt["target"],
+                            [*worker_cmd, "cancel", *tail], cwd=placement["workdir"])
+                    elif observed.get("supervisor_alive"):
                         remote_command(self.cfg, attempt["target"], [*worker_cmd, "renew", *tail], cwd=placement["workdir"])
                     elif receipt.get("state") not in {"complete", "failed", "timeout", "cancelled", "supervision_lost"}:
                         self.attention(job["id"], "tmux worker missing without terminal evidence", now)
@@ -819,7 +872,7 @@ def service_dropin(python, checkout, queue_config):
     argv = [python, "-m", "campaigns.execution_service", "--queue-config", queue_config, "run"]
     return "\n".join(["[Service]", "Type=notify", "NotifyAccess=main", "ExecStart=",
                        "ExecStart=" + " ".join(quoted(item) for item in argv),
-                       "WorkingDirectory=" + quoted(checkout), "WatchdogSec=660", "Restart=on-failure",
+                       "WorkingDirectory=" + str(checkout).replace("%", "%%"), "WatchdogSec=660", "Restart=on-failure",
                        "RestartSec=5", "KillMode=process", "TimeoutStopSec=15", "UMask=0077", ""])
 
 
