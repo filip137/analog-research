@@ -266,7 +266,7 @@ class CampaignLedger:
             return False, "submission ownership already reserved"
         return True, ""
 
-    def reserve(self, job):
+    def reserve(self, job, now=None):
         case = self.case(job["id"])
         if case is None:
             return
@@ -274,7 +274,7 @@ class CampaignLedger:
             allowed, reason = self.eligible(job)
             if not allowed:
                 raise ValueError(reason)
-            now = self.clock()
+            now = self.clock() if now is None else now
             self.db.execute("UPDATE campaign_contracts SET started=COALESCE(started,?) WHERE id=?", (now, case["campaign_id"]))
             self.db.execute("INSERT INTO campaign_reservations VALUES(?,?,?,?,?,?)",
                             (job["id"], case["campaign_id"], None, job["spec"]["budget_seconds"] - job["used_seconds"],
@@ -298,6 +298,30 @@ class CampaignLedger:
                 if not attempt["charged"] and attempt["state"] not in {"rejected", "not_started"}:
                     continue
                 self.db.execute("DELETE FROM campaign_reservations WHERE job_id=?", (reservation["job_id"],))
+        # Recover old/interrupted controllers that durably claimed an attempt
+        # but lost its campaign reservation. A queue claim precedes all remote
+        # launches, so this remains conservative even for unknown workers.
+        active_by_job = {}
+        for attempt in self.store.attempts(active=True):
+            if self.case(attempt["job_id"]):
+                active_by_job.setdefault(attempt["job_id"], []).append(attempt)
+        for job_id, attempts in active_by_job.items():
+            if len(attempts) != 1:
+                raise RuntimeError(f"multiple active attempts for campaign case {job_id}; dispatch blocked")
+            existing = self.db.execute("SELECT attempt_token FROM campaign_reservations WHERE job_id=?", (job_id,)).fetchone()
+            if existing:
+                if existing["attempt_token"] != attempts[0]["token"]:
+                    raise RuntimeError(f"reservation and active attempt disagree for {job_id}; dispatch blocked")
+                continue
+            case, job, attempt = self.case(job_id), self.store.job(job_id), attempts[0]
+            allowance = max(0, job["spec"]["budget_seconds"] - job["used_seconds"])
+            with self.store.transaction():
+                self.db.execute("INSERT INTO campaign_reservations VALUES(?,?,?,?,?,?)",
+                                (job_id, case["campaign_id"], attempt["token"], allowance,
+                                 case["contract"]["expected_storage_bytes"], attempt["issued"]))
+                self.db.execute("UPDATE campaign_contracts SET started=COALESCE(started,?) WHERE id=?",
+                                (attempt["issued"], case["campaign_id"]))
+                self.store.event(job_id, "campaign_reservation_restored", {"token": attempt["token"], "gpu_seconds": allowance}, self.clock())
 
     def incident(self, job_id, kind, evidence):
         case = self.case(job_id)
@@ -778,7 +802,7 @@ def scheduler_type(queue_module):
             case = self.campaigns.case(job["id"])
             original_sharing = None
             if case:
-                self.campaigns.reserve(job)
+                self.campaigns.reserve(job, now=now)
                 contract = self.campaigns.contract(case["campaign_id"])
                 deadline = contract["started"] + contract["manifest"]["budgets"]["window_seconds"]
                 if job["spec"].get("deadline"):

@@ -295,6 +295,8 @@ def test_service_dropin_replaces_one_service_and_supervises_heartbeat(tmp_path):
     assert "KillMode=process" in unit
     assert "ExecStart=\nExecStart=" in unit
     assert "campaigns.execution_service" in unit
+    assert f"WorkingDirectory={tmp_path}\n" in unit
+    assert 'WorkingDirectory="' not in unit
 
 
 @pytest.mark.parametrize("offset", [-7243.0, -73.0, -56.0, 0.0, 125.0])
@@ -369,3 +371,45 @@ def test_uncertain_or_live_tmux_prevents_terminal_charge():
     observed = {"receipt": {"state": "failed", "started_at": 1000, "elapsed_seconds": 10}, "alive": False}
     assert merge_terminal_worker_receipt(dict(observed), {"worker_alive": True})["alive"]
     assert "probe_error" in merge_terminal_worker_receipt(dict(observed), {"worker_alive": False, "receipt": {"state": "starting"}})
+
+
+def test_actual_launch_retains_reservation_with_advancing_clock(setup):
+    scheduler, now, job = ready(setup)
+    launch_now = now[0]
+    # Reproduce real service timing: caller sampled time before reserve samples
+    # its own clock. Previously the claim's earlier issued time lost the match.
+    now[0] += .05
+    class AcceptingTransport:
+        def call(self, target, request):
+            return {"accepted": True}
+    scheduler.transport = AcceptingTransport()
+    scheduler.launch(job, {"target": "lab", "uuid": "gpu", "name": "RTX 5090"}, launch_now)
+    attempts = scheduler.store.attempts(active=True)
+    row = scheduler.store.db.execute("SELECT * FROM campaign_reservations").fetchone()
+    assert len(attempts) == 1
+    assert row["attempt_token"] == attempts[0]["token"]
+    assert row["issued"] == attempts[0]["issued"] == launch_now
+    assert scheduler.campaigns.remaining("study")["gpu_seconds_reserved"] == 900
+
+
+def test_restart_restores_dropped_reservation_for_live_campaign_attempt(setup):
+    scheduler, now, job = ready(setup)
+    scheduler.store.db.execute("INSERT INTO attempts(token,job_id,target,gpu_uuid,gpu_name,state,issued,launch_before,progress_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                               ("live", "one", "lab", "gpu", "5090", "unknown", now[0] - 20, now[0]+45, now[0]))
+    recreated = CampaignLedger(scheduler.store, lambda: now[0])
+    recreated.reconcile_reservations()
+    recreated.reconcile_reservations()
+    row = scheduler.store.db.execute("SELECT * FROM campaign_reservations").fetchone()
+    assert row["attempt_token"] == "live"
+    assert row["gpu_seconds"] == 900
+    assert recreated.contract("study")["started"] == now[0] - 20
+    assert scheduler.store.db.execute("SELECT COUNT(*) FROM events WHERE kind='campaign_reservation_restored'").fetchone()[0] == 1
+
+
+def test_duplicate_active_campaign_attempts_fail_closed(setup):
+    scheduler, now, _ = ready(setup)
+    for token in ("one", "two"):
+        scheduler.store.db.execute("INSERT INTO attempts(token,job_id,target,gpu_uuid,gpu_name,state,issued,launch_before,progress_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                                   (token, "one", "lab", "gpu", "5090", "running", now[0], now[0]+45, now[0]))
+    with pytest.raises(RuntimeError, match="multiple active"):
+        scheduler.campaigns.reconcile_reservations()
