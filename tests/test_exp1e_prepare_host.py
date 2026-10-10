@@ -13,7 +13,7 @@ prepare = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(prepare)
 
 
-def test_host_preparation_emits_eight_pinned_cases_and_only_dry_runs(tmp_path, monkeypatch):
+def test_host_preparation_emits_current_pinned_grid_and_only_dry_runs(tmp_path, monkeypatch):
     source, base = tmp_path / "checkout", tmp_path / "host"
     config_root = source / "campaigns/opt-cmo-corruption/lifecycles"
     config_root.mkdir(parents=True)
@@ -71,10 +71,11 @@ def test_host_preparation_emits_eight_pinned_cases_and_only_dry_runs(tmp_path, m
 
     monkeypatch.setattr(prepare, "command", fake_command)
     record = prepare.prepare_host(base, source=source)
-    assert len(record["cases"]) == 8
+    count = len(prepare.development.RATES) * len(prepare.development.SCHEDULES) + 2
+    assert len(record["cases"]) == count
     assert record["launched"] is False
-    assert len([c for c in commands if "--dry-run" in c]) == 8
-    assert len([c for c in commands if c[1:4] == ["-m", "workflow", "plan"]]) == 8
+    assert len([c for c in commands if "--dry-run" in c]) == count
+    assert len([c for c in commands if c[1:4] == ["-m", "workflow", "plan"]]) == count
     assert sum(case["smoke"] for case in record["cases"]) == 2
     for case in record["cases"]:
         spec = json.loads(Path(case["campaign_worker_spec"]).read_text())

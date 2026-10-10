@@ -31,7 +31,7 @@ def prepare(receipts, output):
     expected.update(development_case_id(1e-4, schedule) + "-smoke" for schedule in SCHEDULES)
     first = next(iter(cases.values()))
     if any(set(items) != expected or len(hosts[name]["cases"]) != len(expected) for name, items in cases.items()):
-        raise ValueError("Expected all six candidates and two readiness smokes on every placement")
+        raise ValueError("Expected the complete development grid and both readiness smokes on every placement")
     for host_cases in cases.values():
         for case_id, case in host_cases.items():
             smoke = case_id.endswith("-smoke")

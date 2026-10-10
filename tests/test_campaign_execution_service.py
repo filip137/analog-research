@@ -621,3 +621,95 @@ def test_storage_estimates_need_measurement_evidence_and_unique_cases(setup):
         scheduler.campaigns.amend("study", {**receipt, "evidence": []})
     with pytest.raises(ValueError, match="unique"):
         scheduler.campaigns.amend("study", {**receipt, "storage_estimates": receipt["storage_estimates"] * 2})
+
+
+def scientific_extension_fixture(setup):
+    scheduler, now, job, manifest = setup
+    job("one"); job("upper-lr")
+    config = manifest()
+    sha = scheduler.campaigns.register(config)
+    scheduler.campaigns.gate("study", "handoff", {"manifest_sha256": sha, "passed": True, "evidence": ["validated"]})
+    scheduler.campaigns.storage("study", 100)
+    scheduler.store.db.execute("UPDATE campaign_contracts SET started=? WHERE id='study'", (now[0]-100,))
+    spec = scheduler.store.job("upper-lr")["spec"]
+    spec["placements"]["lab"]["gpu_models"] = ["RTX 5090"]
+    spec["placements"]["lab"]["prepared_files"] = [{"path": "/experiment/lifecycles/upper-lr.json", "sha256": "c"*64}]
+    scheduler.store.db.execute("UPDATE jobs SET spec=? WHERE id='upper-lr'", (json.dumps(spec),))
+    case = {**config["cases"][0], "id": "upper-lr", "dependencies": ["one"]}
+    receipt = {"version": 1, "id": "explicit-upper-lr", "author": "user", "authorization":
+        "please schedule also 5e-3 on the 5090s -- so that we dont finish on the upper bound of good performance",
+        "manifest_sha256": sha, "reason": "Test the explicitly requested higher learning rate",
+        "evidence": ["user-message", "lifecycle-config.json"], "template_case_id": "one", "cases": [case],
+        "scientific_inputs": {"upper-lr": [{"kind": "lifecycle", "sha256": "c"*64}]}, "storage_bytes": 1200}
+    return scheduler, now, receipt
+
+
+def test_scientific_extension_preserves_old_science_and_only_adds_storage_budget(setup, module):
+    scheduler, now, receipt = scientific_extension_fixture(setup)
+    old = scheduler.campaigns.contract("study")
+    old_case = scheduler.campaigns.case("one")
+    old_job = scheduler.store.job("one")
+    gate = scheduler.store.db.execute("SELECT receipt FROM campaign_gates").fetchone()[0]
+    sha = scheduler.campaigns.extend("study", receipt)
+    after = scheduler.campaigns.contract("study")
+    assert after["manifest"] == old["manifest"]
+    assert after["sha256"] == old["sha256"]
+    assert after["started"] == old["started"]
+    assert after["effective_budgets"] == {**old["manifest"]["budgets"], "storage_bytes": 1200}
+    assert scheduler.campaigns.case("one") == old_case
+    assert scheduler.store.job("one") == old_job
+    assert scheduler.store.db.execute("SELECT receipt FROM campaign_gates").fetchone()[0] == gate
+    assert scheduler.store.job("upper-lr")["state"] == "held"
+    assert scheduler.campaigns.extend("study", receipt) == sha
+    assert len(scheduler.campaigns.contract("study")["scientific_extensions"]) == 1
+    reopened_store = module.Store(scheduler.store.root)
+    try:
+        reopened = CampaignLedger(reopened_store, lambda: now[0])
+        assert reopened.case("upper-lr")["contract"] == receipt["cases"][0]
+        assert reopened.contract("study")["effective_budgets"]["storage_bytes"] == 1200
+        assert reopened.remaining("study")["gpu_seconds_available"] == 3600
+        assert reopened.remaining("study")["window_seconds_remaining"] == 43100
+    finally:
+        reopened_store.close()
+
+
+@pytest.mark.parametrize("bad", ["authority", "authorization", "hash", "active", "old_case", "gate", "dependency", "gpu", "cap", "gpu_budget"])
+def test_scientific_extension_rejects_invalid_authority_inputs_gates_and_resources(setup, bad):
+    scheduler, _, receipt = scientific_extension_fixture(setup)
+    if bad == "authority":
+        receipt["author"] = "assistant"
+    elif bad == "authorization":
+        receipt["authorization"] = ""
+    elif bad == "hash":
+        receipt["scientific_inputs"]["upper-lr"][0]["sha256"] = "d"*64
+    elif bad == "active":
+        scheduler.store.update_job("upper-lr", "running")
+    elif bad == "old_case":
+        receipt["cases"][0]["id"] = "one"
+    elif bad == "gate":
+        receipt["cases"][0]["required_gates"] = []
+    elif bad == "dependency":
+        receipt["cases"][0]["dependencies"] = ["not-declared"]
+    elif bad == "gpu":
+        spec = scheduler.store.job("upper-lr")["spec"]
+        spec["placements"]["lab"]["gpu_models"] = ["RTX 3090"]
+        scheduler.store.db.execute("UPDATE jobs SET spec=? WHERE id='upper-lr'", (json.dumps(spec),))
+    elif bad == "cap":
+        receipt["storage_bytes"] = 999
+    elif bad == "gpu_budget":
+        receipt["gpu_hours"] = 100
+    with pytest.raises(ValueError):
+        scheduler.campaigns.extend("study", receipt)
+    assert scheduler.campaigns.case("upper-lr") is None
+    assert scheduler.store.db.execute("SELECT COUNT(*) FROM campaign_extensions").fetchone()[0] == 0
+    assert scheduler.campaigns.contract("study")["effective_budgets"]["storage_bytes"] == 1000
+
+
+def test_storage_admission_uses_extended_cap_without_changing_original_manifest(setup):
+    scheduler, _, receipt = scientific_extension_fixture(setup)
+    scheduler.campaigns.extend("study", receipt)
+    scheduler.store.update_job("one", "complete")
+    scheduler.campaigns.storage("study", 1050)
+    assert scheduler.campaigns.eligible(scheduler.store.job("upper-lr"))[0]
+    scheduler.campaigns.storage("study", 1150)
+    assert "storage budget" in scheduler.campaigns.eligible(scheduler.store.job("upper-lr"))[1]

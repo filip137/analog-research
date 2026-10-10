@@ -23,7 +23,8 @@ from workflow.lifecycle import parse_lifecycle
 LIFECYCLES = ROOT / "campaigns/opt-cmo-corruption/lifecycles"
 BASE = LIFECYCLES / "opt125m-cmo-l6-exp1e-lrdev.json"
 NOTE = "campaigns/opt-cmo-corruption/series/001-hwa-robustness/experiments/exp-005-whole-model-hwa.md"
-RATES = (1e-5, 1e-4, 1e-3)
+RATES = (1e-5, 1e-4, 1e-3, 5e-3)
+RATE_LABELS = {1e-5: "1em5", 1e-4: "1em4", 1e-3: "1em3", 5e-3: "5em3"}
 SCHEDULES = ("linear", "step")
 ARM = "standard_hwa_model"
 
@@ -31,7 +32,7 @@ ARM = "standard_hwa_model"
 def case_id(rate, schedule):
     if rate not in RATES or schedule not in SCHEDULES:
         raise ValueError("Expected a predeclared development grid cell")
-    return f"opt125m-cmo-l6-exp1e-dev-{schedule}-lr1em{-round(math.log10(rate))}"
+    return f"opt125m-cmo-l6-exp1e-dev-{schedule}-lr{RATE_LABELS[rate]}"
 
 
 def lifecycle(rate, schedule, *, smoke=False):
@@ -71,8 +72,10 @@ def prepare(output, rates=RATES):
     for lc in cases:
         path = output / (lc.lifecycle_id + ".json")
         payload = lc.to_dict()
-        if path.exists() and json.loads(path.read_text()) != payload:
-            raise ValueError(f"Refusing to replace a different prepared lifecycle: {path}")
+        if path.exists():
+            if json.loads(path.read_text()) != payload:
+                raise ValueError(f"Refusing to replace a different prepared lifecycle: {path}")
+            continue  # Preserve frozen bytes as well as their scientific identity.
         atomic_write_json(path, payload)
     return [{"id": lc.lifecycle_id, "lifecycle_sha256": lc.digest(),
              "path": str(output / (lc.lifecycle_id + '.json'))} for lc in cases]
@@ -269,7 +272,7 @@ def plot_development(cases, output):
     import matplotlib.pyplot as plt
 
     fig, axes = plt.subplots(2, 1, figsize=(9, 7), constrained_layout=True)
-    colors = dict(zip(RATES, ("#0072B2", "#D55E00", "#009E73")))
+    colors = dict(zip(RATES, ("#0072B2", "#D55E00", "#009E73", "#CC79A7")))
     for case in sorted(cases, key=lambda value: (value["peak_lr"], value["schedule"])):
         lc = parse_lifecycle(json.loads(Path(case["lifecycle"]).read_text()))
         schedule = lc.hwa.lr_schedule

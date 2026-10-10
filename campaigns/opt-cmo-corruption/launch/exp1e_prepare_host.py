@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the eight frozen development cases on a clean host; launch nothing.
+"""Prepare the frozen development grid and readiness smokes; launch nothing.
 
 Run with the training environment's Python. Standard output is one JSON record
 for controller-side queue preparation. Commands are public workflow planning and

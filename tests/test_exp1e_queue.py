@@ -51,7 +51,7 @@ def receipts(tmp_path):
     return paths
 
 
-def test_queue_matches_all_eight_cases_actual_schema_storage_and_readonly_policy(tmp_path, receipts):
+def test_queue_matches_current_grid_actual_schema_storage_and_readonly_policy(tmp_path, receipts):
     scripts = Path.home() / ".codex/skills/run-watch/scripts"
     if not (scripts / "gpu_queue.py").exists():
         pytest.skip("installed run-watch contract required")
@@ -59,7 +59,7 @@ def test_queue_matches_all_eight_cases_actual_schema_storage_and_readonly_policy
     output = tmp_path / "prepared"
     result = queue.prepare(receipts, output)
     manifest = validate_manifest(json.loads(Path(result["manifest"]).read_text()))
-    assert len(manifest["cases"]) == len(result["jobs"]) == 8
+    assert len(manifest["cases"]) == len(result["jobs"]) == len(queue.RATES) * len(queue.SCHEDULES) + 2
     assert manifest["budgets"] == {"gpu_hours": 16, "storage_bytes": 30_000_000_000, "window_seconds": 43200}
     assert len(manifest["storage_roots"]) == 8
     for host in ("fifi", "loulou", "riri", "trex"):

@@ -130,6 +130,9 @@ class CampaignLedger:
             CREATE TABLE IF NOT EXISTS campaign_gate_waivers (
                 campaign_id TEXT NOT NULL REFERENCES campaign_contracts(id), name TEXT NOT NULL,
                 created REAL NOT NULL, receipt TEXT NOT NULL, PRIMARY KEY(campaign_id,name));
+            CREATE TABLE IF NOT EXISTS campaign_extensions (
+                id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL REFERENCES campaign_contracts(id),
+                sha256 TEXT NOT NULL, created REAL NOT NULL, payload TEXT NOT NULL);
         """)
 
     def contract(self, campaign_id):
@@ -139,6 +142,11 @@ class CampaignLedger:
         manifest = json.loads(row["manifest"])
         amendments = [{**dict(item), "payload": json.loads(item["payload"])} for item in self.db.execute(
             "SELECT * FROM campaign_amendments WHERE campaign_id=? ORDER BY created,id", (campaign_id,))]
+        extensions = [{**dict(item), "payload": json.loads(item["payload"])} for item in self.db.execute(
+            "SELECT * FROM campaign_extensions WHERE campaign_id=? ORDER BY created,id", (campaign_id,))]
+        budgets = dict(manifest["budgets"])
+        for extension in extensions:
+            budgets["storage_bytes"] = max(budgets["storage_bytes"], extension["payload"].get("storage_bytes", budgets["storage_bytes"]))
         cases = [json.loads(item["contract"]) for item in self.db.execute(
             "SELECT contract FROM campaign_cases WHERE campaign_id=? ORDER BY rowid", (campaign_id,))]
         roots = list(manifest.get("storage_roots", []))
@@ -148,6 +156,7 @@ class CampaignLedger:
             for target, stages in amendment["payload"].get("target_progress_calibration", {}).items():
                 calibrations.setdefault(target, {}).update(stages)
         return {**dict(row), "manifest": manifest, "effective_cases": cases,
+                "effective_budgets": budgets, "scientific_extensions": extensions,
                 "effective_storage_roots": roots, "target_progress_calibration": calibrations,
                 "amendments": amendments,
                 "gate_waivers": [{**dict(item), "receipt": json.loads(item["receipt"])} for item in self.db.execute(
@@ -156,6 +165,94 @@ class CampaignLedger:
     def case(self, job_id):
         row = self.db.execute("SELECT * FROM campaign_cases WHERE job_id=?", (job_id,)).fetchone()
         return {**dict(row), "contract": json.loads(row["contract"])} if row else None
+
+    def extend(self, campaign_id, raw):
+        """Append explicitly user-authorized 5090 training cases and storage.
+
+        Existing science and receipts remain immutable. Only a higher storage
+        ceiling can accompany this extension; GPU-hours and the running window
+        cannot be reset or expanded through this API.
+        """
+        receipt = json.loads(canonical(raw))
+        allowed = {"version", "id", "author", "authorization", "manifest_sha256", "reason", "evidence",
+                   "template_case_id", "cases", "scientific_inputs", "storage_bytes"}
+        if receipt.get("version") != 1 or set(receipt) - allowed:
+            raise ValueError("unsupported scientific extension fields/version")
+        if receipt.get("author") != "user":
+            raise ValueError("scientific extension requires explicit user authority")
+        for key in ("id", "authorization", "reason"):
+            if not isinstance(receipt.get(key), str) or not receipt[key].strip():
+                raise ValueError(f"scientific extension requires {key}")
+        if not receipt.get("evidence"):
+            raise ValueError("scientific extension requires recorded evidence")
+        identity = digest(receipt)
+        with self.store.transaction():
+            old = self.db.execute("SELECT * FROM campaign_extensions WHERE id=?", (receipt["id"],)).fetchone()
+            if old:
+                if old["campaign_id"] != campaign_id or old["sha256"] != identity:
+                    raise ValueError("extension id already exists with different content")
+                return identity
+            contract = self.contract(campaign_id)
+            if receipt.get("manifest_sha256") != contract["sha256"]:
+                raise ValueError("extension must name the unchanged frozen manifest hash")
+            template = self.case(receipt.get("template_case_id"))
+            if not template or template["campaign_id"] != campaign_id or template["contract"]["stage"] != "training":
+                raise ValueError("extension requires an existing training template in this campaign")
+            additions = receipt.get("cases", [])
+            if not isinstance(additions, list) or not additions:
+                raise ValueError("scientific extension requires new training cases")
+            new_ids = [case.get("id") for case in additions]
+            if len(set(new_ids)) != len(new_ids):
+                raise ValueError("extension case IDs must be unique")
+            scientific = receipt.get("scientific_inputs", {})
+            if not isinstance(scientific, dict) or set(scientific) != set(new_ids):
+                raise ValueError("scientific inputs must name exactly the new cases")
+            budgets = dict(contract["effective_budgets"])
+            if "storage_bytes" in receipt:
+                size = receipt["storage_bytes"]
+                if isinstance(size, bool) or not isinstance(size, int) or size < budgets["storage_bytes"]:
+                    raise ValueError("extension storage cap must be an integer at least the existing cap")
+                budgets["storage_bytes"] = size
+            existing_gates = {row["name"] for row in self.db.execute("SELECT name FROM campaign_gates WHERE campaign_id=?", (campaign_id,))}
+            required_gates = set(template["contract"].get("required_gates", []))
+            for case in additions:
+                case_id = case["id"]
+                if case["stage"] != "training" or self.case(case_id):
+                    raise ValueError("extension can only append previously unregistered training cases")
+                gates = set(case.get("required_gates", []))
+                if not required_gates <= gates or not gates <= existing_gates:
+                    raise ValueError("new cases must preserve template validation gates and name existing gates only")
+                job = self.store.job(case_id)
+                if not job or job["state"] != "held" or any(a["job_id"] == case_id for a in self.store.attempts()):
+                    raise ValueError("new training jobs must be held without any execution history")
+                if job["spec"].get("recovery", True) or case["expected_gpu_seconds"] > job["spec"]["budget_seconds"]:
+                    raise ValueError("new training job has mutable recovery or insufficient worker allowance")
+                inputs = scientific[case_id]
+                if not isinstance(inputs, list) or not inputs or any(not isinstance(item, dict) or item.get("kind") != "lifecycle"
+                        or len(item.get("sha256", "")) != 64 or any(char not in "0123456789abcdef" for char in item["sha256"]) for item in inputs):
+                    raise ValueError("each new case requires pinned lifecycle hashes")
+                required_hashes = {item["sha256"] for item in inputs}
+                for placement in job["spec"]["placements"].values():
+                    if not placement.get("gpu_models") or any("5090" not in model for model in placement["gpu_models"]):
+                        raise ValueError("this scientific extension is restricted to RTX 5090 placements")
+                    if not Path(placement.get("campaign_worker_spec", "")).is_absolute() or not Path(placement.get("campaign_result_root", "")).is_absolute():
+                        raise ValueError("new training placement needs explicit tmux and result paths")
+                    hashes = {item["sha256"] for item in placement.get("prepared_files", [])
+                              if "lifecycles" in Path(item["path"]).parts and Path(item["path"]).suffix == ".json"}
+                    if not required_hashes <= hashes:
+                        raise ValueError("new training placement does not pin its declared scientific lifecycle")
+            validate_manifest({**contract["manifest"], "budgets": budgets,
+                               "cases": contract["effective_cases"] + additions,
+                               "storage_roots": contract["effective_storage_roots"]})
+            for case in additions:
+                self.db.execute("INSERT INTO campaign_cases VALUES(?,?,?)", (case["id"], campaign_id, canonical(case)))
+            self.db.execute("INSERT INTO campaign_extensions VALUES(?,?,?,?,?)",
+                            (receipt["id"], campaign_id, identity, self.clock(), canonical(receipt)))
+            self.store.event(None, "campaign_scientific_extension_by_user", {"campaign_id": campaign_id,
+                "extension_id": receipt["id"], "sha256": identity, "cases": new_ids,
+                "previous_storage_bytes": contract["effective_budgets"]["storage_bytes"],
+                "storage_bytes": budgets["storage_bytes"]}, self.clock())
+        return identity
 
     def amend(self, campaign_id, raw):
         """Audit execution capacity and measured storage estimates without retuning.
@@ -417,7 +514,7 @@ class CampaignLedger:
                 # estimate uses the controller admission time; terminal receipts
                 # replace it with the worker's measured elapsed duration.
                 active_elapsed += max(0.0, self.clock() - attempt["issued"])
-        budgets = contract["manifest"]["budgets"]
+        budgets = contract["effective_budgets"]
         return {"gpu_seconds_charged": charged, "gpu_seconds_active_estimate": active_elapsed,
                 "gpu_seconds_reserved": reserved, "gpu_seconds_available": budgets["gpu_hours"] * 3600 - charged - reserved,
                 "storage_bytes_observed": contract["storage_bytes"],
@@ -454,7 +551,7 @@ class CampaignLedger:
         if contract["storage_observed"] is None or self.clock() - contract["storage_observed"] > 600:
             return False, "campaign storage measurement is missing or stale"
         needed = usage["storage_bytes_observed"] + usage["storage_bytes_reserved"] + case["contract"]["expected_storage_bytes"]
-        if needed > contract["manifest"]["budgets"]["storage_bytes"]:
+        if needed > contract["effective_budgets"]["storage_bytes"]:
             return False, "campaign storage budget cannot cover this stage"
         if self.db.execute("SELECT 1 FROM campaign_reservations WHERE job_id=?", (job["id"],)).fetchone():
             return False, "submission ownership already reserved"
@@ -535,6 +632,7 @@ class CampaignLedger:
         return {"incident": dict(incident), "case_id": job["id"], "manifest": contract["manifest"],
                 "manifest_sha256": contract["sha256"], "job": job,
                 "operational_amendments": contract["amendments"],
+                "scientific_extensions": contract["scientific_extensions"], "effective_budgets": contract["effective_budgets"],
                 "gate_waivers": contract["gate_waivers"],
                 "target_progress_calibration": contract["target_progress_calibration"],
                 "expected_progress": self.progress_expectation(job["id"]),
@@ -583,6 +681,7 @@ class CampaignLedger:
                             "state": "awaiting_scientific_review" if all(j["state"] == "complete" for j in jobs) else "active_or_blocked",
                             "last_poll": contract["last_poll"], "remaining_budget": self.remaining(row["id"]),
                             "operational_amendments": contract["amendments"],
+                            "scientific_extensions": contract["scientific_extensions"], "effective_budgets": contract["effective_budgets"],
                             "gate_waivers": contract["gate_waivers"],
                             "effective_storage_roots": contract["effective_storage_roots"],
                             "target_progress_calibration": contract["target_progress_calibration"],
@@ -941,9 +1040,9 @@ def scheduler_type(queue_module):
                                 [target["python"], "-m", "campaigns.execution_service", "probe-storage", *paths], cwd=workdir)
                             total += value["storage_bytes"]
                         self.campaigns.storage(row["id"], total, now)
-                        if total > contract["manifest"]["budgets"]["storage_bytes"]:
+                        if total > contract["effective_budgets"]["storage_bytes"]:
                             self.campaigns.incident(contract["effective_cases"][0]["id"], "storage_budget_exceeded",
-                                                    {"storage_bytes": total, "limit": contract["manifest"]["budgets"]["storage_bytes"]})
+                                                    {"storage_bytes": total, "limit": contract["effective_budgets"]["storage_bytes"]})
                     except Exception as exc:
                         for case in contract["effective_cases"]:
                             self.campaigns.incident(case["id"], "storage_observation_failed", {"error": str(exc)[:1000]})
@@ -1005,7 +1104,7 @@ def scheduler_type(queue_module):
             if case:
                 self.campaigns.reserve(job, now=now)
                 contract = self.campaigns.contract(case["campaign_id"])
-                deadline = contract["started"] + contract["manifest"]["budgets"]["window_seconds"]
+                deadline = contract["started"] + contract["effective_budgets"]["window_seconds"]
                 if job["spec"].get("deadline"):
                     deadline = min(deadline, queue_module.timestamp(job["spec"]["deadline"]))
                 job = json.loads(canonical(job))
@@ -1145,6 +1244,8 @@ def main(argv=None):
     prepare.add_argument("job", type=Path)
     amendment = commands.add_parser("amend")
     amendment.add_argument("campaign_id"); amendment.add_argument("amendment", type=Path)
+    extension = commands.add_parser("extend")
+    extension.add_argument("campaign_id"); extension.add_argument("receipt", type=Path)
     gate = commands.add_parser("gate")
     gate.add_argument("campaign_id"); gate.add_argument("name"); gate.add_argument("receipt", type=Path)
     waiver = commands.add_parser("waive-gate")
@@ -1168,6 +1269,7 @@ def main(argv=None):
                       "attempts": [dict(row) for row in db.execute("SELECT * FROM attempts")],
                       "observations": [dict(row) for row in db.execute("SELECT * FROM campaign_observations")],
                       "amendments": [dict(row) for row in db.execute("SELECT * FROM campaign_amendments")],
+                      "scientific_extensions": [dict(row) for row in db.execute("SELECT * FROM campaign_extensions")],
                       "gate_waivers": [dict(row) for row in db.execute("SELECT * FROM campaign_gate_waivers")],
                       "investigations": [dict(row) for row in db.execute("SELECT * FROM campaign_investigations")],
                       "campaigns": [dict(row) for row in db.execute("SELECT * FROM campaign_contracts")],
@@ -1184,6 +1286,8 @@ def main(argv=None):
         print(scheduler.campaigns.register(json.loads(args.manifest.read_text()))); return
     if args.command == "amend":
         print(scheduler.campaigns.amend(args.campaign_id, json.loads(args.amendment.read_text()))); return
+    if args.command == "extend":
+        print(scheduler.campaigns.extend(args.campaign_id, json.loads(args.receipt.read_text()))); return
     if args.command == "gate":
         scheduler.campaigns.gate(args.campaign_id, args.name, json.loads(args.receipt.read_text())); return
     if args.command == "waive-gate":
