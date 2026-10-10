@@ -15,7 +15,9 @@ unexecuted fixed-1e-4 plan and the older digital-only LR search.
 
 The user authorized implementation, launch, persistent monitoring and tmux access.
 On 2026-10-10 the user lifted the weekend two-GPU admission cap and authorized a
-higher compute allowance; the bounded campaign allowance is now 16 GPU-hours.
+higher compute allowance; the original bounded allowance was 16 GPU-hours.
+The authorized duration comparison below raises the cumulative cap to 20 GPU-hours,
+including all prior work and retries.
 The initial six-cell grid used the previously discussed 1e-5/1e-4/1e-3 range.
 After four completed candidates favored its upper LR boundary, the user explicitly
 requested adding 5e-3 on RTX 5090s: "please schedule also 5e-3 on the 5090s -- so
@@ -24,7 +26,10 @@ additional candidates, one per existing schedule. The expansion is an adaptive
 development decision made after partial results, not part of the initial grid.
 After all eight completed, the user authorized a second extension to 1e-2 for
 both schedules ("its just strange that lr has to be so high? but yes leta do
-1e-2 as well"). The active development grid therefore has ten candidates.
+1e-2 as well"). The LR development grid therefore has ten candidates. The user
+then accepted a separate two-case duration comparison at 1e-3 and 5e-3 after
+reviewing the late improvements ("ok yes..."). Its frozen protocol is below;
+unequal training budgets do not enter the ten-case LR ranking.
 Both readiness smokes passed and the calibrated handoff gate remains open.
 
 As of 2026-10-10 15:37 Paris, the first eight development candidates are complete,
@@ -512,3 +517,68 @@ charged time, window and matching waiver remained intact. This handoff is in
 `readiness/lr1em2/live-handoff.json`. The regenerated review has eight of ten
 completed candidates and withholds a recommendation. Expected finish for both
 new runs is 16:40–16:50 Paris, subject to throughput and validation.
+
+### Authorized duration comparison, 2026-10-10
+
+Question: after the current step-schedule runs, does more training at the same
+post-decay rate improve development performance, and does it change the ordering
+of peak LR 1e-3 and 5e-3? The user accepted this comparison following the
+training-duration interpretation in the result note. This is adaptive development,
+not an independent confirmation or a new source of training-seed replication.
+
+Add exactly two cases:
+`opt125m-cmo-l6-exp1e-dev-step-lr1em3-tail4pass` and
+`opt125m-cmo-l6-exp1e-dev-step-lr5em3-tail4pass`. Both start from the same pinned
+teacher and run 25,600 updates (100 intervals, 209,715,200 token exposures,
+approximately 4.196 corpus passes). Preserve batch 32, sequences per interval
+8,192, the 205-update warm-up, the peak through update 10,240, and the tenfold
+drop beginning at 10,241. Thus every scheduled LR through update 12,800 is
+unchanged, and the additional 12,800 updates use 1e-4 or 5e-4 respectively.
+Do not stretch warm-up or move the decay point. This tests a longer low-LR tail;
+it does not test stretching the whole schedule over four passes.
+
+All other scientific settings in the frozen comparison remain fixed: teacher,
+corpus/cohorts, whole-transformer scope, six analog MLPs, 3% standard HWA noise,
+optimizer, seeds, development cases/arrays and 512-update selection cadence.
+The selected source still minimizes mean healthy/faulted development KL, with
+earliest ties. The native saved source lacks optimizer/RNG state, so these are
+fresh complete runs with a matching declared prefix, not exact checkpoint resumes.
+Retain the existing cross-GPU randomness waiver; prefix differences are reported
+as diagnostics and never trigger an automatic scientific restart.
+
+Report the duration comparison separately from the equal-budget ten-case grid.
+For each long run, compare terminal development KL at update 25,600 with that
+same trajectory's update 12,800, including healthy and faulty components.
+Also report selected checkpoints, late-curve improvement and comparison of the
+12,800-update midpoint with the prior short run. Best-score improvement alone
+cannot demonstrate a duration benefit because longer runs offer more selection
+opportunities. Between the two equal-budget long runs, retain the existing
+within-1% preference for lower peak LR. No result automatically releases broader
+recipes, extra epochs or final-test evaluation.
+
+The duration choice is a declared deviation from Büchel et al. Appendix I's
+two-epoch recipe. Its Appendix H motivates checking slower noisy-training
+convergence, but neither its corpus size nor its optimizer is matched here.
+Rasch et al. use task-dependent training durations (including 5–20 epochs for
+BERT in Appendix A.2.3); that is context, not a prescribed OPT epoch count.
+Both reference PDFs were consulted. The specific four-pass budget and fixed
+decay point are justified by this campaign's late development improvements.
+
+Dispatch only after both current 1e-2 cases finish execution, collection and
+their declared validation. Use the existing fifi/loulou RTX 5090 placements,
+one job per GPU, through the same persistent queue and tmux supervisors.
+Measured 50–52-minute short trials project to 100–105 minutes per long trial;
+allow 7,200 seconds expected and 10,800 seconds hard runtime per case, with a
+900-second renewable supervision lease. Memory remains 21,500 MiB plus 1,024 MiB
+headroom. Add approximately 3.4 GPU-hours and 1.84 GB retained evidence; expected
+cumulative usage is about 15.2 GPU-hours and 33.9 GB. Raise the cumulative cap
+to 20 GPU-hours and 36 GB through an append-only user-authorized receipt,
+preserving all charged work and the original 23:19:34 Paris deadline.
+
+Use the clean worker revision `237de7d` and existing native training implementation.
+New host/case plans and pinned configs go under each worker's ignored
+`results/lifecycles/<case-id>/`; preparation and queue receipts go under local
+`results/lifecycles/opt125m-cmo-l6-exp1e-development/readiness/tail4pass/`.
+Native outputs stay in each case root and compact exports join the existing
+`collected/` index, with a separate duration section in its review. The original
+manifest, earlier lifecycle files and completed artifacts remain immutable.

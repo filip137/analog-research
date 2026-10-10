@@ -30,8 +30,8 @@ def write_json(path, value):
     path.write_text(json.dumps(value))
 
 
-def case_bundle(root, rate=1e-4, schedule="linear", *, score=0.1, rejected=False):
-    lc = development.lifecycle(rate, schedule)
+def case_bundle(root, rate=1e-4, schedule="linear", *, score=0.1, rejected=False, duration=False):
+    lc = development.duration_lifecycle(rate) if duration else development.lifecycle(rate, schedule)
     config = root / f"{lc.lifecycle_id}.json"
     run = root / lc.lifecycle_id / "attempt-1"
     result_path = run / "result.json"
@@ -39,17 +39,17 @@ def case_bundle(root, rate=1e-4, schedule="linear", *, score=0.1, rejected=False
     write_json(run / "config.resolved.json", {
         "lifecycle": lc.to_dict(), "stage": {"kind": "hwa", "hwa_arm": development.ARM, "array_seed": None},
     })
-    epochs = range(0, 5 if rejected else 51, 2)
+    epochs = range(0, 5 if rejected else lc.hwa.epochs + 1, 2)
     history = [{
         "epoch": epoch, "global_step": epoch * 256, "elapsed_seconds": float(epoch),
         "teacher_kl": score + (50 - epoch) * 0.001,
         "cases": [{"case": case.label, "teacher_kl": score + (50 - epoch) * 0.001}
                   for case in lc.hwa.arms[0].selection_cases],
     } for epoch in epochs]
-    steps_run = 1200 if rejected else 12800
+    steps_run = 1200 if rejected else lc.hwa.lr_schedule.total_steps
     fit = {
         "status": "rejected_nonfinite" if rejected else "complete", "history": history,
-        "epochs_run": 4 if rejected else 50, "maximum_epochs": 50,
+        "epochs_run": 4 if rejected else lc.hwa.epochs, "maximum_epochs": lc.hwa.epochs,
         "selected_epoch": history[-1]["epoch"], "development_kl": history[-1]["teacher_kl"],
         "convergence_review_required": True,
         "rejection": {"epoch": 5, "batch": 176, "reason": "nonfinite HWA objective"} if rejected else None,
@@ -322,6 +322,148 @@ def test_original_eight_results_remain_partial_until_both_new_rates_finish(tmp_p
     assert report["coverage_complete"] is False and report["recommendation"] is None
     assert len(report["expected"]) == 10
     assert set(report["missing"]) == {development.case_id(1e-2, schedule) for schedule in development.SCHEDULES}
+
+
+def test_duration_preparation_changes_only_budget_and_preserves_grid_bytes(tmp_path):
+    development.prepare(tmp_path)
+    before = {path.name: path.read_bytes() for path in tmp_path.glob("*.json")}
+    prepared = development.prepare_duration(tmp_path)
+    assert len(prepared) == 2
+    assert all((tmp_path / name).read_bytes() == content for name, content in before.items())
+    for rate, record in zip(development.DURATION_RATES, prepared):
+        short = development.lifecycle(rate, "step")
+        long = parse_lifecycle(json.loads(Path(record["path"]).read_text()))
+        assert long.lifecycle_id == short.lifecycle_id + "-tail4pass"
+        assert long.digest() == record["lifecycle_sha256"]
+        assert long.hwa.epochs == 100 and long.hwa.lr_schedule.total_steps == 25600
+        assert long.hwa.lr_schedule.warmup_steps == 205
+        assert long.hwa.lr_schedule.milestone_step == 10240
+        assert long.hwa.lr_schedule.decay_factor == 0.1
+        assert [long.hwa.lr_schedule.factor(step) for step in range(12801)] == [
+            short.hwa.lr_schedule.factor(step) for step in range(12801)]
+        assert long.hwa.lr_schedule.factor(25600) == 0.1
+        doc, original = long.to_dict(), short.to_dict()
+        doc["lifecycle_id"] = original["lifecycle_id"]
+        doc["question"]["text"] = original["question"]["text"]
+        doc["hwa"]["epochs"] = original["hwa"]["epochs"]
+        doc["hwa"]["lr_schedule"]["total_steps"] = original["hwa"]["lr_schedule"]["total_steps"]
+        assert doc == original
+    assert development.prepare_duration(tmp_path) == prepared
+    with pytest.raises(ValueError, match="predeclared"):
+        development.duration_lifecycle(1e-2)
+    write_json(Path(prepared[0]["path"]), {})
+    with pytest.raises(ValueError, match="replace"):
+        development.prepare_duration(tmp_path)
+
+
+@pytest.mark.parametrize("failure", ["none", "epochs", "maximum_epochs", "steps", "history", "config"])
+def test_duration_sources_require_full_frozen_100_epoch_budget(tmp_path, failure):
+    config, result = case_bundle(tmp_path, 1e-3, "step", duration=True)
+    payload = json.loads(result.read_text())
+    fit = payload["metrics"]["fit"]
+    if failure == "epochs":
+        fit["epochs_run"] = 50
+    elif failure == "maximum_epochs":
+        fit["maximum_epochs"] = 50
+    elif failure == "steps":
+        fit["lr_schedule"]["steps_run"] = 12800
+    elif failure == "history":
+        fit["history"] = fit["history"][:26]
+    elif failure == "config":
+        doc = json.loads(config.read_text())
+        doc["hwa"]["lr_schedule"]["warmup_steps"] = 410
+        write_json(config, doc)
+    write_json(result, payload)
+    if failure == "none":
+        case = development.read_case(config, result)
+        assert case["comparison"] == "duration" and case["steps_run"] == 25600
+        assert len(case["history"]) == 51 and case["selected_epoch"] == 100
+    else:
+        with pytest.raises(ValueError):
+            development.read_case(config, result)
+
+
+def test_duration_summary_is_separate_and_reports_matched_terminal_components(tmp_path, monkeypatch):
+    monkeypatch.setattr(development, "plot_development", lambda *args: [])
+    entries = []
+    for rate in development.RATES:
+        for schedule in development.SCHEDULES:
+            config, result = case_bundle(tmp_path, rate, schedule, score=0.0999 if rate == 5e-3 else 0.1)
+            entries.append({"lifecycle": str(config), "result": str(result)})
+    for rate in development.DURATION_RATES:
+        config, result = case_bundle(tmp_path, rate, "step", duration=True,
+                                    score=0.0999 if rate == 5e-3 else 0.1)
+        entries.append({"lifecycle": str(config), "result": str(result)})
+    # Give healthy/faulty components different values while preserving the mean.
+    for entry in entries:
+        result = Path(entry["result"])
+        def different_components(payload):
+            for point in payload["metrics"]["fit"]["history"]:
+                point["cases"][0]["teacher_kl"] = point["teacher_kl"] * 0.8
+                point["cases"][1]["teacher_kl"] = point["teacher_kl"] * 1.2
+        mutate_result(result, different_components)
+    index = tmp_path / "index.json"
+    write_json(index, entries)
+    report = development.summarize(index, tmp_path / "review")
+    assert len(report["cases"]) == len(report["expected"]) == 10
+    assert report["recommendation"] == development.case_id(1e-5, "linear")
+    duration = report["duration_comparison"]
+    assert duration["coverage_complete"] and duration["reference_coverage_complete"]
+    assert len(duration["cases"]) == 2 and not duration["missing"]
+    assert duration["recommendation"] == development.duration_lifecycle(1e-3).lifecycle_id
+    assert duration["downstream_gate"] == report["downstream_gate"] == "awaiting_scientific_review"
+    assert duration["test_used_for_selection"] is False
+    assert "more selection opportunities" in duration["selection_caveat"]
+    for comparison in duration["comparisons"]:
+        assert comparison["history_prefix_identical"] is True
+        assert comparison["prior_replay_change"]["mean_teacher_kl_delta"] == 0
+        assert comparison["checkpoint_12800"] == comparison["prior_checkpoint_12800"]
+        assert comparison["terminal_25600"]["step"] == 25600
+        for kind in ("selected", "terminal"):
+            delta = comparison[f"{kind}_change_12800_to_25600"]
+            assert delta["mean_teacher_kl_delta"] == pytest.approx(-0.05)
+            assert delta["case_teacher_kl_deltas"]["nominal"] == pytest.approx(-0.04)
+            assert delta["case_teacher_kl_deltas"]["random_30000ppm"] == pytest.approx(-0.06)
+        assert comparison["terminal_change_20480_to_25600"]["mean_teacher_kl_delta"] == pytest.approx(-0.02)
+    assert (tmp_path / "review/duration/duration.md").exists()
+    assert json.loads((tmp_path / "review/duration/duration.json").read_text()) == duration
+    write_json(index, entries[:-1])
+    partial = development.summarize(index, tmp_path / "partial")
+    assert partial["coverage_complete"] and partial["recommendation"] == report["recommendation"]
+    assert not partial["duration_comparison"]["coverage_complete"]
+    assert partial["duration_comparison"]["recommendation"] is None
+    monkeypatch.setattr("sys.argv", ["exp1e_development.py", "summarize", "--index", str(index),
+                                     "--output", str(tmp_path / "partial-cli")])
+    assert development.main() == 2
+    write_json(index, entries + entries[-1:])
+    with pytest.raises(ValueError, match="Duplicate"):
+        development.summarize(index, tmp_path / "duplicate")
+
+
+def test_duration_prefix_difference_and_missing_reference_remain_visible(tmp_path):
+    originals, durations = [], []
+    for rate in development.DURATION_RATES:
+        originals.append(development.read_case(*case_bundle(tmp_path, rate, "step")))
+        durations.append(development.read_case(*case_bundle(tmp_path, rate, "step", duration=True, score=0.1001)))
+    report = development.duration_review(durations, originals)
+    assert report["coverage_complete"]
+    assert all(item["history_prefix_identical"] is False for item in report["comparisons"])
+    assert all(item["prior_replay_change"]["mean_teacher_kl_delta"] == pytest.approx(0.0001)
+               for item in report["comparisons"])
+    assert sum(item["kind"] == "prefix_replay_difference" for item in report["warnings"]) == 2
+    missing = development.duration_review(durations, originals[:1])
+    assert not missing["reference_coverage_complete"] and missing["recommendation"] is None
+    assert missing["missing_complete_references"] == [development.case_id(5e-3, "step")]
+
+
+def test_rejected_duration_does_not_fabricate_terminal_or_selected_improvement(tmp_path):
+    rejected = development.read_case(*case_bundle(tmp_path, 1e-3, "step", duration=True, rejected=True))
+    report = development.duration_review([rejected], [])
+    comparison = report["comparisons"][0]
+    assert comparison["checkpoint_12800"] is None and comparison["terminal_25600"] is None
+    assert comparison["selected_change_12800_to_25600"] is None
+    assert comparison["terminal_change_12800_to_25600"] is None
+    assert report["recommendation"] is None
 
 
 @pytest.mark.parametrize("rejected", [False, True])

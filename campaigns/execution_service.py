@@ -147,6 +147,7 @@ class CampaignLedger:
         budgets = dict(manifest["budgets"])
         for extension in extensions:
             budgets["storage_bytes"] = max(budgets["storage_bytes"], extension["payload"].get("storage_bytes", budgets["storage_bytes"]))
+            budgets["gpu_hours"] = max(budgets["gpu_hours"], extension["payload"].get("gpu_hours", budgets["gpu_hours"]))
         cases = [json.loads(item["contract"]) for item in self.db.execute(
             "SELECT contract FROM campaign_cases WHERE campaign_id=? ORDER BY rowid", (campaign_id,))]
         roots = list(manifest.get("storage_roots", []))
@@ -167,15 +168,15 @@ class CampaignLedger:
         return {**dict(row), "contract": json.loads(row["contract"])} if row else None
 
     def extend(self, campaign_id, raw):
-        """Append explicitly user-authorized 5090 training cases and storage.
+        """Append explicitly user-authorized 5090 cases and resource allowances.
 
-        Existing science and receipts remain immutable. Only a higher storage
-        ceiling can accompany this extension; GPU-hours and the running window
-        cannot be reset or expanded through this API.
+        Existing science and receipts remain immutable. Explicit higher storage
+        and GPU-hour ceilings may accompany the new cases. Charged time and the
+        running execution window are never reset or extended through this API.
         """
         receipt = json.loads(canonical(raw))
         allowed = {"version", "id", "author", "authorization", "manifest_sha256", "reason", "evidence",
-                   "template_case_id", "cases", "scientific_inputs", "storage_bytes"}
+                   "template_case_id", "cases", "scientific_inputs", "storage_bytes", "gpu_hours"}
         if receipt.get("version") != 1 or set(receipt) - allowed:
             raise ValueError("unsupported scientific extension fields/version")
         if receipt.get("author") != "user":
@@ -213,6 +214,13 @@ class CampaignLedger:
                 if isinstance(size, bool) or not isinstance(size, int) or size < budgets["storage_bytes"]:
                     raise ValueError("extension storage cap must be an integer at least the existing cap")
                 budgets["storage_bytes"] = size
+            if "gpu_hours" in receipt:
+                positive(receipt["gpu_hours"], "extension gpu_hours")
+                if not math.isfinite(receipt["gpu_hours"] * 3600):
+                    raise ValueError("extension GPU-hour cap must remain finite when converted to seconds")
+                if receipt["gpu_hours"] < budgets["gpu_hours"]:
+                    raise ValueError("extension GPU-hour cap cannot decrease the current effective cap")
+                budgets["gpu_hours"] = receipt["gpu_hours"]
             existing_gates = {row["name"] for row in self.db.execute("SELECT name FROM campaign_gates WHERE campaign_id=?", (campaign_id,))}
             required_gates = set(template["contract"].get("required_gates", []))
             for case in additions:
@@ -251,7 +259,9 @@ class CampaignLedger:
             self.store.event(None, "campaign_scientific_extension_by_user", {"campaign_id": campaign_id,
                 "extension_id": receipt["id"], "sha256": identity, "cases": new_ids,
                 "previous_storage_bytes": contract["effective_budgets"]["storage_bytes"],
-                "storage_bytes": budgets["storage_bytes"]}, self.clock())
+                "storage_bytes": budgets["storage_bytes"],
+                "previous_gpu_hours": contract["effective_budgets"]["gpu_hours"],
+                "gpu_hours": budgets["gpu_hours"]}, self.clock())
         return identity
 
     def amend(self, campaign_id, raw):
@@ -480,8 +490,16 @@ class CampaignLedger:
 
     def progress_expectation(self, job_id, target=None):
         case = self.case(job_id)
+        contract = self.contract(case["campaign_id"])
+        if any(any(added["id"] == job_id for added in extension["payload"]["cases"])
+               for extension in contract["scientific_extensions"]):
+            # A scientific extension declares its own calibrated duration (for
+            # example twice as many optimizer updates). Preserve that frozen
+            # case contract rather than inheriting a shorter original run's
+            # target/stage or handoff/stage estimate.
+            return case["contract"]["progress"]
         if target:
-            calibrated = self.contract(case["campaign_id"])["target_progress_calibration"].get(target, {}).get(case["contract"]["stage"])
+            calibrated = contract["target_progress_calibration"].get(target, {}).get(case["contract"]["stage"])
             if calibrated:
                 return calibrated
         row = self.db.execute("SELECT receipt FROM campaign_gates WHERE campaign_id=? AND name='handoff'", (case["campaign_id"],)).fetchone()

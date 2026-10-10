@@ -623,12 +623,15 @@ def test_storage_estimates_need_measurement_evidence_and_unique_cases(setup):
         scheduler.campaigns.amend("study", {**receipt, "storage_estimates": receipt["storage_estimates"] * 2})
 
 
-def scientific_extension_fixture(setup):
+def scientific_extension_fixture(setup, calibration=None):
     scheduler, now, job, manifest = setup
     job("one"); job("upper-lr")
     config = manifest()
     sha = scheduler.campaigns.register(config)
-    scheduler.campaigns.gate("study", "handoff", {"manifest_sha256": sha, "passed": True, "evidence": ["validated"]})
+    gate = {"manifest_sha256": sha, "passed": True, "evidence": ["validated"]}
+    if calibration:
+        gate["progress_calibration"] = calibration
+    scheduler.campaigns.gate("study", "handoff", gate)
     scheduler.campaigns.storage("study", 100)
     scheduler.store.db.execute("UPDATE campaign_contracts SET started=? WHERE id='study'", (now[0]-100,))
     spec = scheduler.store.job("upper-lr")["spec"]
@@ -673,7 +676,7 @@ def test_scientific_extension_preserves_old_science_and_only_adds_storage_budget
         reopened_store.close()
 
 
-@pytest.mark.parametrize("bad", ["authority", "authorization", "hash", "active", "old_case", "gate", "dependency", "gpu", "cap", "gpu_budget"])
+@pytest.mark.parametrize("bad", ["authority", "authorization", "hash", "active", "old_case", "gate", "dependency", "gpu", "cap", "window_budget"])
 def test_scientific_extension_rejects_invalid_authority_inputs_gates_and_resources(setup, bad):
     scheduler, _, receipt = scientific_extension_fixture(setup)
     if bad == "authority":
@@ -696,8 +699,8 @@ def test_scientific_extension_rejects_invalid_authority_inputs_gates_and_resourc
         scheduler.store.db.execute("UPDATE jobs SET spec=? WHERE id='upper-lr'", (json.dumps(spec),))
     elif bad == "cap":
         receipt["storage_bytes"] = 999
-    elif bad == "gpu_budget":
-        receipt["gpu_hours"] = 100
+    elif bad == "window_budget":
+        receipt["window_seconds"] = 100000
     with pytest.raises(ValueError):
         scheduler.campaigns.extend("study", receipt)
     assert scheduler.campaigns.case("upper-lr") is None
@@ -713,3 +716,82 @@ def test_storage_admission_uses_extended_cap_without_changing_original_manifest(
     assert scheduler.campaigns.eligible(scheduler.store.job("upper-lr"))[0]
     scheduler.campaigns.storage("study", 1150)
     assert "storage budget" in scheduler.campaigns.eligible(scheduler.store.job("upper-lr"))[1]
+
+
+def test_user_gpu_hour_extension_preserves_charges_window_and_survives_restart(setup, module):
+    scheduler, now, receipt = scientific_extension_fixture(setup)
+    scheduler.store.db.execute("UPDATE jobs SET used_seconds=321 WHERE id='one'")
+    original = scheduler.campaigns.contract("study")
+    receipt["gpu_hours"] = 20
+    sha = scheduler.campaigns.extend("study", receipt)
+    after = scheduler.campaigns.contract("study")
+    assert after["manifest"] == original["manifest"]
+    assert after["sha256"] == original["sha256"]
+    assert after["started"] == original["started"]
+    assert after["effective_budgets"]["window_seconds"] == original["effective_budgets"]["window_seconds"]
+    assert after["effective_budgets"]["gpu_hours"] == 20
+    assert scheduler.campaigns.extend("study", receipt) == sha
+    reopened_store = module.Store(scheduler.store.root)
+    try:
+        reopened = CampaignLedger(reopened_store, lambda: now[0])
+        usage = reopened.remaining("study")
+        assert usage["gpu_seconds_charged"] == 321
+        assert usage["gpu_seconds_available"] == 20 * 3600 - 321
+        assert usage["window_seconds_remaining"] == 43100
+        assert reopened.contract("study")["manifest"]["budgets"]["gpu_hours"] == 1
+        event = json.loads(reopened_store.db.execute("SELECT detail FROM events WHERE kind='campaign_scientific_extension_by_user'").fetchone()[0])
+        assert event["previous_gpu_hours"] == 1
+        assert event["gpu_hours"] == 20
+        assert len(reopened.contract("study")["scientific_extensions"]) == 1
+    finally:
+        reopened_store.close()
+
+
+@pytest.mark.parametrize("bad_hours", [float("nan"), float("inf"), 1e308, True, False, 0, -1, .5, "20"])
+def test_user_gpu_hour_extension_rejects_nonfinite_boolean_or_decreased_caps(setup, bad_hours):
+    scheduler, _, receipt = scientific_extension_fixture(setup)
+    receipt["gpu_hours"] = bad_hours
+    with pytest.raises(ValueError):
+        scheduler.campaigns.extend("study", receipt)
+    assert scheduler.campaigns.contract("study")["effective_budgets"]["gpu_hours"] == 1
+    assert scheduler.store.db.execute("SELECT COUNT(*) FROM campaign_extensions").fetchone()[0] == 0
+
+
+def test_gpu_hour_increase_still_requires_user_authority(setup):
+    scheduler, _, receipt = scientific_extension_fixture(setup)
+    receipt.update(gpu_hours=20, author="assistant")
+    with pytest.raises(ValueError, match="user authority"):
+        scheduler.campaigns.extend("study", receipt)
+
+
+def test_long_case_waits_for_both_predecessors_and_retains_mandatory_gates(setup):
+    scheduler, now, receipt = scientific_extension_fixture(setup,
+        calibration={"training": {"startup_seconds": 600, "stale_seconds": 600, "expected_seconds": 3600}})
+    scheduler.campaigns.extend("study", receipt)
+    _, _, make_job, _ = setup
+    make_job("longer")
+    spec = scheduler.store.job("longer")["spec"]
+    spec["placements"]["lab"]["gpu_models"] = ["RTX 5090"]
+    spec["placements"]["lab"]["prepared_files"] = [{"path": "/experiment/lifecycles/longer.json", "sha256": "d"*64}]
+    scheduler.store.db.execute("UPDATE jobs SET spec=? WHERE id='longer'", (json.dumps(spec),))
+    long = {**receipt, "id": "long-duration", "gpu_hours": 20,
+        "cases": [{**receipt["cases"][0], "id": "longer", "dependencies": ["one", "upper-lr"],
+                   "progress": {"startup_seconds": 600, "stale_seconds": 600, "expected_seconds": 7200}}],
+        "scientific_inputs": {"longer": [{"kind": "lifecycle", "sha256": "d"*64}]}}
+    scheduler.campaigns.extend("study", long)
+    assert scheduler.campaigns.progress_expectation("one", "lab")["expected_seconds"] == 3600
+    assert scheduler.campaigns.progress_expectation("longer", "lab")["expected_seconds"] == 7200
+    job = scheduler.store.job("longer")
+    assert "dependency" in scheduler.campaigns.eligible(job)[1]
+    scheduler.store.update_job("one", "complete")
+    scheduler.store.update_job("upper-lr", "collecting")
+    assert "upper-lr" in scheduler.campaigns.eligible(job)[1]
+    scheduler.store.update_job("upper-lr", "complete")
+    assert scheduler.campaigns.eligible(job)[0]
+    # Replaying the extension after predecessor completion cannot add a second
+    # case or attempt; failed numerical gates still prevent any admission.
+    scheduler.campaigns.extend("study", long)
+    assert len([case for case in scheduler.campaigns.contract("study")["effective_cases"] if case["id"] == "longer"]) == 1
+    assert not scheduler.store.attempts()
+    scheduler.campaigns.gate("study", "mandatory-numerical", {"manifest_sha256": receipt["manifest_sha256"], "passed": False, "evidence": ["nonfinite validation"]})
+    assert "mandatory" in scheduler.campaigns.eligible(job)[1]

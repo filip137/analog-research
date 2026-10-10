@@ -26,6 +26,8 @@ NOTE = "campaigns/opt-cmo-corruption/series/001-hwa-robustness/experiments/exp-0
 RATES = (1e-5, 1e-4, 1e-3, 5e-3, 1e-2)
 RATE_LABELS = {1e-5: "1em5", 1e-4: "1em4", 1e-3: "1em3", 5e-3: "5em3", 1e-2: "1em2"}
 SCHEDULES = ("linear", "step")
+DURATION_RATES = (1e-3, 5e-3)
+DURATION_BOUNDARY = 12800
 ARM = "standard_hwa_model"
 
 
@@ -81,6 +83,37 @@ def prepare(output, rates=RATES):
              "path": str(output / (lc.lifecycle_id + '.json'))} for lc in cases]
 
 
+def duration_lifecycle(rate):
+    if rate not in DURATION_RATES:
+        raise ValueError("Expected a predeclared duration-comparison learning rate")
+    doc = lifecycle(rate, "step").to_dict()
+    doc["lifecycle_id"] += "-tail4pass"
+    doc["question"]["text"] = (
+        f"Standard 3% whole-transformer HWA duration comparison at peak Adam LR {rate:g}: "
+        "extend the unchanged 12,800-update step schedule to 25,600 updates on synthetic text, "
+        "retaining 205 warm-up updates and the x0.1 decay after update 10,240. "
+        "Compare only the two equal-budget duration cases; do not pool them into the original LR grid."
+    )
+    doc["hwa"]["epochs"] = 100
+    doc["hwa"]["lr_schedule"]["total_steps"] = 25600
+    return parse_lifecycle(doc)
+
+
+def prepare_duration(output):
+    output.mkdir(parents=True, exist_ok=True)
+    records = []
+    for rate in DURATION_RATES:
+        lc = duration_lifecycle(rate)
+        path = output / f"{lc.lifecycle_id}.json"
+        if path.exists():
+            if json.loads(path.read_text()) != lc.to_dict():
+                raise ValueError(f"Refusing to replace a different prepared lifecycle: {path}")
+        else:
+            atomic_write_json(path, lc.to_dict())
+        records.append({"id": lc.lifecycle_id, "lifecycle_sha256": lc.digest(), "path": str(path)})
+    return records
+
+
 def finite_metrics(value, label):
     """Reject nonfinite numeric fields, including per-case and clean metrics."""
     if isinstance(value, dict):
@@ -134,8 +167,9 @@ def verify_source(result_path, artifact):
 def read_case(config_path, result_path):
     """Read one explicitly named result and check its scientific identity."""
     lc = parse_lifecycle(json.loads(config_path.read_text()))
-    canonical = {case_id(rate, schedule): (rate, schedule) for rate in RATES for schedule in SCHEDULES}
-    if lc.lifecycle_id not in canonical or lc.digest() != lifecycle(*canonical[lc.lifecycle_id]).digest():
+    canonical = {case_id(rate, schedule): lifecycle(rate, schedule) for rate in RATES for schedule in SCHEDULES}
+    canonical.update({duration_lifecycle(rate).lifecycle_id: duration_lifecycle(rate) for rate in DURATION_RATES})
+    if lc.lifecycle_id not in canonical or lc.digest() != canonical[lc.lifecycle_id].digest():
         raise ValueError("Result is not an exact predeclared development grid cell")
     result = json.loads(result_path.read_text())
     resolved_path = result_path.parent / "config.resolved.json"
@@ -219,6 +253,7 @@ def read_case(config_path, result_path):
         raise ValueError("Unexpected negative development KL")
     return {
         "id": lc.lifecycle_id, "lifecycle": str(config_path.resolve()), "lifecycle_sha256": lc.digest(),
+        "comparison": "duration" if lc.lifecycle_id.endswith("-tail4pass") else "lr_grid",
         "result": str(result_path.resolve()), "result_sha256": sha256_file(result_path),
         "source": sources[0], "source_verification": verification, "fit_status": fit["status"],
         "peak_lr": lc.hwa.learning_rate, "schedule": lc.hwa.lr_schedule.kind,
@@ -298,7 +333,12 @@ def plot_development(cases, output):
         axis.grid(alpha=0.2)
     axes[0].legend(fontsize=8, ncol=2)
     axes[1].set_title("Circles mark selected checkpoints; test cohorts remain held out", fontsize=10)
-    fig.suptitle("Standard 3% whole-model HWA development — one training seed")
+    duration = any(case["total_steps"] > DURATION_BOUNDARY for case in cases)
+    if duration:
+        for axis in axes:
+            axis.axvline(DURATION_BOUNDARY, color="0.4", linewidth=1, linestyle=":")
+    fig.suptitle("Standard 3% whole-model HWA " + ("duration comparison" if duration else "development")
+                 + " — one training seed")
     filenames = ["development-curves.png", "development-curves.pdf"]
     try:
         for name in filenames:
@@ -308,17 +348,144 @@ def plot_development(cases, output):
     return filenames
 
 
+def checkpoint_metrics(item):
+    if item is None:
+        return None
+    return {"step": item["global_step"], "mean_teacher_kl": item["teacher_kl"],
+            "cases": {case["case"]: case["teacher_kl"] for case in item["cases"]}}
+
+
+def metric_change(before, after):
+    """Signed changes are after minus before; positive relative reduction improves."""
+    if before is None or after is None:
+        return None
+    return {"mean_teacher_kl_delta": after["mean_teacher_kl"] - before["mean_teacher_kl"],
+            "case_teacher_kl_deltas": {name: after["cases"][name] - value
+                                      for name, value in before["cases"].items()},
+            "relative_mean_reduction": (1 - after["mean_teacher_kl"] / before["mean_teacher_kl"])
+            if before["mean_teacher_kl"] else None}
+
+
+def duration_review(cases, original_cases):
+    """Compare only the two equal-budget extensions, with their matched prefixes."""
+    expected = {duration_lifecycle(rate).lifecycle_id for rate in DURATION_RATES}
+    seen = {case["id"] for case in cases}
+    originals = {case["id"]: case for case in original_cases}
+    reference_ids = {case_id(rate, "step") for rate in DURATION_RATES}
+    missing_references = sorted(name for name in reference_ids
+                                if name not in originals or originals[name]["fit_status"] != "complete")
+    complete = seen == expected
+    report = {"schema": "exp1e.duration_review.v1", "coverage_complete": complete,
+              "expected": sorted(expected), "missing": sorted(expected - seen),
+              "reference_coverage_complete": not missing_references,
+              "missing_complete_references": missing_references,
+              "budget_steps": 25600, "comparison_boundary_steps": DURATION_BOUNDARY,
+              "primary_duration_effect": "terminal development KL at 25600 minus 12800 within each run",
+              "selection_caveat": "Selected-checkpoint improvement includes more selection opportunities at the longer budget.",
+              "cases": cases, "comparisons": [],
+              "recommendation": recommend(cases) if complete and not missing_references else None,
+              "downstream_gate": "awaiting_scientific_review", "test_used_for_selection": False,
+              "warnings": review_warnings(cases, None)}
+    for case in sorted(cases, key=lambda item: item["peak_lr"]):
+        points = {item["global_step"]: item for item in case["history"]}
+        prefix = [item for item in case["history"] if item["global_step"] <= DURATION_BOUNDARY]
+        boundary = checkpoint_metrics(points.get(DURATION_BOUNDARY))
+        selected_before = checkpoint_metrics(min(prefix, key=lambda item: item["teacher_kl"])) if boundary else None
+        terminal = checkpoint_metrics(points.get(25600))
+        selected_after = checkpoint_metrics(min(case["history"], key=lambda item: item["teacher_kl"])) if terminal else None
+        late_start = checkpoint_metrics(points.get(20480))
+        reference = originals.get(case_id(case["peak_lr"], "step"))
+        reference_terminal = reference_selected = prefix_identical = None
+        if reference is not None and reference["fit_status"] == "complete":
+            reference_terminal = checkpoint_metrics(reference["history"][-1])
+            reference_selected = checkpoint_metrics(min(reference["history"], key=lambda item: item["teacher_kl"]))
+            if boundary is not None:
+                prefix_identical = [checkpoint_metrics(item) for item in prefix] == [
+                    checkpoint_metrics(item) for item in reference["history"]]
+                if not prefix_identical:
+                    report["warnings"].append({"case": case["id"], "kind": "prefix_replay_difference",
+                                               "message": "The repeated first 12,800 updates differ from the prior run; review the matched comparison before attributing changes to duration."})
+        report["comparisons"].append({
+            "id": case["id"], "peak_lr": case["peak_lr"],
+            "reference_id": case_id(case["peak_lr"], "step"),
+            "checkpoint_12800": boundary, "prior_checkpoint_12800": reference_terminal,
+            "prior_selected": reference_selected, "history_prefix_identical": prefix_identical,
+            "prior_replay_change": metric_change(reference_terminal, boundary),
+            "selected_through_12800": selected_before, "selected_through_25600": selected_after,
+            "terminal_25600": terminal,
+            "selected_change_12800_to_25600": metric_change(selected_before, selected_after),
+            "terminal_change_12800_to_25600": metric_change(boundary, terminal),
+            "checkpoint_20480": late_start,
+            "terminal_change_20480_to_25600": metric_change(late_start, terminal),
+            "selected_in_final_20_percent": case["selected_step"] >= 20480,
+        })
+    return report
+
+
+def write_duration_review(report, output):
+    output.mkdir(parents=True, exist_ok=True)
+    report["plots"] = plot_development(report["cases"], output)
+    atomic_write_json(output / "duration.json", report)
+    lines = ["# Experiment 1e duration comparison", "",
+             "The two 25,600-update step runs are ranked separately from the 12,800-update LR grid. "
+             "Means equally weight the healthy and 3% random-fault development cases. Tests remain held out.", "",
+             "The primary duration effect compares terminal KL at 12,800 and 25,600 updates. "
+             "Selected-checkpoint improvements are separate because the longer run has more selection opportunities.", "",
+             "Changes below are after minus before; negative KL changes indicate improvement.", ""]
+    for comparison in report["comparisons"]:
+        lines += [f"## {comparison['id']}", "",
+                  f"Reference: `{comparison['reference_id']}`. Exact metric-history prefix replay: "
+                  f"{comparison['history_prefix_identical']}.", "",
+                  "| Checkpoint | Update | Mean KL | Healthy KL | 3% faulty KL |",
+                  "|---|---:|---:|---:|---:|"]
+        for key, label in (("prior_checkpoint_12800", "Prior terminal"), ("prior_selected", "Prior selected"),
+                           ("checkpoint_12800", "Repeated 12,800"), ("selected_through_12800", "Selected through 12,800"),
+                           ("selected_through_25600", "Selected through 25,600"), ("terminal_25600", "Terminal 25,600")):
+            value = comparison[key]
+            if value is not None:
+                lines.append(f"| {label} | {value['step']} | {value['mean_teacher_kl']:.8g} | "
+                             f"{value['cases']['nominal']:.8g} | {value['cases']['random_30000ppm']:.8g} |")
+        lines += ["", "| Comparison | Mean KL change | Healthy change | Faulty change |",
+                  "|---|---:|---:|---:|"]
+        for key, label in (("prior_replay_change", "Repeated minus prior at 12,800"),
+                           ("terminal_change_12800_to_25600", "Terminal: 12,800 to 25,600"),
+                           ("selected_change_12800_to_25600", "Selected: 12,800 to 25,600"),
+                           ("terminal_change_20480_to_25600", "Terminal: final 20%")):
+            value = comparison[key]
+            if value is not None:
+                lines.append(f"| {label} | {value['mean_teacher_kl_delta']:.8g} | "
+                             f"{value['case_teacher_kl_deltas']['nominal']:.8g} | "
+                             f"{value['case_teacher_kl_deltas']['random_30000ppm']:.8g} |")
+        lines.append("")
+    lines += [f"Duration coverage: {len(report['cases'])}/{len(report['expected'])}.",
+              f"Missing complete 12,800-update references: {report['missing_complete_references']}.",
+              f"Recommendation: {report['recommendation'] or 'none; incomplete coverage, missing reference or no stable candidate'}.",
+              "Within 1% of the best selected mean development KL, prefer the lower peak LR. "
+              "Broader experiments remain held for scientific review."]
+    if report["warnings"]:
+        lines += ["", "Warnings:", ""]
+        lines += [f"- `{item['case']}`: {item['message']}" for item in report["warnings"]]
+    if report["plots"]:
+        lines += ["", "![Duration LR and development KL](development-curves.png)", "",
+                  "[Vector figure](development-curves.pdf). The vertical line marks 12,800 updates."]
+    (output / "duration.md").write_text("\n".join(lines) + "\n")
+
+
 def summarize(index, output):
     entries = json.loads(index.read_text())
     if not isinstance(entries, list):
         raise ValueError("Expected an explicit list of lifecycle/result paths")
-    cases = [read_case(Path(e["lifecycle"]), Path(e["result"])) for e in entries]
+    all_cases = [read_case(Path(e["lifecycle"]), Path(e["result"])) for e in entries]
     expected = {case_id(r, s) for r in RATES for s in SCHEDULES}
-    seen = [c["id"] for c in cases]
-    if len(set(seen)) != len(seen):
+    all_ids = [c["id"] for c in all_cases]
+    if len(set(all_ids)) != len(all_ids):
         raise ValueError("Duplicate development case; select the intended attempt explicitly")
-    if set(seen) - expected:
+    duration_expected = {duration_lifecycle(rate).lifecycle_id for rate in DURATION_RATES}
+    if set(all_ids) - expected - duration_expected:
         raise ValueError("Unexpected development case")
+    cases = [case for case in all_cases if case["id"] in expected]
+    duration_cases = [case for case in all_cases if case["id"] in duration_expected]
+    seen = {case["id"] for case in cases}
     complete = set(seen) == expected
     report = {"schema": "exp1e.development_review.v1", "coverage_complete": complete,
               "expected": sorted(expected), "missing": sorted(expected - set(seen)), "cases": cases,
@@ -328,6 +495,8 @@ def summarize(index, output):
     report["warnings"] = review_warnings(cases, report["recommendation"])
     output.mkdir(parents=True, exist_ok=True)
     report["plots"] = plot_development(cases, output)
+    report["duration_comparison"] = duration_review(duration_cases, cases)
+    write_duration_review(report["duration_comparison"], output / "duration")
     atomic_write_json(output / "development.json", report)
     lines = ["# Experiment 1e development", "", "Exploratory, one training seed; tests are held out.", "",
              "| Case | Peak LR | Best dev KL | Final dev KL | Selected step | Status |",
@@ -338,6 +507,8 @@ def summarize(index, output):
     lines += ["", f"Coverage: {len(cases)}/{len(expected)}.",
               f"Recommendation: {report['recommendation'] or 'none; incomplete coverage or no stable candidate'}.",
               "Broader experiments remain held for scientific review."]
+    lines += ["", "[Separate duration comparison](duration/duration.md): "
+              f"{len(duration_cases)}/2 cases. These runs do not enter the original LR ranking."]
     if report["warnings"]:
         lines += ["", "Warnings:", ""]
         lines += [f"- `{item['case']}`: {item['message']}" for item in report["warnings"]]
@@ -353,13 +524,26 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("prepare")
     p.add_argument("--output", type=Path, default=LIFECYCLES)
+    p = sub.add_parser("prepare-duration")
+    p.add_argument("--output", type=Path, default=LIFECYCLES)
     s = sub.add_parser("summarize")
     s.add_argument("--index", type=Path, required=True)
     s.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    result = prepare(args.output) if args.command == "prepare" else summarize(args.index, args.output)
+    if args.command == "prepare":
+        result = prepare(args.output)
+    elif args.command == "prepare-duration":
+        result = prepare_duration(args.output)
+    else:
+        result = summarize(args.index, args.output)
     print(json.dumps(result, indent=2, allow_nan=False))
-    return 0 if args.command == "prepare" or (result["coverage_complete"] and result["recommendation"] is not None) else 2
+    if args.command.startswith("prepare"):
+        return 0
+    duration = result["duration_comparison"]
+    ready = result["coverage_complete"] and result["recommendation"] is not None
+    if duration["cases"]:
+        ready = ready and duration["coverage_complete"] and duration["recommendation"] is not None
+    return 0 if ready else 2
 
 
 if __name__ == "__main__":
