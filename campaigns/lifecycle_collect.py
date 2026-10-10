@@ -3,6 +3,8 @@
 Only compact control files are copied to the controller. Native artifacts are
 fully hashed on their execution host and stay there. A slice contains prepare,
 devices, one declared HWA source, and every declared assignment for that source.
+Explicit source-only collection instead requires exactly prepare, devices and
+one source; it cannot silently accept a missing deployment from a full slice.
 """
 from __future__ import annotations
 
@@ -58,10 +60,11 @@ def rows_key(row):
     return row["lifecycle_id"], row["hwa_arm"], row["array_seed"], row["case"]
 
 
-def checked_payload(payload, expected_root):
+def checked_payload(payload, expected_root, *, source_only=False):
     """Recheck identities, native lineage, coverage and collected values."""
     root = Path(expected_root)
-    if payload.get("schema") != "lifecycle.compact_export.v1" or payload.get("campaign_root") != str(root):
+    schema = "lifecycle.source_export.v1" if source_only else "lifecycle.compact_export.v1"
+    if payload.get("schema") != schema or payload.get("campaign_root") != str(root):
         raise ValueError("Compact export campaign identity mismatch")
     contract = json.loads(payload["campaign_resolved"])
     source_manifest = json.loads(payload["source_manifest"])
@@ -181,11 +184,13 @@ def checked_payload(payload, expected_root):
         manifests[stage_id], results[stage_id] = manifest, result
     if lifecycle is None or selected_arm is None:
         raise ValueError("Missing lifecycle source")
+    kinds = {"prepare", "devices", "hwa"} if source_only else {"prepare", "devices", "hwa", "deploy"}
     expected_selections = {item.stage_id: item for item in stage_selections(lifecycle)
-                           if item.kind in {"prepare", "devices", "hwa", "deploy"}
+                           if item.kind in kinds
                            and item.hwa_arm in {None, selected_arm}}
     if set(records) != set(expected_selections):
-        raise ValueError("Expected the source and every declared deployment assignment")
+        raise ValueError("Expected exact source-only coverage" if source_only else
+                         "Expected the source and every declared deployment assignment")
     teacher_inputs = []
     for stage_id, selection in expected_selections.items():
         if results[stage_id]["metrics"]["stage"] != selection.to_dict():
@@ -224,7 +229,7 @@ def checked_payload(payload, expected_root):
     return payload
 
 
-def export(root):
+def export(root, *, source_only=False):
     root = root.resolve()
     contract_text = (root / "campaign.resolved.json").read_text()
     contract = json.loads(contract_text)
@@ -252,15 +257,18 @@ def export(root):
         stages[stage_id] = {"native_run": str(run), "files": files}
     with tempfile.TemporaryDirectory(prefix="lifecycle-collect-") as folder:
         command = [sys.executable, "-m", "workflow", "collect"]
-        command += [stage["native_run"] for name, stage in stages.items() if name.startswith("deploy__")]
+        command += [stage["native_run"] for name, stage in stages.items()
+                    if source_only or name.startswith("deploy__")]
         completed = subprocess.run([*command, "--output", folder], capture_output=True, text=True, timeout=180)
         if completed.returncode:
             raise RuntimeError(completed.stdout[-4000:] + completed.stderr[-2000:])
         deployments = (Path(folder) / "deployments.json").read_text()
-        csv = (Path(folder) / "deployments.csv").read_text()
-    return checked_payload({"schema": "lifecycle.compact_export.v1", "campaign_root": str(root),
+        csv_path = Path(folder) / "deployments.csv"
+        # Native collect emits no CSV when a declared source-only slice has no rows.
+        csv = "" if source_only and not csv_path.exists() else csv_path.read_text()
+    return checked_payload({"schema": "lifecycle.source_export.v1" if source_only else "lifecycle.compact_export.v1", "campaign_root": str(root),
         "campaign_resolved": contract_text, "source_manifest": manifest_path.read_text(), "aggregate": aggregate,
-        "stages": stages, "deployments_json": deployments, "deployments_csv": csv}, root)
+        "stages": stages, "deployments_json": deployments, "deployments_csv": csv}, root, source_only=source_only)
 
 
 def exact_attempt(dbpath, job_id):
@@ -299,7 +307,7 @@ def write_frozen(path, content):
     os.replace(temporary, path)
 
 
-def collect(queue_config, output):
+def collect(queue_config, output, *, source_only=False):
     job_id = os.environ["RUN_WATCH_JOB_ID"]
     cfg = json.loads(queue_config.read_text())
     dbpath = Path(cfg.get("state_dir", "~/.local/state/run-watch/queue")).expanduser() / "queue.sqlite3"
@@ -307,6 +315,8 @@ def collect(queue_config, output):
     placement = json.loads(job["spec"])["placements"][attempt["target"]]
     target = cfg["targets"][attempt["target"]]
     argv = [placement["campaign_python"], "-m", "campaigns.lifecycle_collect", "export", placement["campaign_result_root"]]
+    if source_only:
+        argv.append("--source-only")
     if target.get("transport") == "local":
         command, cwd = argv, placement["workdir"]
     elif target.get("transport") == "ssh":
@@ -318,7 +328,7 @@ def collect(queue_config, output):
     completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=600, check=True)
     if len(completed.stdout.encode()) > 64 * 1024 * 1024:
         raise ValueError("Compact collection unexpectedly exceeds 64 MB")
-    payload = checked_payload(json.loads(completed.stdout), Path(placement["campaign_result_root"]))
+    payload = checked_payload(json.loads(completed.stdout), Path(placement["campaign_result_root"]), source_only=source_only)
     with collection_lock(output):
         _, current = exact_attempt(dbpath, job_id)
         if current["token"] != attempt["token"]:
@@ -365,15 +375,18 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("export", "validate"):
-        commands.add_parser(name).add_argument("root", type=Path)
+        sub = commands.add_parser(name)
+        sub.add_argument("root", type=Path)
+        sub.add_argument("--source-only", action="store_true")
     comp = commands.add_parser("collect")
     comp.add_argument("--queue-config", type=Path, required=True)
     comp.add_argument("--output", type=Path, required=True)
+    comp.add_argument("--source-only", action="store_true")
     args = parser.parse_args(argv)
     if args.command == "collect":
-        result = collect(args.queue_config, args.output)
+        result = collect(args.queue_config, args.output, source_only=args.source_only)
     else:
-        result = export(args.root)
+        result = export(args.root, source_only=args.source_only)
         if args.command == "validate":
             result = {"valid": True, "campaign_root": result["campaign_root"],
                       "stages": sorted(result["stages"]), "deployment_rows": len(json.loads(result["deployments_json"]))}

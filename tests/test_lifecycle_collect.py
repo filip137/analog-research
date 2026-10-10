@@ -22,7 +22,7 @@ _CACHE = None
 
 
 @pytest.fixture
-def native(cmo_inputs, tmp_path):
+def native(cmo_inputs, tmp_path, request):
     weights, corpus = cmo_inputs
     lc = small(**{"data.corpus": {"name": "synthetic", "sha256": corpus}, "data.sequence_length": 9,
         "data.evaluation": "development", "data.test_sequences": 0, "hwa.arms": [model_arm()],
@@ -30,11 +30,14 @@ def native(cmo_inputs, tmp_path):
         "onchip": None, "transfer_tests": [
             {"label": label, "corpus": {"name": "synthetic", "sha256": corpus}, "split": "test", "sequences": count}
             for label, count in (("wikitext", 3), ("generated", 2))]})
+    source_only = getattr(request, "param", False)
     root = tmp_path / "campaign"
     plan = tmp_path / "plan"
     plan.mkdir()
     results, records, stages = {}, [], []
     for selection in stage_selections(lc):
+        if source_only and selection.kind == "deploy":
+            continue
         results[selection.stage_id] = run_stage(lc, selection, results, weights, root)
         run, result = results[selection.stage_id]
         config = plan / (selection.stage_id + ".json")
@@ -79,6 +82,29 @@ def test_real_native_full_slice_export_and_semantic_progress(exported):
             metrics = [json.loads(line) for line in stage["files"]["metrics.jsonl"].splitlines()]
             assert metrics[0]["stage"] == "deploy_source_gate" and metrics[0]["passed"]
             assert [item["cases_complete"] for item in metrics if item["stage"] == "deploy" and "case" in item] == list(range(1, len(lc.defects.cases) + 1))
+
+
+@pytest.mark.parametrize("native", [True], indirect=True)
+def test_source_only_requires_explicit_collection_and_complete_source(native):
+    root, _ = native
+    payload = collector.export(root, source_only=True)
+    assert json.loads(payload["deployments_json"]) == []
+    assert len(payload["stages"]) == 3
+    assert collector.checked_payload(payload, root, source_only=True) == payload
+    with pytest.raises(ValueError, match="identity"):
+        collector.checked_payload(payload, root)
+    source = next(name for name in payload["stages"] if name.startswith("hwa__"))
+    replace_result(payload, source, lambda metrics: metrics["fit"]["lr_schedule"].update(steps_run=1))
+    with pytest.raises(ValueError, match="schedule"):
+        collector.checked_payload(payload, root, source_only=True)
+
+
+def test_full_slice_cannot_be_relabelled_source_only(exported):
+    root, _, original = exported
+    payload = copy.deepcopy(original)
+    payload["schema"] = "lifecycle.source_export.v1"
+    with pytest.raises(ValueError, match="source-only coverage"):
+        collector.checked_payload(payload, root, source_only=True)
 
 
 def replace_result(payload, stage_id, change):

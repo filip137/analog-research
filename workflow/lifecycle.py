@@ -897,7 +897,7 @@ def _hwa_arm(raw: Any, path: str, technology: Technology) -> HwaArm:
     scope = _choice(raw.get("scope", "analog"), f"{path}.scope", HWA_SCOPES)
     digital_learning_rate = raw.get("digital_learning_rate")
     if scope == "model":
-        digital_learning_rate = _number(digital_learning_rate, f"{path}.digital_learning_rate", positive=True)
+        digital_learning_rate = _number(digital_learning_rate, f"{path}.digital_learning_rate")
     elif digital_learning_rate is not None:
         raise config_error(f"{path}.digital_learning_rate", "to be null for an analog-scope arm", digital_learning_rate)
     corruption = None

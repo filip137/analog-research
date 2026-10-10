@@ -245,7 +245,11 @@ Each arm is a source that later stages deploy:
   - `model` also trains every digital parameter of the student's own copy of
     the network: embeddings, the earlier layers, all attention and LayerNorms,
     and the tied head. Both reference papers fine-tune the whole model this
-    way. It requires `digital_learning_rate` (Adam, the same `hwa` schedule).
+    way. It requires a nonnegative `digital_learning_rate` (Adam, the same
+    `hwa` schedule). Zero is a diagnostic endpoint: it retains the model-scope
+    forward/backward path and optimizer group while leaving digital weights
+    unchanged. The runtime verifies this and records initial/selected digital
+    hashes; analog weights and calibration still train at `hwa.learning_rate`.
   - Only the analog weights see noise and corruption, and the frozen teacher
     remains the KL target.
   - A `model`-scope source carries its digital weights through deployment and

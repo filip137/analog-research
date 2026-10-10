@@ -8,6 +8,73 @@ hypotheses: []
 
 ## Question and current assignment
 
+On 2026-10-11, after reviewing the scope gap, the user approved the focused test:
+hold analog training fixed and vary only the additional digital LR toward zero.
+The completed cosine comparison below is retained as its reference. Execute four
+fresh standard-3% HWA sources on **fifi and loulou only**, with the shared persistent
+dispatcher, one worker per RTX 5090. The existing analog and equal-rate controls
+are references, not new replicates.
+
+### Frozen digital-LR comparison
+
+| Setting | Declared value |
+|---|---|
+| Additional digital peak LR | 0, 1e-5, 1e-4, 1e-3; final rates 0, 2e-6, 2e-5, 2e-4 |
+| Analog/calibration LR | Fixed peak 5e-3, cosine decay to 1e-3 |
+| Schedule and budget | 205 warm-up updates; 25,600 updates, batch 32, about 4.196 synthetic-corpus passes |
+| Training scope | Model scope for all four, including the zero-digital-update endpoint |
+| Teacher/network | Same pinned FP32 OPT-125M, last six analog MLPs, 28,311,552 logical analog weights |
+| Data and noise | Same synthetic cohort, seeds and batch stream; standard per-output-channel 3% Gaussian HWA; no corruption masks |
+| Selection | Unchanged mean healthy/3%-random-fault development KL on selection arrays 211001/211002, 256 development sequences, initialization plus every 512 updates |
+| Held fixed | Adam defaults, no weight decay or gradient clipping, q clamp [-1,1], calibration group and CMO endpoint model |
+| Evaluation boundary | Prepare, devices and HWA only; no deployment to test arrays and no held-out test corpus loaded |
+
+Rank completed candidates by the existing development mean; within 1% prefer
+the smaller digital peak LR, including zero. Report both components, clean KL,
+selected update and late-convergence flag. Compare the zero case with the prior
+analog-only mean 0.085279 and all candidates with the prior equal-rate mean
+0.305032. A nonzero rate must improve on the zero endpoint beyond the tie range
+to motivate retaining digital updates. No new healthy-performance threshold is
+introduced: report the tradeoff explicitly. One training seed and an adaptively
+chosen development grid remain exploratory; no automatic broader rollout follows.
+
+The LR split tests a specific optimization hypothesis, not a claim that the
+previous implementation is faulty. All runs start from the original teacher,
+not the trained analog source. The zero case retains the whole-model forward,
+backward and optimizer path, with a runtime assertion that its digital weights
+stay unchanged. A tiny CPU equivalence test and two 512-update full-batch smokes
+(analog and zero digital LR) check this boundary before expensive dispatch.
+Cross-host exact GPU matching remains diagnostic under the user's earlier waiver;
+finite execution, exact schedule coverage and zero digital-weight changes are
+mandatory gates. Smokes retain 205 warm-up steps but have their own 512-update
+cosine horizon; they do not select a scientific rate.
+
+The two reference papers and their local PDFs were consulted again. Per-channel
+noise and synthetic distillation retain the earlier Büchel-inspired choices;
+backpropagation through noisy weights retains the Rasch-style choice. The LR
+split, zero endpoint, cosine floor, Adam defaults, smaller token budget and best
+development checkpoint remain campaign-specific deviations. Appendix I of Büchel
+uses different AdamW settings and polynomial scheduling; neither paper establishes
+the digital/analog rate ratio tested here. No paper-matched recipe is claimed.
+
+Strict definitions: `campaigns/opt-cmo-corruption/lifecycles/opt125m-cmo-l6-exp1e-digital-*.json`.
+Preparation: `campaigns/opt-cmo-corruption/launch/exp1e_digital_lr.py`.
+Local evidence: `results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr/`.
+Remote source/results: `/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-lr-20261011/`.
+New phase ID: `opt-cmo-exp1e-digital-lr-20261011`. Bound the incremental phase to
+**10 GPU-hours, 16 GB storage and 8 hours from registration**, including readiness,
+failed attempts and any authorized operational retry. Full-worker hard cap 3 h;
+smoke cap 30 min. The measured whole-model fit takes about 6,057 s; four fits are
+about 6.8 GPU-hours plus readiness/validation, or **3.5–4 h on the pair**.
+The service polls campaign semantics every five minutes, distinguishes queued
+from running, and applies phase thresholds: prepare/devices 120 s, HWA 6,500 s
+(smoke 300 s), validation/collection 600 s; stale 900 s, startup 600 s.
+Failed mandatory gates or insufficient budget stop downstream dispatch. No
+automatic scientific changes or compute retries. The existing tested incident
+investigator, restart-safe ownership, locking and durable ledger remain in use.
+
+### Completed cosine comparison protocol
+
 The focused learning-rate and duration experiments are complete. On 2026-10-10,
 the user selected a pragmatic common recipe: “5e-3 with cos decay to 1e-3” for
 “the whole experiment”, then explicitly requested “run it on two 5090s”. This

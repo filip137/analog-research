@@ -101,6 +101,29 @@ def test_real_optimizer_uses_schedule_for_every_parameter_group(monkeypatch, tmp
     assert [r["global_step"] for r in selection] == [0, 3, 6]
 
 
+def test_zero_digital_lr_preserves_digital_weights_and_analog_training(tmp_path):
+    analog_doc = document("cosine_warmup_decay", scope="analog")
+    model_doc = document("cosine_warmup_decay", scope="model")
+    model_doc["hwa"]["arms"][1]["digital_learning_rate"] = 0
+    analog, analog_records = train(analog_doc, tmp_path / "analog")
+    model, model_records = train(model_doc, tmp_path / "model")
+    for key, value in analog["model"].items():
+        assert torch.equal(value, model["model"][key]), key
+    assert model["fit"]["scope"]["digital_unchanged"]
+    assert model["fit"]["scope"]["initial_digital_sha256"] == model["fit"]["scope"]["digital_sha256"]
+    assert model["fit"]["development_kl"] == analog["fit"]["development_kl"]
+    assert [r["loss"] for r in analog_records if "loss" in r] == [r["loss"] for r in model_records if "loss" in r]
+    assert model["fit"]["lr_schedule"]["final_learning_rates"] == [2e-5, 0.0]
+
+
+@pytest.mark.parametrize("value", [-1e-4, float("nan"), float("inf"), True, None])
+def test_digital_lr_rejects_invalid_values(value):
+    doc = document()
+    doc["hwa"]["arms"][1]["digital_learning_rate"] = value
+    with pytest.raises(ConfigError, match="digital_learning_rate"):
+        parse_lifecycle(doc)
+
+
 @pytest.mark.parametrize(
     "key,value",
     [

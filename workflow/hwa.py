@@ -297,11 +297,20 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
         }
     if arm.scope == "model":
         digital = {k: v for k, v in best["model"].items() if k.startswith("digital.")}
+        initial_digital = {k: v for k, v in pristine.items() if k.startswith("digital.")}
+        unchanged = state_hash(digital) == state_hash(initial_digital)
+        if arm.digital_learning_rate == 0 and any(
+            not torch.equal(value.detach().cpu(), pristine[key])
+            for key, value in network.state_dict().items() if key.startswith("digital.")
+        ):
+            raise RuntimeError("Zero-LR HWA changed the digital weights.")
         fit["scope"] = {
             "scope": "model",
             "digital_learning_rate": arm.digital_learning_rate,
             "digital_parameters": sum(v.numel() for v in digital.values()),
             "digital_sha256": state_hash(digital),
+            "initial_digital_sha256": state_hash(initial_digital),
+            "digital_unchanged": unchanged,
         }
     if streamed:
         fit["stream"] = {
