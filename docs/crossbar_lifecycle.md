@@ -211,7 +211,22 @@ Each arm is a source that later stages deploy:
   reaching exactly zero on update T. `warmup_step_decay` additionally requires
   `milestone_step` M and `decay_factor` d: it holds the peak through update M,
   then uses d for updates M+1 through T. Require 0 ≤ W < T, W < M < T and
-  0 < d ≤ 1. An explicit W=0 disables warm-up.
+  0 < d ≤ 1. `cosine_warmup_decay` instead requires `min_factor` m, a finite
+  number with 0 ≤ m ≤ 1. After warm-up, its factor is
+  m + (1−m) × (1 + cos(π × (s−W)/(T−W))) / 2. The peak is reached at update W;
+  the last update T uses exactly m times each group's base rate. For example,
+  peak LR 5e-3 and `min_factor: 0.2` give a final LR of 1e-3. The floor applies
+  to the decay phase; warm-up starts at 1/W of the base rate. The cosine form
+  does not accept step-only `milestone_step` or `decay_factor` fields, and the
+  older forms do not accept `min_factor`.
+
+  ```json
+  {"kind": "cosine_warmup_decay", "total_steps": 25600, "warmup_steps": 205, "min_factor": 0.2}
+  ```
+
+  An explicit W=0 disables warm-up: the logged step-0 factor is one, and the
+  first actual update already follows the decay curve (below the peak for
+  linear decay and cosine decay with m < 1).
 
   `total_steps` must equal `epochs` × ceil(effective examples per epoch /
   `batch_size`), including partial minibatches and any `sequences_per_epoch`

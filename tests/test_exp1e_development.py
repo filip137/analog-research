@@ -558,6 +558,20 @@ def test_legacy_analysis_requires_explicit_contract_and_model_tag(tmp_path, caps
     assert "analysis contract: legacy-v1" in capsys.readouterr().out
 
 
+def test_cosine_contract_keeps_fresh_baseline_but_reports_historical_gpu_difference(tmp_path, capsys):
+    data = deployment_rows()
+    write_deployments(tmp_path, data)
+    data[0]["deployed_transfer_wikitext_teacher_kl"] = 1.1
+    collected = tmp_path / "cosine.json"
+    write_json(collected, data)
+    assert decision.main([str(tmp_path), "--collected", str(collected)]) != 0
+    assert decision.main([str(tmp_path), "--contract", "cosine-5090-v1", "--collected", str(collected)]) == 0
+    output = capsys.readouterr().out
+    assert "historical V100 pretrained diagnostic" in output and "fresh 5090 pretrained arm" in output
+    write_json(collected, [row for row in data if row["hwa_arm"] != "pretrained"])
+    assert decision.main([str(tmp_path), "--contract", "cosine-5090-v1", "--collected", str(collected)]) != 0
+
+
 def test_material_comparison_never_downgrades_missing_arrays_to_no_difference():
     a = {seed: 0.8 for seed in decision.SEEDS}
     b = {seed: 1.0 for seed in decision.SEEDS}

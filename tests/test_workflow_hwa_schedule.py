@@ -1,6 +1,7 @@
 """Fixed-update HWA schedules, observed at real Adam updates on a tiny OPT."""
 
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,8 @@ def document(kind="linear_warmup_decay", *, scope="model"):
         doc["hwa"]["lr_schedule"] = {"kind": kind, "total_steps": 6, "warmup_steps": 2}
         if kind == "warmup_step_decay":
             doc["hwa"]["lr_schedule"].update(milestone_step=4, decay_factor=0.1)
+        elif kind == "cosine_warmup_decay":
+            doc["hwa"]["lr_schedule"]["min_factor"] = 0.2
     return doc
 
 
@@ -53,6 +56,8 @@ def train(doc, tmp_path, *, cached_examples=None):
     [
         ("linear_warmup_decay", [0, 0.5, 1, 0.75, 0.5, 0.25, 0]),
         ("warmup_step_decay", [0, 0.5, 1, 1, 1, 0.1, 0.1]),
+        ("cosine_warmup_decay", [0, 0.5, 1, 0.6 + 0.2 * math.sqrt(2), 0.6,
+                                 0.6 - 0.2 * math.sqrt(2), 0.2]),
     ],
 )
 @pytest.mark.parametrize("scope", ["analog", "model"])
@@ -72,7 +77,7 @@ def test_real_optimizer_uses_schedule_for_every_parameter_group(monkeypatch, tmp
     doc = document(kind, scope=scope)
     lifecycle = parse_lifecycle(doc)
     schedule = lifecycle.hwa.lr_schedule
-    assert [schedule.factor(s) for s in range(7)] == factors
+    assert [schedule.factor(s) for s in range(7)] == pytest.approx(factors)
     for bad_step in (-1, 7):
         with pytest.raises(ValueError, match="HWA update"):
             schedule.factor(bad_step)
@@ -101,7 +106,7 @@ def test_real_optimizer_uses_schedule_for_every_parameter_group(monkeypatch, tmp
     [
         ("kind", "cosine"), ("total_steps", 0), ("total_steps", 7),
         ("total_steps", True), ("warmup_steps", -1), ("warmup_steps", 6),
-        ("warmup_steps", 2.5), ("unknown", 1), ("decay_factor", 0.1),
+        ("warmup_steps", 2.5), ("unknown", 1), ("decay_factor", 0.1), ("min_factor", 0.2),
     ],
 )
 def test_linear_schedule_rejects_invalid_configuration(key, value):
@@ -114,13 +119,77 @@ def test_linear_schedule_rejects_invalid_configuration(key, value):
 @pytest.mark.parametrize(
     "key,value",
     [("milestone_step", 2), ("milestone_step", 6), ("decay_factor", 0),
-     ("decay_factor", float("nan")), ("decay_factor", 1.01)],
+     ("decay_factor", float("nan")), ("decay_factor", 1.01), ("min_factor", 0.2)],
 )
 def test_step_schedule_rejects_invalid_configuration(key, value):
     doc = document("warmup_step_decay")
     doc["hwa"]["lr_schedule"][key] = value
     with pytest.raises(ConfigError, match="hwa.lr_schedule"):
         parse_lifecycle(doc)
+
+
+@pytest.mark.parametrize("value", [-0.01, 1.01, float("nan"), float("inf"), True, False, None, "0.2"])
+def test_cosine_floor_requires_a_finite_number_in_the_unit_interval(value):
+    doc = document("cosine_warmup_decay")
+    doc["hwa"]["lr_schedule"]["min_factor"] = value
+    with pytest.raises(ConfigError, match="hwa.lr_schedule.min_factor"):
+        parse_lifecycle(doc)
+
+
+@pytest.mark.parametrize("field", ["missing_floor", "milestone_step", "decay_factor"])
+def test_cosine_schedule_requires_only_its_specific_fields(field):
+    doc = document("cosine_warmup_decay")
+    if field == "missing_floor":
+        del doc["hwa"]["lr_schedule"]["min_factor"]
+    else:
+        doc["hwa"]["lr_schedule"][field] = 1
+    with pytest.raises(ConfigError, match="hwa.lr_schedule"):
+        parse_lifecycle(doc)
+
+
+@pytest.mark.parametrize("warmup", [0, 2])
+@pytest.mark.parametrize("floor", [0, 0.2, 1])
+def test_cosine_warmup_peak_midpoint_and_floor_are_monotonic(warmup, floor):
+    doc = document("cosine_warmup_decay")
+    doc["hwa"]["lr_schedule"].update(warmup_steps=warmup, min_factor=floor)
+    schedule = parse_lifecycle(doc).hwa.lr_schedule
+    factors = [schedule.factor(step) for step in range(7)]
+    assert factors[0] == (0 if warmup else 1)
+    assert factors[warmup] == 1
+    assert factors[(6 + warmup) // 2] == pytest.approx((1 + floor) / 2)
+    assert factors[-1] == floor
+    assert all(floor <= value <= 1 for value in factors[warmup:])
+    assert all(left >= right for left, right in zip(factors[warmup:-1], factors[warmup + 1:]))
+    assert all(left < right for left, right in zip(factors[:warmup], factors[1:warmup + 1]))
+    if not warmup and floor < 1:
+        assert factors[1] < 1
+
+
+@pytest.mark.parametrize("kind,digest,arm_digest", [
+    ("linear_warmup_decay", "631eecbf214e53e5e893e7f2d7ae038c8464c0e9c069343810d875f41c4514d5",
+     "4773003bed7bed4a319583d41df676fa55d107a311d5e6bdeb5cff4ad2efc40b"),
+    ("warmup_step_decay", "dfae71009c9768bb281afc2394e62d77022b6b41e80f2556750882f6e18f8131",
+     "ec6a266db40a04290dcf62b4bd03c7286fc559fa33260e06c2b13ce1a1d546b8"),
+])
+def test_existing_step_schedule_serialization_and_source_identity_stay_frozen(kind, digest, arm_digest):
+    doc = document(kind)
+    lifecycle = parse_lifecycle(doc)
+    assert lifecycle.hwa.lr_schedule.to_dict() == doc["hwa"]["lr_schedule"]
+    assert "min_factor" not in lifecycle.hwa.lr_schedule.to_dict()
+    assert lifecycle.digest() == digest
+    assert lifecycle.hwa_arm_digest("standard_hwa") == arm_digest
+    assert parse_lifecycle(lifecycle.to_dict()) == lifecycle
+
+
+def test_cosine_round_trip_and_floor_are_part_of_source_identity():
+    doc = document("cosine_warmup_decay")
+    lifecycle = parse_lifecycle(doc)
+    assert lifecycle.hwa.lr_schedule.to_dict() == doc["hwa"]["lr_schedule"]
+    assert parse_lifecycle(lifecycle.to_dict()) == lifecycle
+    doc["hwa"]["lr_schedule"]["min_factor"] = 0.1
+    changed = parse_lifecycle(doc)
+    assert changed.digest() != lifecycle.digest()
+    assert changed.hwa_arm_digest("standard_hwa") != lifecycle.hwa_arm_digest("standard_hwa")
 
 
 @pytest.mark.parametrize("setting", ["milestones", "decay", "extension", "null", "missing"])
@@ -220,10 +289,12 @@ def test_rejected_run_records_only_completed_updates(monkeypatch, tmp_path):
     assert result["fit"]["lr_schedule"]["steps_run"] == 1
 
 
-@pytest.mark.parametrize("kind", ["linear_warmup_decay", "warmup_step_decay"])
+@pytest.mark.parametrize("kind", ["linear_warmup_decay", "warmup_step_decay", "cosine_warmup_decay"])
 def test_warmup_can_be_explicitly_disabled(kind):
     doc = document(kind)
     doc["hwa"]["lr_schedule"]["warmup_steps"] = 0
     schedule = parse_lifecycle(doc).hwa.lr_schedule
     assert schedule.factor(0) == 1
-    assert schedule.factor(1) == pytest.approx(5 / 6 if kind == "linear_warmup_decay" else 1)
+    expected = {"linear_warmup_decay": 5 / 6, "warmup_step_decay": 1,
+                "cosine_warmup_decay": 0.2 + 0.4 * (1 + math.cos(math.pi / 6))}
+    assert schedule.factor(1) == pytest.approx(expected[kind])

@@ -941,6 +941,7 @@ class HwaLrSchedule:
     warmup_steps: int
     milestone_step: Optional[int] = None
     decay_factor: Optional[float] = None
+    min_factor: Optional[float] = None
 
     def factor(self, step: int) -> float:
         if not 0 <= step <= self.total_steps:
@@ -949,6 +950,9 @@ class HwaLrSchedule:
             return step / self.warmup_steps
         if self.kind == "linear_warmup_decay":
             return (self.total_steps - step) / (self.total_steps - self.warmup_steps)
+        if self.kind == "cosine_warmup_decay":
+            progress = (step - self.warmup_steps) / (self.total_steps - self.warmup_steps)
+            return self.min_factor + (1 - self.min_factor) * 0.5 * (1 + math.cos(math.pi * progress))
         return 1.0 if step <= self.milestone_step else self.decay_factor
 
     def boundary_steps(self) -> set[int]:
@@ -961,6 +965,8 @@ class HwaLrSchedule:
         value = {"kind": self.kind, "total_steps": self.total_steps, "warmup_steps": self.warmup_steps}
         if self.kind == "warmup_step_decay":
             value.update(milestone_step=self.milestone_step, decay_factor=self.decay_factor)
+        elif self.kind == "cosine_warmup_decay":
+            value["min_factor"] = self.min_factor
         return value
 
 
@@ -968,10 +974,13 @@ def _hwa_lr_schedule(raw: Any) -> HwaLrSchedule:
     path = "hwa.lr_schedule"
     if not isinstance(raw, Mapping):
         raise config_error(path, "to be an object", raw)
-    kind = _choice(raw.get("kind"), f"{path}.kind", ("linear_warmup_decay", "warmup_step_decay"))
+    kind = _choice(raw.get("kind"), f"{path}.kind",
+                   ("linear_warmup_decay", "warmup_step_decay", "cosine_warmup_decay"))
     keys = ("kind", "total_steps", "warmup_steps")
     if kind == "warmup_step_decay":
         keys += ("milestone_step", "decay_factor")
+    elif kind == "cosine_warmup_decay":
+        keys += ("min_factor",)
     raw = _object(raw, path, keys)
     total = _integer(raw["total_steps"], f"{path}.total_steps", minimum=1)
     warmup = _integer(raw["warmup_steps"], f"{path}.warmup_steps", maximum=total - 1)
@@ -981,6 +990,8 @@ def _hwa_lr_schedule(raw: Any) -> HwaLrSchedule:
             raw["milestone_step"], f"{path}.milestone_step", minimum=warmup + 1, maximum=total - 1
         )
         extra["decay_factor"] = _number(raw["decay_factor"], f"{path}.decay_factor", positive=True, maximum=1.0)
+    elif kind == "cosine_warmup_decay":
+        extra["min_factor"] = _number(raw["min_factor"], f"{path}.min_factor", maximum=1.0)
     return HwaLrSchedule(kind, total, warmup, **extra)
 
 

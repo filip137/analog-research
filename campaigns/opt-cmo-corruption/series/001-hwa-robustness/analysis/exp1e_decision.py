@@ -107,8 +107,8 @@ def mean(by, arm, rate):
     return statistics.mean(by[(arm, rate)].values())
 
 
-def analyze(root, *, contract="transfer-tests-v1", legacy_model_tag=None):
-    if contract == "transfer-tests-v1":
+def analyze(root, *, contract="transfer-tests-v1", legacy_model_tag=None, collected=None):
+    if contract in {"transfer-tests-v1", "cosine-5090-v1"}:
         if legacy_model_tag is not None:
             raise ValueError("A legacy model tag requires the explicit legacy-v1 contract")
         domains, evaluation = DOMAINS, "development"
@@ -121,7 +121,9 @@ def analyze(root, *, contract="transfer-tests-v1", legacy_model_tag=None):
     else:
         raise ValueError(f"Unsupported explicit analysis contract: {contract!r}")
     arms = sorted(("pretrained", *BASES, *model.values()))
-    data = rows(root, MAIN)
+    if collected is not None and contract != "cosine-5090-v1":
+        raise ValueError("An explicit new collection requires the cosine-5090-v1 contract")
+    data = json.loads(collected.read_text()) if collected is not None else rows(root, MAIN)
     flags = validate_rows(data, arms, domains, evaluation=evaluation)
     reference = [row for row in rows(root, REFERENCE) if row["hwa_arm"] == "pretrained"]
     validate_rows(reference, ("pretrained",), {"wikitext": "deployed_teacher_kl"},
@@ -130,10 +132,14 @@ def analyze(root, *, contract="transfer-tests-v1", legacy_model_tag=None):
     wikitext = table(data, domains["wikitext"])
     worst = max(abs(wikitext[("pretrained", rate)][seed] / old[("pretrained", rate)][seed] - 1)
                 for rate in RATES for seed in SEEDS)
-    if worst > 1e-6:
+    if worst > 1e-6 and contract != "cosine-5090-v1":
         raise ValueError(f"Pretrained reproduction FAIL: maximum relative KL difference {worst:.2e}")
     print(f"analysis contract: {contract}\nsources: {arms}")
-    print(f"pretrained reproduction: maximum relative KL difference = {worst:.2e} -> PASS")
+    if contract == "cosine-5090-v1":
+        print(f"historical V100 pretrained diagnostic: maximum relative KL difference = {worst:.2e}; "
+              "exact cross-GPU matching waived by user; comparisons use the fresh 5090 pretrained arm")
+    else:
+        print(f"pretrained reproduction: maximum relative KL difference = {worst:.2e} -> PASS")
     for domain, column in domains.items():
         by = table(data, column)
         print(f"\n===== {domain} test: KL means per rate (0..5 %)")
@@ -171,11 +177,12 @@ def analyze(root, *, contract="transfer-tests-v1", legacy_model_tag=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path, nargs="?", default=Path("results/lifecycles"))
-    parser.add_argument("--contract", choices=("transfer-tests-v1", "legacy-v1"), default="transfer-tests-v1")
+    parser.add_argument("--contract", choices=("transfer-tests-v1", "legacy-v1", "cosine-5090-v1"), default="transfer-tests-v1")
     parser.add_argument("--legacy-model-tag")
+    parser.add_argument("--collected", type=Path)
     args = parser.parse_args(argv)
     try:
-        return analyze(args.root, contract=args.contract, legacy_model_tag=args.legacy_model_tag)
+        return analyze(args.root, contract=args.contract, legacy_model_tag=args.legacy_model_tag, collected=args.collected)
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f"Experiment 1e validation FAIL: {error}", file=sys.stderr)
         return 2

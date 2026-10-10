@@ -32,6 +32,8 @@ import uuid
 DEFAULT_SCRIPTS = Path.home() / ".codex/skills/run-watch/scripts"
 OPERATIONAL_RETRIES = frozenset({"preempted", "node_failure", "transport_before_start", "supervision_lost", "collection_transport"})
 ACTIVE = frozenset({"claimed", "starting", "running", "unknown"})
+PROGRESS_FIELDS = frozenset({"startup_seconds", "stale_seconds", "expected_seconds"})
+PROGRESS_PHASES = frozenset({"prepare", "devices", "hwa", "deploy", "onchip", "collection", "validation"})
 
 
 def canonical(value):
@@ -78,6 +80,15 @@ def validate_manifest(raw):
         positive(case["expected_storage_bytes"], "expected_storage_bytes")
         for key in ("startup_seconds", "stale_seconds", "expected_seconds"):
             positive(case["progress"][key], key)
+        if "phases" in case["progress"]:
+            phases = case["progress"]["phases"]
+            if not isinstance(phases, dict) or not phases or set(phases) - PROGRESS_PHASES:
+                raise ValueError("progress phases must name native stages, collection or validation")
+            for phase, thresholds in phases.items():
+                if not isinstance(thresholds, dict) or set(thresholds) != PROGRESS_FIELDS:
+                    raise ValueError("each progress phase requires exactly startup, stale and expected seconds")
+                for key, value in thresholds.items():
+                    positive(value, f"progress.phases.{phase}.{key}")
         if not set(case.get("dependencies", [])) <= set(ids):
             raise ValueError("unknown case dependency")
         if any(not isinstance(gate, str) or not gate for gate in case.get("required_gates", [])):
@@ -446,6 +457,18 @@ class CampaignLedger:
                 positive(value, key)
             if min(progress["startup_seconds"], progress["stale_seconds"]) < 600:
                 raise ValueError("calibrated progress thresholds must cover two five-minute polls")
+        phase_calibration = receipt.get("phase_progress_calibration", {})
+        if not isinstance(phase_calibration, dict) or set(phase_calibration) - PROGRESS_PHASES:
+            raise ValueError("phase progress calibration must name native stages, collection or validation")
+        if phase_calibration and name != "handoff":
+            raise ValueError("only the frozen handoff gate may supply phase progress calibration")
+        for phase, thresholds in phase_calibration.items():
+            if not isinstance(thresholds, dict) or set(thresholds) != PROGRESS_FIELDS:
+                raise ValueError("phase progress calibration requires exactly startup, stale and expected seconds")
+            for key, value in thresholds.items():
+                positive(value, f"phase_progress_calibration.{phase}.{key}")
+            if min(thresholds["startup_seconds"], thresholds["stale_seconds"]) < 600:
+                raise ValueError("calibrated phase thresholds must cover two five-minute polls")
         prior = self.db.execute("SELECT receipt FROM campaign_gates WHERE campaign_id=? AND name=?", (campaign_id, name)).fetchone()
         if prior and prior["receipt"] != canonical(receipt):
             raise ValueError("validation gates are immutable; use a new contract for changed evidence")
@@ -488,8 +511,21 @@ class CampaignLedger:
                 and receipt.get("failed_gate_receipt_sha256") == digest(failed_receipt)
                 and failed_receipt.get("passed") is False)
 
-    def progress_expectation(self, job_id, target=None):
+    def progress_expectation(self, job_id, target=None, stage=None):
         case = self.case(job_id)
+        progress = case["contract"]["progress"]
+        if "phases" in progress:
+            # Measured phase calibration is frozen once in the handoff gate.
+            # Other phases retain their case-specific estimates (e.g. HWA scope).
+            kind = stage.get("kind") if isinstance(stage, dict) else stage
+            row = self.db.execute("SELECT receipt FROM campaign_gates WHERE campaign_id=? AND name='handoff'",
+                                  (case["campaign_id"],)).fetchone()
+            if row:
+                receipt = json.loads(row["receipt"])
+                calibrated = receipt.get("phase_progress_calibration", {}).get(kind)
+                if receipt["passed"] and calibrated:
+                    return calibrated
+            return progress["phases"].get(kind, {key: progress[key] for key in PROGRESS_FIELDS})
         contract = self.contract(case["campaign_id"])
         if any(any(added["id"] == job_id for added in extension["payload"]["cases"])
                for extension in contract["scientific_extensions"]):
@@ -647,13 +683,18 @@ class CampaignLedger:
     def snapshot(self, incident):
         job = self.store.job(incident["job_id"])
         contract = self.contract(incident["campaign_id"])
+        latest = self.db.execute("SELECT o.payload,a.target FROM campaign_observations o JOIN attempts a ON a.token=o.token "
+                                 "WHERE a.job_id=? ORDER BY o.observed DESC LIMIT 1", (job["id"],)).fetchone()
+        observation = json.loads(latest["payload"]) if latest else None
+        stage = observation.get("monitor_phase", {}).get("kind") if observation else None
         return {"incident": dict(incident), "case_id": job["id"], "manifest": contract["manifest"],
                 "manifest_sha256": contract["sha256"], "job": job,
                 "operational_amendments": contract["amendments"],
                 "scientific_extensions": contract["scientific_extensions"], "effective_budgets": contract["effective_budgets"],
                 "gate_waivers": contract["gate_waivers"],
                 "target_progress_calibration": contract["target_progress_calibration"],
-                "expected_progress": self.progress_expectation(job["id"]),
+                "expected_progress": self.progress_expectation(job["id"], latest["target"] if latest else None, stage),
+                "latest_observation": observation,
                 "remaining_budget": self.remaining(incident["campaign_id"]),
                 "execution_history": [a for a in self.store.attempts() if a["job_id"] == job["id"]],
                 "events": [dict(r) for r in self.db.execute("SELECT * FROM events WHERE job_id=? ORDER BY id DESC LIMIT 40", (job["id"],))]}
@@ -886,14 +927,16 @@ class CampaignTransport:
 
 
 def artifact_probe(root):
-    """Bounded semantic inspection under an explicit case root, never choose newest.
+    """Bounded semantic inspection under an explicit execution root.
 
     Native stage directories may be nested. Every metric stream contributes its
     named counter, and all complete metric records are checked for finite values.
-    Partial final writes are ignored until the next poll.
+    Partial final writes are ignored until the next poll. The current native stage
+    is identified from its resolved configuration, preferring a running stage and
+    then the freshest stage evidence. This is monitoring, never source selection.
     """
     base = Path(root)
-    progress, invalid, count = {}, [], 0
+    progress, invalid, count, stages, freshness = {}, [], 0, {}, {}
     def finite(value):
         if isinstance(value, float):
             return math.isfinite(value)
@@ -908,6 +951,9 @@ def artifact_probe(root):
                 continue
             count += 1
             name = str(path.relative_to(base))
+            stage_key = str(path.parent.relative_to(base))
+            if path.name in {"config.resolved.json", "metrics.jsonl", "status.json", "result.json"}:
+                freshness[stage_key] = max(freshness.get(stage_key, 0), path.stat().st_mtime_ns)
             if path.name == "metrics.jsonl":
                 if path.stat().st_size > 32 * 1024 * 1024:
                     invalid.append(name + ": metric stream exceeds probe bound")
@@ -927,6 +973,17 @@ def artifact_probe(root):
                         records += 1
                         last = item
                 progress[name] = {"records": records, "last": last}
+            elif path.name == "config.resolved.json":
+                if path.stat().st_size > 4 * 1024 * 1024:
+                    continue
+                try:
+                    resolved = json.loads(path.read_text())
+                except (ValueError, OSError):
+                    continue
+                stage = resolved.get("stage") if isinstance(resolved, dict) else None
+                if isinstance(stage, dict) and stage.get("kind") in PROGRESS_PHASES:
+                    stages[stage_key] = stage
+                    progress[name] = {"stage": stage}
             elif path.name in {"result.json", "status.json", "receipt.json"}:
                 if path.stat().st_size > 4 * 1024 * 1024:
                     continue
@@ -934,12 +991,23 @@ def artifact_probe(root):
                     item = json.loads(path.read_text())
                 except (ValueError, OSError):
                     continue
-                progress[name] = {key: item[key] for key in ("state", "stage", "step", "global_step", "epoch") if key in item}
+                progress[name] = {key: item[key] for key in ("state", "status", "stage", "step", "global_step", "epoch") if key in item}
                 if path.name == "result.json":
                     progress[name]["present"] = True
                     if not finite(item):
                         invalid.append(name + ": nonfinite result")
-    return {"progress": progress, "metrics_valid": not invalid, "errors": invalid[:20], "artifact_count": count}
+    result = {"progress": progress, "metrics_valid": not invalid, "errors": invalid[:20], "artifact_count": count}
+    if stages:
+        def entry(stage_key, filename):
+            return progress.get(str(Path(stage_key) / filename), {})
+        def stage_status(stage_key):
+            return entry(stage_key, "result.json").get("status") or entry(stage_key, "status.json").get("status")
+        stage_key = max(stages, key=lambda key: (stage_status(key) == "running", freshness.get(key, 0), key))
+        result.update(active_stage=stages[stage_key], stage_key=stage_key, stage_status=stage_status(stage_key),
+                      latest_metric=entry(stage_key, "metrics.jsonl").get("last"),
+                      stage_progress={name: value for name, value in progress.items()
+                                      if str(Path(name).parent) == stage_key})
+    return result
 
 
 def storage_probe(paths):
@@ -1100,17 +1168,39 @@ def scheduler_type(queue_module):
                     if not artifacts["metrics_valid"]:
                         self.attention(job["id"], "invalid or nonfinite campaign metrics", now)
                         self.campaigns.incident(job["id"], "invalid_metrics", {"errors": artifacts["errors"], "attempt": attempt["token"]})
-                    token = digest(artifacts["progress"])
                     previous = self.campaigns.db.execute("SELECT * FROM campaign_observations WHERE token=?", (attempt["token"],)).fetchone()
-                    if artifacts["progress"] and (previous is None or previous["progress_token"] != token):
+                    phase_aware = "phases" in case["contract"]["progress"]
+                    previous_payload = json.loads(previous["payload"]) if previous else {}
+                    outer = self.observations.get(attempt["target"], {}).get("attempts", {}).get(attempt["token"], {})
+                    stage = artifacts.get("active_stage") or {}
+                    stage_key = artifacts.get("stage_key", "startup")
+                    signal = artifacts.get("stage_progress", artifacts["progress"]) if phase_aware else artifacts["progress"]
+                    if phase_aware and outer.get("receipt", {}).get("stage") == "validate":
+                        stage, stage_key, signal = {"kind": "validation"}, "queue:validation", {"stage": "validation"}
+                    prior_phase = previous_payload.get("monitor_phase", {})
+                    phase_changed = phase_aware and stage_key != prior_phase.get("stage_key")
+                    stage_started = now if phase_changed else prior_phase.get("started_at", attempt["issued"])
+                    token = digest({"stage_key": stage_key, "progress": signal}) if phase_aware else digest(signal)
+                    if phase_changed or signal and (previous is None or previous["progress_token"] != token):
                         progress_at = now
                     else:
                         progress_at = previous["progress_at"] if previous else attempt["issued"]
-                    expected = self.campaigns.progress_expectation(job["id"], attempt["target"])
-                    if (observed.get("worker_alive") or observed.get("supervisor_alive")) and now - progress_at > max(expected["startup_seconds"], expected["stale_seconds"]):
+                    expected = self.campaigns.progress_expectation(job["id"], attempt["target"], stage)
+                    stale_at, stale_limit = progress_at, max(expected["startup_seconds"], expected["stale_seconds"])
+                    if phase_aware:
+                        observed["monitor_phase"] = {"kind": stage.get("kind"), "stage_key": stage_key,
+                                                      "started_at": stage_started, "expected": expected}
+                        observed["queue_worker"] = {"stage": outer.get("receipt", {}).get("stage"), "alive": outer.get("alive")}
+                        if artifacts.get("latest_metric") is not None and stage.get("kind") != "validation":
+                            stale_limit = expected["stale_seconds"]
+                        else:
+                            stale_at, stale_limit = stage_started, expected["startup_seconds"]
+                    alive = observed.get("worker_alive") or observed.get("supervisor_alive") or (phase_aware and outer.get("alive"))
+                    if alive and now - stale_at > stale_limit:
                         self.attention(job["id"], "stage-specific semantic progress threshold exceeded", now)
-                    if now - attempt["issued"] > expected["expected_seconds"] * 1.5:
-                        self.campaigns.incident(job["id"], "slow_progress", {"attempt": attempt["token"], "expected_seconds": expected["expected_seconds"]})
+                    if now - (stage_started if phase_aware else attempt["issued"]) > expected["expected_seconds"] * 1.5:
+                        self.campaigns.incident(job["id"], "slow_progress", {"attempt": attempt["token"],
+                            "stage": stage, "stage_key": stage_key, "expected_seconds": expected["expected_seconds"]})
                     self.campaigns.db.execute("INSERT OR REPLACE INTO campaign_observations VALUES(?,?,?,?,?)",
                                              (attempt["token"], now, token, progress_at, canonical(observed)))
                 except Exception as exc:

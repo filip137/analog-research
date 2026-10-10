@@ -1,12 +1,86 @@
 ---
 id: "exp-005"
-title: "Experiment 1e: develop whole-model HWA, then compare matched scopes"
+title: "Experiment 1e: matched HWA scopes with cosine decay"
 status: "partial"
 hypotheses: []
 ---
 # exp-005: whole-transformer HWA
 
 ## Question and current assignment
+
+The focused learning-rate and duration experiments are complete. On 2026-10-10,
+the user selected a pragmatic common recipe: “5e-3 with cos decay to 1e-3” for
+“the whole experiment”, then explicitly requested “run it on two 5090s”. This
+supersedes the pending broader-release decision below. Execute on **fifi and
+loulou only**, one worker per RTX 5090, through the existing persistent service.
+
+The new recipe uses 25,600 updates (100 intervals of 8,192 sequences, batch 32;
+about 4.196 passes over the 195,226-sequence synthetic training cohort), retaining
+205 warm-up updates. All trained parameter groups warm up to 0.005 and then use
+`0.001 + 0.004 * (1 + cos(pi * (s - 205) / (25600 - 205))) / 2`.
+The final optimizer update has LR 0.001. This smooth schedule and floor were
+**user-selected, not evaluated or established optimal by the previous sweep**.
+The floor is twice the 0.0005 tail of the completed 5e-3 step trial. Warm-up is
+0.80% of this longer budget; the original 1.6% ratio described the short grid.
+
+Train all six sources afresh from the pinned teacher: standard 3%, standard 9%,
+and temporary random-corruption-aware 3%, each at analog and whole-model scope.
+No old step/linear source is reused. Include the unchanged pretrained logical
+source. Preserve the selection rule, data, seeds, Adam settings and physical
+regime below. Score seven sources on five independent assignments and all six
+fault fractions: **210 deployment rows**, with both held-out domains per row.
+Transfer cohorts may be prepared with the source cache, but neither training nor
+checkpoint selection reads them. Only deployment evaluates the test domains.
+
+Strict main lifecycle: [opt125m-cmo-l6-exp1e.json](../../../lifecycles/opt125m-cmo-l6-exp1e.json).
+Two labelled numerical canaries use 512 updates (205 warm-up), corruption-aware
+3% HWA at each scope, one assignment and all six fault fractions, with the full
+held-out evaluation cohorts. These canaries test the changed scheduler, source
+validation, deployment, collection and memory/time estimates; their test metrics
+must not be used to retune the scientific recipe. Main jobs wait for the frozen
+handoff gate. Deployment itself requires a complete finite source fit and exact
+update/schedule/selection coverage; a numerically invalid source never advances.
+
+One queue job owns a native dependency-preserving source slice: prepare, devices,
+HWA and its five deployment stages. Source artifacts are referenced by exact
+native dependencies and hashes. Native resume reuses validated completed stages;
+it does not infer training-state resume from a selected checkpoint. The reusable
+collector inspects hashes, validates exact coverage and lineage, invokes native
+`workflow collect`, and copies compact evidence. Failed collection does not rerun
+successful GPU work. The service observes each actual stage with separate
+training, deployment, validation and collection expectations; per-defect metrics
+make deployment progress visible. No additional dispatcher or polling agent.
+
+New phase ledger ID: `opt-cmo-exp1e-cosine-20261010`, in the existing shared SQLite
+ledger. **18 incremental GPU-hours, 40 GB incremental storage, 12 hours from the
+first canary**, including readiness, failed attempts and retries. The completed
+focused phase retains its original records and 15.329 GPU-hours charged; the new
+phase does not reset or erase them. Estimated work is 8.6 GPU-hours training plus
+roughly 2 GPU-hours deployment, subject to the live canary, about 5–6 hours across
+the pair. Worker hard caps are 3 h whole-model, 2.25 h analog, 45 min pretrained,
+and 30 min per readiness job. Reserve full allowances before dispatch.
+
+Both test corpora and the teacher/training corpus are hash-verified on both hosts.
+Remote source and native outputs are under
+`/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-cosine-20261010/`;
+local compact evidence and queue receipts are under
+`results/lifecycles/opt125m-cmo-l6-exp1e-cosine/`.
+The former pretrained results were generated on V100. Cross-GPU exact stochastic
+matching was explicitly waived by the user. Historical baseline differences are
+reported as diagnostics, not an automatic cancellation gate; the freshly deployed
+pretrained arm supplies the matched baseline for this two-5090 comparison.
+
+Implementation: strict `cosine_warmup_decay` with required `min_factor: 0.2`;
+existing optimizer code applies the factor to both analog/calibration and digital
+parameter groups. Legacy lifecycle/source identities remain unchanged. The
+scheduler tests include the actual final optimizer update and both parameter
+groups. Validation passed: 276 workflow/collector tests (one skipped), 109 service
+tests, 50 development/decision tests; the updated collector suite has 19 tests.
+Before deployment, complete native dry-runs,
+then the two full-batch canaries. Handoff receipts below will record actual launch
+handles and measured expectations once those gates pass.
+
+## Completed focused development (historical protocol)
 
 First determine how standard 3% whole-transformer HWA responds to learning rate
 and decay on synthetic text. Review this focused evidence before committing to
@@ -38,8 +112,9 @@ all campaign GPUs are released. The short-grid rule recommends linear 1e-2;
 the separate four-pass comparison recommends step 5e-3. Longer training improves
 both healthy and faulty performance, but both duration runs select their final
 checkpoint. The result note contains the review. Experiment status is partial
-because the broader scope/recipe comparison remains unsubmitted, pending the
-scientific decision on the common recipe and training budget.
+because the broader scope/recipe comparison was then unsubmitted. The user
+subsequently selected the cosine protocol above; the following focused rules
+remain the historical record of how its evidence was obtained.
 
 ## Frozen focused comparison
 
@@ -89,14 +164,14 @@ a best checkpoint at initialization, late improvement, or inconsistent schedule
 ordering; do not silently extend the grid. One training seed gives exploratory
 hyperparameter evidence, not an estimate of training variance.
 
-The summary recommends a recipe but writes `awaiting_scientific_review`; it cannot
-release the broader campaign. Review the curves and cost before freezing the common
-recipe. Neither final test domain participates in this decision.
+The focused summary retains its original `awaiting_scientific_review` marker.
+The subsequent user decision above authorizes the new cosine comparison; no
+summary script makes this scientific decision. Neither final test domain
+participates in recipe selection.
 
-## Broader comparison, held until development review
+## Broader comparison and frozen decision rule
 
-After the recipe is frozen, reuse the selected standard-3% whole-model source
-verbatim and train the other five sources: standard 9% and corruption-aware 3%
+The user-selected cosine recipe requires six fresh sources: standard 3%, standard 9% and corruption-aware 3%
 whole-model HWA, and all three analog-only counterparts. Both scopes use the same
 frozen LR, schedule, data and update budget. Historical analog-only sources are
 contextual evidence and are not matched controls for the new optimization recipe.
@@ -112,10 +187,16 @@ A wins over B only with lower KL on at least four of five matched assignments an
 mean per-assignment relative reduction at least 10%, separately by fault fraction
 and domain. Report clean-source versus healthy-deployment versus corrupt-deployment
 contrasts and absolute scores on both domains; a specialization ratio alone cannot
-establish an absolute loss out of domain. Reproduce the unchanged pretrained
-baseline; do not demand that newly trained analog controls reproduce old checkpoints.
+establish an absolute loss out of domain. Deploy the unchanged pretrained logical
+source as the fresh matched baseline. Historical V100 reproduction is a diagnostic
+under the explicit GPU-matching waiver; newly trained controls do not reproduce
+old checkpoints. The `cosine-5090-v1` analysis contract records that distinction.
 
 ## Reference choices and deviations
+
+The broader cosine-to-0.2-floor schedule is a declared user-selected deviation
+from the papers and from both schedules tested during focused development.
+Retaining 205 warm-up updates on the longer budget also changes the warm-up ratio.
 
 Consult [the reference papers](../../../../../hwa_papers/README.md). The 1.6% warm-up
 ratio follows Büchel et al. 2025 Appendix I; our explicit linear and late-step
@@ -172,7 +253,7 @@ Local compact evidence and plots: `results/lifecycles/opt125m-cmo-l6-exp1e-devel
 Final interpretation belongs to [results/exp-005.md](../results/exp-005.md).
 Copy back small results/configs/metrics/inspection receipts, not large raw bundles.
 
-## Budget and admission
+## Focused-development budget and admission (historical)
 
 16 GPU-hours total, 34 GB of incremental artifacts/staged copies (30 GB initially,
 32 GB after the 5e-3 extension, then 34 GB after the 1e-2 extension), and a 12-hour
@@ -198,7 +279,8 @@ linear, 1e-5 step, 1e-3 linear, 1e-3 step as queue priority; all run in full.
 One existing `run-watch-queue.service` on nom-cool-2 owns campaign dispatch and
 monitoring through a repository-owned reusable extension. Its existing SQLite ledger
 records jobs, attempts, manifests, dependencies, leases, incidents and budgets.
-Register this focused phase only; broader jobs are not submitted before review.
+The focused phase and the newly authorized cosine phase have separate frozen
+contracts in this same ledger; the completed focused history remains intact.
 
 Poll every 300 seconds. Observe actual workers, nested native-stage progress,
 finite metrics, artifacts and storage, separate queued/running states, and integrate

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import sqlite3
 
@@ -234,6 +235,205 @@ def test_nested_metrics_finite_validation_and_partial_write(tmp_path):
     assert next(iter(value["progress"].values()))["records"] == 1
     metric.write_text('{"step":1,"loss":NaN}\n')
     assert not artifact_probe(tmp_path)["metrics_valid"]
+
+
+def native_stage(root, name, kind, *, status="running", stamp=100, metric=None, seed=None):
+    path = root / name
+    path.mkdir(parents=True, exist_ok=True)
+    stage = {"kind": kind, "hwa_arm": "standard_hwa", "array_seed": seed}
+    (path / "config.resolved.json").write_text(json.dumps({"stage": stage}))
+    (path / "status.json").write_text(json.dumps({"status": status}))
+    if metric is not None:
+        (path / "metrics.jsonl").write_text(json.dumps(metric) + "\n")
+    for file in path.iterdir():
+        os.utime(file, (stamp, stamp))
+    return path
+
+
+def test_artifact_probe_identifies_native_stage_and_its_latest_complete_metric(tmp_path):
+    old = native_stage(tmp_path, "hwa/run", "hwa", status="complete", stamp=200,
+                       metric={"stage": "hwa_selection", "global_step": 25600})
+    current = native_stage(tmp_path, "deploy/run", "deploy", stamp=300, seed=271001,
+                           metric={"stage": "deploy_case", "case": "nominal", "teacher_kl": 0.1})
+    # A completed stage's newer file timestamp must not mask the active run.
+    os.utime(old / "metrics.jsonl", (400, 400))
+    with (current / "metrics.jsonl").open("a") as stream:
+        stream.write('{"stage":"deploy_case","case":')
+    observed = artifact_probe(tmp_path)
+    assert observed["active_stage"] == {"kind": "deploy", "hwa_arm": "standard_hwa", "array_seed": 271001}
+    assert observed["stage_key"] == "deploy/run" and observed["stage_status"] == "running"
+    assert observed["latest_metric"]["case"] == "nominal"
+    assert observed["latest_metric"]["stage"] == "deploy_case"
+    assert observed["stage_progress"]["deploy/run/metrics.jsonl"]["records"] == 1
+    assert all(name.startswith("deploy/run/") for name in observed["stage_progress"])
+    assert "hwa/run/metrics.jsonl" in observed["progress"]
+    # A new stage is visible before its first metric is available.
+    (current / "status.json").write_text('{"status":"complete"}')
+    native_stage(tmp_path, "deploy2/run", "deploy", stamp=500, seed=271002)
+    observed = artifact_probe(tmp_path)
+    assert observed["active_stage"]["array_seed"] == 271002
+    assert observed["latest_metric"] is None
+
+
+def test_new_native_config_and_running_status_identify_phase_before_first_metric(tmp_path):
+    native_stage(tmp_path, "earlier/run", "hwa", stamp=100, metric={"global_step": 25600})
+    native_stage(tmp_path, "new/run", "deploy", stamp=200, seed=271001)
+    observed = artifact_probe(tmp_path)
+    assert observed["active_stage"]["kind"] == "deploy"
+    assert observed["stage_key"] == "new/run" and observed["latest_metric"] is None
+
+
+@pytest.mark.parametrize("phases", [None, {}, [], {"training": {}},
+    {"deploy": {"startup_seconds": 600, "stale_seconds": 600}},
+    {"hwa": {"startup_seconds": True, "stale_seconds": 600, "expected_seconds": 600}},
+    {"validation": {"startup_seconds": 600, "stale_seconds": 0, "expected_seconds": 600}},
+    {"deploy": {"startup_seconds": 600, "stale_seconds": 600, "expected_seconds": 600, "other": 1}},
+])
+def test_phase_contract_rejects_unknown_or_incomplete_thresholds(setup, phases):
+    _, _, _, manifest = setup
+    doc = manifest()
+    doc["cases"][0]["progress"]["phases"] = phases
+    with pytest.raises(ValueError):
+        validate_manifest(doc)
+
+
+def phase_thresholds():
+    return {"hwa": {"startup_seconds": 6000, "stale_seconds": 6000, "expected_seconds": 12000},
+            "deploy": {"startup_seconds": 900, "stale_seconds": 600, "expected_seconds": 1200},
+            "validation": {"startup_seconds": 600, "stale_seconds": 600, "expected_seconds": 900}}
+
+
+def test_explicit_phase_contract_wins_over_old_whole_case_calibration(setup):
+    scheduler, _, job, manifest = setup
+    job()
+    doc = manifest()
+    doc["cases"][0]["progress"]["phases"] = phase_thresholds()
+    sha = scheduler.campaigns.register(doc)
+    scheduler.campaigns.gate("study", "handoff", {"manifest_sha256": sha, "passed": True,
+        "evidence": ["old calibration"], "progress_calibration": {"training": {
+            "startup_seconds": 10000, "stale_seconds": 10000, "expected_seconds": 10000}}})
+    for kind, thresholds in phase_thresholds().items():
+        assert scheduler.campaigns.progress_expectation("one", "lab", {"kind": kind}) == thresholds
+    assert scheduler.campaigns.progress_expectation("one", "lab", "prepare") == {
+        "startup_seconds": 600, "stale_seconds": 600, "expected_seconds": 600}
+
+
+def test_handoff_phase_calibration_is_frozen_without_overwriting_other_phase_or_manifest(setup):
+    scheduler, _, job, manifest = setup
+    job()
+    doc = manifest()
+    doc["cases"][0]["progress"]["phases"] = phase_thresholds()
+    sha = scheduler.campaigns.register(doc)
+    measured = {"startup_seconds": 600, "stale_seconds": 600, "expected_seconds": 300}
+    receipt = {"manifest_sha256": sha, "passed": True, "evidence": ["native canary"],
+               "phase_progress_calibration": {"deploy": measured}}
+    scheduler.campaigns.gate("study", "handoff", receipt)
+    assert scheduler.campaigns.progress_expectation("one", "lab", "deploy") == measured
+    assert scheduler.campaigns.progress_expectation("one", "lab", "hwa") == phase_thresholds()["hwa"]
+    assert scheduler.campaigns.contract("study")["manifest"] == doc
+    assert scheduler.campaigns.contract("study")["sha256"] == sha
+    scheduler.campaigns.gate("study", "handoff", receipt)
+    with pytest.raises(ValueError, match="immutable"):
+        scheduler.campaigns.gate("study", "handoff", {**receipt, "phase_progress_calibration": {
+            "deploy": {**measured, "expected_seconds": 500}}})
+    with pytest.raises(ValueError, match="handoff"):
+        scheduler.campaigns.gate("study", "other", receipt)
+
+
+@pytest.mark.parametrize("calibration", [None, [], {"wrong": {}},
+    {"deploy": {"startup_seconds": 599, "stale_seconds": 600, "expected_seconds": 300}},
+    {"deploy": {"startup_seconds": 600, "stale_seconds": True, "expected_seconds": 300}},
+    {"deploy": {"startup_seconds": 600, "stale_seconds": 600}},
+])
+def test_handoff_phase_calibration_rejects_invalid_or_short_poll_thresholds(setup, calibration):
+    scheduler, _, job, manifest = setup
+    job()
+    sha = scheduler.campaigns.register(manifest())
+    with pytest.raises(ValueError):
+        scheduler.campaigns.gate("study", "handoff", {"manifest_sha256": sha, "passed": True,
+            "evidence": ["native canary"], "phase_progress_calibration": calibration})
+
+
+def phase_monitor(setup, monkeypatch):
+    scheduler, now, job, manifest = setup
+    job()
+    doc = manifest()
+    doc["cases"][0]["progress"]["phases"] = phase_thresholds()
+    scheduler.campaigns.register(doc)
+    scheduler.store.update_job("one", "running")
+    scheduler.store.db.execute("INSERT INTO attempts(token,job_id,target,gpu_uuid,gpu_name,state,issued,launch_before,progress_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                               ("token", "one", "lab", "gpu", "5090", "running", now[0] - 10000, now[0] - 9955, now[0]))
+    evidence = {"worker": {"worker_alive": True, "supervisor_alive": True, "receipt": {"state": "running"}},
+        "artifacts": {"metrics_valid": True, "errors": [], "progress": {"old": {"records": 1}},
+                      "active_stage": {"kind": "hwa"}, "stage_key": "hwa/run",
+                      "latest_metric": {"global_step": 100}, "stage_progress": {"metrics": {"records": 1}}}}
+    def remote(cfg, target, argv, **kwargs):
+        if "status" in argv:
+            return json.loads(json.dumps(evidence["worker"]))
+        if "probe-artifacts" in argv:
+            return json.loads(json.dumps(evidence["artifacts"]))
+        assert "renew" in argv
+        return {}
+    monkeypatch.setattr("campaigns.execution_service.remote_command", remote)
+    return scheduler, now, evidence
+
+
+def observed_phase(scheduler):
+    row = scheduler.store.db.execute("SELECT payload FROM campaign_observations WHERE token='token'").fetchone()
+    return json.loads(row["payload"])["monitor_phase"]
+
+
+def test_phase_clocks_follow_each_native_array_and_survive_ledger_restart(setup, monkeypatch):
+    scheduler, now, evidence = phase_monitor(setup, monkeypatch)
+    scheduler.probe_campaigns(now[0])
+    assert observed_phase(scheduler)["kind"] == "hwa"
+    now[0] += 2000
+    evidence["artifacts"].update(active_stage={"kind": "deploy", "array_seed": 271001}, stage_key="deploy1/run")
+    scheduler.probe_campaigns(now[0])
+    first = observed_phase(scheduler)
+    assert first["started_at"] == now[0] and first["expected"] == phase_thresholds()["deploy"]
+    assert not scheduler.store.db.execute("SELECT 1 FROM campaign_incidents WHERE kind='slow_progress'").fetchone()
+    now[0] += 300
+    scheduler.campaigns = CampaignLedger(scheduler.store, lambda: now[0])
+    scheduler.probe_campaigns(now[0])
+    assert observed_phase(scheduler)["started_at"] == first["started_at"]
+    now[0] += 301
+    evidence["artifacts"].update(active_stage={"kind": "deploy", "array_seed": 271002}, stage_key="deploy2/run")
+    scheduler.probe_campaigns(now[0])
+    assert observed_phase(scheduler)["started_at"] == now[0]
+    assert scheduler.store.job("one")["state"] == "running"
+
+
+def test_deployment_stall_uses_its_threshold_and_ignores_old_stage_activity(setup, monkeypatch):
+    scheduler, now, evidence = phase_monitor(setup, monkeypatch)
+    evidence["artifacts"].update(active_stage={"kind": "deploy"}, stage_key="deploy/run")
+    scheduler.probe_campaigns(now[0])
+    now[0] += 601
+    # Fresh data in a completed stage cannot hide a stalled current deployment.
+    evidence["artifacts"]["progress"]["old"]["records"] += 1
+    scheduler.probe_campaigns(now[0])
+    assert scheduler.store.job("one")["state"] == "attention"
+    assert "stage-specific" in scheduler.store.job("one")["reason"]
+
+
+def test_validation_worker_gets_its_own_clock_liveness_and_incident_context(setup, monkeypatch):
+    scheduler, now, evidence = phase_monitor(setup, monkeypatch)
+    scheduler.probe_campaigns(now[0])
+    now[0] += 3000
+    evidence["worker"] = {"worker_alive": False, "supervisor_alive": False, "receipt": {"state": "complete"}}
+    scheduler.observations = {"lab": {"attempts": {"token": {"alive": True, "receipt": {"stage": "validate"}}}}}
+    scheduler.probe_campaigns(now[0])
+    phase = observed_phase(scheduler)
+    assert phase["kind"] == "validation" and phase["started_at"] == now[0]
+    assert scheduler.store.job("one")["state"] == "running"
+    now[0] += 601
+    scheduler.probe_campaigns(now[0])
+    assert scheduler.store.job("one")["state"] == "attention"
+    incident_id = scheduler.campaigns.incident("one", "validation_test", {})
+    incident = scheduler.store.db.execute("SELECT * FROM campaign_incidents WHERE id=?", (incident_id,)).fetchone()
+    snapshot = scheduler.campaigns.snapshot(incident)
+    assert snapshot["expected_progress"] == phase_thresholds()["validation"]
+    assert snapshot["latest_observation"]["monitor_phase"]["kind"] == "validation"
 
 
 def test_storage_counts_staged_copies_but_not_hardlinks_twice(tmp_path):
