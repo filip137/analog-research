@@ -158,7 +158,7 @@ class CampaignLedger:
         return {**dict(row), "contract": json.loads(row["contract"])} if row else None
 
     def amend(self, campaign_id, raw):
-        """Append readiness capacity without rewriting science, gates or budgets.
+        """Audit execution capacity and measured storage estimates without retuning.
 
         Newly prepared jobs remain held. Scientific identity is the exact pinned
         lifecycle content shared with an existing readiness case; host paths and
@@ -167,7 +167,8 @@ class CampaignLedger:
         """
         amendment = json.loads(canonical(raw))
         allowed = {"version", "id", "manifest_sha256", "authorization", "reason", "evidence",
-                   "template_case_id", "scientific_inputs", "cases", "storage_roots", "target_progress_calibration"}
+                   "template_case_id", "scientific_inputs", "cases", "storage_roots", "target_progress_calibration",
+                   "storage_estimates"}
         if set(amendment) - allowed or amendment.get("version") != 1:
             raise ValueError("unsupported operational amendment fields/version")
         for key in ("id", "authorization", "reason"):
@@ -188,8 +189,29 @@ class CampaignLedger:
             additions = amendment.get("cases", [])
             roots = amendment.get("storage_roots", [])
             calibration = amendment.get("target_progress_calibration", {})
-            if not additions and not roots and not calibration:
+            storage_estimates = amendment.get("storage_estimates", [])
+            if not additions and not roots and not calibration and not storage_estimates:
                 raise ValueError("operational amendment has no additions")
+            if not isinstance(storage_estimates, list):
+                raise ValueError("storage_estimates must be a list of measured case estimates")
+            estimates_by_case = {}
+            for estimate in storage_estimates:
+                if not isinstance(estimate, dict) or set(estimate) != {"case_id", "previous_bytes", "expected_bytes", "measured_bytes"}:
+                    raise ValueError("storage estimate requires case_id, previous_bytes, expected_bytes and measured_bytes")
+                case_id = estimate["case_id"]
+                if not isinstance(case_id, str) or case_id in estimates_by_case:
+                    raise ValueError("storage estimate case IDs must be unique strings")
+                case = self.case(case_id)
+                if not case or case["campaign_id"] != campaign_id:
+                    raise ValueError("storage estimate names an unknown case in this campaign")
+                for key in ("previous_bytes", "expected_bytes", "measured_bytes"):
+                    if isinstance(estimate[key], bool) or not isinstance(estimate[key], int) or estimate[key] <= 0:
+                        raise ValueError("storage estimate byte counts must be positive integers")
+                if estimate["previous_bytes"] != case["contract"]["expected_storage_bytes"]:
+                    raise ValueError("storage estimate previous_bytes is stale")
+                if estimate["expected_bytes"] < estimate["measured_bytes"]:
+                    raise ValueError("storage estimate cannot be smaller than its measured evidence")
+                estimates_by_case[case_id] = {**case["contract"], "expected_storage_bytes": estimate["expected_bytes"]}
             known_targets = {target for case in contract["effective_cases"]
                              for target in self.store.job(case["id"])["spec"]["placements"]}
             template = self.case(amendment.get("template_case_id")) if additions else None
@@ -248,6 +270,11 @@ class CampaignLedger:
                         raise ValueError("target progress thresholds must cover two five-minute polls")
             for case in additions:
                 self.db.execute("INSERT INTO campaign_cases VALUES(?,?,?)", (case["id"], campaign_id, canonical(case)))
+            for case_id, revised in estimates_by_case.items():
+                self.db.execute("UPDATE campaign_cases SET contract=? WHERE job_id=? AND campaign_id=?",
+                                (canonical(revised), case_id, campaign_id))
+                self.db.execute("UPDATE campaign_reservations SET storage_bytes=? WHERE job_id=? AND campaign_id=?",
+                                (revised["expected_storage_bytes"], case_id, campaign_id))
             self.db.execute("INSERT INTO campaign_amendments VALUES(?,?,?,?,?)",
                             (amendment["id"], campaign_id, identity, self.clock(), canonical(amendment)))
             if roots:
@@ -257,7 +284,7 @@ class CampaignLedger:
             self.store.event(None, "campaign_operational_amendment", {"campaign_id": campaign_id,
                 "amendment_id": amendment["id"], "sha256": identity,
                 "cases": [case["id"] for case in additions], "storage_roots": roots,
-                "target_progress_calibration": calibration}, self.clock())
+                "target_progress_calibration": calibration, "storage_estimates": storage_estimates}, self.clock())
         return identity
 
     def register(self, raw):

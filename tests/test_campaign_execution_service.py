@@ -551,3 +551,73 @@ def test_matching_waiver_cannot_waive_other_checks_or_replace_prior_waiver(setup
     scheduler.campaigns.waive_gate("study", "rtx3090_matched_randomness", waiver)
     with pytest.raises(ValueError, match="immutable"):
         scheduler.campaigns.waive_gate("study", "rtx3090_matched_randomness", dict(waiver, reason="replace previous rationale"))
+
+
+def storage_estimate_receipt(scheduler, **change):
+    return {"version": 1, "id": "measured-case-storage", "manifest_sha256": scheduler.campaigns.contract("study")["sha256"],
+            "authorization": "Calibrate operational reservation within original resource caps",
+            "reason": "Completed-case artifact measurement replaces preliminary storage estimate",
+            "evidence": ["completed-case-storage-measurement.json"],
+            "storage_estimates": [{"case_id": "one", "previous_bytes": 100, "expected_bytes": 80, "measured_bytes": 70, **change}]}
+
+
+def test_measured_storage_amendment_updates_live_reservation_without_changing_other_budgets(setup):
+    scheduler, now, job = ready(setup)
+    scheduler.campaigns.reserve(job)
+    original = scheduler.campaigns.contract("study")
+    reserved = dict(scheduler.store.db.execute("SELECT * FROM campaign_reservations").fetchone())
+    job_before = scheduler.store.job("one")
+    receipt = storage_estimate_receipt(scheduler)
+    identity = scheduler.campaigns.amend("study", receipt)
+    updated = scheduler.campaigns.contract("study")
+    current = dict(scheduler.store.db.execute("SELECT * FROM campaign_reservations").fetchone())
+    assert current == {**reserved, "storage_bytes": 80}
+    assert updated["manifest"] == original["manifest"]
+    assert updated["sha256"] == original["sha256"]
+    assert updated["started"] == original["started"]
+    assert updated["storage_observed"] == original["storage_observed"]
+    assert updated["effective_cases"][0] == {**original["effective_cases"][0], "expected_storage_bytes": 80}
+    assert scheduler.store.job("one") == job_before
+    assert scheduler.campaigns.remaining("study")["storage_bytes_reserved"] == 80
+    assert scheduler.campaigns.amend("study", receipt) == identity
+    assert len(scheduler.campaigns.contract("study")["amendments"]) == 1
+
+
+def test_measured_storage_estimate_survives_reopen_and_missing_reservation_recovery(setup, module):
+    scheduler, now, job = ready(setup)
+    scheduler.campaigns.amend("study", storage_estimate_receipt(scheduler))
+    scheduler.store.db.execute("INSERT INTO attempts(token,job_id,target,gpu_uuid,gpu_name,state,issued,launch_before,progress_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                               ("running", "one", "lab", "gpu", "5090", "running", now[0], now[0]+45, now[0]))
+    reopened_store = module.Store(scheduler.store.root)
+    try:
+        reopened = CampaignLedger(reopened_store, lambda: now[0])
+        reopened.reconcile_reservations()
+        reservation = dict(reopened_store.db.execute("SELECT * FROM campaign_reservations").fetchone())
+        assert reservation["storage_bytes"] == 80
+        assert reservation["gpu_seconds"] == 900
+        assert reopened.contract("study")["manifest"]["cases"][0]["expected_storage_bytes"] == 100
+        assert reopened.case("one")["contract"]["expected_storage_bytes"] == 80
+    finally:
+        reopened_store.close()
+
+
+@pytest.mark.parametrize("change", [{"previous_bytes": 99}, {"case_id": "unknown"},
+    {"expected_bytes": 69}, {"expected_bytes": 0}, {"measured_bytes": -1}, {"expected_bytes": 80.5}])
+def test_invalid_measured_storage_estimates_fail_transactionally(setup, change):
+    scheduler, _, job = ready(setup)
+    scheduler.campaigns.reserve(job)
+    before = dict(scheduler.store.db.execute("SELECT * FROM campaign_reservations").fetchone())
+    with pytest.raises(ValueError):
+        scheduler.campaigns.amend("study", storage_estimate_receipt(scheduler, **change))
+    assert scheduler.campaigns.case("one")["contract"]["expected_storage_bytes"] == 100
+    assert dict(scheduler.store.db.execute("SELECT * FROM campaign_reservations").fetchone()) == before
+    assert scheduler.store.db.execute("SELECT COUNT(*) FROM campaign_amendments").fetchone()[0] == 0
+
+
+def test_storage_estimates_need_measurement_evidence_and_unique_cases(setup):
+    scheduler, _, _ = ready(setup)
+    receipt = storage_estimate_receipt(scheduler)
+    with pytest.raises(ValueError, match="evidence"):
+        scheduler.campaigns.amend("study", {**receipt, "evidence": []})
+    with pytest.raises(ValueError, match="unique"):
+        scheduler.campaigns.amend("study", {**receipt, "storage_estimates": receipt["storage_estimates"] * 2})
