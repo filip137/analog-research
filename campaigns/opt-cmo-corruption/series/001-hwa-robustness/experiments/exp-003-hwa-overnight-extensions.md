@@ -139,8 +139,21 @@ Jean Zay.
 | C `pretrained` deployments | Jean Zay 844416 | `logs/x1c-c-pre-844416.out` | running |
 | Deploy pipelines | local `pipeline.sh`, one per lifecycle (logs `exp1b/pipeline-{a,b,c}.log`); D's runs inside the dispatcher | background tasks | waiting for sources |
 
+**Updates.**
+- **D, complete (02:23).** The dispatcher found `riri` idle at 00:56 and
+  launched both seed-2 trainings there (RTX 5090, PyTorch 2.11).
+  - Deployments: Jean Zay 849073 and 849901, both COMPLETED.
+  - Inspect passed for all 12 Jean Zay bundles and the `riri` bundles.
+  - 60 rows collected, no duplicates.
+- **C, in progress.** `standard_hwa` was deployed as Jean Zay 846442.
+- **Experiment 1b's watcher fault** affected C as well. Its first collection
+  failed silently because the helper sourced `/etc/profile` under `set -u`.
+  Jean Zay's `launch/inspect_collect.sh` was fixed at 01:20, before any
+  Experiment 1c pipeline reached it.
+
 **Next:**
 - When each pipeline reports `DONE`, check the inspect outputs under
   `results/lifecycles/<id>/collected/`.
+- Run [`analysis/exp1c_decision.py`](../analysis/exp1c_decision.py).
 - Write `results/exp-003.md` with every part that completed. A part that
   never launched is labelled not run.
