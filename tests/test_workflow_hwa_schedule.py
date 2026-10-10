@@ -124,6 +124,41 @@ def test_digital_lr_rejects_invalid_values(value):
         parse_lifecycle(doc)
 
 
+def test_zero_digital_lr_distinguishes_signed_zero_from_parameter_changes(monkeypatch, tmp_path):
+    factory = tiny_teacher
+    def teacher_with_negative_zero():
+        teacher = factory()
+        with torch.no_grad():
+            teacher.embed_tokens.weight[0, 0] = -0.0
+        return teacher
+    monkeypatch.setattr(__import__(__name__), "tiny_teacher", teacher_with_negative_zero)
+    original_step = torch.optim.Adam.step
+    def step_with_zero_canonicalization(optimizer, *args, **kwargs):
+        result = original_step(optimizer, *args, **kwargs)
+        with torch.no_grad():
+            for group in optimizer.param_groups:
+                if group["base_lr"] == 0:
+                    for parameter in group["params"]:
+                        parameter[parameter == 0] = 0.0
+        return result
+    monkeypatch.setattr(torch.optim.Adam, "step", step_with_zero_canonicalization)
+    # Choose the terminal checkpoint so the regression examines the arithmetic
+    # after actual zero-rate Adam steps, independently of this tiny cohort's fit.
+    calls = []
+    original_score = hwa.selection_score
+    def terminal_score(*args, **kwargs):
+        score = original_score(*args, **kwargs)
+        calls.append(score)
+        return {**score, "teacher_kl": 1 / len(calls)}
+    monkeypatch.setattr(hwa, "selection_score", terminal_score)
+    doc = document("cosine_warmup_decay")
+    doc["hwa"]["arms"][1]["digital_learning_rate"] = 0
+    result, _ = train(doc, tmp_path)
+    scope = result["fit"]["scope"]
+    assert scope["digital_unchanged"] and not scope["digital_bitwise_unchanged"]
+    assert scope["digital_sha256"] != scope["initial_digital_sha256"]
+
+
 @pytest.mark.parametrize(
     "key,value",
     [

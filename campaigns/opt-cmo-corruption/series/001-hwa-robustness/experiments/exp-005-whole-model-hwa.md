@@ -62,7 +62,7 @@ Preparation: `campaigns/opt-cmo-corruption/launch/exp1e_digital_lr.py`.
 Local evidence: `results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr/`.
 Remote source/results: `/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-lr-20261011/`.
 New phase ID: `opt-cmo-exp1e-digital-lr-20261011`. Bound the incremental phase to
-**10 GPU-hours, 16 GB storage and 8 hours from registration**, including readiness,
+**10 GPU-hours, 16 GB storage and 8 hours from first admission**, including readiness,
 failed attempts and any authorized operational retry. Full-worker hard cap 3 h;
 smoke cap 30 min. The measured whole-model fit takes about 6,057 s; four fits are
 about 6.8 GPU-hours plus readiness/validation, or **3.5–4 h on the pair**.
@@ -72,6 +72,17 @@ from running, and applies phase thresholds: prepare/devices 120 s, HWA 6,500 s
 Failed mandatory gates or insufficient budget stop downstream dispatch. No
 automatic scientific changes or compute retries. The existing tested incident
 investigator, restart-safe ownership, locking and durable ledger remain in use.
+
+Readiness found a reporting-only issue in the new zero-rate diagnostic: byte
+hashes count sign changes from -0.0 to +0.0 as changes, while the runtime's
+numeric assertion correctly accepted unchanged values. A CPU inspection of all
+96,895,488 digital parameters found exact numerical equality and only 32 zero
+sign-bit changes; the zero and analog canaries' common state hashes and scores
+were identical. Preserve these original canaries. Correct the report to separate
+numerical and byte equality, repeat only the zero canary, then use the corrected
+source for the four still-unstarted cases. Replacement execution records retain
+the same lifecycle hashes, budgets, deadline and scientific settings; all earlier
+charges and evidence remain in this phase's ledger.
 
 ### Completed cosine comparison protocol
 

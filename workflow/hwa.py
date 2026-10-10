@@ -298,11 +298,13 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
     if arm.scope == "model":
         digital = {k: v for k, v in best["model"].items() if k.startswith("digital.")}
         initial_digital = {k: v for k, v in pristine.items() if k.startswith("digital.")}
-        unchanged = state_hash(digital) == state_hash(initial_digital)
-        if arm.digital_learning_rate == 0 and any(
+        # A zero Adam step can canonicalize -0.0 to +0.0. Preserve byte hashes
+        # for provenance, but test unchanged numerical parameters separately.
+        unchanged = all(torch.equal(value, initial_digital[key]) for key, value in digital.items())
+        if arm.digital_learning_rate == 0 and (not unchanged or any(
             not torch.equal(value.detach().cpu(), pristine[key])
             for key, value in network.state_dict().items() if key.startswith("digital.")
-        ):
+        )):
             raise RuntimeError("Zero-LR HWA changed the digital weights.")
         fit["scope"] = {
             "scope": "model",
@@ -311,6 +313,7 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
             "digital_sha256": state_hash(digital),
             "initial_digital_sha256": state_hash(initial_digital),
             "digital_unchanged": unchanged,
+            "digital_bitwise_unchanged": state_hash(digital) == state_hash(initial_digital),
         }
     if streamed:
         fit["stream"] = {

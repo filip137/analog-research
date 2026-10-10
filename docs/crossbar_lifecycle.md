@@ -250,6 +250,8 @@ Each arm is a source that later stages deploy:
     forward/backward path and optimizer group while leaving digital weights
     unchanged. The runtime verifies this and records initial/selected digital
     hashes; analog weights and calibration still train at `hwa.learning_rate`.
+    Numerical equality and byte equality are reported separately: zero-rate Adam
+    may change the sign bit of a zero without changing its numerical value.
   - Only the analog weights see noise and corruption, and the frozen teacher
     remains the KL target.
   - A `model`-scope source carries its digital weights through deployment and
