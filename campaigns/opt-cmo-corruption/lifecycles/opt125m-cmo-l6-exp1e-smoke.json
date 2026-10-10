@@ -1,0 +1,157 @@
+{
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "lifecycle_id": "opt125m-cmo-l6-exp1e-smoke",
+  "question": {
+    "text": "Smoke (not evidence) for Experiment 1e: two streamed epochs of whole-model standard HWA (digital learning rate 3e-5) on one assignment, to measure epoch time and peak GPU memory before Stage 1e-a.",
+    "decision": "The digital learning rate frozen for every whole-model arm of Experiment 1e (see campaigns/opt-cmo-corruption/series/001-hwa-robustness/experiments/exp-005-whole-model-hwa.md).",
+    "primary_metric": "teacher_kl",
+    "evidence_class": "exploratory_model_based"
+  },
+  "network": {
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m",
+    "analog_decoder_layers": 6
+  },
+  "data": {
+    "corpus": {
+      "name": "opt125m-synthetic-50m",
+      "sha256": "ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984"
+    },
+    "sequence_length": 256,
+    "data_seed": 20261008,
+    "hwa_sequences": 195226,
+    "recovery_sequences": 8192,
+    "development_sequences": 256,
+    "test_sequences": 1024,
+    "evaluation": "test",
+    "max_examples": 0
+  },
+  "devices": {
+    "technology": "cmo",
+    "model": "aihwkit_1.1.0_reram_cmo",
+    "noise_scale": 1.0,
+    "assignment_seeds": [
+      271001
+    ],
+    "selection_seeds": [
+      211001,
+      211002
+    ],
+    "endpoint_seed_offset": 10000
+  },
+  "defects": {
+    "placement": "hierarchical_die_array",
+    "persistence": "permanent",
+    "arrays_per_die": 48,
+    "cases": [
+      {
+        "kind": "none",
+        "rate_ppm": 0,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 10000,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 20000,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 30000,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 40000,
+        "die_concentration": null,
+        "array_concentration": null
+      },
+      {
+        "kind": "random",
+        "rate_ppm": 50000,
+        "die_concentration": null,
+        "array_concentration": null
+      }
+    ]
+  },
+  "deployment": {
+    "scaling": "per_output_channel_absmax",
+    "encoding": "active_reference_pair",
+    "tile_size": 256,
+    "read_noise": 0.0,
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias"
+  },
+  "hwa": {
+    "noise_model": "additive_gaussian_weight",
+    "noise_std": 0.03,
+    "noise_scaling": "output_channel_abs_max",
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "learning_rate": 0.005,
+    "lr_milestones": [
+      40
+    ],
+    "lr_decay": 0.1,
+    "epochs": 2,
+    "sequences_per_epoch": 8192,
+    "batch_size": 32,
+    "augment": false,
+    "seed": 41,
+    "selection": {
+      "every_epochs": 2,
+      "extension_epochs": 0
+    },
+    "arms": [
+      {
+        "id": "standard_hwa_model_dlr3em5",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "corruption": null,
+        "selection_cases": [
+          {
+            "kind": "none",
+            "rate_ppm": 0,
+            "die_concentration": null,
+            "array_concentration": null
+          },
+          {
+            "kind": "random",
+            "rate_ppm": 30000,
+            "die_concentration": null,
+            "array_concentration": null
+          }
+        ],
+        "scope": "model",
+        "digital_learning_rate": 3e-05
+      }
+    ]
+  },
+  "program_verify": {
+    "method": "gaussian_endpoint",
+    "acceptance_percent": 2.0,
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "onchip": null,
+  "transfer_tests": [
+    {
+      "label": "generated",
+      "corpus": {
+        "name": "wikitext2-train-synthtest",
+        "sha256": "8e73b6b43aafb92b8b52e11cdd060d573331fae410350cf2427f3eeba640e224"
+      },
+      "split": "test",
+      "sequences": 384
+    }
+  ]
+}

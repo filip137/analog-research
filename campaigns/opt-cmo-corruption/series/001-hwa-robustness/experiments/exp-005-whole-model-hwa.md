@@ -106,8 +106,10 @@ rate and per test domain, never pooled:
    - corruption-aware 3 % against standard 3 % (the crossover);
    - 9 % noise against corruption-aware 3 %;
    - compared with the analog-only ordering.
-3. **Specialization:** for each source, generated-test KL ÷ WikiText KL at
-   0 %, compared with the analog-only source.
+3. **Specialization:** for each source, out-of-domain ÷ in-domain KL at 0 %
+   (WikiText ÷ generated, since every source here trains on generated
+   text), compared with the analog-only source. The wording was clarified
+   before any results.
 4. **Per-rate best set** over all seven sources, per domain.
 
 **Guards.**
@@ -156,18 +158,190 @@ rate and per test domain, never pooled:
 - **Outputs:** `results/lifecycles/opt125m-cmo-l6-exp1e{-lrdev,}/` and
   `results/exp-005.md`.
 
+
 ## Execution and monitoring handoff
 
-**State:** ready, not launched. You asked to implement and test only, then
-review before any launch (2026-10-10).
+**State:** ready, not launched. You asked (2026-10-10, about 08:00) for "a
+handoff file for another agent to implement and monitor this".
 
-**To launch after review:**
-1. Commit, then stage the bundle and both corpora (`opt125m-synthetic-50m`,
-   `wikitext2-train-synthtest`) on the chosen 5090 hosts and Jean Zay.
-2. Run the smoke.
-3. Run Stage 1e-a (three trainings), and freeze the digital learning rate by
-   the rule.
-4. Write `opt125m-cmo-l6-exp1e`.
-5. Train the remaining two whole-model arms.
-6. Deploy all seven sources on Jean Zay.
-7. Inspect, collect, write the result.
+**What that assigns to the receiving agent**, within this note's scope and
+budget:
+- staging, the smoke, Stage 1e-a, the freeze;
+- writing `opt125m-cmo-l6-exp1e`;
+- the two remaining trainings, deployments, monitoring, collection, and the
+  result note.
+
+**Defaults in force.** You had not yet answered these review points, so the
+plan's defaults apply unless you change them:
+- the digital learning-rate grid {1e-5, 3e-5, 1e-4} and its freeze rule;
+- Adam without weight decay or gradient clipping;
+- a single ×0.1 step after epoch 40;
+- best-checkpoint selection.
+
+**Escalate to the user, and do not decide alone:**
+- any change to arms, data, metric, rule or budget;
+- a smoke that does not fit in memory, or whose extrapolation exceeds the
+  8 GPU-hour cap;
+- Stage 1e-a falling under the stop rule;
+- any reproduction-guard failure.
+
+### Inputs (verified 2026-10-10)
+
+**Code.**
+- Commit `3ea25e8` plus the commit that adds this handoff, the launch kit
+  (`campaigns/opt-cmo-corruption/launch/`) and
+  `opt125m-cmo-l6-exp1e-smoke`. Use the newest commit on
+  `codex/revised-hwa-training` that contains this section. The other
+  session's uncommitted `AGENTS.md`, `explorer.md` and `hwa_papers/` edits do
+  not affect execution.
+- **Lifecycles:**
+  - `opt125m-cmo-l6-exp1e-smoke` (`9e0484104cfe`; not evidence);
+  - `opt125m-cmo-l6-exp1e-lrdev` (`0cf4f02ecd12`);
+  - `opt125m-cmo-l6-exp1e`, written after the freeze by
+    `launch/make_exp1e_lifecycle.py <rate>`. Tested for all three rates:
+    every reused source passes provenance.
+
+**Teacher.** `opt-125m-27dcfa74/pytorch_model.bin`, SHA-256 `2d74da66…`. It is
+in `<root>/inputs/` on `fifi`, `riri`, `loulou`, `trex`, `nom-cool-1` and
+Jean Zay.
+
+**Corpora**, in `<root>/inputs/corpora/`:
+
+| Corpus | SHA-256 | Present on |
+| --- | --- | --- |
+| `opt125m-synthetic-50m.pt` | `ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984` | every host and Jean Zay |
+| `wikitext2-train-synthtest.pt` (the transfer cohort) | `8e73b6b43aafb92b8b52e11cdd060d573331fae410350cf2427f3eeba640e224` | only `riri` and Jean Zay |
+
+Copy the second from local `data/corpora/` to any other training host and
+verify its SHA-256.
+
+**Reused analog-only sources on Jean Zay** (`<root>/sources/`). Each was hash
+checked against its run record when copied there:
+
+| File | SHA-256 | Origin |
+| --- | --- | --- |
+| `opt125m-cmo-l6-exp1c-decay-standard_hwa-source.pt` | `5ddfad0a…` | exp-003 part B, `fifi` |
+| `opt125m-cmo-l6-exp1c-decay-cdt_random_3pct-source.pt` | `7c000693…` | exp-003 part B, `fifi` |
+| `opt125m-cmo-l6-exp1c-decay-9pct-standard_hwa_9pct-source.pt` | `c58b03ef…` | exp-003 part F, `riri` |
+
+### Run order
+
+The launch kit is in `campaigns/opt-cmo-corruption/launch/`; its README lists
+the pitfalls and the compute rules. All training runs on RTX 5090s with
+PyTorch 2.11, the platform of every reused source.
+- Daytime: at most two of our 5090s at once.
+- Only start on a GPU with no compute process (`nvidia-smi
+  --query-compute-apps=pid`).
+
+1. **Stage.**
+   - `git bundle create hwa-<C>.bundle codex/revised-hwa-training`; copy it to
+     `<root>/stage/` on the chosen 5090s and Jean Zay.
+   - `git clone -q stage/hwa-<C>.bundle hwa-<C> -b codex/revised-hwa-training`,
+     then check `git status --porcelain` is empty.
+   - Copy the launch kit to `<root>/launch/`, and both corpora where missing.
+     Verify every SHA-256.
+   - Run `pytest -q tests/test_workflow_cmo.py tests/test_workflow_opt.py
+     tests/test_workflow_lifecycle.py` in one host clone (CPU,
+     `CUDA_VISIBLE_DEVICES=`).
+2. **Smoke** (5090 A).
+   - In tmux, run `SRC=<root>/hwa-<C> launch/train_stages.sh
+     opt125m-cmo-l6-exp1e-smoke prepare devices
+     hwa__standard_hwa_model_dlr3em5 > logs/exp1e-smoke-<host>.log 2>&1`.
+   - **Record:**
+     - seconds per epoch: the `elapsed_seconds` difference between the
+       epoch-0 and epoch-2 `hwa_selection` rows of the run's `metrics.jsonl`;
+     - peak GPU memory: the HWA result's `metrics.peak_gpu_memory_bytes`
+       (analog-only L6 used 15.6 GB);
+     - `fit.scope` (whole-model scope, its digital learning rate and the
+       digital parameter count).
+   - **Stop and escalate** if peak memory exceeds about 30 GB, or if five
+     trainings at the measured rate exceed the cap. Expected: 45–60 min per
+     training and 25–28 GB.
+3. **Stage 1e-a**, two 5090s in parallel.
+   - A: `launch/train_stages.sh opt125m-cmo-l6-exp1e-lrdev prepare devices
+     hwa__standard_hwa_model_dlr1em5 hwa__standard_hwa_model_dlr1em4`.
+   - B: `… hwa__standard_hwa_model_dlr3em5`.
+   - Nothing deploys yet.
+4. **Freeze** by the rule above. Read each source's selected score:
+   ```bash
+   python3 -c 'import glob,json; [print(p.split("/runs/")[1].split("/")[0], json.load(open(p))["metrics"]["fit"]["development_kl"], json.load(open(p))["metrics"]["fit"]["selected_epoch"]) for p in sorted(glob.glob("hwa-<C>/results/lifecycles/opt125m-cmo-l6-exp1e-lrdev/runs/hwa__*/*/result.json"))]'
+   ```
+   - The analog-only reference score is 0.0935 (exp-003 part B
+     `standard_hwa`).
+   - At a grid edge, add the arm a factor of 3 beyond the edge, e.g.
+     `standard_hwa_model_dlr3em4`, to the lrdev lifecycle. Commit, ship, and
+     train it on its own before freezing.
+   - Record the decision in this note.
+5. **Write the main lifecycle.**
+   - `python3 campaigns/opt-cmo-corruption/launch/make_exp1e_lifecycle.py
+     <rate>`, then `python -m workflow check` and commit.
+   - Ship the commit to the training hosts and Jean Zay. Plan it on Jean Zay
+     (`. /etc/profile; module load pytorch-gpu/py3/2.5.0; export
+     EBL_CORPUS_ROOT=<root>/inputs/corpora; python -m workflow plan … --device
+     cuda:0`).
+6. **Train the two new arms** on the two 5090s:
+   `train_stages.sh opt125m-cmo-l6-exp1e prepare devices
+   hwa__standard_hwa_9pct_model_<tag>` on one, and
+   `hwa__cdt_random_3pct_model_<tag>` on the other.
+7. **Deploy on Jean Zay**, every job with `sbatch --export=ALL,SRC=<root>/hwa-<C>`
+   and `--time=01:00:00`:
+   - **Submit now:** shared `prepare devices hwa__pretrained`; then, each with
+     `--dependency=afterok:<shared>`:
+     - `deploy__pretrained__2710{01..05}`;
+     - one job per reused analog source, with `--input
+       deploy__<arm>__<seed>:weights=<root>/sources/<file>` for each seed.
+   - **The frozen Stage 1e-a source:** print its path and hash with
+     `launch/source_record.py <lrdev runs> hwa__standard_hwa_model_<tag>`.
+     Copy it to `<root>/sources/` and check the SHA-256 on Jean Zay. Submit
+     its five deployments the same way.
+   - **The two new whole-model sources:** one `launch/pipeline.sh` per
+     training host. For example:
+     ```bash
+     HOST=<host> CLONE=hwa-<C> JCLONE=hwa-<C> ID=opt125m-cmo-l6-exp1e \
+       ALIVE='tmux has-session -t <session>' SHARED=<shared job> \
+       EXTRA=<all manual job ids> \
+       launch/pipeline.sh <arm> > pipeline-<arm>.log 2>&1
+     ```
+     Run it in the background so the controlling agent is notified on exit.
+   - When both pipelines report `DONE`, run `launch/inspect_collect.sh
+     opt125m-cmo-l6-exp1e <root>/hwa-<C>` once more on Jean Zay. Copy
+     `collected/deployments.{json,csv}` and the inspect output to local
+     `results/lifecycles/opt125m-cmo-l6-exp1e/collected/`. That gives one
+     complete collection: 7 sources × 5 arrays × 6 rates = 210 rows.
+8. **Analyse:**
+   `python3 campaigns/opt-cmo-corruption/series/001-hwa-robustness/analysis/exp1e_decision.py`.
+   It applies the frozen rule on both test domains and checks the
+   reproduction guard: `pretrained` and the reused analog sources must
+   reproduce their earlier WikiText rows exactly.
+   - Copy each training's `metrics.jsonl` to `hwa-metrics/` for the
+     convergence report.
+   - Write `results/exp-005.md` in the format of exp-003 and exp-004:
+     - evidence and coverage (hosts, job ids, inspect, rows, hashes);
+     - measurements;
+     - the rule outcomes;
+     - interpretation, with the paper-deviation table;
+     - the decision.
+   - Then set this note's status, regenerate the ledger with `--check`, and
+     commit.
+
+### Monitoring
+
+**Owner:** the receiving agent, from launch to result.
+- Check each running stage at about 10–15 min intervals: log tail,
+  `status.json`, the latest `hwa_selection` row, GPU state.
+- Watch the pipeline logs for `FAIL`. A pipeline that ends with `FAIL` stops
+  only itself. Diagnose before retrying, and retry only understood
+  operational failures within the budget. Preserve failed attempts.
+- **Escalate:** nonfinite objectives, a failed `prepare` gate, memory errors,
+  a reproduction-guard failure, or the budget at risk.
+- Keep this handoff's handle table current: hosts, tmux sessions, log paths,
+  job ids, states with times, and the next check.
+
+| Work | Where | Handle | State |
+| --- | --- | --- | --- |
+| Smoke | — | — | not started |
+| Stage 1e-a (3 trainings) | — | — | not started |
+| Freeze | — | — | — |
+| `opt125m-cmo-l6-exp1e` trainings (2) | — | — | not started |
+| Jean Zay shared, `pretrained`, reused-source deployments | — | — | not started |
+| Collection, analysis, result | — | — | not started |
