@@ -1,7 +1,7 @@
 ---
 id: "exp-003"
 title: "Experiment 1c: overnight extensions of Experiment 1b (9 % noise, mixed-rate corruption, LR decay, L3, training seed)"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-003: Experiment 1c, overnight extensions of Experiment 1b
@@ -206,7 +206,14 @@ Jean Zay.
   `pretrained` 844416.
   - Inspect passed for all 28 Jean Zay bundles and the `nom-cool-1` bundles.
   - 150 rows collected, no duplicates.
-- **F, queued (03:45).** Commit `8ce23e3`, Jean Zay shared job 852015.
+- **F, complete (05:44).** Commit `8ce23e3`, Jean Zay shared job 852015,
+  deployments 853742.
+  - Inspect passed for all 7 Jean Zay bundles and the `riri` bundles.
+  - 30 rows collected.
+- **All parts complete (05:44).** No session or GPU process of ours remains on
+  `fifi`, `riri` or `nom-cool-1`, and the Jean Zay queue is empty. Result:
+  [exp-003](../results/exp-003.md).
+- **F's original queue entry (03:45).**
   - Runs on `riri` in tmux `opt-exp1c-f` after Experiment 1d's chain; log
     `logs/exp1c-f-riri.log`.
   - Pipeline log `exp1b/pipeline-f.log`.
