@@ -98,6 +98,27 @@ Experiment 1b. Two arms:
 **Placement.** On `fifi`, after part B, starting about 04:15 and taking about
 75 min. Deployments on Jean Zay.
 
+## Part F (added 2026-10-10, 03:45, before its results)
+
+**Motivation.** Part B's decay improved 3 % corruption-aware HWA by 11–17 % at
+every rate. It improved standard HWA by 11–27 % at 0–2 %. Part A's comparison
+of 9 % noise against corruption-aware HWA was made at a constant learning
+rate, so it may not survive decay.
+
+**Lifecycle:** `opt125m-cmo-l6-exp1c-decay-9pct`, with the part-B shared HWA
+settings (`lr_milestones` [40], `lr_decay` 0.1). One arm:
+`standard_hwa_9pct`.
+
+**Rule (frozen before results).** Decayed `standard_hwa_9pct` against the
+decayed `standard_hwa` and `cdt_random_3pct` of part B, and against the
+constant-rate `standard_hwa_9pct`. Plus the per-rate best set over the three
+decayed sources.
+
+**Placement.** On `riri`, after Experiment 1d's chain, about 05:00–05:45.
+
+**Budget.** The cap rises from 14 to 16 GPU-hours to cover parts E and F.
+Expected total: about 14.5.
+
 ## Placement, budget and stopping
 
 - **A then B** on `fifi`, chained after Experiment 1b's four trainings. That
@@ -169,6 +190,16 @@ Jean Zay.
   - Deployments: Jean Zay 849073 and 849901, both COMPLETED.
   - Inspect passed for all 12 Jean Zay bundles and the `riri` bundles.
   - 60 rows collected, no duplicates.
+- **A, complete (02:30).** Deployments: Jean Zay 849261 and 850134.
+  - Inspect passed for all 12 Jean Zay bundles and the `fifi` bundles.
+  - 60 rows collected, no duplicates.
+- **B, complete (03:41).** Deployments: Jean Zay 850950 and 851748.
+  - Inspect passed for all 12 Jean Zay bundles and the `fifi` bundles.
+  - 60 rows collected.
+- **E, queued (02:45).** Commit `31c7652`, Jean Zay shared job 850552.
+  - Runs on `fifi` in tmux `opt-exp1c-e`, after `opt-exp1c-l6` ends and the
+    GPU is idle; log `logs/exp1c-e-fifi.log`.
+  - Pipeline log `exp1b/pipeline-e.log`.
 - **C, in progress.** `standard_hwa` was deployed as Jean Zay 846442.
 - **Experiment 1b's watcher fault** affected C as well. Its first collection
   failed silently because the helper sourced `/etc/profile` under `set -u`.
