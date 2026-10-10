@@ -504,3 +504,50 @@ def test_storage_only_amendment_rejects_unknown_target_and_overlap(setup):
     second["storage_roots"] = [{"target": "undeclared", "path": "/another/runtime"}]
     with pytest.raises(ValueError, match="target"):
         scheduler.campaigns.amend("study", second)
+
+
+def matching_waiver_fixture(setup, required=False):
+    scheduler, _, job, manifest = setup
+    value = job()
+    config = manifest()
+    config["cases"][0]["required_gates"] = ["rtx3090_matched_randomness"] if required else []
+    sha = scheduler.campaigns.register(config)
+    failed = {"manifest_sha256": sha, "passed": False, "evidence": ["3090 randomness differs"]}
+    scheduler.campaigns.gate("study", "rtx3090_matched_randomness", failed)
+    scheduler.campaigns.storage("study", 0)
+    waiver = {"author": "user", "authorization": "i dont care about the matching check",
+              "manifest_sha256": sha, "failed_gate_receipt_sha256": digest(failed),
+              "reason": "User explicitly waived this matching requirement", "evidence": ["user message"]}
+    return scheduler, value, failed, waiver
+
+
+@pytest.mark.parametrize("required", [False, True])
+def test_explicit_user_waiver_preserves_failure_and_only_releases_matching_gate(setup, required):
+    scheduler, job, failed, waiver = matching_waiver_fixture(setup, required)
+    assert not scheduler.campaigns.eligible(job)[0]
+    expected = scheduler.campaigns.waive_gate("study", "rtx3090_matched_randomness", waiver)
+    assert scheduler.campaigns.eligible(job)[0]
+    assert scheduler.campaigns.waive_gate("study", "rtx3090_matched_randomness", waiver) == expected
+    persisted = scheduler.store.db.execute("SELECT receipt FROM campaign_gates WHERE name='rtx3090_matched_randomness'").fetchone()[0]
+    assert json.loads(persisted) == failed
+    assert scheduler.store.db.execute("SELECT COUNT(*) FROM campaign_gate_waivers").fetchone()[0] == 1
+    scheduler.campaigns.gate("study", "numerical_validity", dict(failed, evidence=["nonfinite metrics"]))
+    assert not scheduler.campaigns.eligible(job)[0]
+
+
+@pytest.mark.parametrize("field,value", [("author", "assistant"), ("authorization", "probably okay"),
+    ("manifest_sha256", "stale"), ("failed_gate_receipt_sha256", "stale")])
+def test_gate_waiver_rejects_false_authority_or_stale_evidence(setup, field, value):
+    scheduler, _, _, waiver = matching_waiver_fixture(setup)
+    with pytest.raises(ValueError):
+        scheduler.campaigns.waive_gate("study", "rtx3090_matched_randomness", dict(waiver, **{field: value}))
+    assert scheduler.store.db.execute("SELECT COUNT(*) FROM campaign_gate_waivers").fetchone()[0] == 0
+
+
+def test_matching_waiver_cannot_waive_other_checks_or_replace_prior_waiver(setup):
+    scheduler, _, _, waiver = matching_waiver_fixture(setup)
+    with pytest.raises(ValueError, match="only waives"):
+        scheduler.campaigns.waive_gate("study", "numerical_validity", waiver)
+    scheduler.campaigns.waive_gate("study", "rtx3090_matched_randomness", waiver)
+    with pytest.raises(ValueError, match="immutable"):
+        scheduler.campaigns.waive_gate("study", "rtx3090_matched_randomness", dict(waiver, reason="replace previous rationale"))

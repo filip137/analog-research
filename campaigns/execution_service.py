@@ -127,6 +127,9 @@ class CampaignLedger:
             CREATE TABLE IF NOT EXISTS campaign_amendments (
                 id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL REFERENCES campaign_contracts(id),
                 sha256 TEXT NOT NULL, created REAL NOT NULL, payload TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS campaign_gate_waivers (
+                campaign_id TEXT NOT NULL REFERENCES campaign_contracts(id), name TEXT NOT NULL,
+                created REAL NOT NULL, receipt TEXT NOT NULL, PRIMARY KEY(campaign_id,name));
         """)
 
     def contract(self, campaign_id):
@@ -146,7 +149,9 @@ class CampaignLedger:
                 calibrations.setdefault(target, {}).update(stages)
         return {**dict(row), "manifest": manifest, "effective_cases": cases,
                 "effective_storage_roots": roots, "target_progress_calibration": calibrations,
-                "amendments": amendments}
+                "amendments": amendments,
+                "gate_waivers": [{**dict(item), "receipt": json.loads(item["receipt"])} for item in self.db.execute(
+                    "SELECT * FROM campaign_gate_waivers WHERE campaign_id=? ORDER BY created,name", (campaign_id,))]}
 
     def case(self, job_id):
         row = self.db.execute("SELECT * FROM campaign_cases WHERE job_id=?", (job_id,)).fetchone()
@@ -312,6 +317,43 @@ class CampaignLedger:
             raise ValueError("validation gates are immutable; use a new contract for changed evidence")
         self.db.execute("INSERT OR IGNORE INTO campaign_gates VALUES(?,?,?)", (campaign_id, name, canonical(receipt)))
 
+    def waive_gate(self, campaign_id, name, receipt):
+        """Record the user's specific matching-check waiver, retaining the failure."""
+        if name != "rtx3090_matched_randomness":
+            raise ValueError("this user authorization only waives the RTX 3090 matching check")
+        if receipt.get("author") != "user" or receipt.get("authorization") != "i dont care about the matching check":
+            raise ValueError("gate waiver requires the user's explicit matching-check authorization")
+        if not isinstance(receipt.get("reason"), str) or not receipt["reason"].strip() or not receipt.get("evidence"):
+            raise ValueError("gate waiver requires a reason and supporting evidence")
+        payload = canonical(receipt)
+        with self.store.transaction():
+            contract = self.contract(campaign_id)
+            failed = self.db.execute("SELECT receipt FROM campaign_gates WHERE campaign_id=? AND name=?", (campaign_id, name)).fetchone()
+            if not failed or json.loads(failed["receipt"])["passed"] is not False:
+                raise ValueError("gate waiver requires an existing failed gate")
+            if receipt.get("manifest_sha256") != contract["sha256"] or receipt.get("failed_gate_receipt_sha256") != digest(json.loads(failed["receipt"])):
+                raise ValueError("gate waiver manifest or failed-gate receipt hash is stale")
+            old = self.db.execute("SELECT receipt FROM campaign_gate_waivers WHERE campaign_id=? AND name=?", (campaign_id, name)).fetchone()
+            if old:
+                if old["receipt"] != payload:
+                    raise ValueError("gate waiver is immutable; a conflicting waiver already exists")
+                return digest(receipt)
+            self.db.execute("INSERT INTO campaign_gate_waivers VALUES(?,?,?,?)", (campaign_id, name, self.clock(), payload))
+            self.store.event(None, "campaign_gate_waived_by_user", {"campaign_id": campaign_id, "name": name,
+                "waiver_sha256": digest(receipt), "failed_gate_receipt_sha256": receipt["failed_gate_receipt_sha256"]}, self.clock())
+        return digest(receipt)
+
+    def gate_waived(self, campaign_id, name, failed_receipt):
+        row = self.db.execute("SELECT receipt FROM campaign_gate_waivers WHERE campaign_id=? AND name=?", (campaign_id, name)).fetchone()
+        if not row or name != "rtx3090_matched_randomness":
+            return False
+        receipt = json.loads(row["receipt"])
+        manifest = self.db.execute("SELECT sha256 FROM campaign_contracts WHERE id=?", (campaign_id,)).fetchone()
+        return (receipt.get("author") == "user" and receipt.get("authorization") == "i dont care about the matching check"
+                and receipt.get("manifest_sha256") == manifest["sha256"]
+                and receipt.get("failed_gate_receipt_sha256") == digest(failed_receipt)
+                and failed_receipt.get("passed") is False)
+
     def progress_expectation(self, job_id, target=None):
         case = self.case(job_id)
         if target:
@@ -363,14 +405,16 @@ class CampaignLedger:
         contract = self.contract(case["campaign_id"])
         if case["contract"]["stage"] != "readiness":
             failed = self.db.execute("SELECT name,receipt FROM campaign_gates WHERE campaign_id=?", (case["campaign_id"],)).fetchall()
-            if any(json.loads(gate["receipt"])["passed"] is False for gate in failed):
+            if any(json.loads(gate["receipt"])["passed"] is False
+                   and not self.gate_waived(case["campaign_id"], gate["name"], json.loads(gate["receipt"])) for gate in failed):
                 return False, "a mandatory campaign validation gate failed"
         for dependency in case["contract"].get("dependencies", []):
             if self.store.job(dependency)["state"] != "complete":
                 return False, f"dependency {dependency} has not passed validation"
         for gate in case["contract"].get("required_gates", []):
             row = self.db.execute("SELECT receipt FROM campaign_gates WHERE campaign_id=? AND name=?", (case["campaign_id"], gate)).fetchone()
-            if not row or json.loads(row["receipt"])["passed"] is not True:
+            if not row or (json.loads(row["receipt"])["passed"] is not True
+                           and not self.gate_waived(case["campaign_id"], gate, json.loads(row["receipt"]))):
                 return False, f"required validation gate {gate} has not passed"
         usage = self.remaining(case["campaign_id"])
         allowance = job["spec"]["budget_seconds"] - job["used_seconds"]
@@ -464,6 +508,7 @@ class CampaignLedger:
         return {"incident": dict(incident), "case_id": job["id"], "manifest": contract["manifest"],
                 "manifest_sha256": contract["sha256"], "job": job,
                 "operational_amendments": contract["amendments"],
+                "gate_waivers": contract["gate_waivers"],
                 "target_progress_calibration": contract["target_progress_calibration"],
                 "expected_progress": self.progress_expectation(job["id"]),
                 "remaining_budget": self.remaining(incident["campaign_id"]),
@@ -511,6 +556,7 @@ class CampaignLedger:
                             "state": "awaiting_scientific_review" if all(j["state"] == "complete" for j in jobs) else "active_or_blocked",
                             "last_poll": contract["last_poll"], "remaining_budget": self.remaining(row["id"]),
                             "operational_amendments": contract["amendments"],
+                            "gate_waivers": contract["gate_waivers"],
                             "effective_storage_roots": contract["effective_storage_roots"],
                             "target_progress_calibration": contract["target_progress_calibration"],
                             "cases": [{k: j[k] for k in ("id", "state", "reason", "used_seconds")} for j in jobs]})
@@ -1074,6 +1120,8 @@ def main(argv=None):
     amendment.add_argument("campaign_id"); amendment.add_argument("amendment", type=Path)
     gate = commands.add_parser("gate")
     gate.add_argument("campaign_id"); gate.add_argument("name"); gate.add_argument("receipt", type=Path)
+    waiver = commands.add_parser("waive-gate")
+    waiver.add_argument("campaign_id"); waiver.add_argument("name"); waiver.add_argument("receipt", type=Path)
     storage = commands.add_parser("storage")
     storage.add_argument("campaign_id"); storage.add_argument("bytes", type=int)
     args = parser.parse_args(argv)
@@ -1093,6 +1141,7 @@ def main(argv=None):
                       "attempts": [dict(row) for row in db.execute("SELECT * FROM attempts")],
                       "observations": [dict(row) for row in db.execute("SELECT * FROM campaign_observations")],
                       "amendments": [dict(row) for row in db.execute("SELECT * FROM campaign_amendments")],
+                      "gate_waivers": [dict(row) for row in db.execute("SELECT * FROM campaign_gate_waivers")],
                       "investigations": [dict(row) for row in db.execute("SELECT * FROM campaign_investigations")],
                       "campaigns": [dict(row) for row in db.execute("SELECT * FROM campaign_contracts")],
                       "incidents": [dict(row) for row in db.execute("SELECT * FROM campaign_incidents")]}
@@ -1110,6 +1159,8 @@ def main(argv=None):
         print(scheduler.campaigns.amend(args.campaign_id, json.loads(args.amendment.read_text()))); return
     if args.command == "gate":
         scheduler.campaigns.gate(args.campaign_id, args.name, json.loads(args.receipt.read_text())); return
+    if args.command == "waive-gate":
+        print(scheduler.campaigns.waive_gate(args.campaign_id, args.name, json.loads(args.receipt.read_text()))); return
     if args.command == "storage":
         scheduler.campaigns.storage(args.campaign_id, args.bytes); return
     if args.command == "incident":
