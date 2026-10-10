@@ -490,3 +490,25 @@ Host, queue, extension and monitoring receipts are under
 Native outputs use each new lifecycle's existing-host case directory; compact
 results join the shared `collected/` index and ten-candidate review. Numerical
 divergence is retained as an outcome; no automatic LR change is authorized.
+
+Both candidates were admitted at 15:49 Paris under controller `c29330c` after
+71 experiment tests and all four host/case dry-runs passed. Existing lifecycle
+files remain byte-identical. Extension SHA-256:
+`4f9b2abbeb15583f1193666fdd5180183e1e54e1dc2b43ce237644fb83d2c8e4`.
+Preparation and admission evidence is in `readiness/lr1em2/{hosts,extension.json,admission.json}`.
+
+| Host | Candidate | Attempt |
+|---|---|---|
+| fifi, RTX 5090 | linear, 1e-2 | `e96e67eee9504c558becd405bc1ad42a` |
+| loulou, RTX 5090 | step, 1e-2 | `299d83d879ab458f84cacbbc2acd3cd7` |
+
+Each tmux session is `<candidate-lifecycle-id>-<attempt>`. Both workers passed
+numerical preparation and initial HWA selection, then reached update 206 with
+finite training loss and the intended LR (linear 0.009999206, step 0.01).
+The persistent watchdog observed live workers/supervisors and finite metrics.
+After controller restart, both attempts remained unique, the two scientific
+extensions and 34 GB cap persisted, and the original 16 GPU-hour allowance,
+charged time, window and matching waiver remained intact. This handoff is in
+`readiness/lr1em2/live-handoff.json`. The regenerated review has eight of ten
+completed candidates and withholds a recommendation. Expected finish for both
+new runs is 16:40–16:50 Paris, subject to throughput and validation.
