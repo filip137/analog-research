@@ -23,8 +23,8 @@ from workflow.lifecycle import parse_lifecycle
 LIFECYCLES = ROOT / "campaigns/opt-cmo-corruption/lifecycles"
 BASE = LIFECYCLES / "opt125m-cmo-l6-exp1e-lrdev.json"
 NOTE = "campaigns/opt-cmo-corruption/series/001-hwa-robustness/experiments/exp-005-whole-model-hwa.md"
-RATES = (1e-5, 1e-4, 1e-3, 5e-3)
-RATE_LABELS = {1e-5: "1em5", 1e-4: "1em4", 1e-3: "1em3", 5e-3: "5em3"}
+RATES = (1e-5, 1e-4, 1e-3, 5e-3, 1e-2)
+RATE_LABELS = {1e-5: "1em5", 1e-4: "1em4", 1e-3: "1em3", 5e-3: "5em3", 1e-2: "1em2"}
 SCHEDULES = ("linear", "step")
 ARM = "standard_hwa_model"
 
@@ -272,7 +272,7 @@ def plot_development(cases, output):
     import matplotlib.pyplot as plt
 
     fig, axes = plt.subplots(2, 1, figsize=(9, 7), constrained_layout=True)
-    colors = dict(zip(RATES, ("#0072B2", "#D55E00", "#009E73", "#CC79A7")))
+    colors = dict(zip(RATES, ("#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00")))
     for case in sorted(cases, key=lambda value: (value["peak_lr"], value["schedule"])):
         lc = parse_lifecycle(json.loads(Path(case["lifecycle"]).read_text()))
         schedule = lc.hwa.lr_schedule

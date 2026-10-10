@@ -81,12 +81,12 @@ def mutate_result(path, edit):
 
 def test_grid_is_matched_and_tests_are_held_out(tmp_path):
     prepared = development.prepare(tmp_path)
-    assert len(prepared) == 10
+    assert len(prepared) == 12
     cases = [parse_lifecycle(json.loads(Path(item["path"]).read_text())) for item in prepared]
     full = [lc for lc in cases if not lc.lifecycle_id.endswith("-smoke")]
-    assert len(full) == 8 and len({lc.lifecycle_id for lc in cases}) == 10
+    assert len(full) == 10 and len({lc.lifecycle_id for lc in cases}) == 12
     assert {(lc.hwa.learning_rate, lc.hwa.lr_schedule.kind) for lc in full} == {
-        (r, s) for r in (1e-5, 1e-4, 1e-3, 5e-3)
+        (r, s) for r in (1e-5, 1e-4, 1e-3, 5e-3, 1e-2)
         for s in ("linear_warmup_decay", "warmup_step_decay")
     }
     for lc in cases:
@@ -131,7 +131,7 @@ def test_read_case_distinguishes_nonfinite_science_from_incomplete_execution(tmp
 
 
 def test_expanded_grid_preserves_old_ids_digests_and_existing_file_bytes(tmp_path):
-    for rate, label in ((1e-5, "1em5"), (1e-4, "1em4"), (1e-3, "1em3")):
+    for rate, label in ((1e-5, "1em5"), (1e-4, "1em4"), (1e-3, "1em3"), (5e-3, "5em3")):
         for schedule in development.SCHEDULES:
             lc = development.lifecycle(rate, schedule)
             assert lc.lifecycle_id == f"opt125m-cmo-l6-exp1e-dev-{schedule}-lr{label}"
@@ -144,9 +144,9 @@ def test_expanded_grid_preserves_old_ids_digests_and_existing_file_bytes(tmp_pat
     development.prepare(tmp_path)
     assert all((tmp_path / name).read_bytes() == content for name, content in before.items())
     for schedule in development.SCHEDULES:
-        lc = development.lifecycle(5e-3, schedule)
-        assert lc.lifecycle_id == f"opt125m-cmo-l6-exp1e-dev-{schedule}-lr5em3"
-        expanded, prior = lc.to_dict(), development.lifecycle(1e-3, schedule).to_dict()
+        lc = development.lifecycle(1e-2, schedule)
+        assert lc.lifecycle_id == f"opt125m-cmo-l6-exp1e-dev-{schedule}-lr1em2"
+        expanded, prior = lc.to_dict(), development.lifecycle(5e-3, schedule).to_dict()
         expanded["lifecycle_id"] = prior["lifecycle_id"]
         expanded["question"]["text"] = prior["question"]["text"]
         expanded["hwa"]["learning_rate"] = prior["hwa"]["learning_rate"]
@@ -301,17 +301,17 @@ def test_initial_checkpoint_warning_does_not_trigger_an_automatic_grid_extension
     assert "No automatic extension" in warnings[-1]["message"]
 
 
-def test_one_em3_is_now_interior_and_five_em3_is_the_high_boundary():
-    for rate, is_boundary in ((1e-5, True), (1e-3, False), (5e-3, True)):
+def test_previous_high_rates_are_interior_and_one_em2_is_the_high_boundary():
+    for rate, is_boundary in ((1e-5, True), (1e-3, False), (5e-3, False), (1e-2, True)):
         cases = [{"id": "winner", "fit_status": "complete", "selected_step": 512,
                   "total_steps": 12800, "peak_lr": rate}]
         warnings = development.review_warnings(cases, "winner")
         assert any(item["kind"] == "grid_edge" for item in warnings) is is_boundary
 
 
-def test_original_six_results_remain_partial_until_both_new_rates_finish(tmp_path, monkeypatch):
+def test_original_eight_results_remain_partial_until_both_new_rates_finish(tmp_path, monkeypatch):
     entries = []
-    for rate in (1e-5, 1e-4, 1e-3):
+    for rate in (1e-5, 1e-4, 1e-3, 5e-3):
         for schedule in development.SCHEDULES:
             config, result = case_bundle(tmp_path / "cases", rate, schedule)
             entries.append({"lifecycle": str(config), "result": str(result)})
@@ -320,8 +320,8 @@ def test_original_six_results_remain_partial_until_both_new_rates_finish(tmp_pat
     monkeypatch.setattr(development, "plot_development", lambda *args: [])
     report = development.summarize(index, tmp_path / "review")
     assert report["coverage_complete"] is False and report["recommendation"] is None
-    assert len(report["expected"]) == 8
-    assert set(report["missing"]) == {development.case_id(5e-3, schedule) for schedule in development.SCHEDULES}
+    assert len(report["expected"]) == 10
+    assert set(report["missing"]) == {development.case_id(1e-2, schedule) for schedule in development.SCHEDULES}
 
 
 @pytest.mark.parametrize("rejected", [False, True])
