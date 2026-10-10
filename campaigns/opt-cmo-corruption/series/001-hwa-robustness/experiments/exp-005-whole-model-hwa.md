@@ -403,3 +403,25 @@ dry-run, queue and extension receipts belong in
 Native results stay under each new case root; compact collection joins the existing
 `collected/` index and eight-candidate review. The persistent watchdog is the
 single dispatch and monitoring owner. No broader comparison is released.
+
+The extension was admitted at 14:09 Paris under controller `402acee`, with
+76 service tests and 71 experiment preparation/collection/review tests passing.
+All four host/case planning dry-runs passed. The append-only extension digest is
+`bfe35d99f678f1d72c55f0861879183eb9a77793a53f549203b56ac10042ea3f`.
+Its receipt and unchanged prior-attempt/budget checks are in
+`readiness/lr5em3/extension.json` and `admission.json`.
+
+| Host | Candidate | Attempt |
+|---|---|---|
+| fifi, RTX 5090 | linear, 5e-3 | `08f61584d19c4b9783a7f01aefc18739` |
+| loulou, RTX 5090 | step, 5e-3 | `4d4d220426ad4d49a6e917aad98de1ca` |
+
+Tmux sessions use `<candidate-lifecycle-id>-<attempt>`. Both workers passed
+numerical preparation and emitted their initial HWA selection. The watchdog
+observed each worker and supervisor, finite metrics, and at least 101 updates;
+subsequent direct reads showed further progress past warm-up. Restarting the
+controller preserved the extension, 32 GB cap, original 16 GPU-hour allowance,
+matching waiver and exact single attempt per added case. The receipt is
+`readiness/lr5em3/live-handoff.json`. The expanded review reports four of eight
+completed candidates and no recommendation. Expected completion for the new
+5090 pair is 15:00–15:10 Paris, subject to measured throughput and validation.
