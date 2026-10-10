@@ -163,7 +163,8 @@ def test_collection_lock_serializes_publishers_and_frozen_files_reject_replaceme
         collector.write_frozen(path, "two")
 
 
-def test_collection_publishes_one_immutable_attempt_and_repeats_idempotently(exported, tmp_path, monkeypatch):
+@pytest.mark.parametrize("transport", ["ssh", "local"])
+def test_collection_publishes_one_immutable_attempt_and_repeats_idempotently(exported, tmp_path, monkeypatch, transport):
     root, payload = exported
     state = tmp_path / "state"
     state.mkdir()
@@ -174,10 +175,14 @@ def test_collection_publishes_one_immutable_attempt_and_repeats_idempotently(exp
     with sqlite3.connect(database) as db:
         db.execute("UPDATE jobs SET spec=?", (json.dumps(spec),))
     config = tmp_path / "queue.json"
-    config.write_text(json.dumps({"state_dir": str(state), "targets": {"fifi": {"host": "fifi"}}}))
+    target = {"transport": transport, **({"host": "fifi", "ssh_options": ["-F", "/tmp/ssh config"]} if transport == "ssh" else {})}
+    config.write_text(json.dumps({"state_dir": str(state), "targets": {"fifi": target}}))
     monkeypatch.setenv("RUN_WATCH_JOB_ID", "case")
-    monkeypatch.setattr(collector.subprocess, "run", lambda *args, **kwargs:
-                        subprocess.CompletedProcess(args[0], 0, json.dumps(payload), ""))
+    calls = []
+    def transport_call(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
+    monkeypatch.setattr(collector.subprocess, "run", transport_call)
     reviewed = []
     monkeypatch.setattr(collector, "summarize", lambda index, output: reviewed.append(json.loads(index.read_text())))
     output = tmp_path / "collected"
@@ -188,9 +193,68 @@ def test_collection_publishes_one_immutable_attempt_and_repeats_idempotently(exp
     receipt = json.loads(receipts[0].read_text())
     assert receipt["job"] == "case" and receipt["attempt"] == "one"
     assert len(reviewed) == 2 and len(reviewed[0]) == 1
+    for command, kwargs in calls:
+        assert kwargs["check"] is True and kwargs.get("shell", False) is False
+        if transport == "local":
+            assert command == [sys.executable, str(ROOT / "campaigns/opt-cmo-corruption/launch/exp1e_collect.py"),
+                               "export", str(root)]
+            assert kwargs["cwd"] == str(ROOT)
+        else:
+            assert command[0] == "ssh" and command[-2] == "fifi"
+            assert command[5:7] == ["-F", "/tmp/ssh config"]
+            assert kwargs["cwd"] is None
     for filename, digest in receipt["files"].items():
         assert sha256_file(receipts[0].parent / filename) == digest
     with sqlite3.connect(database) as db:
         db.execute("UPDATE attempts SET token='replacement'")
     with pytest.raises(ValueError, match="overwrite"):
         collector.collect(config, output)
+
+
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_local_transport_runs_actual_native_export_and_preserves_integrity(native, tmp_path, monkeypatch, corrupt):
+    state = tmp_path / "state"
+    state.mkdir()
+    database = state / "queue.sqlite3"
+    queue_db(database)
+    placement = {"workdir": str(ROOT), "campaign_python": sys.executable, "campaign_result_root": str(native)}
+    with sqlite3.connect(database) as db:
+        db.execute("UPDATE attempts SET target='local'")
+        db.execute("UPDATE jobs SET spec=?", (json.dumps({"placements": {"local": placement}}),))
+    config = tmp_path / "queue.json"
+    config.write_text(json.dumps({"state_dir": str(state), "targets": {"local": {"transport": "local"}}}))
+    monkeypatch.setenv("RUN_WATCH_JOB_ID", "case")
+    monkeypatch.setattr(collector, "summarize", lambda *args: None)
+    output = tmp_path / "collected"
+    if corrupt:
+        records = json.loads((native / "aggregate/results.json").read_text())["stages"]
+        source_run = Path(next(row["run_result"] for row in records if row["stage_id"].startswith("hwa__"))).parent
+        (source_run / "checkpoints/source.pt").write_bytes(b"corrupt source")
+        with pytest.raises(subprocess.CalledProcessError):
+            collector.collect(config, output)
+        assert not output.exists()
+    else:
+        receipt = collector.collect(config, output)
+        folder = Path(receipt["collected"])
+        identity = json.loads((folder / "collection.json").read_text())
+        assert identity["target"] == "local" and identity["attempt"] == "one"
+        assert len(identity["stages"]) == 3
+        assert all(sha256_file(folder / path) == digest for path, digest in identity["files"].items())
+
+
+@pytest.mark.parametrize("transport", [None, "slurm"])
+def test_unsupported_transport_fails_before_execution_or_collection(tmp_path, monkeypatch, transport):
+    state = tmp_path / "state"
+    state.mkdir()
+    database = state / "queue.sqlite3"
+    queue_db(database)
+    placement = {"workdir": str(ROOT), "campaign_python": sys.executable, "campaign_result_root": "/tmp/example"}
+    with sqlite3.connect(database) as db:
+        db.execute("UPDATE jobs SET spec=?", (json.dumps({"placements": {"fifi": placement}}),))
+    config = tmp_path / "queue.json"
+    config.write_text(json.dumps({"state_dir": str(state), "targets": {"fifi": {"transport": transport}}}))
+    monkeypatch.setenv("RUN_WATCH_JOB_ID", "case")
+    monkeypatch.setattr(collector.subprocess, "run", lambda *args, **kwargs: pytest.fail("Transport must reject before executing"))
+    with pytest.raises(ValueError, match="Unsupported collector transport"):
+        collector.collect(config, tmp_path / "collected")
+    assert not (tmp_path / "collected").exists()

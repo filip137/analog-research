@@ -413,3 +413,94 @@ def test_duplicate_active_campaign_attempts_fail_closed(setup):
                                    (token, "one", "lab", "gpu", "5090", "running", now[0], now[0]+45, now[0]))
     with pytest.raises(RuntimeError, match="multiple active"):
         scheduler.campaigns.reconcile_reservations()
+
+
+def amendment_ready(setup):
+    scheduler, now, job, manifest = setup
+    job("one"); job("readiness-new")
+    for name in ("one", "readiness-new"):
+        value = scheduler.store.job(name)
+        value["spec"]["placements"]["lab"]["prepared_files"] = [{"path": "/frozen/lifecycles/smoke.json", "sha256": "a" * 64}]
+        scheduler.store.db.execute("UPDATE jobs SET spec=? WHERE id=?", (json.dumps(value["spec"]), name))
+    config = manifest()
+    config["cases"][0]["stage"] = "readiness"
+    sha = scheduler.campaigns.register(config)
+    scheduler.campaigns.gate("study", "handoff", {"manifest_sha256": sha, "passed": True, "evidence": ["original handoff"]})
+    scheduler.campaigns.storage("study", 50)
+    scheduler.store.db.execute("UPDATE campaign_contracts SET started=? WHERE id='study'", (now[0] - 100,))
+    new_case = {**config["cases"][0], "id": "readiness-new", "required_gates": []}
+    amendment = {"version": 1, "id": "add-readiness-host", "manifest_sha256": sha,
+        "authorization": "User permits all available GPUs", "reason": "Measure new host memory and throughput",
+        "evidence": ["matching-runtime.json"], "template_case_id": "one",
+        "scientific_inputs": [{"kind": "lifecycle", "sha256": "a" * 64}], "cases": [new_case],
+        "storage_roots": [{"target": "lab", "path": "/new/runtime"}]}
+    return scheduler, now, config, amendment
+
+
+def test_additive_readiness_preserves_science_gates_window_and_aggregates_cost(setup):
+    scheduler, now, config, amendment = amendment_ready(setup)
+    before = scheduler.campaigns.contract("study")
+    receipt = scheduler.store.db.execute("SELECT receipt FROM campaign_gates").fetchone()[0]
+    sha = scheduler.campaigns.amend("study", amendment)
+    after = scheduler.campaigns.contract("study")
+    assert after["manifest"] == config == before["manifest"]
+    assert after["sha256"] == before["sha256"]
+    assert after["started"] == before["started"] == now[0] - 100
+    assert scheduler.store.db.execute("SELECT receipt FROM campaign_gates").fetchone()[0] == receipt
+    assert {case["id"] for case in after["effective_cases"]} == {"one", "readiness-new"}
+    assert after["effective_storage_roots"] == amendment["storage_roots"]
+    assert after["storage_observed"] is None
+    assert scheduler.store.job("readiness-new")["state"] == "held"
+    scheduler.store.db.execute("UPDATE jobs SET used_seconds=123 WHERE id='readiness-new'")
+    assert scheduler.campaigns.remaining("study")["gpu_seconds_charged"] == 123
+    assert scheduler.campaigns.amend("study", amendment) == sha
+    assert len(scheduler.campaigns.contract("study")["amendments"]) == 1
+
+
+@pytest.mark.parametrize("change", ["active", "different_hash", "scientific_stage", "duplicate", "wrong_manifest", "budget_field"])
+def test_readiness_amendment_fails_closed_without_partial_edits(setup, change):
+    scheduler, now, _, amendment = amendment_ready(setup)
+    if change == "active":
+        scheduler.store.update_job("readiness-new", "running")
+    elif change == "different_hash":
+        spec = scheduler.store.job("readiness-new")["spec"]
+        spec["placements"]["lab"]["prepared_files"][0]["sha256"] = "b" * 64
+        scheduler.store.db.execute("UPDATE jobs SET spec=? WHERE id='readiness-new'", (json.dumps(spec),))
+    elif change == "scientific_stage":
+        amendment["cases"][0]["stage"] = "training"
+    elif change == "duplicate":
+        amendment["cases"][0]["id"] = "one"
+    elif change == "wrong_manifest":
+        amendment["manifest_sha256"] = "b" * 64
+    elif change == "budget_field":
+        amendment["budgets"] = {"gpu_hours": 100}
+    with pytest.raises(ValueError):
+        scheduler.campaigns.amend("study", amendment)
+    assert len(scheduler.campaigns.contract("study")["effective_cases"]) == 1
+    assert scheduler.store.db.execute("SELECT COUNT(*) FROM campaign_amendments").fetchone()[0] == 0
+    assert scheduler.campaigns.contract("study")["storage_bytes"] == 50
+
+
+def test_target_progress_calibration_is_additive_and_does_not_replace_global_gate(setup):
+    scheduler, _, _, amendment = amendment_ready(setup)
+    calibration = {"startup_seconds": 600, "stale_seconds": 900, "expected_seconds": 7000}
+    amendment["target_progress_calibration"] = {"lab": {"readiness": calibration}}
+    scheduler.campaigns.amend("study", amendment)
+    assert scheduler.campaigns.progress_expectation("readiness-new", "lab") == calibration
+    assert scheduler.campaigns.progress_expectation("readiness-new", "other")["expected_seconds"] == 600
+    second = {key: value for key, value in amendment.items() if key not in {"cases", "storage_roots"}}
+    second["id"] = "replace-target-calibration"
+    with pytest.raises(ValueError, match="already frozen"):
+        scheduler.campaigns.amend("study", second)
+
+
+def test_storage_only_amendment_rejects_unknown_target_and_overlap(setup):
+    scheduler, _, _, amendment = amendment_ready(setup)
+    scheduler.campaigns.amend("study", amendment)
+    second = {key: value for key, value in amendment.items() if key not in {"cases", "scientific_inputs", "template_case_id"}}
+    second["id"] = "extra-storage"
+    with pytest.raises(ValueError, match="overlap"):
+        scheduler.campaigns.amend("study", second)
+    second["storage_roots"] = [{"target": "undeclared", "path": "/another/runtime"}]
+    with pytest.raises(ValueError, match="target"):
+        scheduler.campaigns.amend("study", second)

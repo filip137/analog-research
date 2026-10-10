@@ -247,11 +247,20 @@ def collect(queue_config, output):
     spec = json.loads(job["spec"])
     placement = spec["placements"][attempt["target"]]
     target = cfg["targets"][attempt["target"]]
-    remote = [placement["campaign_python"], str(Path(placement["workdir"]) /
-              "campaigns/opt-cmo-corruption/launch/exp1e_collect.py"), "export", placement["campaign_result_root"]]
-    command = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", *target.get("ssh_options", []),
-               target["host"], "cd " + shlex.quote(placement["workdir"]) + " && " + shlex.join(remote)]
-    completed = subprocess.run(command, capture_output=True, text=True, timeout=600, check=True)
+    export_argv = [placement["campaign_python"], str(Path(placement["workdir"]) /
+                   "campaigns/opt-cmo-corruption/launch/exp1e_collect.py"), "export", placement["campaign_result_root"]]
+    transport = target.get("transport")
+    if transport == "local":
+        # Preserve the pinned placement's interpreter/worktree without invoking
+        # a shell or assuming the controller's current directory is that tree.
+        command, cwd = export_argv, placement["workdir"]
+    elif transport == "ssh":
+        command = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", *target.get("ssh_options", []),
+                   target["host"], "cd " + shlex.quote(placement["workdir"]) + " && " + shlex.join(export_argv)]
+        cwd = None
+    else:
+        raise ValueError(f"Unsupported collector transport: {transport!r}; expected local or ssh")
+    completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=600, check=True)
     if len(completed.stdout.encode()) > 20_000_000:
         raise ValueError("Compact collection unexpectedly exceeds 20 MB")
     payload = checked_payload(json.loads(completed.stdout), Path(placement["campaign_result_root"]))

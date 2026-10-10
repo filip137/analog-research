@@ -124,17 +124,136 @@ class CampaignLedger:
             CREATE TABLE IF NOT EXISTS campaign_observations (
                 token TEXT PRIMARY KEY, observed REAL NOT NULL, progress_token TEXT,
                 progress_at REAL NOT NULL, payload TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS campaign_amendments (
+                id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL REFERENCES campaign_contracts(id),
+                sha256 TEXT NOT NULL, created REAL NOT NULL, payload TEXT NOT NULL);
         """)
 
     def contract(self, campaign_id):
         row = self.db.execute("SELECT * FROM campaign_contracts WHERE id=?", (campaign_id,)).fetchone()
         if row is None:
             raise ValueError(f"unknown campaign {campaign_id}")
-        return {**dict(row), "manifest": json.loads(row["manifest"])}
+        manifest = json.loads(row["manifest"])
+        amendments = [{**dict(item), "payload": json.loads(item["payload"])} for item in self.db.execute(
+            "SELECT * FROM campaign_amendments WHERE campaign_id=? ORDER BY created,id", (campaign_id,))]
+        cases = [json.loads(item["contract"]) for item in self.db.execute(
+            "SELECT contract FROM campaign_cases WHERE campaign_id=? ORDER BY rowid", (campaign_id,))]
+        roots = list(manifest.get("storage_roots", []))
+        calibrations = {}
+        for amendment in amendments:
+            roots.extend(amendment["payload"].get("storage_roots", []))
+            for target, stages in amendment["payload"].get("target_progress_calibration", {}).items():
+                calibrations.setdefault(target, {}).update(stages)
+        return {**dict(row), "manifest": manifest, "effective_cases": cases,
+                "effective_storage_roots": roots, "target_progress_calibration": calibrations,
+                "amendments": amendments}
 
     def case(self, job_id):
         row = self.db.execute("SELECT * FROM campaign_cases WHERE job_id=?", (job_id,)).fetchone()
         return {**dict(row), "contract": json.loads(row["contract"])} if row else None
+
+    def amend(self, campaign_id, raw):
+        """Append readiness capacity without rewriting science, gates or budgets.
+
+        Newly prepared jobs remain held. Scientific identity is the exact pinned
+        lifecycle content shared with an existing readiness case; host paths and
+        generated worker/plan files may differ. A separate explicit release is
+        still required after this transactional audit succeeds.
+        """
+        amendment = json.loads(canonical(raw))
+        allowed = {"version", "id", "manifest_sha256", "authorization", "reason", "evidence",
+                   "template_case_id", "scientific_inputs", "cases", "storage_roots", "target_progress_calibration"}
+        if set(amendment) - allowed or amendment.get("version") != 1:
+            raise ValueError("unsupported operational amendment fields/version")
+        for key in ("id", "authorization", "reason"):
+            if not isinstance(amendment.get(key), str) or not amendment[key].strip():
+                raise ValueError(f"operational amendment needs {key}")
+        if not amendment.get("evidence"):
+            raise ValueError("operational amendment needs explicit evidence")
+        identity = digest(amendment)
+        with self.store.transaction():
+            old = self.db.execute("SELECT * FROM campaign_amendments WHERE id=?", (amendment["id"],)).fetchone()
+            if old:
+                if old["campaign_id"] != campaign_id or old["sha256"] != identity:
+                    raise ValueError("amendment id already exists with different content")
+                return identity
+            contract = self.contract(campaign_id)
+            if amendment.get("manifest_sha256") != contract["sha256"]:
+                raise ValueError("amendment must name the unchanged frozen manifest hash")
+            additions = amendment.get("cases", [])
+            roots = amendment.get("storage_roots", [])
+            calibration = amendment.get("target_progress_calibration", {})
+            if not additions and not roots and not calibration:
+                raise ValueError("operational amendment has no additions")
+            known_targets = {target for case in contract["effective_cases"]
+                             for target in self.store.job(case["id"])["spec"]["placements"]}
+            template = self.case(amendment.get("template_case_id")) if additions else None
+            scientific = amendment.get("scientific_inputs", [])
+            if additions:
+                if not template or template["campaign_id"] != campaign_id or template["contract"]["stage"] != "readiness":
+                    raise ValueError("new readiness cases require an existing readiness template in this campaign")
+                if not scientific or any(item.get("kind") != "lifecycle" or len(item.get("sha256", "")) != 64
+                                         or any(char not in "0123456789abcdef" for char in item["sha256"]) for item in scientific):
+                    raise ValueError("new readiness cases require pinned lifecycle scientific input hashes")
+                needed_hashes = {item["sha256"] for item in scientific}
+                template_job = self.store.job(template["job_id"])
+                for placement in template_job["spec"]["placements"].values():
+                    hashes = {item["sha256"] for item in placement.get("prepared_files", [])
+                              if "lifecycles" in Path(item["path"]).parts and Path(item["path"]).suffix == ".json"}
+                    if not needed_hashes <= hashes:
+                        raise ValueError("scientific input hash is not pinned by the template readiness job")
+                validate_manifest({"version": 1, "id": amendment["id"], "budgets": contract["manifest"]["budgets"], "cases": additions})
+            for case in additions:
+                if case["stage"] != "readiness" or case.get("dependencies") or case.get("required_gates"):
+                    raise ValueError("only independent readiness cases may be added operationally")
+                if self.case(case["id"]):
+                    raise ValueError("readiness case already belongs to a campaign")
+                job = self.store.job(case["id"])
+                if not job or job["state"] != "held" or any(a["job_id"] == case["id"] for a in self.store.attempts()):
+                    raise ValueError("new readiness job must be held with no execution history")
+                if job["spec"].get("recovery", True) or case["expected_gpu_seconds"] > job["spec"]["budget_seconds"]:
+                    raise ValueError("new readiness job has mutable recovery or insufficient worker allowance")
+                for target, placement in job["spec"]["placements"].items():
+                    known_targets.add(target)
+                    if not Path(placement.get("campaign_worker_spec", "")).is_absolute() or not Path(placement.get("campaign_result_root", "")).is_absolute():
+                        raise ValueError("new readiness placement requires explicit tmux and result paths")
+                    hashes = {item["sha256"] for item in placement.get("prepared_files", [])
+                              if "lifecycles" in Path(item["path"]).parts and Path(item["path"]).suffix == ".json"}
+                    if not needed_hashes <= hashes:
+                        raise ValueError("new readiness placement changes the frozen scientific lifecycle")
+            for root in roots:
+                if root.get("target") not in known_targets:
+                    raise ValueError("storage root target is not a declared or prepared campaign placement")
+            # Reuse the strict overlap/absolute-path validation on the effective
+            # roots without changing or rehashing the original manifest.
+            validate_manifest({**contract["manifest"], "storage_roots": contract["effective_storage_roots"] + roots})
+            for target, stages in calibration.items():
+                if target not in known_targets:
+                    raise ValueError("calibration target is not a declared or prepared campaign placement")
+                for stage, progress in stages.items():
+                    if stage not in {case["stage"] for case in contract["effective_cases"] + additions}:
+                        raise ValueError("calibration stage is not part of this campaign")
+                    if stage in contract["target_progress_calibration"].get(target, {}):
+                        raise ValueError("target/stage calibration is already frozen; it cannot be replaced")
+                    if set(progress) != {"startup_seconds", "stale_seconds", "expected_seconds"}:
+                        raise ValueError("target progress calibration requires exactly startup, stale and expected seconds")
+                    for key, value in progress.items():
+                        positive(value, key)
+                    if min(progress["startup_seconds"], progress["stale_seconds"]) < 600:
+                        raise ValueError("target progress thresholds must cover two five-minute polls")
+            for case in additions:
+                self.db.execute("INSERT INTO campaign_cases VALUES(?,?,?)", (case["id"], campaign_id, canonical(case)))
+            self.db.execute("INSERT INTO campaign_amendments VALUES(?,?,?,?,?)",
+                            (amendment["id"], campaign_id, identity, self.clock(), canonical(amendment)))
+            if roots:
+                # A previous measurement omitted the new roots. Invalidate it
+                # until the next complete observation, preventing undercounting.
+                self.db.execute("UPDATE campaign_contracts SET storage_bytes=NULL,storage_observed=NULL WHERE id=?", (campaign_id,))
+            self.store.event(None, "campaign_operational_amendment", {"campaign_id": campaign_id,
+                "amendment_id": amendment["id"], "sha256": identity,
+                "cases": [case["id"] for case in additions], "storage_roots": roots,
+                "target_progress_calibration": calibration}, self.clock())
+        return identity
 
     def register(self, raw):
         manifest = validate_manifest(raw)
@@ -180,7 +299,7 @@ class CampaignLedger:
         if calibration and name != "handoff":
             raise ValueError("only the frozen handoff gate may supply progress calibration")
         for stage, progress in calibration.items():
-            if stage not in {case["stage"] for case in contract["manifest"]["cases"]}:
+            if stage not in {case["stage"] for case in contract["effective_cases"]}:
                 raise ValueError("progress calibration names an unknown campaign stage")
             if set(progress) != {"startup_seconds", "stale_seconds", "expected_seconds"}:
                 raise ValueError("progress calibration needs exactly startup, stale and expected seconds")
@@ -193,8 +312,12 @@ class CampaignLedger:
             raise ValueError("validation gates are immutable; use a new contract for changed evidence")
         self.db.execute("INSERT OR IGNORE INTO campaign_gates VALUES(?,?,?)", (campaign_id, name, canonical(receipt)))
 
-    def progress_expectation(self, job_id):
+    def progress_expectation(self, job_id, target=None):
         case = self.case(job_id)
+        if target:
+            calibrated = self.contract(case["campaign_id"])["target_progress_calibration"].get(target, {}).get(case["contract"]["stage"])
+            if calibrated:
+                return calibrated
         row = self.db.execute("SELECT receipt FROM campaign_gates WHERE campaign_id=? AND name='handoff'", (case["campaign_id"],)).fetchone()
         if row:
             receipt = json.loads(row["receipt"])
@@ -213,7 +336,7 @@ class CampaignLedger:
 
     def remaining(self, campaign_id):
         contract = self.contract(campaign_id)
-        jobs = [self.store.job(c["id"]) for c in contract["manifest"]["cases"]]
+        jobs = [self.store.job(c["id"]) for c in contract["effective_cases"]]
         charged = sum(j["used_seconds"] for j in jobs)
         reservations = list(self.db.execute("SELECT * FROM campaign_reservations WHERE campaign_id=?", (campaign_id,)))
         reserved = sum(row["gpu_seconds"] for row in reservations)
@@ -340,6 +463,8 @@ class CampaignLedger:
         contract = self.contract(incident["campaign_id"])
         return {"incident": dict(incident), "case_id": job["id"], "manifest": contract["manifest"],
                 "manifest_sha256": contract["sha256"], "job": job,
+                "operational_amendments": contract["amendments"],
+                "target_progress_calibration": contract["target_progress_calibration"],
                 "expected_progress": self.progress_expectation(job["id"]),
                 "remaining_budget": self.remaining(incident["campaign_id"]),
                 "execution_history": [a for a in self.store.attempts() if a["job_id"] == job["id"]],
@@ -381,10 +506,13 @@ class CampaignLedger:
         results = []
         for row in self.db.execute("SELECT id FROM campaign_contracts ORDER BY created"):
             contract = self.contract(row["id"])
-            jobs = [self.store.job(c["id"]) for c in contract["manifest"]["cases"]]
+            jobs = [self.store.job(c["id"]) for c in contract["effective_cases"]]
             results.append({"id": row["id"], "manifest_sha256": contract["sha256"],
                             "state": "awaiting_scientific_review" if all(j["state"] == "complete" for j in jobs) else "active_or_blocked",
                             "last_poll": contract["last_poll"], "remaining_budget": self.remaining(row["id"]),
+                            "operational_amendments": contract["amendments"],
+                            "effective_storage_roots": contract["effective_storage_roots"],
+                            "target_progress_calibration": contract["target_progress_calibration"],
                             "cases": [{k: j[k] for k in ("id", "state", "reason", "used_seconds")} for j in jobs]})
         return {"campaigns": results, "incidents": [dict(r) for r in self.db.execute("SELECT * FROM campaign_incidents ORDER BY id")],
                 "capabilities": {"shared_queue": True, "slurm": False, "automatic_scientific_decisions": False}}
@@ -725,7 +853,7 @@ def scheduler_type(queue_module):
         def probe_campaigns(self, now):
             for row in self.campaigns.db.execute("SELECT id FROM campaign_contracts").fetchall():
                 contract = self.campaigns.contract(row["id"])
-                roots = contract["manifest"].get("storage_roots", [])
+                roots = contract["effective_storage_roots"]
                 if roots:
                     total = 0
                     try:
@@ -733,7 +861,7 @@ def scheduler_type(queue_module):
                             target = self.cfg["targets"][target_name]
                             # The code is staged on each execution host. Probe itself
                             # requires no GPU, user credentials or result mutation.
-                            workdir = next(p["workdir"] for c in contract["manifest"]["cases"]
+                            workdir = next(p["workdir"] for c in contract["effective_cases"]
                                            for name, p in self.store.job(c["id"])["spec"]["placements"].items() if name == target_name)
                             paths = [root["path"] for root in roots if root["target"] == target_name]
                             value = remote_command(self.cfg, target_name,
@@ -741,10 +869,10 @@ def scheduler_type(queue_module):
                             total += value["storage_bytes"]
                         self.campaigns.storage(row["id"], total, now)
                         if total > contract["manifest"]["budgets"]["storage_bytes"]:
-                            self.campaigns.incident(contract["manifest"]["cases"][0]["id"], "storage_budget_exceeded",
+                            self.campaigns.incident(contract["effective_cases"][0]["id"], "storage_budget_exceeded",
                                                     {"storage_bytes": total, "limit": contract["manifest"]["budgets"]["storage_bytes"]})
                     except Exception as exc:
-                        for case in contract["manifest"]["cases"]:
+                        for case in contract["effective_cases"]:
                             self.campaigns.incident(case["id"], "storage_observation_failed", {"error": str(exc)[:1000]})
                             break
             for attempt in self.store.attempts(active=True):
@@ -788,7 +916,7 @@ def scheduler_type(queue_module):
                         progress_at = now
                     else:
                         progress_at = previous["progress_at"] if previous else attempt["issued"]
-                    expected = self.campaigns.progress_expectation(job["id"])
+                    expected = self.campaigns.progress_expectation(job["id"], attempt["target"])
                     if (observed.get("worker_alive") or observed.get("supervisor_alive")) and now - progress_at > max(expected["startup_seconds"], expected["stale_seconds"]):
                         self.attention(job["id"], "stage-specific semantic progress threshold exceeded", now)
                     if now - attempt["issued"] > expected["expected_seconds"] * 1.5:
@@ -942,6 +1070,8 @@ def main(argv=None):
     register.add_argument("manifest", type=Path)
     prepare = commands.add_parser("prepare")
     prepare.add_argument("job", type=Path)
+    amendment = commands.add_parser("amend")
+    amendment.add_argument("campaign_id"); amendment.add_argument("amendment", type=Path)
     gate = commands.add_parser("gate")
     gate.add_argument("campaign_id"); gate.add_argument("name"); gate.add_argument("receipt", type=Path)
     storage = commands.add_parser("storage")
@@ -962,6 +1092,7 @@ def main(argv=None):
             output = {"jobs": [dict(row) for row in db.execute("SELECT id,spec,state,reason,used_seconds FROM jobs")],
                       "attempts": [dict(row) for row in db.execute("SELECT * FROM attempts")],
                       "observations": [dict(row) for row in db.execute("SELECT * FROM campaign_observations")],
+                      "amendments": [dict(row) for row in db.execute("SELECT * FROM campaign_amendments")],
                       "investigations": [dict(row) for row in db.execute("SELECT * FROM campaign_investigations")],
                       "campaigns": [dict(row) for row in db.execute("SELECT * FROM campaign_contracts")],
                       "incidents": [dict(row) for row in db.execute("SELECT * FROM campaign_incidents")]}
@@ -975,6 +1106,8 @@ def main(argv=None):
         print(canonical(prepare_job(module, scheduler, json.loads(args.job.read_text())))); return
     if args.command == "register":
         print(scheduler.campaigns.register(json.loads(args.manifest.read_text()))); return
+    if args.command == "amend":
+        print(scheduler.campaigns.amend(args.campaign_id, json.loads(args.amendment.read_text()))); return
     if args.command == "gate":
         scheduler.campaigns.gate(args.campaign_id, args.name, json.loads(args.receipt.read_text())); return
     if args.command == "storage":
