@@ -1,7 +1,7 @@
 ---
 id: "exp-005"
 title: "Experiment 1e: matched HWA scopes with cosine decay"
-status: "partial"
+status: "running"
 hypotheses: []
 ---
 # exp-005: whole-transformer HWA
@@ -751,3 +751,77 @@ new campaign incidents; leave it running for other work. The original deadline
 and matching waiver are preserved. Broader dispatch remains
 `awaiting_scientific_review`; this terminal handoff does not authorize another
 duration extension or an unequal-budget recipe comparison.
+
+
+### Current cosine execution handoff, 2026-10-10 19:27 Paris
+
+The new comparison is launched. Both 512-update readiness jobs completed native
+execution, full artifact validation and compact collection. The immutable handoff
+gate passed; all seven main jobs are released. At this observation two are running
+and five are queued. Only **fifi and loulou** are eligible, one worker per RTX 5090.
+
+Worker and isolated controller revision:
+`b31202f8ad7a373717095c9dfd45303dfef68f0e`.
+Main lifecycle digest:
+`7daec35c3d992cc2ef028156e55673ab10de91e7441d34a13c11c416324dde88`.
+Campaign ledger manifest digest:
+`f6704ae69ce65a0a38cef5dd906b54d42670febefee9f21c1381d6828be134f9`.
+Every frozen host receipt and job specification is under the local cosine evidence
+root's `prepared/`; all 18 host-specific native dry-runs passed.
+
+| Host | Current case | Worker PID | Tmux session |
+|---|---|---:|---|
+| loulou | `exp1e-cosine-cdt_random_3pct_model` | 630949 | `exp1e-cosine-cdt_random_3pct_model-ed6cb7620d514b338d9b73610c974092` |
+| fifi | `exp1e-cosine-pretrained` | 908359 | `exp1e-cosine-pretrained-a9a549c4b40a423a8267e8b9a9ead7d8` |
+
+Attach read-only with `ssh -t <host> 'tmux attach -r -t <session>'`; later jobs
+get their own sessions, visible with `ssh <host> 'tmux ls'`. Panes are retained
+after completion. Exact boot/start identities, native stage roots and live logs
+are in `readiness/live-handoff.json`. Worker logs follow
+`/home/filip/analog-research/opt-cmo-exp1/worker-receipts/<revision>/<case>/<attempt>/run.log`.
+
+The whole-model worker has passed its initial selection and update 512; the
+pretrained job is on its third assignment. Both advanced on two direct native
+checks with finite metrics, and both outer worker observations are persisted by
+the service. The next semantic campaign poll is due around **19:29 Paris**, then
+at five-minute cadence. Queued jobs consume no GPU time and do not count as stalled.
+
+The existing `run-watch-queue.service` is active with PID 211221, systemd watchdog
+11 min, automatic restart, user lingering and renewable 15-minute worker leases.
+Its working directory is the pinned local cosine evidence root's `controller/`.
+The SQLite ledger remains `/home/filip/.local/state/run-watch/queue/queue.sqlite3`;
+there is no second dispatcher or interactive monitoring owner. A live restart
+retained both readiness worker identities and produced no duplicate attempts.
+Injected incident 5 successfully invoked the bounded read-only investigator and
+preserved its diagnosis, recommendation and immutable snapshot. Old jobs,
+incidents and charges also survived the controller update.
+
+Readiness charged **0.1012 GPU-hours**. The two active jobs reserve 3.75 GPU-hours,
+leaving **14.1488 unreserved GPU-hours** within the 18-hour phase cap (actual active
+usage accrues against those reservations). The most recent storage observation is
+3.284 GB; finished phase storage is projected at about 21.5 GB against the 40 GB
+cap. The phase window ends **2026-10-11 07:17:43 Paris**. Normal completion is
+expected around **00:15–00:45 Paris**, roughly five hours after the 19:24 launch.
+
+Measured readiness freezes prepare/devices expectations at 120 s and each
+six-case deployment array at 121 s; start/stale thresholds are 600 s. HWA keeps
+scope-specific expected duration 6,500 s whole-model / 4,500 s analog and a
+900 s stale threshold. Validation and controller collection each allow 600 s.
+The service raises an incident beyond 1.5 times a stage expectation. These
+thresholds flag anomalies; they do not change LR, data, selection or training
+length. Read-only investigation and explicitly classified operational recovery
+remain bounded by the existing budgets. No scientific retuning is authorized.
+
+Each source job validates its complete finite fit before native deployment.
+On exit it undergoes remote full-artifact inspection, then CPU-only controller
+collection. The reusable collector preserves compact control files and exact
+artifact receipts; large native caches, sources and deployments stay on their
+execution host. `collected/deployments.json` contains only the main comparison;
+`collected/readiness-deployments.json` holds canaries. At all 210 main rows, the
+completion hook applies the frozen paired rule and writes `collected/review.txt`.
+There is no downstream on-chip dispatch in this experiment. Scientific
+interpretation remains partial until all required coverage has been reviewed.
+
+Verified handoff evidence: `readiness/handoff-tests.json`, `handoff-gate.json`,
+`live-handoff.json` and `dispatch-handoff.json` under
+`results/lifecycles/opt125m-cmo-l6-exp1e-cosine/`.
