@@ -145,8 +145,10 @@ training or enlarge limits silently to fit a resource estimate.
 
 All four RTX 5090 hosts (fifi, loulou, riri, trex) are eligible when idle, with the
 user's weekend fleet-cap override. Prefer the already compatible PyTorch 2.11
-hosts, one worker per GPU. Do not disturb or share with existing jobs. RTX 3090
-placement is not assumed to fit the whole-model run. Jean Zay is held for the later
+hosts, one worker per GPU. Do not disturb or share with existing jobs. The user
+also explicitly authorized nom-cool-1 and the local nom-cool-2 RTX 3090s on
+2026-10-10. The local full-batch smoke fits, but full 3090 admission is held by
+the cross-hardware randomness failure described below. Jean Zay is held for the later
 deployment phase and requires its own validated adapter and production canary.
 
 Measure full-batch peak memory, throughput, and actual storage during the 512-update
@@ -228,6 +230,62 @@ The initial smokes both executed on loulou after fifi became occupied by another
 user. Step attempt: `3568591cb3c943b1b8633530c3efd11c`; linear attempt:
 `d5fbd9d96016443e8781cc39b45b4e5c`. The linear placement amendment was recorded
 before any attempt and preserved its exact configuration and budget.
+
+## Additional RTX 3090 readiness and scientific hold
+
+Both added GPUs are healthy outside the interactive sandbox. Stage the same
+training source and pinned inputs in the dedicated checkout above, with an
+isolated runtime at `~/analog-research/opt-cmo-exp1/runtime-exp1e-cu128`.
+It matches the 5090 runtime: PyTorch 2.11.0+cu128, Transformers 5.8.0,
+NumPy 2.4.4 and tokenizers 0.22.2. Shared existing environments remain intact.
+Runtime copies are included in the original 30 GB storage allowance.
+
+Controller revision `3890610` adds local collection and append-only operational
+amendments for readiness cases, storage roots and target progress calibration.
+The original manifest hash, handoff gate, 16 GPU-hour cap, start time and deadline
+are unchanged. Old and new execution records remain in the same locked ledger.
+Amendment receipts and diagnostics are under `readiness/3090/` in the local
+evidence root. The local readiness job is
+`opt125m-cmo-l6-exp1e-dev-linear-lr1em4-smoke-readiness-local`, attempt
+`7c1fa9e007a443e0a03de990c5113996`. Its visible tmux session is
+`opt125m-cmo-l6-exp1e-dev-linear-lr1em4-smoke-7c1fa9e007a443e0a03de990c5113996`.
+
+Nom-cool-1 uses the separate readiness queue ID
+`opt125m-cmo-l6-exp1e-dev-linear-lr1em4-smoke-readiness-nom-cool-1`.
+Its first attempt, `c106f2a82c4140c089ad4957a2297f7c`, failed at the first
+`tmux` lookup before creating a training worker. Preserve that failed attempt.
+An isolated tmux executable was staged and checked with a disposable non-GPU
+session; its hashes and the exact required placement `PATH` are recorded in
+`readiness/3090/nom-cool-1-tmux-fix.json`. Future nom-cool-1 placements must retain
+that PATH. One classified pre-start operational retry uses the original
+readiness allowance and campaign budget; it grants no full scientific admission.
+The retry is running with attempt `262ff8d09a454354943964610f842919`, in tmux
+session `opt125m-cmo-l6-exp1e-dev-linear-lr1em4-smoke-262ff8d09a454354943964610f842919`.
+Use the isolated runtime's `bin/tmux` to attach on nom-cool-1. The fresh service
+observation and restart-recovery receipt is `readiness/3090/live-handoff.json`.
+
+The local smoke completed all 512 updates with finite metrics, but initial
+development KL differs from loulou by about 1%. Paired exact-shape probes confirm
+different hashes for the minibatch permutation, CMO programming endpoints and
+HWA noise despite equal seeds and Torch/CUDA versions. Permanent CPU-generated
+fault maps remain matched. The current CUDA sampling implementation therefore
+does not satisfy the frozen matched-randomness contract across GPU models.
+
+Do not add full 3090 placements to the current grid. Incident 2,
+`cross_hardware_randomness_mismatch`, has a durable bounded read-only investigator
+report. The existing 5090 trial continues and the five pending scientific cases
+retain their 5090 placements. The user has been asked to choose between retaining
+that grid and explicitly restarting a matched grid with versioned portable
+randomness on all authorized GPUs. A portable profile must pass complete tensor
+hash checks across targets and preserve legacy bundle replay; seeds or matching
+prefixes alone are insufficient. No scientific configuration has been changed.
+The immutable `rtx3090_matched_randomness` gate records `passed: false`; the
+original 5090 handoff gate remains unchanged.
+
+Measured 3090 throughput projects to roughly 2–2.5 hours for 12,800 updates.
+If full 3090 training is later admitted, record a measured wall-time amendment;
+the current 90-minute worker limit is insufficient. Readiness success is not
+permission to change the update budget, batch size or checkpoint-selection rule.
 
 The campaign window started at 09:19:34 UTC (11:19:34 Paris) and closes at
 21:19:34 UTC (23:19:34 Paris). Full candidates have 90-minute allowances;
