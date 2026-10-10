@@ -1,7 +1,7 @@
 ---
 id: "exp-005"
 title: "Experiment 1e: develop whole-model HWA, then compare matched scopes"
-status: "running"
+status: "partial"
 hypotheses: []
 ---
 # exp-005: whole-transformer HWA
@@ -32,12 +32,14 @@ reviewing the late improvements ("ok yes..."). Its frozen protocol is below;
 unequal training budgets do not enter the ten-case LR ranking.
 Both readiness smokes passed and the calibrated handoff gate remains open.
 
-As of 2026-10-10 15:37 Paris, the first eight development candidates are complete,
-validated and collected. The declared rule recommends 5e-3 step, but the LR
-optimum remains unbracketed and healthy performance degrades as fault robustness
-improves. The result note contains the complete review. This experiment is
-reopened for the two authorized 1e-2 candidates. Its broader scope/recipe
-comparison remains unsubmitted.
+As of 2026-10-10 18:52 Paris, all ten short candidates and both duration trials
+are complete, validated and collected. The focused execution is finished and
+all campaign GPUs are released. The short-grid rule recommends linear 1e-2;
+the separate four-pass comparison recommends step 5e-3. Longer training improves
+both healthy and faulty performance, but both duration runs select their final
+checkpoint. The result note contains the review. Experiment status is partial
+because the broader scope/recipe comparison remains unsubmitted, pending the
+scientific decision on the common recipe and training budget.
 
 ## Frozen focused comparison
 
@@ -644,3 +646,26 @@ Observed storage is 32.9006 GB against 36 GB. Existing tmux session naming,
 five-minute supervision and the original deadline are unchanged. The result
 note records the complete ten-case outcome and explicitly partial duration
 observations; no broader jobs have been submitted.
+
+### Terminal duration handoff, 2026-10-10 18:52 Paris
+
+Both duration attempts completed all 25,600 updates and passed native validation
+and automatic collection without retries. Loulou's step 5e-3 case used 6,066.08
+charged seconds and fifi's step 1e-3 case used 6,174.45. Both GPU reservations
+are released, and no campaign jobs remain queued. The twelve scientific cases
+and four successful readiness cases are terminal; the historical pre-start
+failure remains preserved separately.
+
+The terminal check verified each duration case's 22 collected files against its
+receipt, the exact source inspection bindings, one completed attempt per case,
+and complete short-reference/duration review coverage. Evidence is in
+`readiness/tail4pass/terminal-handoff.json`; final duration tables and figures
+are under `collected/review/duration/`. The result note owns interpretation.
+
+Total charged consumption is 15.3287 GPU-hours against 20, with 4.6713 remaining
+and no active reservation. Observed storage is 33.9029 GB against 36 GB. The
+persistent shared watchdog remains enabled and healthy with no host errors or
+new campaign incidents; leave it running for other work. The original deadline
+and matching waiver are preserved. Broader dispatch remains
+`awaiting_scientific_review`; this terminal handoff does not authorize another
+duration extension or an unequal-budget recipe comparison.
