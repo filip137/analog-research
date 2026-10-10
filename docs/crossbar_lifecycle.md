@@ -56,6 +56,7 @@ normalized before hashing.
 | `hwa` (ii) | noise model (and `noise_std`, `noise_scaling` for CMO), shared optimizer, objective, schedule, epochs, augmentation (CIFAR only), seed and selection rule, plus source `arms` |
 | `program_verify` (iii) | method, verify cycles and window (OM), acceptance range (CMO), relaxation |
 | `onchip` (iv) | update law, objective, learning rates, epochs, seed, write budget and matched `arms`; or `null` for a deployment-only loop with no on-chip stage |
+| `transfer_tests` (optional) | OPT only: extra test cohorts from other pinned corpora, scored at every evaluation. Omitted when absent, so lifecycles without it keep their digests |
 
 ### (a) Question, devices and defects
 
@@ -194,6 +195,21 @@ Each arm is a source that later stages deploy:
   is extended once by `selection.extension_epochs`; if it is still late, the
   source records `convergence_review_required` and later stages propagate the
   flag. Final arrays and test data are never used for selection.
+- `scope` (optional, OPT family only) sets which parameters an arm trains.
+  - `analog` (the default, and omitted from the arm) trains the analog
+    weights and their calibration parameters: the analog layers' MLP biases,
+    the LayerNorm in front of each analog MLP, and per-matrix output gains.
+    The frozen teacher supplies every other digital parameter.
+  - `model` also trains every digital parameter of the student's own copy of
+    the network: embeddings, the earlier layers, all attention and LayerNorms,
+    and the tied head. Both reference papers fine-tune the whole model this
+    way. It requires `digital_learning_rate` (Adam, the same `hwa` schedule).
+  - Only the analog weights see noise and corruption, and the frozen teacher
+    remains the KL target.
+  - A `model`-scope source carries its digital weights through deployment and
+    on-chip stages. On-chip arms never train them. Deployment bundles of such
+    sources are about 4 bytes per digital parameter larger (about 0.4 GB for
+    OPT-125M).
 - `sequences_per_epoch` (optional, OPT family only) streams a large HWA cohort.
   Without it an epoch is one pass over `data.hwa_sequences`. With it, epoch e
   takes stream positions [(e−1)·S, e·S) of an endless series of seeded passes
@@ -293,10 +309,20 @@ arms:
 
 | Artifact | Depends on |
 | --- | --- |
-| `feature_cache` | `network`, `data` |
+| `feature_cache` | `network`, `data`, and `transfer_tests` when declared |
 | `device_bundle` | `network`, `devices`, `program_verify` |
 | `hwa_source` | `network`, `data`, `devices`, `deployment`, `program_verify`, shared `hwa` settings and its own arm |
-| `deployment` | all of the above for its arm, plus `defects` |
+| `deployment` | all of the above for its arm, plus `defects`, and `transfer_tests` when declared |
+
+`transfer_tests` never determines a source, so adding a second test domain
+reuses existing sources. Each entry names a `label`, a pinned `corpus` (name
+and SHA-256), its `split` (`validation` or `test`, never `train`) and a sequence
+count. The first sequences of that split are scored next to the lifecycle's own
+evaluation split, under the cache and metric key `transfer_<label>`. Collected
+rows gain `clean_`, `deployed_`, `initial_` and `final_transfer_<label>_<metric>`
+columns. The lifecycle's own validation split cannot be reused as a transfer
+cohort. Overlap with another corpus's training text must be checked and recorded
+in the experiment note.
 
 Teacher and mapping hashes must also match.
 

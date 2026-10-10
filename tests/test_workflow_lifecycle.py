@@ -141,7 +141,9 @@ def test_section_provenance_allows_reuse_only_for_unchanged_dependencies():
     with pytest.raises(ValueError, match="defects"):
         verify_provenance(deployment, parse_lifecycle(changed(document(), "defects.cases.1.rate_ppm", 30000)),
                           "deployment", hwa_arm="digital")
-    assert set(ARTIFACT_SECTIONS["feature_cache"]) == {"network", "data"}
+    # Optional sections enter a provenance record only when the lifecycle declares them.
+    assert set(ARTIFACT_SECTIONS["feature_cache"]) == {"network", "data", "transfer_tests"}
+    assert set(provenance(base, "feature_cache")["sections"]) == {"network", "data"}
 
 
 def test_stage_dag_covers_every_arm_and_assignment():

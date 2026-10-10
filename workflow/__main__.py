@@ -156,6 +156,13 @@ def _rows(run_dir: Path, result: dict) -> list[dict]:
             "calibration": row["calibration"],
             "evaluation": split,
             **{f"{state}_{k}": row[state][split][k] for state in ("clean", "initial", "final") for k in metrics},
+            # Transfer test cohorts (another pinned corpus), as extra columns.
+            **{
+                f"{state}_{name}_{k}": row[state][name][k]
+                for name in sorted(n for n in row["final"] if n.startswith("transfer_"))
+                for state in ("clean", "initial", "final")
+                for k in metrics
+            },
             **{k: row[k] for k in ("image_presentations", "sequence_presentations") if k in row},
             "failed_devices": row["identity"]["failed_devices"],
             "hwa_convergence_review_required": row["hwa_convergence_review_required"],
@@ -188,6 +195,13 @@ def _deployment_rows(run_dir: Path, result: dict) -> list[dict]:
                 "evaluation": split,
                 **{f"clean_{k}": clean[split][k] for k in names},
                 **{f"deployed_{k}": deployed[k] for k in names},
+                # Transfer test cohorts (another pinned corpus), as extra columns.
+                **{
+                    f"{state}_{name}_{k}": values[name][k]
+                    for name in sorted(n for n in clean if n.startswith("transfer_"))
+                    for state, values in (("clean", clean), ("deployed", case["initial"]))
+                    for k in names
+                },
                 "failed_devices": case["identity"]["failed_devices"],
                 "out_of_range_devices": case["programming"].get("out_of_range_devices"),
                 "hwa_convergence_review_required": metrics["hwa_convergence_review_required"],

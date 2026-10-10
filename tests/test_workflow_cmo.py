@@ -24,8 +24,8 @@ from workflow import devices as device_stage
 from workflow.__main__ import STATE_BYTES_PER_WEIGHT
 from workflow.__main__ import main as workflow_main
 from workflow.__main__ import summary
-from workflow.lifecycle import CMO_ACCEPTANCE_PERCENT, DefectCase, parse_lifecycle, stage_selections
-from workflow.networks.opt_mlp import MatrixSpec
+from workflow.lifecycle import CMO_ACCEPTANCE_PERCENT, DefectCase, parse_lifecycle, provenance, stage_selections, verify_provenance
+from workflow.networks.opt_mlp import MatrixSpec, StudentInput
 from test_workflow_opt import changed, tiny_teacher, write_corpus
 from workflow_helpers import lifecycle_document, run_lifecycle
 
@@ -657,3 +657,171 @@ def test_streamed_hwa_takes_the_next_sequences_each_epoch(cmo_inputs, tmp_path):
         "cohort_sequences": 8,
         "passes": fit["epochs_run"] * 3 / 8,
     }
+
+
+# --- whole-model HWA and transfer tests -------------------------------------------------
+
+
+def model_arm(**changes):
+    arm = {
+        "id": "standard_hwa_model",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "corruption": None,
+        "selection_cases": [case_doc()],
+        "scope": "model",
+        "digital_learning_rate": 1e-4,
+    }
+    arm.update(changes)
+    return arm
+
+
+def transfer_doc(digest, label="other", split="test", sequences=3):
+    return [{"label": label, "corpus": {"name": "other", "sha256": digest}, "split": split, "sequences": sequences}]
+
+
+def test_whole_model_scope_is_an_optional_arm_setting_that_keeps_analog_digests():
+    plain = small()
+    explicit = template()
+    explicit["hwa"]["arms"][1]["scope"] = "analog"
+    explicit["hwa"]["arms"][1]["digital_learning_rate"] = None
+    explicit = small(**{"hwa.arms": explicit["hwa"]["arms"]})
+    assert explicit.hwa_arm_digest("standard_hwa") == plain.hwa_arm_digest("standard_hwa")
+    assert explicit.digest() == plain.digest()
+    arms = template()["hwa"]["arms"] + [model_arm()]
+    lc = small(**{"hwa.arms": arms})
+    arm = lc.hwa.arm("standard_hwa_model")
+    assert (arm.scope, arm.digital_learning_rate) == ("model", 1e-4)
+    assert arm.to_dict()["scope"] == "model" and parse_lifecycle(lc.to_dict()) == lc
+    # Adding a whole-model arm does not change the other arms' source identity.
+    assert lc.hwa_arm_digest("standard_hwa") == plain.hwa_arm_digest("standard_hwa")
+    with pytest.raises(ConfigError, match="digital_learning_rate"):
+        small(**{"hwa.arms": template()["hwa"]["arms"] + [model_arm(digital_learning_rate=None)]})
+    with pytest.raises(ConfigError, match="digital_learning_rate"):
+        small(**{"hwa.arms": template()["hwa"]["arms"] + [model_arm(scope="analog")]})
+    with pytest.raises(ConfigError, match="scope"):
+        small(**{"hwa.arms": template()["hwa"]["arms"] + [model_arm(scope="all")]})
+
+
+def test_transfer_tests_are_optional_and_never_enter_source_provenance():
+    digest = "a" * 64
+    plain = small()
+    doc = small().to_dict()
+    doc["transfer_tests"] = transfer_doc(digest)
+    lc = parse_lifecycle(doc)
+    assert lc.transfer_tests.tests[0].cache_key == "transfer_other"
+    assert parse_lifecycle(lc.to_dict()) == lc and lc.digest() != plain.digest()
+    assert "transfer_tests" not in plain.to_dict() and "transfer_tests" in lc.to_dict()
+    assert "transfer_tests" in provenance(lc, "feature_cache")["sections"]
+    assert "transfer_tests" in provenance(lc, "deployment", hwa_arm="standard_hwa")["sections"]
+    # A source trained without transfer tests is reusable by a lifecycle that adds them.
+    source = provenance(plain, "hwa_source", hwa_arm="standard_hwa")
+    verify_provenance(source, lc, "hwa_source", hwa_arm="standard_hwa")
+    with pytest.raises(ValueError, match="transfer_tests"):
+        verify_provenance(provenance(plain, "feature_cache"), lc, "feature_cache")
+    for bad, message in (
+        (transfer_doc(digest, split="train"), "split"),
+        (transfer_doc(digest) + transfer_doc(digest), "unique"),
+        (transfer_doc(plain.data.corpus_sha256, split="validation"), "validation"),
+    ):
+        broken = small().to_dict()
+        broken["transfer_tests"] = bad
+        with pytest.raises(ConfigError, match=message):
+            parse_lifecycle(broken)
+
+
+def test_whole_model_student_starts_as_the_analog_student_with_its_own_digital_copy():
+    teacher = tiny_teacher()
+    arms = template()["hwa"]["arms"] + [model_arm()]
+    lc = small(**{"hwa.arms": arms})
+    analog = deployment.build_network(teacher, lc, "standard_hwa")
+    whole = deployment.build_network(teacher, lc, "standard_hwa_model")
+    assert analog.digital is None and whole.digital is not None
+    tokens = torch.randint(0, teacher.config.vocab_size, (2, 7), generator=torch.Generator().manual_seed(5))
+    inputs = whole.features(tokens)
+    assert isinstance(inputs, StudentInput) and torch.equal(inputs.teacher_hidden, analog.features(tokens))
+    assert torch.equal(whole.forward_features(inputs), analog.forward_features(analog.features(tokens)))
+    assert torch.equal(whole.teacher_logits(inputs), analog.teacher_logits(analog.features(tokens)))
+    keys = set(whole.state_dict())
+    assert keys - set(analog.state_dict()) == {k for k in keys if k.startswith("digital.")}
+    start = len(teacher.layers) - lc.network.analog_decoder_layers
+    assert not any(f"digital.layers.{i}.fc1" in k or f"digital.layers.{i}.final_layer_norm" in k
+                   for k in keys for i in range(start, len(teacher.layers)))
+    assert "digital.layers.0.fc1.weight" in keys and "digital.embed_tokens.weight" in keys
+    whole.enable_calibration(True)
+    whole.enable_digital(True)
+    digital = {id(p) for p in whole.digital_parameters()}
+    assert digital and not digital & {id(p) for p in whole.calibration_parameters()}
+    whole.enable_digital(False)
+    assert not any(p.requires_grad for p in whole.digital_parameters())
+
+
+def test_whole_model_hwa_trains_digital_weights_and_deploys_them_with_transfer_scores(cmo_inputs, tmp_path):
+    weights, digest = cmo_inputs
+    other = write_corpus(tmp_path / "corpora", name="other", seed=12)
+    arms = template()["hwa"]["arms"][:2] + [model_arm(selection_cases=[case_doc(), case_doc("random", 30000)])]
+    doc = small(
+        **{
+            "data.corpus": {"name": "synthetic", "sha256": digest},
+            "data.sequence_length": 9,
+            "data.max_examples": 8,
+            "defects.cases": [case_doc(), case_doc("random", 50000)],
+            "hwa.batch_size": 4,
+            "hwa.arms": arms,
+            "onchip": None,
+        }
+    ).to_dict()
+    doc["transfer_tests"] = transfer_doc(other, sequences=3)
+    lc = parse_lifecycle(doc)
+    teacher = tiny_teacher()
+    results = run_lifecycle(lc, weights, tmp_path / "runs")
+    fit = results["hwa__standard_hwa_model"][1]["metrics"]["fit"]
+    assert fit["status"] == "complete" and fit["scope"]["scope"] == "model"
+    assert fit["scope"]["digital_learning_rate"] == 1e-4 and fit["scope"]["digital_parameters"] > 0
+    assert "scope" not in results["hwa__standard_hwa"][1]["metrics"]["fit"]
+    source = load(next((tmp_path / "runs/hwa__standard_hwa_model").glob("*/checkpoints/source.pt")))
+    trained = {k[len("digital."):]: v for k, v in source["model"].items() if k.startswith("digital.")}
+    reference = teacher.state_dict()
+    assert any(not torch.equal(v.cpu(), reference[k]) for k, v in trained.items())
+    run_dir, deploy = results["deploy__standard_hwa_model__271001"]
+    assert set(deploy["metrics"]["clean"]) == {"development", "test", "transfer_other"}
+    assert deploy["metrics"]["clean"]["transfer_other"]["sequences"] == 3
+    collected = tmp_path / "collected"
+    assert workflow_main(["collect", str(tmp_path / "runs"), "--output", str(collected)]) == 0
+    rows = json.loads((collected / "deployments.json").read_text())
+    assert len(rows) == len(lc.hwa.arms) * len(lc.defects.cases)
+    assert all("deployed_transfer_other_teacher_kl" in r and "clean_transfer_other_perplexity" in r for r in rows)
+
+
+
+def test_onchip_recovery_holds_whole_model_digital_weights_and_reports_transfer_scores(cmo_inputs, tmp_path):
+    weights, digest = cmo_inputs
+    other = write_corpus(tmp_path / "corpora", name="other", seed=12)
+    arms = template()["hwa"]["arms"][:1] + [model_arm(selection_cases=[case_doc()])]
+    doc = small(
+        **{
+            "data.corpus": {"name": "synthetic", "sha256": digest},
+            "data.sequence_length": 9,
+            "data.max_examples": 8,
+            "defects.cases": [case_doc("random", 50000)],
+            "hwa.batch_size": 4,
+            "hwa.arms": arms,
+            "onchip.batch_size": 4,
+        }
+    ).to_dict()
+    doc["transfer_tests"] = transfer_doc(other, sequences=2)
+    lc = parse_lifecycle(doc)
+    results = run_lifecycle(lc, weights, tmp_path / "runs")
+    run_dir, _ = results["onchip__standard_hwa_model__271001"]
+    rows = json.loads((run_dir / "measurements.json").read_text())
+    assert {r["onchip_arm"] for r in rows} == {arm.arm_id for arm in lc.onchip.arms}
+    assert all("transfer_other" in r["final"] and r["replay_exact"] for r in rows)
+    # On-chip arms never train the source's digital weights: none is saved as a
+    # trained parameter, and the exact replay restores them from the source.
+    for row in rows:
+        state = load(run_dir / "checkpoints/onchip" / row["case"] / f"{row['onchip_arm']}.pt")
+        assert not any(name.startswith("digital.") for name in state["calibration"])
+    collected = tmp_path / "collected"
+    assert workflow_main(["collect", str(tmp_path / "runs"), "--output", str(collected)]) == 0
+    collected_rows = json.loads((collected / "rows.json").read_text())
+    assert collected_rows and all("final_transfer_other_teacher_kl" in r for r in collected_rows)

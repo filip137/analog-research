@@ -23,6 +23,7 @@ from dataclasses import dataclass
 import math
 import os
 from pathlib import Path
+from typing import NamedTuple
 
 import torch
 from torch import nn
@@ -151,6 +152,13 @@ def from_hugging_face(state: dict, config: OptConfig) -> OptDecoder:
 # --- the crossbar student --------------------------------------------------------
 
 
+class StudentInput(NamedTuple):
+    """A whole-model student's minibatch: its own tokens and the teacher's prefix state."""
+
+    tokens: torch.Tensor
+    teacher_hidden: torch.Tensor
+
+
 class OptMlpSuffix(nn.Module):
     """Analog fc1/fc2 of the last decoder layers; everything else is the frozen teacher.
 
@@ -162,10 +170,22 @@ class OptMlpSuffix(nn.Module):
     abs-max (``per_layer_absmax``, one digital output scale per matrix) or by
     each output channel's abs-max (``per_output_channel_absmax``, a fixed
     digital output scale per channel, the AIHWKit column-wise convention).
+
+    ``scope="model"`` gives the student its own copy of every digital parameter
+    (``digital``: embeddings, the earlier layers, all attention and LayerNorms
+    and the tied head), trainable for whole-model HWA and carried in the state
+    dict. The frozen teacher then only supplies the reference logits. The copy
+    omits the analog layers' fc1/fc2 and their LayerNorm, which the crossbar
+    targets, ``mlp_biases`` and ``mlp_norms`` replace.
     """
 
     def __init__(
-        self, teacher: OptDecoder, analog_layers: int, tile_size: int = 512, scaling: str = "per_layer_absmax"
+        self,
+        teacher: OptDecoder,
+        analog_layers: int,
+        tile_size: int = 512,
+        scaling: str = "per_layer_absmax",
+        scope: str = "analog",
     ):
         super().__init__()
         depth = len(teacher.layers)
@@ -173,7 +193,9 @@ class OptMlpSuffix(nn.Module):
             raise ValueError("Expected between one and all decoder layers and a positive tile size.")
         if scaling not in SCALINGS:
             raise ValueError(f"Expected a scaling in {SCALINGS}. Provided value: {scaling!r}.")
-        self.scaling = scaling
+        if scope not in ("analog", "model"):
+            raise ValueError(f"Expected an HWA scope of analog or model. Provided value: {scope!r}.")
+        self.scaling, self.scope = scaling, scope
         self.start, self.tile_size = depth - analog_layers, tile_size
         self.suffix = f"last_{analog_layers}_decoder_mlps"
         self._frozen = (teacher,)
@@ -210,7 +232,14 @@ class OptMlpSuffix(nn.Module):
         )
         self.read_noise = 0.0
         self.read_generator = torch.Generator(device=self.q.device).manual_seed(0)
+        self.digital = None
+        if scope == "model":
+            self.digital = copy.deepcopy(teacher)
+            for i in range(self.start, depth):
+                layer = self.digital.layers[i]
+                layer.fc1 = layer.fc2 = layer.final_layer_norm = None
         self.enable_calibration(False)
+        self.enable_digital(False)
 
     @property
     def teacher(self) -> OptDecoder:
@@ -226,8 +255,16 @@ class OptMlpSuffix(nn.Module):
         self.mlp_biases.requires_grad_(enabled)
         self.mlp_norms.requires_grad_(enabled)
 
+    def enable_digital(self, enabled: bool):
+        if self.digital is not None:
+            self.digital.requires_grad_(enabled)
+
+    def digital_parameters(self):
+        return [] if self.digital is None else list(self.digital.parameters())
+
     def calibration_parameters(self):
-        return [p for p in self.parameters() if p is not self.q and p.requires_grad]
+        digital = {id(p) for p in self.digital_parameters()}
+        return [p for p in self.parameters() if p is not self.q and p.requires_grad and id(p) not in digital]
 
     def prefix_hash(self):
         """Every frozen digital parameter: embeddings, prefix, attention, LayerNorms and head."""
@@ -239,12 +276,15 @@ class OptMlpSuffix(nn.Module):
         hidden = self.teacher.embed(tokens)
         for i in range(self.start):
             hidden = self.teacher.layers[i](hidden)
-        return hidden
+        # A whole-model student runs its own (trainable) prefix from the tokens.
+        return hidden if self.digital is None else StudentInput(tokens, hidden)
 
     @torch.no_grad()
     def teacher_logits(self, hidden):
         """Digital teacher logits at the scored positions from the shared prefix state."""
 
+        if isinstance(hidden, StudentInput):
+            hidden = hidden.teacher_hidden
         for i in range(self.start, len(self.teacher.layers)):
             hidden = self.teacher.layers[i](hidden)
         return self.teacher.logits(hidden[:, :-1])
@@ -279,16 +319,28 @@ class OptMlpSuffix(nn.Module):
         return result.reshape(*x.shape[:-1], spec.shape[0])
 
     def forward_features(self, hidden, q=None):
-        """Student logits at the scored positions from the frozen prefix state."""
+        """Student logits at the scored positions from the frozen prefix state.
+
+        A whole-model student instead starts from the tokens of ``hidden``
+        (a ``StudentInput``) and uses its own digital parameters throughout.
+        """
 
         q = self.q if q is None else q
         if q.shape != self.q.shape:
             raise ValueError("Expected one normalized value per analog MLP weight.")
+        digital = self.teacher
+        if self.digital is not None:
+            if not isinstance(hidden, StudentInput):
+                raise ValueError("Expected the tokens of a whole-model student (features() output).")
+            digital = self.digital
+            hidden = digital.embed(hidden.tokens)
+            for i in range(self.start):
+                hidden = digital.layers[i](hidden)
         for k, i in enumerate(range(self.start, len(self.teacher.layers))):
-            hidden = self.teacher.layers[i].attention(hidden)
+            hidden = digital.layers[i].attention(hidden)
             y = self._matrix(self.mlp_norms[k](hidden), 2 * k, q)
             hidden = hidden + self._matrix(F.relu(y), 2 * k + 1, q)
-        return self.teacher.logits(hidden[:, :-1])
+        return digital.logits(hidden[:, :-1])
 
     def forward(self, tokens, q=None):
         return self.forward_features(self.features(tokens), q)
@@ -349,9 +401,14 @@ def load_teacher(path, network, device):
     return teacher, digest
 
 
-def build_network(teacher, lifecycle) -> OptMlpSuffix:
+def build_network(teacher, lifecycle, hwa_arm=None) -> OptMlpSuffix:
+    """The crossbar student; a whole-model HWA arm's stages also get a digital copy."""
+
     deployment = lifecycle.deployment
-    return OptMlpSuffix(teacher, lifecycle.network.analog_decoder_layers, deployment.tile_size, deployment.scaling)
+    scope = "analog" if hwa_arm is None else lifecycle.hwa.arm(hwa_arm).scope
+    return OptMlpSuffix(
+        teacher, lifecycle.network.analog_decoder_layers, deployment.tile_size, deployment.scaling, scope
+    )
 
 
 # --- token corpus and cohorts ---------------------------------------------------
@@ -365,6 +422,8 @@ def corpus_path(data) -> Path:
 
 
 def load_corpus(data, model: str) -> tuple[dict, Path]:
+    """The pinned corpus of ``data`` (the lifecycle data or one transfer test)."""
+
     path = corpus_path(data)
     digest = sha256_file(path)
     if digest != data.corpus_sha256:
@@ -431,7 +490,29 @@ def build_cache(teacher, network, lifecycle, device) -> dict:
     cache["development"] = first(blocks("validation"), "validation", data.cohort_size("development"))
     if data.evaluation == "test":
         cache["test"] = first(blocks("test"), "test", data.cohort_size("test"))
+    for test in transfer_tests(lifecycle):
+        other, other_path = load_corpus(test, lifecycle.network.model)
+        stream = other["splits"][test.split]
+        if int(stream.min()) < 0 or int(stream.max()) >= vocabulary:
+            raise ValueError(f"Expected transfer test {test.label!r} token ids inside the vocabulary.")
+        count = min(test.sequences, data.max_examples) if data.max_examples else test.sequences
+        available = len(stream) // length
+        if count > available:
+            raise ValueError(
+                f"Expected at least {count} {test.label} sequences of {length} tokens. Provided value: {available}."
+            )
+        cohort = _cohort(stream[: count * length].reshape(count, length), test.split, range(count))
+        cohort["cohort"]["corpus"] = {"name": test.corpus, "sha256": test.corpus_sha256, "path": str(other_path)}
+        cache[transfer_split(test)] = cohort
     return cache
+
+
+def transfer_tests(lifecycle) -> tuple:
+    return () if lifecycle.transfer_tests is None else lifecycle.transfer_tests.tests
+
+
+def transfer_split(test) -> str:
+    return test.cache_key
 
 
 def check_cache(cache: dict, lifecycle) -> None:
@@ -441,20 +522,33 @@ def check_cache(cache: dict, lifecycle) -> None:
         expected = (data.cohort_size(name), data.sequence_length)
         if name not in cache or tuple(cache[name]["tokens"].shape) != expected:
             raise ValueError(f"Expected the {name} cohort to contain {expected[0]} sequences of {expected[1]} tokens.")
+    for test in transfer_tests(lifecycle):
+        name = transfer_split(test)
+        count = min(test.sequences, data.max_examples) if data.max_examples else test.sequences
+        if name not in cache or tuple(cache[name]["tokens"].shape) != (count, data.sequence_length):
+            raise ValueError(
+                f"Expected the {name} cohort to contain {count} sequences of {data.sequence_length} tokens."
+            )
+        if cache[name]["cohort"]["corpus"]["sha256"] != test.corpus_sha256:
+            raise ValueError(f"Expected the {name} cohort to come from its declared corpus.")
     if cache["corpus"]["sha256"] != data.corpus_sha256:
         raise ValueError("Expected the cache to come from the lifecycle corpus.")
 
 
+def _splits(cache: dict) -> tuple:
+    return SPLITS + tuple(sorted(name for name in cache if name.startswith("transfer_")))
+
+
 def to_device(cache: dict, device) -> dict:
     moved = dict(cache)
-    for name in SPLITS:
+    for name in _splits(cache):
         if name in cache:
             moved[name] = {**cache[name], "tokens": cache[name]["tokens"].to(device)}
     return moved
 
 
 def cohorts(cache: dict) -> dict:
-    return {name: cache[name]["cohort"] for name in SPLITS if name in cache}
+    return {name: cache[name]["cohort"] for name in _splits(cache) if name in cache}
 
 
 # --- batches, objective and metrics ---------------------------------------------

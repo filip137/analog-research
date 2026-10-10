@@ -66,7 +66,7 @@ class Stage:
         self.teacher, teacher_sha256 = deployment.load_teacher(
             request.teacher_weights, self.lifecycle.network, device
         )
-        self.network = deployment.build_network(self.teacher, self.lifecycle)
+        self.network = deployment.build_network(self.teacher, self.lifecycle, self.selection.hwa_arm)
         self.mapping = deployment.mapping_receipt(self.network, self.lifecycle)
         self.context = {
             "teacher_sha256": teacher_sha256,
@@ -194,6 +194,8 @@ def deploy(stage: Stage):
     clean = {"development": evaluate(network, cache["development"], device)}
     if split == "test":
         clean["test"] = evaluate(network, cache["test"], device)
+    for name in data_stage.transfer_splits(lifecycle):
+        clean[name] = evaluate(network, cache[name], device)
     cases, summary = {}, {}
     for case in lifecycle.defects.cases:
         array = program_verify.fresh(lifecycle, network.layout, seed, case, bundle["populations"], device)

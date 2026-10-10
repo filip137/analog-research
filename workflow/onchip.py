@@ -29,6 +29,7 @@ import torch
 
 from experiments.cifar_crossbar.devices import clone_cpu
 from experiments.cifar_crossbar.model import tensor_hash
+from workflow import data as data_stage
 from workflow import devices as device_stage
 from workflow.networks import family
 
@@ -212,6 +213,8 @@ def evaluations(network, array, cache, lifecycle, device) -> dict:
     values = {"development": evaluate(network, cache["development"], device, q=q)}
     if split == "test":
         values["test"] = evaluate(network, cache["test"], device, q=q)
+    for name in data_stage.transfer_splits(lifecycle):
+        values[name] = evaluate(network, cache[name], device, q=q)
     persistent = device_stage.persistent_state(array, lifecycle.devices.technology)
     if persistent is not None:
         values[f"persistent_{split}"] = evaluate(network, cache[split], device, q=persistent)

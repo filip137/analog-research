@@ -32,10 +32,14 @@ def load_teacher(path, network, device):
     return FAMILIES[network.family].load_teacher(path, network, device)
 
 
-def build_network(teacher, lifecycle):
-    """Map the teacher's analog matrices onto normalized crossbar targets."""
+def build_network(teacher, lifecycle, hwa_arm=None):
+    """Map the teacher's analog matrices onto normalized crossbar targets.
 
-    network = family(lifecycle.network).build_network(teacher, lifecycle)
+    ``hwa_arm`` names the source a stage trains, deploys or recovers; its scope
+    decides whether the student carries its own digital parameters.
+    """
+
+    network = family(lifecycle.network).build_network(teacher, lifecycle, hwa_arm)
     network.read_noise = lifecycle.deployment.read_noise
     return network
 

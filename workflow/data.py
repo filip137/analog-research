@@ -15,6 +15,13 @@ def evaluation_split(lifecycle) -> str:
     return lifecycle.data.evaluation
 
 
+def transfer_splits(lifecycle) -> list[str]:
+    """Cache keys of the lifecycle's transfer test cohorts, scored with every evaluation."""
+
+    tests = () if lifecycle.transfer_tests is None else lifecycle.transfer_tests.tests
+    return [test.cache_key for test in tests]
+
+
 def build_cache(teacher, network, lifecycle, device) -> dict:
     """Materialize every cohort a lifecycle reads, truncated for smoke runs."""
 

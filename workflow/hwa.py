@@ -17,6 +17,12 @@ persistent-device trajectory:
   and the reference device of every pair, after the weight noise). They never
   become a deployed fault map.
 
+``scope: model`` (OPT only) also trains every digital parameter of the
+student's own copy of the network -- embeddings, attention, LayerNorms and the
+tied head -- with Adam at the arm's ``digital_learning_rate`` under the same
+schedule, as both reference papers fine-tune the whole model. Only the analog
+weights see noise and corruption; the frozen teacher stays the KL target.
+
 An epoch is one pass over the HWA cohort unless ``hwa.sequences_per_epoch``
 streams it: each epoch then takes the next sequences of seeded passes over a
 large cohort (``stream_order``), keeping the selection cadence per step budget.
@@ -36,6 +42,7 @@ import torch
 
 from experiments.cifar_crossbar.devices import clone_cpu
 from experiments.cifar_crossbar.hwa_fault_runtime import sampled_weights
+from experiments.cifar_crossbar.model import state_hash
 from experiments.cifar_crossbar.sweep_devices import MixedOmSampler
 from training import reram_cmo
 from workflow import program_verify
@@ -147,8 +154,12 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
     populations = device_bundle.get("populations")
     network.enable_calibration(True)
     network.q.requires_grad_(True)
-    parameters = [network.q] + network.calibration_parameters()
-    optimizer = torch.optim.Adam(parameters, lr=hwa.learning_rate)
+    # Each group keeps its base rate; the shared schedule scales both.
+    groups = [(hwa.learning_rate, [network.q] + network.calibration_parameters())]
+    if arm.scope == "model":
+        network.enable_digital(True)
+        groups.append((arm.digital_learning_rate, network.digital_parameters()))
+    optimizer = torch.optim.Adam([{"params": params, "lr": lr, "base_lr": lr} for lr, params in groups])
     sample = endpoint_sampler(lifecycle, arm, device_bundle, device, layout=network.layout)
     rate_generator = torch.Generator().manual_seed(hwa.seed + 20000)
     rates = arm.corruption.rates_ppm if arm.corruption else ()
@@ -163,7 +174,7 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
     while epoch <= limit:
         if epoch:
             for group in optimizer.param_groups:
-                group["lr"] = hwa.learning_rate * hwa.lr_factor(epoch)
+                group["lr"] = group["base_lr"] * hwa.lr_factor(epoch)
             data_rng = torch.Generator(device=device).manual_seed(data.data_seed + epoch)
             if streamed:
                 order = stream_order(examples, per_epoch, epoch, data.data_seed, device)
@@ -221,6 +232,8 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
             limit += hwa.extension_epochs
             store.append_metric({"stage": "hwa", "arm": arm.arm_id, "extended_to_epoch": limit})
         epoch += 1
+    if arm.scope == "model":
+        network.enable_digital(False)
     if network.prefix_hash() != prefix:
         raise RuntimeError("HWA changed the frozen digital prefix.")
     if best is None:
@@ -241,6 +254,14 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
         "history": history,
         "selection": "minimum mean development teacher KL over selection cases and selection arrays",
     }
+    if arm.scope == "model":
+        digital = {k: v for k, v in best["model"].items() if k.startswith("digital.")}
+        fit["scope"] = {
+            "scope": "model",
+            "digital_learning_rate": arm.digital_learning_rate,
+            "digital_parameters": sum(v.numel() for v in digital.values()),
+            "digital_sha256": state_hash(digital),
+        }
     if streamed:
         fit["stream"] = {
             "sequences_per_epoch": per_epoch,

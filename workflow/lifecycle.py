@@ -542,6 +542,66 @@ def _text_data(raw: Any, network: OptNetwork) -> TextData:
 
 
 @dataclass(frozen=True)
+class TransferTest:
+    """A second test cohort from another pinned corpus, scored at every evaluation.
+
+    It only adds measurements: feature caches and deployments depend on it,
+    HWA sources do not, so a source trained without it can be reused.
+    """
+
+    label: str
+    corpus: str
+    corpus_sha256: str
+    split: str
+    sequences: int
+
+    @property
+    def cache_key(self) -> str:
+        """Cache and metric key of the cohort."""
+
+        return f"transfer_{self.label}"
+
+    def to_dict(self) -> dict:
+        return {
+            "label": self.label,
+            "corpus": {"name": self.corpus, "sha256": self.corpus_sha256},
+            "split": self.split,
+            "sequences": self.sequences,
+        }
+
+
+@dataclass(frozen=True)
+class TransferTests:
+    tests: tuple[TransferTest, ...]
+
+    def to_dict(self) -> list:
+        return [test.to_dict() for test in self.tests]
+
+
+def _transfer_tests(raw: Any) -> TransferTests:
+    tests = []
+    for i, item in enumerate(_list(raw, "transfer_tests")):
+        path = f"transfer_tests[{i}]"
+        item = _object(item, path, ("label", "corpus", "split", "sequences"))
+        corpus = _object(item["corpus"], f"{path}.corpus", ("name", "sha256"))
+        if not isinstance(corpus["sha256"], str) or not _SHA256.match(corpus["sha256"]):
+            raise config_error(f"{path}.corpus.sha256", "to be a lowercase SHA-256 digest", corpus["sha256"])
+        tests.append(
+            TransferTest(
+                label=_identifier(item["label"], f"{path}.label"),
+                corpus=_identifier(corpus["name"], f"{path}.corpus.name", _LIFECYCLE_ID),
+                corpus_sha256=corpus["sha256"],
+                # Never a train split: transfer cohorts are evaluation-only tokens.
+                split=_choice(item["split"], f"{path}.split", ("validation", "test")),
+                sequences=_integer(item["sequences"], f"{path}.sequences", minimum=1),
+            )
+        )
+    if len({test.label for test in tests}) != len(tests):
+        raise config_error("transfer_tests", "to have unique labels", [test.label for test in tests])
+    return TransferTests(tuple(tests))
+
+
+@dataclass(frozen=True)
 class Characterization:
     """Independent OM populations that measure the P&V endpoint law for HWA."""
 
@@ -782,6 +842,13 @@ class Corruption:
         return {"kind": self.kind, "rates_ppm": list(self.rates_ppm)}
 
 
+# What an HWA arm trains: ``analog`` the analog weights and their calibration
+# parameters (the frozen teacher supplies every other digital parameter);
+# ``model`` also every digital parameter, as in Rasch et al. 2023 and Büchel et
+# al. 2025 (OPT family only).
+HWA_SCOPES = ("analog", "model")
+
+
 @dataclass(frozen=True)
 class HwaArm:
     arm_id: str
@@ -789,6 +856,9 @@ class HwaArm:
     noise_strength: Optional[float] = None
     corruption: Optional[Corruption] = None
     selection_cases: tuple[DefectCase, ...] = ()
+    scope: str = "analog"
+    # Adam learning rate of the digital parameters of a ``model``-scope arm.
+    digital_learning_rate: Optional[float] = None
 
     @property
     def trains(self) -> bool:
@@ -797,12 +867,19 @@ class HwaArm:
     def to_dict(self) -> dict:
         if not self.trains:
             return {"id": self.arm_id, "method": self.method}
+        # The default analog scope is omitted, so existing arm digests are unchanged.
+        scope = (
+            {}
+            if self.scope == "analog"
+            else {"scope": self.scope, "digital_learning_rate": self.digital_learning_rate}
+        )
         return {
             "id": self.arm_id,
             "method": self.method,
             "noise_strength": self.noise_strength,
             "corruption": None if self.corruption is None else self.corruption.to_dict(),
             "selection_cases": [case.to_dict() for case in self.selection_cases],
+            **scope,
         }
 
 
@@ -813,7 +890,16 @@ def _hwa_arm(raw: Any, path: str, technology: Technology) -> HwaArm:
     if method == "none":
         raw = _object(raw, path, ("id", "method"))
         return HwaArm(_identifier(raw["id"], f"{path}.id"), method)
-    raw = _object(raw, path, ("id", "method", "noise_strength", "corruption", "selection_cases"))
+    keys = ("id", "method", "noise_strength", "corruption", "selection_cases")
+    if "scope" in raw:
+        keys += ("scope", "digital_learning_rate")
+    raw = _object(raw, path, keys)
+    scope = _choice(raw.get("scope", "analog"), f"{path}.scope", HWA_SCOPES)
+    digital_learning_rate = raw.get("digital_learning_rate")
+    if scope == "model":
+        digital_learning_rate = _number(digital_learning_rate, f"{path}.digital_learning_rate", positive=True)
+    elif digital_learning_rate is not None:
+        raise config_error(f"{path}.digital_learning_rate", "to be null for an analog-scope arm", digital_learning_rate)
     corruption = None
     if raw["corruption"] is not None:
         if not technology.corruption_aware_hwa:
@@ -841,6 +927,8 @@ def _hwa_arm(raw: Any, path: str, technology: Technology) -> HwaArm:
             technology.failure_kinds,
             technology.defect_placement == HIERARCHICAL,
         ),
+        scope=scope,
+        digital_learning_rate=digital_learning_rate,
     )
 
 
@@ -1165,15 +1253,18 @@ SECTIONS = (
     "program_verify",
     "onchip",
 )
+# Optional sections are omitted from the document and from every provenance
+# record when absent, so lifecycles without them keep their digests.
+OPTIONAL_SECTIONS = ("transfer_tests",)
 LIFECYCLE_KEYS = ("schema", "schema_version", "lifecycle_id") + SECTIONS
 
 # Upstream artifacts are reusable exactly when the sections they depend on are
 # unchanged; the question text, unrelated arms and later stages may change.
 ARTIFACT_SECTIONS = {
-    "feature_cache": ("network", "data"),
+    "feature_cache": ("network", "data", "transfer_tests"),
     "device_bundle": ("network", "devices", "program_verify"),
     "hwa_source": ("network", "data", "devices", "deployment", "program_verify"),
-    "deployment": ("network", "data", "devices", "defects", "deployment", "program_verify"),
+    "deployment": ("network", "data", "devices", "defects", "deployment", "program_verify", "transfer_tests"),
 }
 
 
@@ -1190,6 +1281,10 @@ class Lifecycle:
     program_verify: ProgramVerify
     # None: a deployment-only loop with no on-chip stage.
     onchip: Optional[Onchip]
+    transfer_tests: Optional[TransferTests] = None
+
+    def present_sections(self) -> tuple[str, ...]:
+        return SECTIONS + tuple(name for name in OPTIONAL_SECTIONS if getattr(self, name) is not None)
 
     @property
     def technology(self) -> Technology:
@@ -1200,14 +1295,14 @@ class Lifecycle:
             "schema": SCHEMA,
             "schema_version": SCHEMA_VERSION,
             "lifecycle_id": self.lifecycle_id,
-            **{name: self._section(name) for name in SECTIONS},
+            **{name: self._section(name) for name in self.present_sections()},
         }
 
     def digest(self) -> str:
         return content_hash(self.to_dict())
 
     def section_digest(self, name: str) -> str:
-        if name not in SECTIONS:
+        if name not in SECTIONS + OPTIONAL_SECTIONS:
             raise ValueError(f"Expected a lifecycle section. Provided value: {name!r}.")
         return content_hash(self._section(name))
 
@@ -1238,6 +1333,15 @@ def _cross_validate(lifecycle: Lifecycle) -> None:
         )
     if family == OPT_FAMILY and lifecycle.hwa.augment:
         raise config_error("hwa.augment", f"to be false; {family} defines no augmentation", True)
+    model_scope = [arm.arm_id for arm in lifecycle.hwa.arms if arm.scope == "model"]
+    if model_scope and family != OPT_FAMILY:
+        raise config_error("hwa.arms.scope", f"to be analog; {family} defines no whole-model HWA", model_scope)
+    if lifecycle.transfer_tests is not None and family != OPT_FAMILY:
+        raise config_error("transfer_tests", f"to be absent; {family} defines no transfer cohorts", "present")
+    if lifecycle.transfer_tests is not None and any(
+        t.corpus_sha256 == data.corpus_sha256 and t.split == "validation" for t in lifecycle.transfer_tests.tests
+    ):
+        raise config_error("transfer_tests", "not to reuse the lifecycle's own validation split", "validation")
     streamed = lifecycle.hwa.sequences_per_epoch
     if streamed is not None and family != OPT_FAMILY:
         raise config_error("hwa.sequences_per_epoch", f"to be absent; {family} streams no cohort", streamed)
@@ -1284,7 +1388,10 @@ def _cross_validate(lifecycle: Lifecycle) -> None:
 def parse_lifecycle(payload: Any) -> Lifecycle:
     """Parse one lifecycle document strictly."""
 
-    raw = _object(payload, "lifecycle", LIFECYCLE_KEYS)
+    keys = LIFECYCLE_KEYS + tuple(
+        name for name in OPTIONAL_SECTIONS if isinstance(payload, Mapping) and name in payload
+    )
+    raw = _object(payload, "lifecycle", keys)
     if raw["schema"] != SCHEMA or type(raw["schema_version"]) is not int or raw["schema_version"] != SCHEMA_VERSION:
         raise config_error(
             "lifecycle schema", f"to be {SCHEMA!r} version {SCHEMA_VERSION}", [raw["schema"], raw["schema_version"]]
@@ -1303,6 +1410,7 @@ def parse_lifecycle(payload: Any) -> Lifecycle:
         hwa=_hwa(raw["hwa"], technology),
         program_verify=_program_verify(raw["program_verify"], technology),
         onchip=None if raw["onchip"] is None else _onchip(raw["onchip"], technology),
+        transfer_tests=_transfer_tests(raw["transfer_tests"]) if "transfer_tests" in raw else None,
     )
     _cross_validate(lifecycle)
     return lifecycle
@@ -1486,7 +1594,11 @@ def provenance(lifecycle: Lifecycle, kind: str, *, hwa_arm: Optional[str] = None
         "kind": kind,
         "lifecycle_id": lifecycle.lifecycle_id,
         "lifecycle_sha256": lifecycle.digest(),
-        "sections": {name: lifecycle.section_digest(name) for name in ARTIFACT_SECTIONS[kind]},
+        "sections": {
+            name: lifecycle.section_digest(name)
+            for name in ARTIFACT_SECTIONS[kind]
+            if name in lifecycle.present_sections()
+        },
     }
     if kind in ("hwa_source", "deployment"):
         if hwa_arm is None:

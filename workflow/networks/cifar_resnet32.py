@@ -56,7 +56,8 @@ def load_teacher(path, network, device):
     return teacher, digest
 
 
-def build_network(teacher, lifecycle) -> CrossbarSuffix:
+def build_network(teacher, lifecycle, hwa_arm=None) -> CrossbarSuffix:
+    # Every CIFAR arm trains the analog suffix only (whole-model scope is OPT-only).
     return CrossbarSuffix(teacher, lifecycle.network.suffix, lifecycle.deployment.tile_size)
 
 
