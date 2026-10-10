@@ -4,7 +4,7 @@
 
 Sources: campaign experiment metadata and reviewer-written result notes. No raw evidence or live job state is inferred.
 
-Counts: complete=4, running=1.
+Counts: complete=4, partial=1.
 
 ## Experiments
 
@@ -14,7 +14,7 @@ Counts: complete=4, running=1.
 | [exp-002 — Experiment 1b: L6 HWA sources distilled on 50 M teacher-generated tokens, with stronger noise and an overestimated fault rate](series/001-hwa-robustness/experiments/exp-002-hwa-synthetic-data.md) | complete | None declared | [validated-local](series/001-hwa-robustness/results/exp-002.md): L6 HWA on 50 M teacher-generated tokens: much worse WikiText-2 test fidelity than WikiText-trained HWA (2-2.5x KL at 0 %); HWA still essential at 1-5 %; corruption-aware crossover moves to 4 %; 6 % noise and 5 % training corruption are not material improvements |
 | [exp-003 — Experiment 1c: overnight extensions of Experiment 1b (9 % noise, mixed-rate corruption, LR decay, L3, training seed)](series/001-hwa-robustness/experiments/exp-003-hwa-overnight-extensions.md) | complete | None declared | [validated-local](series/001-hwa-robustness/results/exp-003.md): Generated-text HWA, scored out of domain on WikiText-2: LR decay is the largest single improvement (11-27 %); with or without decay, 9 % Gaussian noise is in the best set at every rate 1-5 %, while mixed-rate or noise-plus-mask corruption training adds nothing material; training-run variance <= 6 %; L3 agrees |
 | [exp-004 — Experiment 1d: cross-domain evaluation of WikiText-trained and generated-text-trained L6 HWA sources](series/001-hwa-robustness/experiments/exp-004-cross-domain-evaluation.md) | complete | None declared | [validated-local](series/001-hwa-robustness/results/exp-004.md): Training corpus x test domain (L6): pure domain specialization - each corpus wins on its own test domain at every rate (34-150 % lower KL); corruption-aware HWA's high-rate advantage holds in-domain (from 3 %) but largely vanishes out of domain |
-| [exp-005 — Experiment 1e: develop whole-model HWA, then compare matched scopes](series/001-hwa-robustness/experiments/exp-005-whole-model-hwa.md) | running | None declared | [validated-local](series/001-hwa-robustness/results/exp-005.md): Focused LR/schedule development: readiness evidence validated; six full candidates released after validated readiness |
+| [exp-005 — Experiment 1e: develop whole-model HWA, then compare matched scopes](series/001-hwa-robustness/experiments/exp-005-whole-model-hwa.md) | partial | None declared | [validated-local](series/001-hwa-robustness/results/exp-005.md): All eight LR/schedule candidates validated; 5e-3 step wins mean KL at 0.42995, with worse healthy performance and an unresolved upper boundary |
 
 ## Hypothesis evidence
 

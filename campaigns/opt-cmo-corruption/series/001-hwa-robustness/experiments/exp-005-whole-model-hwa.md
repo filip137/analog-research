@@ -1,7 +1,7 @@
 ---
 id: "exp-005"
 title: "Experiment 1e: develop whole-model HWA, then compare matched scopes"
-status: "running"
+status: "partial"
 hypotheses: []
 ---
 # exp-005: whole-transformer HWA
@@ -23,6 +23,13 @@ that we dont finish on the upper bound of good performance". This authorizes two
 additional candidates, one per existing schedule. The expansion is an adaptive
 development decision made after partial results, not part of the initial grid.
 Both readiness smokes passed and the calibrated handoff gate remains open.
+
+As of 2026-10-10 15:37 Paris, all eight development candidates are complete,
+validated and collected. The declared rule recommends 5e-3 step, but the LR
+optimum remains unbracketed and healthy performance degrades as fault robustness
+improves. The result note contains the complete review. This experiment is
+labelled partial because its broader scope/recipe comparison remains unsubmitted;
+no campaign worker or GPU reservation remains active.
 
 ## Frozen focused comparison
 
@@ -425,3 +432,22 @@ matching waiver and exact single attempt per added case. The receipt is
 `readiness/lr5em3/live-handoff.json`. The expanded review reports four of eight
 completed candidates and no recommendation. Expected completion for the new
 5090 pair is 15:00–15:10 Paris, subject to measured throughput and validation.
+
+### Terminal development handoff, 2026-10-10 15:37 Paris
+
+All eight scientific cases have one completed, validated and collected attempt,
+with 12,800 updates each. Last collection finished at 15:03 Paris. The local
+3090 and nom-cool-1 cases completed collection at 14:25 and 14:37 respectively.
+The two 5e-3 cases completed at 15:03 (fifi linear) and 15:02 (loulou step).
+The native collection index and eight-case summary are complete; the selected
+development winner is `opt125m-cmo-l6-exp1e-dev-step-lr5em3` with KL 0.4299463.
+The upper-boundary and late-checkpoint review flags remain unresolved; this is
+not an automatic authorization for higher LR, more updates or the broader grid.
+
+Remaining compute allowance is 5.9731 GPU-hours, with zero active reservations;
+charged time is 10.0269 GPU-hours including readiness and its failed pre-start
+attempt. Observed incremental storage is 30.228 GB against 32 GB. All campaign
+GPUs are released. The persistent shared watchdog remains healthy, with a fresh
+15:36 heartbeat, no host errors and no new incidents. Preserve its other jobs.
+The scientific next decision and limits are in the result note; no further
+scientific cases are queued.
