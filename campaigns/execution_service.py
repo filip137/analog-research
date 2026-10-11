@@ -286,7 +286,7 @@ class CampaignLedger:
         amendment = json.loads(canonical(raw))
         allowed = {"version", "id", "manifest_sha256", "authorization", "reason", "evidence",
                    "template_case_id", "scientific_inputs", "cases", "storage_roots", "target_progress_calibration",
-                   "storage_estimates", "relocations"}
+                   "storage_estimates", "relocations", "prepared_placements"}
         if set(amendment) - allowed or amendment.get("version") != 1:
             raise ValueError("unsupported operational amendment fields/version")
         for key in ("id", "authorization", "reason"):
@@ -309,7 +309,8 @@ class CampaignLedger:
             calibration = amendment.get("target_progress_calibration", {})
             storage_estimates = amendment.get("storage_estimates", [])
             relocations = amendment.get("relocations", [])
-            if not additions and not roots and not calibration and not storage_estimates and not relocations:
+            prepared_placements = amendment.get("prepared_placements", [])
+            if not additions and not roots and not calibration and not storage_estimates and not relocations and not prepared_placements:
                 raise ValueError("operational amendment has no additions")
             if not isinstance(relocations, list):
                 raise ValueError("relocations must be a list")
@@ -346,6 +347,49 @@ class CampaignLedger:
                     (move["to_canonical_host"], placements[source]["run_dir"])).fetchone()
                 if destination and destination["job_id"] != jid:
                     raise ValueError("relocation destination belongs to another job")
+                relocated[jid] = (job, revised, move)
+            # Add an independently staged recovery host without replacing a
+            # job ID, its budget, gates or any existing artifact ownership.
+            if not isinstance(prepared_placements, list):
+                raise ValueError("prepared_placements must be a list")
+            for addition in prepared_placements:
+                if set(addition) != {"job_id", "to_target", "to_canonical_host", "prepared_receipt"}:
+                    raise ValueError("prepared placement requires target and pinned preparation receipt")
+                jid, target = addition["job_id"], addition["to_target"]
+                case, job = self.case(jid), self.store.job(jid)
+                if (jid in relocated or not case or case["campaign_id"] != campaign_id or not job
+                        or job["state"] != "held" or job["used_seconds"]
+                        or any(a["job_id"] == jid for a in self.store.attempts())
+                        or target in job["spec"]["placements"]):
+                    raise ValueError("new placement requires a held, never-started campaign job and a new host")
+                proof = addition["prepared_receipt"]
+                if set(proof) != {"path", "sha256"} or not Path(proof["path"]).is_absolute():
+                    raise ValueError("prepared placement requires an absolute pinned receipt")
+                data = Path(proof["path"]).read_bytes()
+                if hashlib.sha256(data).hexdigest() != proof["sha256"]:
+                    raise ValueError("prepared placement receipt changed")
+                prepared = json.loads(data)
+                matches = [c for c in prepared.get("cases", []) if c["id"] == jid]
+                if prepared.get("host") != target or len(matches) != 1 or matches[0].get("dry_run_passed") is not True:
+                    raise ValueError("new host lacks an exact successful preparation")
+                placement = matches[0]["placement"]
+                def science(p):
+                    inputs = p.get("recovery_input_contract", {})
+                    artifacts = inputs.get("artifacts", {})
+                    hashes = {f["sha256"] for f in p.get("prepared_files", [])
+                              if "campaigns" in Path(f["path"]).parts and "lifecycles" in Path(f["path"]).parts}
+                    if set(artifacts) != {"teacher_weights", "device_data", "device_model", "device_state"} or len(hashes) != 1:
+                        raise ValueError("additional recovery placement needs pinned lifecycle and all four inputs")
+                    return hashes, {k: v["sha256"] for k, v in artifacts.items()}, {k:v for k,v in inputs.items() if k != "artifacts"}
+                if any(science(p) != science(placement) for p in job["spec"]["placements"].values()):
+                    raise ValueError("new placement changed scientific inputs or held deployment")
+                revised = json.loads(canonical(job["spec"]))
+                revised["placements"][target] = placement
+                destination = self.db.execute("SELECT job_id FROM destinations WHERE host=? AND path=?",
+                    (addition["to_canonical_host"], placement["run_dir"])).fetchone()
+                if destination and destination["job_id"] != jid:
+                    raise ValueError("new placement destination belongs to another job")
+                move = {**addition, "from_target": "additional_prepared_host"}
                 relocated[jid] = (job, revised, move)
             if not isinstance(storage_estimates, list):
                 raise ValueError("storage_estimates must be a list of measured case estimates")
@@ -1440,7 +1484,7 @@ def main(argv=None):
         print(scheduler.campaigns.register(json.loads(args.manifest.read_text()))); return
     if args.command == "amend":
         amendment = json.loads(args.amendment.read_text())
-        for move in amendment.get("relocations", []):
+        for move in amendment.get("relocations", []) + amendment.get("prepared_placements", []):
             target = cfg["targets"].get(move["to_target"])
             if not target or not target["enabled"] or move["to_canonical_host"] != target["canonical_host"]:
                 raise ValueError("relocation target is not enabled in the shared queue")

@@ -82,9 +82,12 @@ def input_contract(base, reused):
 
 
 def prepare_host(host,base,reused):
-    if host not in ('local','nom-cool-1'): raise ValueError('Unauthorized LoRA host')
+    if host not in ('local','nom-cool-1','loulou'): raise ValueError('Unauthorized LoRA host')
     if command(['git','status','--porcelain'],cwd=ROOT).strip(): raise ValueError('Expected clean frozen worker')
     revision=command(['git','rev-parse','HEAD'],cwd=ROOT).strip(); python=sys.executable
+    # Storage must be measurable before the dispatcher admits the first job.
+    # Per-job output directories remain absent until the queue creates them.
+    (base/'worker-receipts'/revision).mkdir(parents=True,exist_ok=True)
     inputs=input_contract(base,reused); inputs_path=ROOT/'results/recovery-inputs.json'; write_frozen(inputs_path,inputs)
     env={'EBL_CORPUS_ROOT':str(base/'inputs/corpora'),'EBL_CAMPAIGN_STREAM':'1','PYTHONUNBUFFERED':'1','OMP_NUM_THREADS':'1'}
     cases=[]
@@ -109,7 +112,7 @@ def prepare_host(host,base,reused):
         files=[cfg,manifest,worker,Path(stage['config']),inputs_path]
         cases.append({'id':lc.lifecycle_id,'label':label,'lifecycle_sha256':lc.digest(),'dry_run_passed':True,
             'budget_seconds':budget,'expected_seconds':expected,'placement':{'workdir':str(ROOT),'run_dir':str(receipt_root),
-            'gpu_models':['3090'],'argv':[python,'-m','campaigns.tmux_worker','bridge','--spec',str(worker)],
+            'gpu_models':['5090' if host=='loulou' else '3090'],'argv':[python,'-m','campaigns.tmux_worker','bridge','--spec',str(worker)],
             'validate_argv':[python,'-m','campaigns.recovery_collect','validate',str(native_root),'--inputs',str(inputs_path)],
             'campaign_python':python,'campaign_worker_spec':str(worker),'campaign_result_root':str(native_root),
             'recovery_inputs':str(inputs_path),'recovery_input_contract':inputs,

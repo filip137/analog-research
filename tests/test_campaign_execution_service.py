@@ -1052,3 +1052,57 @@ def test_long_case_waits_for_both_predecessors_and_retains_mandatory_gates(setup
     assert not scheduler.store.attempts()
     scheduler.campaigns.gate("study", "mandatory-numerical", {"manifest_sha256": receipt["manifest_sha256"], "passed": False, "evidence": ["nonfinite validation"]})
     assert "mandatory" in scheduler.campaigns.eligible(job)[1]
+
+
+def prepared_recovery_placement(setup, tmp_path):
+    scheduler, _, job, manifest = setup
+    value = job()
+    placement = value['spec']['placements']['lab']
+    placement['recovery_input_contract'] = {'artifacts': {role: {'path':str(tmp_path/role),'sha256':'1'*64}
+        for role in ('teacher_weights','device_data','device_model','device_state')},
+        'array_seed':271001,'apparent_sha256':{'faulty':'2'*64}}
+    placement['prepared_files'] = [{'path':str(tmp_path/'campaigns/c/lifecycles/frozen.json'),'sha256':'3'*64}]
+    value['spec']['placements']['second'] = json.loads(json.dumps(placement))
+    scheduler.store.db.execute('UPDATE jobs SET spec=? WHERE id=?',(json.dumps(value['spec']),'one'))
+    sha = scheduler.campaigns.register(manifest())
+    staged = json.loads(json.dumps(placement)); staged['workdir']=str(tmp_path/'new-host')
+    staged['argv']=['python','-m','campaigns.tmux_worker','bridge','--spec',str(tmp_path/'new-host/worker.json')]
+    staged['run_dir']=str(tmp_path/'new-host/receipts')
+    staged['recovery_input_contract']['artifacts']['device_state']['path']=str(tmp_path/'new-host/p0.pt')
+    proof=tmp_path/'new-prepared.json'
+    proof.write_text(json.dumps({'host':'spare','cases':[{'id':'one','dry_run_passed':True,'placement':staged}]}))
+    return {'version':1,'id':'add-spare','manifest_sha256':sha,'authorization':'same approved GPU scope',
+        'reason':'original hosts occupied','evidence':[str(proof)],'prepared_placements':[
+        {'job_id':'one','to_target':'spare','to_canonical_host':'spare',
+         'prepared_receipt':{'path':str(proof),'sha256':hashlib.sha256(proof.read_bytes()).hexdigest()}}]}
+
+
+def test_add_prepared_recovery_host_preserves_job_identity_and_budget(setup,tmp_path):
+    amendment=prepared_recovery_placement(setup,tmp_path); scheduler=setup[0]
+    before=scheduler.store.job('one')
+    sha=scheduler.campaigns.amend('study',amendment)
+    assert scheduler.campaigns.amend('study',amendment)==sha
+    after=scheduler.store.job('one')
+    assert set(after['spec']['placements'])=={'lab','second','spare'}
+    assert after['used_seconds']==0 and after['state']=='held'
+    assert {k:v for k,v in before['spec'].items() if k!='placements'}=={k:v for k,v in after['spec'].items() if k!='placements'}
+    assert after['spec']['placements']['lab']==before['spec']['placements']['lab']
+
+
+@pytest.mark.parametrize('failure',['input','lifecycle','receipt','runnable','history'])
+def test_add_prepared_recovery_host_rejects_scientific_drift_or_started_jobs(setup,tmp_path,failure):
+    amendment=prepared_recovery_placement(setup,tmp_path); scheduler=setup[0]
+    proof=tmp_path/'new-prepared.json'; value=json.loads(proof.read_text())
+    if failure in ('input','lifecycle'):
+        p=value['cases'][0]['placement']
+        if failure=='input':p['recovery_input_contract']['artifacts']['device_state']['sha256']='4'*64
+        else:p['prepared_files'][0]['sha256']='4'*64
+        proof.write_text(json.dumps(value))
+        amendment['prepared_placements'][0]['prepared_receipt']['sha256']=hashlib.sha256(proof.read_bytes()).hexdigest()
+    elif failure=='receipt':proof.write_text('{}')
+    elif failure=='runnable':scheduler.store.update_job('one','queued')
+    else:
+        scheduler.store.db.execute('INSERT INTO attempts(token,job_id,target,gpu_uuid,gpu_name,state,issued,launch_before,progress_at) VALUES(?,?,?,?,?,?,?,?,?)',
+            ('old','one','lab','gpu','3090','failed',900,945,900))
+    with pytest.raises(ValueError):scheduler.campaigns.amend('study',amendment)
+    assert set(scheduler.store.job('one')['spec']['placements'])=={'lab','second'}
