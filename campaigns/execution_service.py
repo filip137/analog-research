@@ -450,7 +450,16 @@ class CampaignLedger:
                         raise ValueError("new readiness placement changes the frozen scientific lifecycle")
             for root in roots:
                 if root.get("target") not in known_targets:
-                    raise ValueError("storage root target is not a declared or prepared campaign placement")
+                    # Completion runs locally even for remote-only GPU jobs.
+                    # Account its prepared checkout or containing evidence root
+                    # without granting a new execution placement.
+                    controllers = [self.store.job(case["id"])["spec"].get("completion", {}).get("workdir")
+                                   for case in contract["effective_cases"]]
+                    controller_root = root.get("target") == "local" and any(
+                        cwd and Path(cwd).is_absolute() and Path(root.get("path", "")) in (Path(cwd), Path(cwd).parent)
+                        for cwd in controllers)
+                    if not controller_root:
+                        raise ValueError("storage root target is not a declared placement or prepared local controller")
             # Reuse the strict overlap/absolute-path validation on the effective
             # roots without changing or rehashing the original manifest.
             validate_manifest({**contract["manifest"], "storage_roots": contract["effective_storage_roots"] + roots})

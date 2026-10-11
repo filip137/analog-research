@@ -675,6 +675,27 @@ def test_storage_roots_cannot_double_count_overlap(setup):
         validate_manifest(manifest(storage_roots=[{"target": "lab", "path": "/runs"}, {"target": "lab", "path": "/runs/one"}]))
 
 
+@pytest.mark.parametrize('allowed', [True, False])
+def test_remote_only_campaign_accounts_its_prepared_local_controller(setup, tmp_path, allowed):
+    scheduler, _, job, manifest = setup
+    value = job()
+    value['spec']['completion'] = {'argv':['true'],'workdir':str(tmp_path/'evidence/controller'),
+                                 'timeout_seconds':60,'retry_safe':True}
+    scheduler.store.db.execute('UPDATE jobs SET spec=? WHERE id=?', (json.dumps(value['spec']),'one'))
+    original = scheduler.campaigns.register(manifest())
+    amendment = {'version':1,'id':'local-storage','manifest_sha256':original,
+        'authorization':'existing experiment','reason':'include collection artifacts','evidence':['prepared controller'],
+        'storage_roots':[{'target':'local','path':str(tmp_path/('evidence' if allowed else 'unrelated'))}]}
+    if not allowed:
+        with pytest.raises(ValueError,match='prepared local controller'):
+            scheduler.campaigns.amend('study',amendment)
+        return
+    scheduler.campaigns.amend('study',amendment)
+    assert scheduler.campaigns.contract('study')['sha256'] == original
+    assert scheduler.campaigns.contract('study')['effective_storage_roots'] == amendment['storage_roots']
+    assert set(scheduler.store.job('one')['spec']['placements']) == {'lab'}
+
+
 def test_shared_dispatcher_lock_prevents_second_owner(module, tmp_path):
     with module.owner_lock(tmp_path):
         with pytest.raises(RuntimeError, match="already running"):
