@@ -283,6 +283,72 @@ def test_retry_requires_known_class_terminal_workers_and_only_once(setup):
         scheduler.campaigns.authorize_retry("one", "node_failure", evidence)
 
 
+def driver_crash_receipt(setup, tmp_path):
+    scheduler, _, _ = ready(setup)
+    job = scheduler.store.job("one")
+    spec = job["spec"]
+    spec["retry_safe"] = False
+    spec["placements"]["spare"] = {**spec["placements"]["lab"], "run_dir": str(tmp_path / "spare")}
+    scheduler.store.db.execute("UPDATE jobs SET spec=?,used_seconds=45 WHERE id='one'", (json.dumps(spec),))
+    scheduler.store.update_job("one", "attention")
+    terminal = {"alive": False, "reservation_held": False,
+        "campaign_worker_terminal": {"worker_alive": False, "supervisor_alive": False}}
+    scheduler.store.db.execute("INSERT INTO attempts(token,job_id,target,gpu_uuid,gpu_name,state,issued,launch_before,receipt,progress_at,charged) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        ("failed-one", "one", "lab", "gpu", "5090", "failed", 900, 945, json.dumps(terminal), 945, 1))
+    evidence = {"failure_class": "node_failure", "failed_attempt": "failed-one", "failed_target": "lab", "native_pid": 123,
+        "stage_result": {"returncode": -11, "status": "failed"}, "kernel_log": ["python[123]: segfault in libcuda.so.610"]}
+    path = tmp_path / "driver-evidence.json"; path.write_text(json.dumps(evidence))
+    return {"version": 1, "manifest_sha256": scheduler.campaigns.contract("study")["sha256"],
+        "job_spec_sha256": digest(spec), "failed_attempt": "failed-one", "authorization": "User permits classified operational retries within the original budget",
+        "evidence": {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}, "restart_from_original_inputs": True}
+
+
+def test_driver_recovery_is_one_audited_replay_without_changing_science_or_budget(setup, tmp_path):
+    receipt = driver_crash_receipt(setup, tmp_path)
+    scheduler = setup[0]; before = scheduler.store.job("one")
+    identity = scheduler.campaigns.recover_driver_crash("one", receipt)
+    after = scheduler.store.job("one")
+    assert after["state"] == "queued" and after["used_seconds"] == 45
+    assert after["spec"]["retry_safe"] is False
+    assert set(after["spec"]["placements"]) == {"spare"}
+    assert after["spec"]["placements"]["spare"] == before["spec"]["placements"]["spare"]
+    assert {k:v for k,v in before["spec"].items() if k != "placements"} == {k:v for k,v in after["spec"].items() if k != "placements"}
+    assert scheduler.campaigns.recover_driver_crash("one", receipt) == identity
+    assert len(scheduler.store.attempts()) == 1
+    assert scheduler.store.db.execute("SELECT COUNT(*) FROM campaign_retries").fetchone()[0] == 1
+    with pytest.raises(ValueError, match="allowance already consumed"):
+        scheduler.campaigns.recover_driver_crash("one", {**receipt, "authorization": "different retry"})
+
+
+@pytest.mark.parametrize("failure", ["hash", "not_driver", "nonfinite", "active", "complete", "worker_alive", "budget", "no_spare", "contract"])
+def test_driver_recovery_fails_closed(setup, tmp_path, failure):
+    receipt = driver_crash_receipt(setup, tmp_path)
+    scheduler = setup[0]; db = scheduler.store.db
+    if failure == "hash":
+        receipt["evidence"]["sha256"] = "0" * 64
+    elif failure in {"not_driver", "nonfinite"}:
+        path = Path(receipt["evidence"]["path"]); data = json.loads(path.read_text())
+        if failure == "not_driver": data["kernel_log"] = ["python[123]: segfault in unrelated.so"]
+        else: data["stage_result"]["returncode"] = 1
+        path.write_text(json.dumps(data)); receipt["evidence"]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    elif failure in {"active", "complete"}:
+        db.execute("UPDATE attempts SET state=?", ("running" if failure == "active" else "complete",))
+    elif failure == "worker_alive":
+        data = json.loads(db.execute("SELECT receipt FROM attempts").fetchone()[0]); data["campaign_worker_terminal"]["worker_alive"] = True
+        db.execute("UPDATE attempts SET receipt=?", (json.dumps(data),))
+    elif failure == "budget":
+        db.execute("UPDATE jobs SET used_seconds=890 WHERE id='one'")
+    elif failure == "no_spare":
+        spec = scheduler.store.job("one")["spec"]; del spec["placements"]["spare"]
+        db.execute("UPDATE jobs SET spec=? WHERE id='one'", (json.dumps(spec),)); receipt["job_spec_sha256"] = digest(spec)
+    else:
+        receipt["job_spec_sha256"] = "0" * 64
+    before = scheduler.store.job("one")
+    with pytest.raises(ValueError): scheduler.campaigns.recover_driver_crash("one", receipt)
+    assert scheduler.store.job("one") == before
+    assert db.execute("SELECT COUNT(*) FROM campaign_retries").fetchone()[0] == 0
+
+
 def test_cycles_and_unsupported_slurm_are_rejected(setup):
     _, _, _, manifest = setup
     bad = manifest()
