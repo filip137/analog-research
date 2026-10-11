@@ -4,7 +4,7 @@
 
 Sources: campaign experiment metadata and reviewer-written result notes. No raw evidence or live job state is inferred.
 
-Counts: complete=8, planned=1.
+Counts: complete=8, running=1.
 
 ## Experiments
 
@@ -17,8 +17,8 @@ Counts: complete=8, planned=1.
 | [exp-005 — Experiment 1e: HWA scopes and digital learning-rate development](series/001-hwa-robustness/experiments/exp-005-whole-model-hwa.md) | complete | None declared | [validated-local](series/001-hwa-robustness/results/exp-005.md): Frozen-checkpoint transfer complete (60/60): digital peak LR 1e-5 lowers 3%-fault test KL by 7.0% on WikiText and 8.3% on synthetic text, with 5/5 array wins; healthy WikiText worsens 2.0%, and no rate/domain meets the 10% material-effect rule |
 | [exp-006 — Corruption-aware HWA with smaller digital learning rates](series/001-hwa-robustness/experiments/exp-006-corruption-aware-digital-lr.md) | complete | None declared | [validated-local](series/001-hwa-robustness/results/exp-006.md): Complete one-seed comparison: digital peak 1e-5 wins development selection and improves every matched test condition over corruption-aware analog-only; at 3% faults KL falls 5.3% on WikiText and 9.8% on generated text, below the 10% material threshold |
 | [exp-007 — Four-arm HWA comparison with frozen whole-model learning rates](series/001-hwa-robustness/experiments/exp-007-corruption-rate-sweep.md) | complete | None declared | [validated-local](series/001-hwa-robustness/results/exp-007.md): Complete four-arm comparison: 9% Gaussian HWA leads WikiText at 2–3% faults; 3%-fault-aware HWA leads at 4–5%; training with 5% faults adds healthy cost without a material gain over 3% |
-| [exp-008 — Dense on-chip baseline over the full synthetic corpus](series/002-onchip-recovery/experiments/exp-008-overnight-recovery.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-008.md): Readiness passed; full dense baseline running on loulou; short canary worsened held-out metrics |
-| [exp-009 — Digital LoRA beside dense on-chip recovery](series/002-onchip-recovery/experiments/exp-009-digital-lora.md) | planned | None declared | No result recorded. |
+| [exp-008 — Dense on-chip baseline over the full synthetic corpus](series/002-onchip-recovery/experiments/exp-008-overnight-recovery.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-008.md): Full dense one-pass recovery completed and worsened both held-out domains at high write cost |
+| [exp-009 — Digital LoRA beside dense on-chip recovery](series/002-onchip-recovery/experiments/exp-009-digital-lora.md) | running | None declared | [validated-local](series/002-onchip-recovery/results/exp-009.md): Three LoRA LR screens validated; full 50M-token rank comparison remains in progress |
 
 ## Hypothesis evidence
 

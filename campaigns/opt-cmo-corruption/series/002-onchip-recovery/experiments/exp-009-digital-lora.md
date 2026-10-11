@@ -137,3 +137,14 @@ Readiness, placement amendments, storage measurements, LR-selection receipts and
 per-rank reports are in `readiness/`, `prepared/`, `collected/` and `reviews/`
 under the evidence root. The original campaign manifest remains immutable;
 durable amendments record additional placements.
+
+The fifi placement was prepared at revision
+`4ae2380014abb919026e64e8a0573502c6455906`; it is available to the unstarted
+rank-4/rank-16 jobs. Rank 64 retains its original placements. Operational
+incident 8 required a controller-only gate-calibration fix, recorded in
+`readiness/controller-gate-recovery.json`: the collection controller is now
+`f9ac9db0ade09d7271f7fb58b5ffda45956ee9a8`, and the single service controller is
+`9bc7fb43f9dcc3e603b6ea590ddb17f1f1a33061`. Both retain the unchanged numerical
+worker implementation. The service restart preserved every active attempt and
+its budget; no GPU computation was repeated. Development measurements and the
+incident diagnosis are recorded in the [result note](../results/exp-009.md).
