@@ -374,6 +374,17 @@ in the experiment note.
 
 Teacher and mapping hashes must also match.
 
+For a frozen-checkpoint deployment campaign, keep the source-dependent lifecycle
+sections unchanged, replace each deploy stage's `weights` dependency with the
+explicit saved `hwa_source` path, and omit the HWA stage from the execution
+manifest. Keep the new prepare and devices stages and every declared assignment;
+adding `transfer_tests` requires a new feature cache but no new training.
+`python -m campaigns.lifecycle_collect validate RUN_ROOT --deployment-only`
+checks this manifest shape, the original source bundle and its full artifact
+hashes, compatible source provenance, exact input lineage, and complete deployment
+coverage. The same explicit mode is available for `export` and `collect`; it does
+not relax the default full-lifecycle or source-only collection gates.
+
 Storage: every trajectory keeps its final state for exact replay. For the
 CIFAR suffix with four analog convolutions that is about 5 MB (PCM) or 10 MB (OM)
 per trajectory. OPT OM states take roughly 70–90 bytes per analog weight

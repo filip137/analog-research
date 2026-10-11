@@ -1,7 +1,7 @@
 ---
 id: "exp-005"
 title: "Experiment 1e: HWA scopes and digital learning-rate development"
-status: "ready"
+status: "running"
 hypotheses: []
 ---
 # exp-005: whole-transformer HWA
@@ -1073,3 +1073,43 @@ No automatic compute retry or scientific change is permitted. Completion hooks
 collect compact evidence and compute paired effects after full 60-row coverage.
 Reviewer interpretation is recorded in the existing result note. No further
 training, corruption-aware sweep or additional seeds are part of this assignment.
+
+Current transfer execution: clean worker/controller revision
+`c30a54fc0375fdf2b44d877c8b02f2581d4091db`; campaign manifest SHA-256
+`72c9e1660137627646e49af9db32ccd67a98c8da6d5df2cc7d8f26aa870be56d`.
+Source reuse and collector validation passed 274 workflow/collection tests
+(one skipped), input hashes and native dry runs on both hosts. Prior dispatcher
+restart/idempotency and bounded incident-invocation evidence was verified; the
+unchanged service has a fresh heartbeat and remaining investigator quota.
+
+The fifi baseline job `opt125m-cmo-l6-exp1e-digital-transfer-lr0`, attempt
+`e23d8accd3144283b9429cd978264437`, completed validation and collection of all
+30 rows. Charged runtime was 325.993 s. Each full six-case/two-domain deployment
+took 60.16–60.56 s, with peak allocated GPU memory 3.730 GB and a 0.615 GB saved
+deployment. Its held-out KL values exactly reproduce the previous analog-only
+source across all 30 assignment/case pairs and both domains; this is a replay
+diagnostic, not another independent training replicate. The passed immutable
+`readiness/baseline-deployment-gate.json` released the prepared loulou job
+`opt125m-cmo-l6-exp1e-digital-transfer-lr1em5`. Full comparison remains pending.
+
+Remote native results are below
+`/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-transfer-20261011/results/lifecycles/<job-id>/runs/<job-id>/`.
+Tmux sessions are `<job-id>-<attempt>`; logs are below
+`/home/filip/analog-research/opt-cmo-exp1/worker-receipts/c30a54fc0375fdf2b44d877c8b02f2581d4091db/<job-id>/<attempt>/run.log`.
+Exact prepared specs and all paths are in `prepared/{fifi,loulou}.json` under the
+local evidence root. The watchdog remains the sole monitoring owner, and its
+completion hook will collect and produce `collected/review.json` when all 60
+rows are present. No live coordinator is needed for the remaining dispatched work.
+
+At 13:33 Paris the 1e-5 job is running on loulou, attempt
+`4bb3e148a10b4379a9bf296baa7e2b72`, tmux session
+`opt125m-cmo-l6-exp1e-digital-transfer-lr1em5-4bb3e148a10b4379a9bf296baa7e2b72`,
+native worker PID 847844. Prepare/devices and the saved-source gate passed;
+native deployment metrics are finite. The persistent service has observed the
+live worker and GPU reservation, and the direct first artifact check is saved
+in `readiness/candidate-first-observation.json`. The next semantic poll is due
+within five minutes. Expected complete collection is around **13:38–13:40 Paris**;
+the phase deadline is **16:21:05 Paris**. Fifi is free. The remaining evaluation,
+validation, collection and fixed paired analysis are owned by the service; no
+further human release gate remains. Reviewer interpretation follows completed
+coverage, and no additional scientific run is queued.
