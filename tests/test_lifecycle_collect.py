@@ -30,7 +30,8 @@ def native(cmo_inputs, tmp_path, request):
         "onchip": None, "transfer_tests": [
             {"label": label, "corpus": {"name": "synthetic", "sha256": corpus}, "split": "test", "sequences": count}
             for label, count in (("wikitext", 3), ("generated", 2))]})
-    source_only = getattr(request, "param", False)
+    mode = getattr(request, "param", False)
+    source_only, deployment_only = mode is True, mode == "deployment"
     root = tmp_path / "campaign"
     plan = tmp_path / "plan"
     plan.mkdir()
@@ -38,12 +39,20 @@ def native(cmo_inputs, tmp_path, request):
     for selection in stage_selections(lc):
         if source_only and selection.kind == "deploy":
             continue
-        results[selection.stage_id] = run_stage(lc, selection, results, weights, root)
+        stage_root = tmp_path / "external-source" if deployment_only and selection.kind == "hwa" else root
+        results[selection.stage_id] = run_stage(lc, selection, results, weights, stage_root)
         run, result = results[selection.stage_id]
+        if deployment_only and selection.kind == "hwa":
+            continue
         config = plan / (selection.stage_id + ".json")
         config.write_text(json.dumps(StageConfig(selection, Execution("cpu", 1, False), lc).to_dict()))
         inputs, dependencies = {}, []
         for role, upstream in stage_inputs(selection).items():
+            if deployment_only and upstream is not None and upstream[1] == "hwa_source":
+                source_run, source_result = results[upstream[0]]
+                artifact = next(item for item in source_result["artifacts"] if item["kind"] == "hwa_source")
+                inputs[role] = {"path": str(source_run / artifact["path"])}
+                continue
             inputs[role] = {"path": str(weights)} if upstream is None else {"stage": upstream[0], "artifact_kind": upstream[1]}
             if upstream is not None:
                 dependencies.append(upstream[0])
@@ -60,6 +69,38 @@ def native(cmo_inputs, tmp_path, request):
     (root / "aggregate").mkdir()
     (root / "aggregate/results.json").write_text(json.dumps({"stages": records}))
     return root, lc
+
+
+@pytest.mark.parametrize("native", ["deployment"], indirect=True)
+def test_reused_source_requires_explicit_mode_and_exact_lineage(native):
+    root, lc = native
+    payload = collector.export(root, deployment_only=True)
+    assert all(not name.startswith("hwa__") for name in payload["stages"])
+    assert len(json.loads(payload["deployments_json"])) == len(lc.devices.assignment_seeds) * len(lc.defects.cases)
+    assert collector.checked_payload(payload, root, deployment_only=True) == payload
+    with pytest.raises(ValueError, match="identity"):
+        collector.checked_payload(payload, root)
+    changed = copy.deepcopy(payload)
+    deploy = next(name for name in changed["stages"] if name.startswith("deploy__"))
+    manifest = json.loads(changed["stages"][deploy]["files"]["manifest.json"])
+    next(item for item in manifest["inputs"] if item["role"] == "weights")["sha256"] = "0" * 64
+    changed["stages"][deploy]["files"]["manifest.json"] = json.dumps(manifest)
+    with pytest.raises(ValueError, match="external source lineage"):
+        collector.checked_payload(changed, root, deployment_only=True)
+    changed = copy.deepcopy(payload)
+    changed["reused_source"]["files"]["inspection.json"] = "[]"
+    with pytest.raises(ValueError, match="source full artifact inspection"):
+        collector.checked_payload(changed, root, deployment_only=True)
+    changed = copy.deepcopy(payload)
+    files = changed["reused_source"]["files"]
+    result = json.loads(files["result.json"])
+    result["metrics"]["fit"]["lr_schedule"]["steps_run"] = 1
+    files["result.json"] = json.dumps(result)
+    inspection = json.loads(files["inspection.json"])
+    inspection[0]["result_sha256"] = collector.text_sha(files["result.json"])
+    files["inspection.json"] = json.dumps(inspection)
+    with pytest.raises(ValueError, match="schedule"):
+        collector.checked_payload(changed, root, deployment_only=True)
 
 
 @pytest.fixture

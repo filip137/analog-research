@@ -5,6 +5,8 @@ fully hashed on their execution host and stay there. A slice contains prepare,
 devices, one declared HWA source, and every declared assignment for that source.
 Explicit source-only collection instead requires exactly prepare, devices and
 one source; it cannot silently accept a missing deployment from a full slice.
+Explicit deployment-only collection requires prepare, devices and every declared
+deployment, binding the external HWA source to its original fully inspected bundle.
 """
 from __future__ import annotations
 
@@ -26,7 +28,7 @@ import tempfile
 
 from experiments.artifacts import atomic_write_json, content_hash, sha256_file
 from workflow.__main__ import _deployment_rows
-from workflow.lifecycle import parse_lifecycle, stage_inputs, stage_selections, STAGE_OUTPUTS
+from workflow.lifecycle import parse_lifecycle, stage_inputs, stage_selections, STAGE_OUTPUTS, provenance, verify_provenance
 from workflow.runtime import validate_source_fit
 
 CONTROL_FILES = ("result.json", "config.resolved.json", "metrics.jsonl", "manifest.json", "status.json")
@@ -60,10 +62,48 @@ def rows_key(row):
     return row["lifecycle_id"], row["hwa_arm"], row["array_seed"], row["case"]
 
 
-def checked_payload(payload, expected_root, *, source_only=False):
+def checked_reused_source(exported, lifecycle, arm):
+    """Bind a frozen external HWA bundle to a deployment-only campaign."""
+    run, files = Path(exported["native_run"]), exported["files"]
+    if not run.is_absolute() or set(files) != EXPORT_FILES:
+        raise ValueError("Unexpected reused source location or control files")
+    result, manifest = json.loads(files["result.json"]), json.loads(files["manifest.json"])
+    config = json.loads(files["config.resolved.json"])
+    source_lifecycle = parse_lifecycle(config["lifecycle"])
+    metrics = result["metrics"]
+    if (config != json.loads(files["stage-config.json"])
+            or manifest["config"]["sha256"] != content_hash(config)
+            or config["stage"] != {"kind": "hwa", "hwa_arm": arm, "array_seed": None}
+            or metrics.get("stage") != config["stage"]
+            or metrics.get("lifecycle_sha256") != source_lifecycle.digest()
+            or result.get("status") != "complete" or metrics.get("test_used_for_selection") is not False):
+        raise ValueError("Reused source identity or selection receipt mismatch")
+    inspection = json.loads(files["inspection.json"])
+    if (len(inspection) != 1 or inspection[0].get("valid") is not True
+            or inspection[0].get("process_complete") is not True
+            or inspection[0].get("validation_mode") != "full_artifact_hashes"
+            or inspection[0].get("path") != str(run)
+            or inspection[0].get("result_sha256") != text_sha(files["result.json"])):
+        raise ValueError("Reused source full artifact inspection failed")
+    verify_provenance(provenance(source_lifecycle, "hwa_source", hwa_arm=arm), lifecycle, "hwa_source", hwa_arm=arm)
+    validate_source_fit(lifecycle, lifecycle.hwa.arm(arm), metrics["fit"])
+    finite(metrics)
+    for line in files["metrics.jsonl"].splitlines():
+        if line.strip():
+            finite(json.loads(line))
+    artifact = unique(result["artifacts"], "kind", "reused artifact")["hwa_source"]
+    relative = Path(artifact["path"])
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError("Reused source artifact escaped its native run")
+    return {"path": str(run / relative), "sha256": artifact["sha256"]}, metrics
+
+
+def checked_payload(payload, expected_root, *, source_only=False, deployment_only=False):
     """Recheck identities, native lineage, coverage and collected values."""
     root = Path(expected_root)
-    schema = "lifecycle.source_export.v1" if source_only else "lifecycle.compact_export.v1"
+    if source_only and deployment_only:
+        raise ValueError("Source-only and deployment-only are mutually exclusive")
+    schema = "lifecycle.deployment_export.v1" if deployment_only else "lifecycle.source_export.v1" if source_only else "lifecycle.compact_export.v1"
     if payload.get("schema") != schema or payload.get("campaign_root") != str(root):
         raise ValueError("Compact export campaign identity mismatch")
     contract = json.loads(payload["campaign_resolved"])
@@ -164,6 +204,10 @@ def checked_payload(payload, expected_root, *, source_only=False):
                 raise ValueError("Missing no-test-selection receipt")
             validate_source_fit(lc, lc.hwa.arm(selected_arm), metrics["fit"])
         else:
+            if deployment_only:
+                if selected_arm not in {None, selection["hwa_arm"]}:
+                    raise ValueError("Expected one reused HWA source per deployment slice")
+                selected_arm = selection["hwa_arm"]
             expected_cases = {case.label: case.to_dict() for case in lc.defects.cases}
             if (set(metrics["cases"]) != set(expected_cases)
                     or metrics["array_seed"] != selection["array_seed"]):
@@ -184,7 +228,15 @@ def checked_payload(payload, expected_root, *, source_only=False):
         manifests[stage_id], results[stage_id] = manifest, result
     if lifecycle is None or selected_arm is None:
         raise ValueError("Missing lifecycle source")
-    kinds = {"prepare", "devices", "hwa"} if source_only else {"prepare", "devices", "hwa", "deploy"}
+    if deployment_only:
+        source, source_metrics = checked_reused_source(payload["reused_source"], lifecycle, selected_arm)
+        artifacts["hwa__" + selected_arm] = {"hwa_source": source}
+        for result in results.values():
+            if any(result["metrics"][key] != source_metrics[key] for key in ("teacher_sha256", "mapping_sha256")):
+                raise ValueError("Reused source teacher or mapping differs from deployment")
+    elif "reused_source" in payload:
+        raise ValueError("Reused source requires explicit deployment-only collection")
+    kinds = {"prepare", "devices", "deploy"} if deployment_only else {"prepare", "devices", "hwa"} if source_only else {"prepare", "devices", "hwa", "deploy"}
     expected_selections = {item.stage_id: item for item in stage_selections(lifecycle)
                            if item.kind in kinds
                            and item.hwa_arm in {None, selected_arm}}
@@ -207,7 +259,10 @@ def checked_payload(payload, expected_root, *, source_only=False):
                     raise ValueError("Teacher input differs from the frozen manifest")
             else:
                 expected = artifacts[upstream[0]][upstream[1]]
-                if (reference["stage"] != upstream[0] or reference["artifact_kind"] != upstream[1]
+                if deployment_only and upstream[1] == "hwa_source":
+                    if reference.get("path") != expected["path"] or any(inputs[role].get(key) != value for key, value in expected.items()):
+                        raise ValueError("Frozen external source lineage mismatch")
+                elif (reference["stage"] != upstream[0] or reference["artifact_kind"] != upstream[1]
                         or any(inputs[role].get(key) != value for key, value in expected.items())):
                     raise ValueError("Native upstream artifact lineage mismatch")
     if len(set(teacher_inputs)) != 1:
@@ -229,7 +284,7 @@ def checked_payload(payload, expected_root, *, source_only=False):
     return payload
 
 
-def export(root, *, source_only=False):
+def export(root, *, source_only=False, deployment_only=False):
     root = root.resolve()
     contract_text = (root / "campaign.resolved.json").read_text()
     contract = json.loads(contract_text)
@@ -266,9 +321,25 @@ def export(root, *, source_only=False):
         csv_path = Path(folder) / "deployments.csv"
         # Native collect emits no CSV when a declared source-only slice has no rows.
         csv = "" if source_only and not csv_path.exists() else csv_path.read_text()
-    return checked_payload({"schema": "lifecycle.source_export.v1" if source_only else "lifecycle.compact_export.v1", "campaign_root": str(root),
+    extra = {}
+    if deployment_only:
+        sources = {stage["inputs"]["weights"].get("path") for name, stage in planned.items() if name.startswith("deploy__")}
+        if len(sources) != 1 or None in sources:
+            raise ValueError("Expected one frozen external HWA source")
+        path = Path(next(iter(sources)))
+        run = path.parent.parent
+        inspected = subprocess.run([sys.executable, "-m", "ebl", "runs", "inspect", str(run),
+            "--verify-artifacts", "--require-complete", "--json"], capture_output=True, text=True, timeout=180)
+        if inspected.returncode:
+            raise RuntimeError(inspected.stdout[-4000:] + inspected.stderr[-2000:])
+        files = {name: (run / name).read_text() for name in CONTROL_FILES}
+        files["inspection.json"] = inspected.stdout
+        files["stage-config.json"] = files["config.resolved.json"]
+        extra["reused_source"] = {"native_run": str(run), "files": files}
+    return checked_payload({"schema": "lifecycle.deployment_export.v1" if deployment_only else "lifecycle.source_export.v1" if source_only else "lifecycle.compact_export.v1", "campaign_root": str(root),
         "campaign_resolved": contract_text, "source_manifest": manifest_path.read_text(), "aggregate": aggregate,
-        "stages": stages, "deployments_json": deployments, "deployments_csv": csv}, root, source_only=source_only)
+        "stages": stages, "deployments_json": deployments, "deployments_csv": csv, **extra}, root,
+        source_only=source_only, deployment_only=deployment_only)
 
 
 def exact_attempt(dbpath, job_id):
@@ -307,7 +378,7 @@ def write_frozen(path, content):
     os.replace(temporary, path)
 
 
-def collect(queue_config, output, *, source_only=False):
+def collect(queue_config, output, *, source_only=False, deployment_only=False):
     job_id = os.environ["RUN_WATCH_JOB_ID"]
     cfg = json.loads(queue_config.read_text())
     dbpath = Path(cfg.get("state_dir", "~/.local/state/run-watch/queue")).expanduser() / "queue.sqlite3"
@@ -317,6 +388,8 @@ def collect(queue_config, output, *, source_only=False):
     argv = [placement["campaign_python"], "-m", "campaigns.lifecycle_collect", "export", placement["campaign_result_root"]]
     if source_only:
         argv.append("--source-only")
+    if deployment_only:
+        argv.append("--deployment-only")
     if target.get("transport") == "local":
         command, cwd = argv, placement["workdir"]
     elif target.get("transport") == "ssh":
@@ -328,7 +401,8 @@ def collect(queue_config, output, *, source_only=False):
     completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=600, check=True)
     if len(completed.stdout.encode()) > 64 * 1024 * 1024:
         raise ValueError("Compact collection unexpectedly exceeds 64 MB")
-    payload = checked_payload(json.loads(completed.stdout), Path(placement["campaign_result_root"]), source_only=source_only)
+    payload = checked_payload(json.loads(completed.stdout), Path(placement["campaign_result_root"]),
+                              source_only=source_only, deployment_only=deployment_only)
     with collection_lock(output):
         _, current = exact_attempt(dbpath, job_id)
         if current["token"] != attempt["token"]:
@@ -343,6 +417,9 @@ def collect(queue_config, output, *, source_only=False):
                  "deployments.csv": payload["deployments_csv"]}
         for stage_id, stage in payload["stages"].items():
             files.update({f"{stage_id}/{name}": content for name, content in stage["files"].items()})
+        if deployment_only:
+            files.update({f"reused-source/{name}": content for name, content in payload["reused_source"]["files"].items()})
+            files["reused-source/origin.json"] = json.dumps({"native_run": payload["reused_source"]["native_run"]}, sort_keys=True) + "\n"
         for name, content in files.items():
             write_frozen(destination / name, content)
         receipt = {**identity, "campaign_root": payload["campaign_root"],
@@ -378,15 +455,17 @@ def main(argv=None):
         sub = commands.add_parser(name)
         sub.add_argument("root", type=Path)
         sub.add_argument("--source-only", action="store_true")
+        sub.add_argument("--deployment-only", action="store_true")
     comp = commands.add_parser("collect")
     comp.add_argument("--queue-config", type=Path, required=True)
     comp.add_argument("--output", type=Path, required=True)
     comp.add_argument("--source-only", action="store_true")
+    comp.add_argument("--deployment-only", action="store_true")
     args = parser.parse_args(argv)
     if args.command == "collect":
-        result = collect(args.queue_config, args.output, source_only=args.source_only)
+        result = collect(args.queue_config, args.output, source_only=args.source_only, deployment_only=args.deployment_only)
     else:
-        result = export(args.root, source_only=args.source_only)
+        result = export(args.root, source_only=args.source_only, deployment_only=args.deployment_only)
         if args.command == "validate":
             result = {"valid": True, "campaign_root": result["campaign_root"],
                       "stages": sorted(result["stages"]), "deployment_rows": len(json.loads(result["deployments_json"]))}

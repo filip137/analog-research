@@ -1,0 +1,26 @@
+{
+  "0": {
+    "development_mean": 0.08527921801615579,
+    "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-values-20261011/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr0/runs/opt125m-cmo-l6-exp1e-digital-lr0--aae82c6233d6/stages/standard_hwa_model/local/hwa__standard_hwa_model/attempt-001/runs/20261010T235121.066849Z-e9cc3f8a-f729bd82/checkpoints/source.pt",
+    "result": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-values-20261011/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr0/runs/opt125m-cmo-l6-exp1e-digital-lr0--aae82c6233d6/stages/standard_hwa_model/local/hwa__standard_hwa_model/attempt-001/runs/20261010T235121.066849Z-e9cc3f8a-f729bd82/result.json",
+    "result_sha256": "efa1f2bef6d4cc871eebee85d859c0daf6fa9433f54af3486824f8e1409fbae8",
+    "selected_step": 25088,
+    "sha256": "95ea4d17a319a71d95d155818dac9129cdd1d26cfbd1d4c4b325fa2a46e51036",
+    "size_bytes": 501121995,
+    "target": "fifi",
+    "training_attempt": "d07ae74a340c4e74a6c9825f0d2196d3",
+    "training_job": "opt125m-cmo-l6-exp1e-digital-lr0-values"
+  },
+  "1em5": {
+    "development_mean": 0.07877010283809083,
+    "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-values-20261011/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr1em5/runs/opt125m-cmo-l6-exp1e-digital-lr1em5--cdac54a85970/stages/standard_hwa_model/local/hwa__standard_hwa_model/attempt-001/runs/20261011T013506.097920Z-d4e9bdc7-e50b689b/checkpoints/source.pt",
+    "result": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-values-20261011/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr1em5/runs/opt125m-cmo-l6-exp1e-digital-lr1em5--cdac54a85970/stages/standard_hwa_model/local/hwa__standard_hwa_model/attempt-001/runs/20261011T013506.097920Z-d4e9bdc7-e50b689b/result.json",
+    "result_sha256": "119e3b646effa043353a6131dcccadbd0fcd1334811568df192460053101a134",
+    "selected_step": 25088,
+    "sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028",
+    "size_bytes": 501121995,
+    "target": "loulou",
+    "training_attempt": "ccb0dfd543b848a4a11facc6ce7611bb",
+    "training_job": "opt125m-cmo-l6-exp1e-digital-lr1em5-values"
+  }
+}

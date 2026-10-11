@@ -1,7 +1,7 @@
 ---
 id: "exp-005"
 title: "Experiment 1e: HWA scopes and digital learning-rate development"
-status: "running"
+status: "ready"
 hypotheses: []
 ---
 # exp-005: whole-transformer HWA
@@ -14,6 +14,13 @@ The completed cosine comparison below is retained as its reference. Execute four
 fresh standard-3% HWA sources on **fifi and loulou only**, with the shared persistent
 dispatcher, one worker per RTX 5090. The existing analog and equal-rate controls
 are references, not new replicates.
+
+The four development candidates are complete, validated and collected. The
+scientific review is recorded in the [result note](../results/exp-005.md#completed-digital-lr-comparison-2026-10-11).
+On 2026-10-11 the user authorized step 1: deploy the selected 1e-5 candidate and
+the zero-digital-LR control on the five matched arrays and both held-out domains.
+This follow-up reuses frozen checkpoints and runs no HWA training. Its current
+handoff is at the end of this note; the completed development handoff is retained.
 
 ### Frozen digital-LR comparison
 
@@ -930,23 +937,23 @@ Charged GPU time is 8.0377 h, plus about 1.1324 h of active allocation
 and all prior charges are preserved. Exact observations are in the cosine
 evidence root’s `readiness/progress-20261011-0010*.json`.
 
-### Current digital-LR handoff, 2026-10-11 01:54 Paris
+### Completed digital-LR handoff, 2026-10-11
 
-The four full development jobs are released under the original phase budget.
-Two are running after warm-up with finite native metrics; two wait for those
-GPUs. The whole transformer trains in every case; the zero-rate endpoint holds
-the additional digital values fixed. Analog/calibration peak and floor remain
-5e-3 and 1e-3 in all four.
+All four full development jobs completed their 25,600 updates, native artifact
+validation and automatic collection, each in one successful attempt. Both 5090s
+have been released. The whole-model execution path was used in every case; the
+zero-rate endpoint held the additional digital values fixed. Analog/calibration
+peak and floor were 5e-3 and 1e-3 in all four.
 
 | Digital peak | Job ID | Host/state | Attempt |
 |---|---|---|---|
-| 0 | `opt125m-cmo-l6-exp1e-digital-lr0-values` | fifi, running | `d07ae74a340c4e74a6c9825f0d2196d3` |
-| 1e-4 | `opt125m-cmo-l6-exp1e-digital-lr1em4-values` | loulou, running | `c085c7fee1b24d1cbcd56dd80bd120a0` |
-| 1e-5 | `opt125m-cmo-l6-exp1e-digital-lr1em5-values` | queued for fifi/loulou | none |
-| 1e-3 | `opt125m-cmo-l6-exp1e-digital-lr1em3-values` | queued for fifi/loulou | none |
+| 0 | `opt125m-cmo-l6-exp1e-digital-lr0-values` | fifi, complete | `d07ae74a340c4e74a6c9825f0d2196d3` |
+| 1e-4 | `opt125m-cmo-l6-exp1e-digital-lr1em4-values` | loulou, complete | `c085c7fee1b24d1cbcd56dd80bd120a0` |
+| 1e-5 | `opt125m-cmo-l6-exp1e-digital-lr1em5-values` | loulou, complete | `ccb0dfd543b848a4a11facc6ce7611bb` |
+| 1e-3 | `opt125m-cmo-l6-exp1e-digital-lr1em3-values` | fifi, complete | `9b41318253264c1ca2d9fa9f15a14609` |
 
-Tmux sessions are `<job-id>-<attempt>` from the table. At handoff the worker PIDs
-are 980807 (fifi) and 711694 (loulou). Logs are
+Tmux sessions were `<job-id>-<attempt>` from the table. At the initial handoff the
+worker PIDs were 980807 (fifi) and 711694 (loulou). Retained logs are
 `/home/filip/analog-research/opt-cmo-exp1/worker-receipts/b0150a717b6f993eae12f20fee55e7f0a4b42716/<job-id>/<attempt>/run.log`.
 The source is clean revision `b0150a717b6f993eae12f20fee55e7f0a4b42716`.
 Exact native manifest, worker spec, result-root paths and all preparation hashes
@@ -966,8 +973,9 @@ reported unchanged numerical digital values. The original source was tested with
 273 passing workflow/collection checks (one skip); the reporting regression and
 focused tests passed 66 checks. Readiness cost is **0.108891 GPU-hours**.
 
-One `run-watch-queue.service` still owns every job, with a fresh heartbeat and
-no host errors. At 01:53:40 Paris it had observed both full workers at update
+One `run-watch-queue.service` retained ownership through completion and remains
+alive with a fresh heartbeat and no host errors. At 01:53:40 Paris it had observed
+both first-wave workers at update
 206 with the expected independent group rates. Service PID 342022; native
 observations and preserved ownership are recorded in `readiness/full-handoff.json`.
 Live restart retained exact worker PID/start/boot identities, and duplicate
@@ -976,17 +984,92 @@ defect; its bounded read-only investigator completed and its immutable snapshot,
 diagnosis and recommendation were verified. It recommended the completed canary
 gate and no scientific changes. The earlier injected incident test remains intact.
 
-Full jobs retain measured HWA expectation 6,500 s and a three-hour hard cap;
-queueing is not a stall. The next campaign semantic poll is within five minutes.
-The **10 GPU-hour and 16 GB caps** are unchanged, with observed storage about
-3.226 GB before main artifacts grew. The original first-admission deadline is
-**09:36:58 Paris**; readiness repairs did not reset it. Expected completion of
-both waves, validation and collection is **05:20–05:50 Paris**, subject to GPU
-availability for the second wave.
+The full jobs used 6,070–6,177 charged GPU-seconds each, below the calibrated
+6,500 s expectation and three-hour hard cap. The second wave finished around
+05:20 Paris, before the original **09:36:58 Paris** deadline. Total incremental
+execution, including all three readiness cases, is **6.9049 GPU-hours** of the
+10-hour cap, leaving 3.0951 GPU-hours unspent. Observed retained storage is
+**6.901 GB** against 16 GB. There are no active reservations for this phase.
 
-The completion hook runs `campaigns.lifecycle_collect` in explicit source-only
-mode, then writes `collected/digital-lr-review.json`. It recommends no rate until
-all four candidate collections pass; the Reviewer compares their development
-results with `reference-sources.json` and records the scientific decision here
-and in the result note. No held-out test evaluation or further grid extension
-is authorized by this handoff. Leave the shared service running after completion.
+The completion hook ran `campaigns.lifecycle_collect` in explicit source-only
+mode and produced complete four-candidate coverage in
+`collected/digital-lr-review.json`. Review rechecked all 104 compact-file hashes,
+12 valid native stage inspections and exact schedule coverage. The frozen rule
+selects digital peak **1e-5**, with final rate **2e-6**; the result note gives
+the component scores, reference comparison and limits. All candidates retain
+the late-convergence review flag. No held-out test evaluation or further grid
+extension is authorized by this handoff; leave the shared service running.
+
+The service's coarse phase label remains `active_or_blocked` because the four
+superseded, unstarted execution specs remain cancelled in its durable history.
+This label is not scientific coverage: all four replacement candidates and
+three readiness cases are complete, and the generated development review has
+`coverage_complete: true`. Its `awaiting_scientific_review` field is the automatic
+collector's gate label; this note and the linked result record the completed
+human-readable review without releasing another stage. Incident 6 and its
+finished diagnosis remain preserved; the successful corrected canary satisfied
+its recommendation before full dispatch.
+
+### Frozen-checkpoint transfer evaluation, authorized 2026-10-11
+
+Evaluate the existing digital-0 and digital-1e-5 whole-model checkpoints selected
+at update 25,088 by the unchanged mean development criterion. Do not reselect
+checkpoints or change weights. The sources, original native bundle paths, training
+attempts and SHA-256 values are pinned in
+`campaigns/opt-cmo-corruption/launch/exp1e_transfer_sources.json`. The zero source
+is the numerically equivalent analog-only control established above. This is
+one matched comparison, not additional independent training replicates.
+
+Use the existing CMO regime, last six MLPs (28,311,552 logical analog weights),
+assignment seeds 271001–271005, endpoint offset 10000, and independent random
+permanent faults at 0, 1, 2, 3, 4 and 5%. The two checkpoints share each assignment,
+fault map and endpoint random stream; remap their respective frozen logical
+weights. Evaluate 1,024 WikiText test sequences and 384 generated test sequences
+of length 256 using exactly the previously pinned transfer corpora and cohorts.
+The 256-sequence synthetic development metric is retained by the native stage
+but does not select or rank the transfer result. There are **60 deployment rows**,
+each containing both test domains. These test cohorts/arrays have appeared in
+earlier campaign comparisons, so this adaptively motivated follow-up remains
+exploratory rather than a pristine untouched confirmation study.
+
+Report teacher KL and perplexity for both sources, paired differences and wins
+per assignment, separately at each rate and domain. Highlight 3% faults and
+healthy performance without pooling rates. Preserve the campaign's descriptive
+material-effect rule: at least 4/5 array wins and at least 10% mean paired relative
+KL reduction. Smaller or inconsistent effects remain explicitly limited; no
+test result authorizes new tuning or a broader rollout. The late-convergence
+flags of the frozen sources remain visible.
+
+Strict lifecycles are `opt125m-cmo-l6-exp1e-digital-transfer-lr0.json` and
+`opt125m-cmo-l6-exp1e-digital-transfer-lr1em5.json` in the campaign lifecycle
+directory. They preserve every source-dependent section and add only the
+existing transfer tests and new question/identities. Preparation uses
+`campaigns/opt-cmo-corruption/launch/exp1e_transfer.py`: native `workflow plan`,
+an execution manifest containing **prepare + devices + five deploy stages**,
+and `ebl campaign run`. The HWA source is an explicit hashed external input;
+there is no HWA stage. `campaigns.lifecycle_collect --deployment-only` validates
+the external source's original native bundle, compatible lifecycle sections,
+exact selected checkpoint, all deployment coverage and both test cohorts.
+
+Execution phase: `opt-cmo-exp1e-digital-transfer-20261011`. Evidence root:
+`results/lifecycles/opt125m-cmo-l6-exp1e-digital-transfer/`. Use fifi for the zero
+source and loulou for 1e-5, where the original checkpoints already reside.
+Incremental caps are **1 GPU-hour, 10 GB and three hours from first admission**;
+each job has a 1,200 s hard limit. Prior whole-model measurements are about
+60 s per array across all six cases and both domains, suggesting roughly
+10–20 minutes total GPU work for both sources including startup/validation.
+Reserve 17,000 MiB plus 2,000 MiB headroom; unchanged full cohorts.
+
+The zero source's five-array job is the bounded readiness run and also contributes
+its 30 scientific rows. After its frozen validation/collection gates pass, record
+measured deployment time/memory/storage and release the 1e-5 job. Do not duplicate
+the baseline as a separate canary. Each case has one persistent tmux worker and
+the existing run-watch service as its sole monitoring owner. The service's tested
+incident invocation, restart recovery and duplicate-prevention mechanisms are
+unchanged; preserve prior handoff-test evidence and live heartbeat observations.
+Poll campaign semantics every five minutes; prepare/devices expectations 120 s,
+deployment 180 s per stage, validation/collection 600 s, stale/startup 600 s.
+No automatic compute retry or scientific change is permitted. Completion hooks
+collect compact evidence and compute paired effects after full 60-row coverage.
+Reviewer interpretation is recorded in the existing result note. No further
+training, corruption-aware sweep or additional seeds are part of this assignment.
