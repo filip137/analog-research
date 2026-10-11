@@ -1,7 +1,7 @@
 ---
 id: "exp-007"
 title: "Four-arm HWA comparison with frozen whole-model learning rates"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-007: four-arm HWA robustness
@@ -141,7 +141,20 @@ checkpoint, with source-fit validation before deployment. The existing-source ma
 contain no HWA stage. Completion hooks collect exact bundles and update the
 four-arm paired report; no interactive coordinator is needed.
 
-## Current handoff
+## Completed handoff
+
+All four sources and the readiness canary completed execution, validation and
+collection by **21:06 Paris on 2026-10-11**. Coverage is **120/120 deployment
+rows** and **72 paired comparisons**, with matched physical identities and no
+incidents or compute retries. The 21:51 status check found no campaign workers
+or reservations; charge was **3.864347 of 7 GPU-hours** and retained remote
+storage **20.347 of 24 GB**. The shared watchdog remains active.
+
+The [result and scientific review](../results/exp-007.md) records all rates,
+domains, development selections and limitations. Rechecking the four collected
+receipts verified 246 compact-file hashes and reproduced the final report
+exactly. No additional experiment was dispatched. Earlier launch and restart
+records follow for reproducibility.
 
 Worker and local completion-controller revision:
 `7aa2d71c984a05f25b04c64c2c67d8dd095464cb`. All three worker checkouts are clean;
@@ -165,8 +178,8 @@ The canary started at 19:08:43 Paris, completed and validated in 146.095 s,
 and was collected automatically. Its handoff gate released both full fits.
 They started at **19:14:21 (cdt5/fifi)** and **19:14:23 (std9/loulou)**.
 Direct native observations found both beyond warm-up at update 357, with finite
-losses and LRs `0.0049996464` / `0.000009999293`. Expected final collection is
-around **21:15–21:45 Paris** on 2026-10-11.
+losses and LRs `0.0049996464` / `0.000009999293`. The launch-time estimate for
+final collection was **21:15–21:45 Paris** on 2026-10-11.
 
 Riri was claimed by another user's job after preflight but before either
 evaluation launched. Both evaluation jobs were held, with zero attempts, while
@@ -180,7 +193,7 @@ The amendment was applied twice to verify idempotency before release. The
 public CLI addition is committed at `5c17a2d`; 125 relevant checks passed,
 including six relocation checks. The running dispatcher code was unchanged.
 
-Live tmux sessions:
+Completed tmux sessions, with retained logs:
 
 ```bash
 ssh -t fifi tmux attach -r -t opt125m-cmo-l6-exp1g-cdt5-60bcf22b16924e04a7ca1d808430250c
