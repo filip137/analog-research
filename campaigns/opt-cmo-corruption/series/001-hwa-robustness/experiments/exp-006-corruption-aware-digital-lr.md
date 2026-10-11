@@ -1,7 +1,7 @@
 ---
 id: "exp-006"
 title: "Corruption-aware HWA with smaller digital learning rates"
-status: "ready"
+status: "running"
 hypotheses: []
 ---
 # exp-006: corruption-aware HWA with split learning rates
@@ -118,5 +118,86 @@ requires deployment-only coverage, full original-source artifact validation and
 exact source lineage. Completion hooks run independently of this interactive
 session, collect compact native evidence and produce development/transfer reports.
 Large artifacts and failed/partial evidence remain on their execution hosts.
-Exact prepared specs, hashes, attempts and first semantic observations will be
-recorded in the handoff below before the interactive owner leaves.
+Exact prepared specs, hashes, attempts and first semantic observations are
+recorded in the handoff below.
+
+## Current execution and monitoring handoff
+
+Frozen worker/controller revision: `176bce6bd226918858c701f84bf394178e6011d3`.
+Campaign manifest SHA-256:
+`abd7482f5b0c3b4cad0e1d7bcfed085435581912443431f4bb223e109f00431b`.
+Both hosts passed pinned teacher/corpus checks and native planning/dry runs.
+Each full lifecycle describes prepare, devices, HWA and five deployments;
+execution slices run only three stages for training and seven for selected-source
+deployment, with zero on-chip trajectories. The source-dependent sections of the
+reused analog control match the new candidates outside the declared scope/LR
+intervention. All five strict lifecycle files passed `workflow check`.
+
+145 focused checks passed, covering conditional selection/replay, invalid or
+partial coverage, native collection and the existing durable execution service.
+Repeat preparation/registration produced the same manifest hash and no duplicate
+jobs or attempts. The unchanged dispatcher's prior live restart, investigator
+invocation and ownership receipts were hash-verified. Service PID 342022 is active,
+restarts on failure, has an 11-minute systemd watchdog and user lingering enabled;
+four of six rolling-day investigator invocations remain available. Initial
+incremental storage is 0.9835 GB. Preflight evidence is in `readiness/preflight.json`.
+
+The fifi canary completed in attempt
+`a1777f0165764adabcf16ea4e681113e`, native worker PID 1120506. Its tmux session was
+`opt125m-cmo-l6-exp1f-cdt-lr1em5-smoke-a1777f0165764adabcf16ea4e681113e`.
+The service observed its live worker and GPU reservation. Direct native
+inspection confirmed prepare/devices completion and finite HWA progress; all
+512 updates subsequently passed native validation and collection. HWA took
+132.493 s with 19.711 GB peak allocated memory; total charged worker time was
+145.893 s (0.040526 GPU-hours). Final rates were 1e-3 and 2e-6. All 26 compact
+file hashes were rechecked. The first observation is
+`readiness/canary-first-observation.json`; the passed immutable gate is
+`readiness/handoff.json`.
+
+The canary completion hook passed the handoff gate and released both full runs
+without an interactive release. Full-fit IDs are
+`opt125m-cmo-l6-exp1f-cdt-lr1em5` (fifi) and
+`opt125m-cmo-l6-exp1f-cdt-lr1em4` (loulou). Conditional evaluation IDs insert
+`-transfer` before `-lr`; only the development-selected alternative may launch.
+Exact placements, native manifests and worker specs are in
+`prepared/{fifi,loulou}.json`; all five queue specs and the idempotent registration
+receipt are under `prepared/queue/`. Completion hooks use the clean local
+`controller/` checkout. Native tmux names are `<job-id>-<attempt>`.
+
+Native run roots are specified exactly by each placement's
+`campaign_result_root`; retained logs are under
+`/home/filip/analog-research/opt-cmo-exp1/worker-receipts/176bce6bd226918858c701f84bf394178e6011d3/<job-id>/<attempt>/run.log`.
+Collection writes `collected/source/`, the immutable `selection.json`, then
+`collected/transfer/` and `collected/transfer-review.json`. If zero wins, the last
+report explicitly identifies reused test evidence. No live coordinator is needed
+for these frozen transitions. Leave the shared service running after this phase.
+
+At **15:15 Paris**, both full fits are running; they started around 15:14:25.
+The service has observed both live workers and GPU reservations. Direct native
+checks confirmed prepare/devices completion and finite HWA progress at update
+206/25,600, with analog rate approximately 0.005 and the correct digital rate
+on each host. Exact observations are `readiness/{fifi,loulou}-first-full-observation.json`;
+the complete handoff snapshot is `readiness/full-handoff.json`.
+
+| Host | Digital peak | Attempt | Native worker PID |
+|---|---:|---|---:|
+| fifi | 1e-5 | `a6e0289cbcbf439eab24303b19bc1ed9` | 1122039 |
+| loulou | 1e-4 | `f5cd534869a54627841159f92f1f12e3` | 868652 |
+
+To view the active tmux sessions:
+
+```bash
+ssh -t filip@fifi 'tmux attach -t opt125m-cmo-l6-exp1f-cdt-lr1em5-a6e0289cbcbf439eab24303b19bc1ed9'
+ssh -t filip@loulou 'tmux attach -t opt125m-cmo-l6-exp1f-cdt-lr1em4-f5cd534869a54627841159f92f1f12e3'
+```
+
+Expected completed comparison, including selected-source deployment/collection:
+**17:15–17:45 Paris on 2026-10-11**. The six-hour phase window ends around
+**21:08:57 Paris**, earlier than the morning availability boundary. The two full
+workers reserve 5 GPU-hours in total; after the canary charge, 0.959474 GPU-hours
+remain unreserved, with unused worker allowances returned on completion. Actual
+charges continue accruing against the original 6-hour cap. Retained storage at
+admission was 1.902 GB against 16 GB, with 3 GB reserved for the active fits.
+No incident, duplicate launch or compute retry occurred. The watchdog heartbeat
+is fresh and host probes are error-free. Its next semantic check is within five
+minutes; collection and winner-only deployment remain automatic and gated.
