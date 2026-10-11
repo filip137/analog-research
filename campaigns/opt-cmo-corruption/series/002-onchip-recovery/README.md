@@ -4,6 +4,7 @@ Measure whether learning on a deployed faulty array improves over frozen HWA,
 digital calibration and rewriting, and report the physical write cost.
 
 - [Dense 50M-token on-chip pilot](experiments/exp-008-overnight-recovery.md)
+- [Digital LoRA rank comparison on the same fixed array](experiments/exp-009-digital-lora.md)
 - [Predecessor: completed four-arm HWA comparison](../001-hwa-robustness/results/exp-007.md)
 
 The first pilot uses standard 3% Gaussian HWA, one 3%-faulty array and dense

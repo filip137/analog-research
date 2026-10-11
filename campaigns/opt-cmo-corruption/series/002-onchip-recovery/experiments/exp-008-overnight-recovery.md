@@ -1,7 +1,7 @@
 ---
 id: "exp-008"
 title: "Dense on-chip baseline over the full synthetic corpus"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-008: dense on-chip recovery after standard HWA
@@ -176,3 +176,10 @@ Attach read-only with `tmux attach -r -t SESSION` on loulou.
 The completion hook collects the full baseline and writes `collected/review.json`,
 with no automatic sparse run or broader sweep. The result note will record the
 actual outcome and interpretation after collection.
+
+
+## Review
+
+The full pass completed and validated; see [the result](../results/exp-008.md).
+This dense LR 5e-3 recipe worsened both held-out domains. No physical continuation
+is queued. The explicitly requested LoRA comparison is recorded in exp-009.
