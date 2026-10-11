@@ -740,11 +740,17 @@ class CampaignLedger:
             self.store.update_job(job_id, "collecting" if mode == "collection_retry" else "queued", "classified operational replay", self.clock())
 
     def recover_driver_crash(self, job_id, raw):
-        """One audited restart after a proven native CUDA-driver SIGSEGV.
+        return self._recover_operational_failure(job_id, raw, "node_failure")
+
+    def recover_missing_tmux(self, job_id, raw):
+        return self._recover_operational_failure(job_id, raw, "transport_before_start")
+
+    def _recover_operational_failure(self, job_id, raw, failure_class):
+        """One audited restart after a driver crash or repaired missing tmux.
 
         Keep retry_safe=false: this receipt authorizes only this terminal fault,
-        from original inputs, on an already prepared host other than the failed
-        host. It cannot change a command, scientific input or resource allowance.
+        from original inputs, on an already prepared host. A driver crash excludes
+        its host. Commands, scientific inputs and resource allowances stay fixed.
         """
         receipt = json.loads(canonical(raw))
         if set(receipt) != {"version", "manifest_sha256", "job_spec_sha256", "failed_attempt", "authorization", "evidence", "restart_from_original_inputs"} or receipt["version"] != 1:
@@ -760,10 +766,13 @@ class CampaignLedger:
         evidence = json.loads(data)
         stage = evidence.get("stage_result", {})
         pid = evidence.get("native_pid")
-        if (evidence.get("failure_class") != "node_failure" or stage.get("returncode") != -11 or stage.get("status") != "failed"
-                or not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0
-                or not any(f"[{pid}]: segfault" in line and "libcuda.so" in line for line in evidence.get("kernel_log", []))):
-            raise ValueError("evidence does not classify a native CUDA-driver SIGSEGV")
+        driver_failure = (evidence.get("failure_class") == "node_failure" and stage.get("returncode") == -11 and stage.get("status") == "failed"
+                and isinstance(pid, int) and not isinstance(pid, bool) and pid > 0
+                and any(f"[{pid}]: segfault" in line and "libcuda.so" in line for line in evidence.get("kernel_log", [])))
+        launcher_failure = (evidence.get("failure_class") == "transport_before_start" and missing_tmux_trace(evidence.get("launcher_log", ""))
+                            and evidence.get("tmux_probe", {}).get("passed") is True)
+        if not ((failure_class == "node_failure" and driver_failure) or (failure_class == "transport_before_start" and launcher_failure)):
+            raise ValueError("evidence does not classify the operational failure and its recovery")
         with self.store.transaction():
             old = self.db.execute("SELECT evidence FROM campaign_retries WHERE job_id=?", (job_id,)).fetchone()
             if old:
@@ -784,20 +793,25 @@ class CampaignLedger:
                 raise ValueError("driver recovery does not match the last failed attempt")
             observed = json.loads(attempt["receipt"] or "{}")
             terminal = observed.get("campaign_worker_terminal", {})
-            if observed.get("alive") is not False or observed.get("reservation_held") is not False or terminal.get("worker_alive") is not False or terminal.get("supervisor_alive") is not False:
+            workers_terminal = terminal.get("worker_alive") is False and terminal.get("supervisor_alive") is False
+            if failure_class == "transport_before_start":
+                workers_terminal = observed.get("campaign_worker_unstarted", {}).get("reason") == "tmux_not_found"
+            if observed.get("alive") is not False or observed.get("reservation_held") is not False or not workers_terminal:
                 raise ValueError("all workers and reservations must be confirmed terminal")
             allowed, reason = self.eligible(job)
             if not allowed:
                 raise ValueError(reason)
             revised = json.loads(canonical(job["spec"]))
-            del revised["placements"][attempt["target"]]
+            if failure_class == "node_failure":
+                del revised["placements"][attempt["target"]]
             if not revised["placements"]:
                 raise ValueError("driver recovery needs another existing prepared host")
-            self.db.execute("INSERT INTO campaign_retries VALUES(?,?,?,?)", (job_id, "node_failure", canonical(receipt), self.clock()))
+            self.db.execute("INSERT INTO campaign_retries VALUES(?,?,?,?)", (job_id, failure_class, canonical(receipt), self.clock()))
             self.db.execute("UPDATE jobs SET spec=?,mode='run' WHERE id=?", (canonical(revised), job_id))
-            self.store.event(job_id, "campaign_driver_recovery", {"receipt": receipt, "excluded_target": attempt["target"],
+            self.store.event(job_id, "campaign_operational_recovery", {"receipt": receipt, "failure_class": failure_class,
+                "excluded_target": attempt["target"] if failure_class == "node_failure" else None,
                 "previous_spec_sha256": digest(job["spec"]), "spec_sha256": digest(revised), "used_seconds": job["used_seconds"]}, self.clock())
-            self.store.update_job(job_id, "queued", "classified CUDA-driver failure; one unchanged restart on another prepared host", self.clock())
+            self.store.update_job(job_id, "queued", "classified operational failure; one unchanged restart", self.clock())
         return digest(receipt)
 
     def status(self):
@@ -1097,6 +1111,11 @@ def storage_probe(paths):
     return {"storage_bytes": total}
 
 
+def missing_tmux_trace(log):
+    return ('if tmux(spec, "has-session"' in log and
+            "FileNotFoundError: [Errno 2] No such file or directory: 'tmux'" in log)
+
+
 def merge_terminal_worker_receipt(observed, worker):
     """Keep compute charged through tmux termination after an outer bridge dies.
 
@@ -1107,6 +1126,12 @@ def merge_terminal_worker_receipt(observed, worker):
     receipt = worker.get("receipt") or {}
     if worker.get("worker_alive") or worker.get("supervisor_alive"):
         observed["alive"] = True
+        return observed
+    if (worker.get("missing") is True and observed.get("alive") is False and observed.get("reservation_held") is False
+            and observed.get("receipt", {}).get("state") == "failed" and missing_tmux_trace(observed.get("log_tail", ""))):
+        # The has-session check precedes tmux creation. Preserve the launcher's
+        # real failure and measured cost instead of waiting for an absent worker.
+        observed["campaign_worker_unstarted"] = {"failure_class": "transport_before_start", "reason": "tmux_not_found"}
         return observed
     if receipt.get("state") not in {"complete", "failed", "timeout", "cancelled", "supervision_lost"}:
         observed["probe_error"] = "tmux terminal identity and receipt are unconfirmed"
@@ -1431,6 +1456,8 @@ def main(argv=None):
     storage.add_argument("campaign_id"); storage.add_argument("bytes", type=int)
     recovery = commands.add_parser("recover-driver-crash")
     recovery.add_argument("case_id"); recovery.add_argument("receipt", type=Path)
+    missing_tmux = commands.add_parser("recover-missing-tmux")
+    missing_tmux.add_argument("case_id"); missing_tmux.add_argument("receipt", type=Path)
     args = parser.parse_args(argv)
     if args.command == "probe-artifacts":
         print(canonical(artifact_probe(args.root))); return
@@ -1475,6 +1502,8 @@ def main(argv=None):
         scheduler.campaigns.storage(args.campaign_id, args.bytes); return
     if args.command == "recover-driver-crash":
         print(scheduler.campaigns.recover_driver_crash(args.case_id, json.loads(args.receipt.read_text()))); return
+    if args.command == "recover-missing-tmux":
+        print(scheduler.campaigns.recover_missing_tmux(args.case_id, json.loads(args.receipt.read_text()))); return
     if args.command == "incident":
         print(scheduler.campaigns.incident(args.case_id, args.kind, json.loads(args.evidence.read_text()))); return
     from queue_recovery import Recovery
