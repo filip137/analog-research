@@ -4,7 +4,7 @@
 
 Sources: campaign experiment metadata and reviewer-written result notes. No raw evidence or live job state is inferred.
 
-Counts: complete=8, running=1.
+Counts: complete=8, planned=1, running=1.
 
 ## Experiments
 
@@ -19,6 +19,7 @@ Counts: complete=8, running=1.
 | [exp-007 — Four-arm HWA comparison with frozen whole-model learning rates](series/001-hwa-robustness/experiments/exp-007-corruption-rate-sweep.md) | complete | None declared | [validated-local](series/001-hwa-robustness/results/exp-007.md): Complete four-arm comparison: 9% Gaussian HWA leads WikiText at 2–3% faults; 3%-fault-aware HWA leads at 4–5%; training with 5% faults adds healthy cost without a material gain over 3% |
 | [exp-008 — Dense on-chip baseline over the full synthetic corpus](series/002-onchip-recovery/experiments/exp-008-overnight-recovery.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-008.md): Full dense one-pass recovery completed and worsened both held-out domains at high write cost |
 | [exp-009 — Digital LoRA beside dense on-chip recovery](series/002-onchip-recovery/experiments/exp-009-digital-lora.md) | running | None declared | [validated-local](series/002-onchip-recovery/results/exp-009.md): Rank-4 full pass reduces generated KL by 38% with zero writes; ranks 16 and 64 remain in progress |
+| [exp-010 — Development-triggered LR follow-up for dense recovery and LoRA](series/002-onchip-recovery/experiments/exp-010-lr-followup.md) | planned | None declared | No result recorded. |
 
 ## Hypothesis evidence
 

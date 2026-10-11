@@ -180,3 +180,8 @@ review of the remaining two reports. Current 3090 throughput projects completion
 and collection before approximately 03:00 Paris, conditional on continued
 healthy progress. The frozen 07:30 compute cutoff and 09:00 delivery deadline
 remain in force.
+
+The user's subsequent instruction, "if the loss worsens tune the lr", authorizes
+the bounded [development-triggered follow-up](exp-010-lr-followup.md). It adds a
+conditional lower-LR fit through the existing completion callback and held jobs;
+the original comparison, selection receipts and current fits remain intact.
