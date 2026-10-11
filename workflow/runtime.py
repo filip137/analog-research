@@ -330,6 +330,8 @@ def train_onchip(stage: Stage):
         index[case.label] = {}
         for arm in lifecycle.onchip.arms:
             started = time.monotonic()
+            if hasattr(network, "enable_lora"):
+                network.enable_lora(None)
             network.load_state_dict(p0["model"])
             array = program_verify.fresh(lifecycle, network.layout, seed, case, bundle["populations"], device)
             device_stage.load_array_state(array, deployed["array"], stage.technology, target)
@@ -373,6 +375,7 @@ def train_onchip(stage: Stage):
                     "onchip_arm": arm.arm_id,
                     "weights": arm.weights,
                     "calibration": arm.calibration,
+                    **({"digital_adapter": outcome["digital_adapter"]} if arm.digital_adapter else {}),
                     "identity": deployed["identity"],
                     "programming": deployed["programming"],
                     "p0_sha256": p0_sha256,

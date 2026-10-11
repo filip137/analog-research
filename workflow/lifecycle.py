@@ -1194,17 +1194,31 @@ def _program_verify(raw: Any, technology: str) -> ProgramVerify:
 
 
 @dataclass(frozen=True)
+class DigitalLora:
+    rank: int
+    alpha: float
+    learning_rate: float
+
+    def to_dict(self) -> dict:
+        return {"kind": "lora", "rank": self.rank, "alpha": self.alpha, "learning_rate": self.learning_rate}
+
+
+@dataclass(frozen=True)
 class OnchipArm:
     arm_id: str
     weights: str
     calibration: bool
+    digital_adapter: Optional[DigitalLora] = None
 
     @property
     def trains(self) -> bool:
-        return self.weights != "hold" or self.calibration
+        return self.weights != "hold" or self.calibration or self.digital_adapter is not None
 
     def to_dict(self) -> dict:
-        return {"id": self.arm_id, "weights": self.weights, "calibration": self.calibration}
+        value = {"id": self.arm_id, "weights": self.weights, "calibration": self.calibration}
+        if self.digital_adapter is not None:
+            value["digital_adapter"] = self.digital_adapter.to_dict()
+        return value
 
 
 @dataclass(frozen=True)
@@ -1272,24 +1286,37 @@ def _onchip(raw: Any, technology: str) -> Onchip:
     arms = []
     for index, item in enumerate(_list(raw["arms"], "onchip.arms")):
         path = f"onchip.arms[{index}]"
-        item = _object(item, path, ("id", "weights", "calibration"))
+        keys = ("id", "weights", "calibration") + (("digital_adapter",) if "digital_adapter" in item else ())
+        item = _object(item, path, keys)
+        adapter = None
+        if "digital_adapter" in item:
+            a = _object(item["digital_adapter"], f"{path}.digital_adapter", ("kind", "rank", "alpha", "learning_rate"))
+            _choice(a["kind"], f"{path}.digital_adapter.kind", ("lora",))
+            adapter = DigitalLora(
+                rank=_integer(a["rank"], f"{path}.digital_adapter.rank", minimum=1, maximum=768),
+                alpha=_number(a["alpha"], f"{path}.digital_adapter.alpha", positive=True),
+                learning_rate=_number(a["learning_rate"], f"{path}.digital_adapter.learning_rate", positive=True),
+            )
+            if item["weights"] != "hold" or item["calibration"] is not False:
+                raise config_error(path, "to hold weights and calibration fixed for digital LoRA", item)
         arms.append(
             OnchipArm(
                 arm_id=_identifier(item["id"], f"{path}.id"),
                 weights=_choice(item["weights"], f"{path}.weights", ("hold", "rewrite", "learn")),
                 calibration=_boolean(item["calibration"], f"{path}.calibration"),
+                digital_adapter=adapter,
             )
         )
     arms = tuple(arms)
     if len({arm.arm_id for arm in arms}) != len(arms):
         raise config_error("onchip.arms", "to have unique ids", [arm.arm_id for arm in arms])
-    settings = {(arm.weights, arm.calibration) for arm in arms}
+    settings = {(arm.weights, arm.calibration, arm.digital_adapter) for arm in arms}
     if len(settings) != len(arms):
         raise config_error("onchip.arms", "to have unique weight/calibration settings", [a.to_dict() for a in arms])
     for arm in arms:
         # A weight-writing arm is interpretable only beside its matched
         # no-weight-write control with the same digital calibration.
-        if arm.weights != "hold" and ("hold", arm.calibration) not in settings:
+        if (arm.weights != "hold" or arm.digital_adapter is not None) and ("hold", arm.calibration, None) not in settings:
             raise config_error(
                 "onchip.arms",
                 f"to include a hold arm with calibration={arm.calibration} matching {arm.arm_id!r}",
@@ -1401,6 +1428,8 @@ class Lifecycle:
 def _cross_validate(lifecycle: Lifecycle) -> None:
     devices, data, network = lifecycle.devices, lifecycle.data, lifecycle.network
     family = network.family
+    if lifecycle.onchip and any(a.digital_adapter for a in lifecycle.onchip.arms) and family != OPT_FAMILY:
+        raise config_error("onchip.arms.digital_adapter", "to be absent outside opt_mlp_suffix", family)
     if lifecycle.question.primary_metric not in PRIMARY_METRICS[family]:
         raise config_error(
             "question.primary_metric",

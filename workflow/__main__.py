@@ -175,6 +175,8 @@ def _measurement_rows(measurements: list[dict], run_dir: Path) -> list[dict]:
         }
         for key, value in sorted(row["cost"].items()):
             flat[f"cost_{key}"] = value
+        for key, value in sorted(row.get("digital_adapter", {}).items()):
+            flat[f"adapter_{key}"] = value
         rows.append(flat)
     return rows
 

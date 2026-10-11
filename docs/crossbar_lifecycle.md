@@ -343,6 +343,34 @@ counts use that cohort. Omission preserves historical lifecycle identities.
 
 ## Stages, artifacts and reuse
 
+### Digital LoRA recovery controls
+
+For `opt_mlp_suffix`, an on-chip hold arm may declare
+`digital_adapter: {"kind": "lora", "rank": 16, "alpha": 16, "learning_rate": 0.001}`.
+It must use `weights: "hold"`, `calibration: false`, and have a matched unadapted
+hold arm. Only digital low-rank branches on the existing analog fc1/fc2 matrices
+are trained. A is initialized uniformly at +/-1/sqrt(fan_in), B to zero, using
+`onchip.seed`; alpha/r scaling, no dropout or weight decay, constant Adam LR.
+Corrections use logical weight units before the fixed output gain and bias.
+Every base parameter and the held array are verified unchanged. Native states
+store adapter tensors separately, replay exactly, and report adapter parameters,
+extra MACs/token and zero adaptation writes. These branches remain digital at
+inference; merging them into an array would be a separate intervention.
+
+`python -m workflow.portable_deployment` expands an existing compact CMO P0 on
+its original GPU into held tensors, binding the new artifact to its parent hash.
+It preserves the original bundle and checks exact apparent-state equality;
+this is a serialization conversion, not a new endpoint draw. Portable states
+stay explicit when saved again, avoiding cross-GPU RNG reconstruction.
+
+A recovery-only native campaign may contain one onchip stage with four explicit
+frozen inputs (`teacher_weights`, `device_data`, `device_model`, `device_state`).
+Use `python -m campaigns.recovery_collect validate RUN_ROOT --inputs INPUTS.json`
+and its `collect` command for this manifest shape. The input contract pins all
+four hashes, array identity and apparent-state hashes; the collector checks
+native inspection, lineage, trajectory coverage, presentation count, exact replay
+and LoRA's immutable physical/base state before exporting native collected rows.
+
 | Stage | Runs | Inputs | Artifact kinds |
 | --- | --- | --- | --- |
 | `prepare` | 1 | teacher (+ the declared corpus for OPT) | `feature_cache` (CIFAR features or OPT token cohorts), `mapping` |

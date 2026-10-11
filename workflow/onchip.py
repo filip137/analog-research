@@ -233,12 +233,18 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
     learn, rewrite = arm.weights == "learn", arm.weights == "rewrite"
     network.enable_calibration(arm.calibration)
     network.q.requires_grad_(False)
+    adapter = arm.digital_adapter
+    if hasattr(network, "enable_lora"):
+        network.enable_lora(adapter, onchip.seed)
+    base_hash = network.base_state_hash() if adapter else None
     master = torch.nn.Parameter(target.clone(), requires_grad=learn)
     groups = []
     if learn and not direct:
         groups.append({"params": [master], "lr": onchip.learning_rate})
     if arm.calibration:
         groups.append({"params": network.calibration_parameters(), "lr": onchip.calibration_learning_rate})
+    if adapter:
+        groups.append({"params": network.lora.parameters(), "lr": adapter.learning_rate})
     optimizer = torch.optim.Adam(groups) if groups else None
     writer = make_writer(array, lifecycle) if learn and direct else None
     tolerance = (
@@ -317,6 +323,10 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
         device_stage.verify_fixed(array, technology, fixed)
         if network.prefix_hash() != prefix:
             raise RuntimeError("On-chip training changed the frozen digital prefix.")
+        if adapter and network.base_state_hash() != base_hash:
+            raise RuntimeError("Digital LoRA changed the frozen base model.")
+        if adapter and (tensor_hash(array.read()) != initial_hash or array.cost() != baseline):
+            raise RuntimeError("Digital LoRA changed the held physical deployment.")
         cost = {key: value - baseline[key] for key, value in array.cost().items()}
         if om:
             count = writer.count if writer else rewrite_count
@@ -353,6 +363,10 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
         "arm": arm.arm_id,
         "weights": arm.weights,
         "calibration": arm.calibration,
+        **({"digital_adapter": {**adapter.to_dict(),
+             "parameters": sum(p.numel() for p in network.lora.parameters()),
+             "extra_macs_per_token": sum(p.numel() for p in network.lora.parameters()),
+             "base_unchanged": True, "array_unchanged": True}} if adapter else {}),
         "curve": curve,
         "initial_apparent_sha256": initial_hash,
         "final_apparent_sha256": tensor_hash(array.read()),
@@ -360,10 +374,12 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
             "calibration": {
                 name: p.detach().cpu().clone()
                 for name, p in network.named_parameters()
-                if name != "q" and p.requires_grad
+                if name != "q" and not name.startswith("lora.") and p.requires_grad
             },
+            **({"digital_adapter": {"config": adapter.to_dict(), "seed": onchip.seed,
+                  "state": clone_cpu(network.lora.state_dict())}} if adapter else {}),
             "master_target": master.detach().cpu().clone(),
-            "array": device_stage.array_state(array, technology),
+            "array": device_stage.array_state(array, technology, portable=bool(adapter)),
             "writer": None if writer is None else writer.state_dict(),
             "rewrite_count": rewrite_count.cpu(),
         },
@@ -376,7 +392,15 @@ def restore(network, array, source_model, state, technology, target=None) -> Non
     ``target`` rebuilds a compact CMO deployment state (an arm that never wrote).
     """
 
+    if hasattr(network, "enable_lora"):
+        network.enable_lora(None)
     network.load_state_dict(source_model)
+    if "digital_adapter" in state:
+        from workflow.lifecycle import DigitalLora
+        saved = state["digital_adapter"]
+        config = {k: v for k, v in saved["config"].items() if k != "kind"}
+        network.enable_lora(DigitalLora(**config), saved["seed"])
+        network.lora.load_state_dict(saved["state"])
     with torch.no_grad():
         parameters = dict(network.named_parameters())
         for name, value in state["calibration"].items():

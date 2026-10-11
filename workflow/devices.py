@@ -455,7 +455,7 @@ def array_identity(array, technology: str) -> dict:
     }
 
 
-def array_state(array, technology: str) -> dict:
+def array_state(array, technology: str, *, portable=False) -> dict:
     """Compact state: OM populations are restored from the device bundle.
 
     A CMO array programmed once and never written is fully determined by its
@@ -463,7 +463,7 @@ def array_state(array, technology: str) -> dict:
     reprogramming on the same execution-device type, then verified.
     """
 
-    if technology == "cmo" and array.freshly_programmed():
+    if technology == "cmo" and array.freshly_programmed() and not portable and not getattr(array, "portable_state", False):
         return {
             "kind": "layered_cmo_deployment",
             "faults_sha256": [child.fault_digest() for child in array.children],
@@ -495,6 +495,10 @@ def load_array_state(array, state: dict, technology: str, target=None) -> None:
             raise RuntimeError("The rebuilt CMO deployment differs from the saved one.")
     else:
         array.load_state_dict(state)
+        if technology == "cmo":
+            # A portable tensor state must never be reduced back to a seed
+            # recipe: CUDA RNG partitioning can vary across GPU models.
+            array.portable_state = True
 
 
 def fixed_state(array, technology: str):

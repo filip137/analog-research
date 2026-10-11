@@ -240,6 +240,32 @@ class OptMlpSuffix(nn.Module):
                 layer.fc1 = layer.fc2 = layer.final_layer_norm = None
         self.enable_calibration(False)
         self.enable_digital(False)
+        self.lora = None
+        self.lora_multiplier = 0.0
+
+    def enable_lora(self, config, seed=0):
+        """Digital corrections to the analog MLPs, in logical weight units.
+
+        A is uniform +/-1/sqrt(fan_in), B is zero; alpha/r scaling, no
+        dropout. CPU initialization makes adapter initialization portable.
+        The correction precedes the frozen output gain and remains digital.
+        """
+        self.lora = None
+        self.lora_multiplier = 0.0
+        if config is None:
+            return
+        generator = torch.Generator().manual_seed(seed)
+        modules = []
+        for spec in self.layout:
+            outputs, inputs = spec.shape
+            a = torch.empty(config.rank, inputs).uniform_(-inputs ** -0.5, inputs ** -0.5, generator=generator)
+            modules.append(nn.ParameterDict({"a": nn.Parameter(a.to(self.q.device)),
+                "b": nn.Parameter(torch.zeros(outputs, config.rank, device=self.q.device))}))
+        self.lora = nn.ModuleList(modules)
+        self.lora_multiplier = config.alpha / config.rank
+
+    def base_state_hash(self):
+        return state_hash({k: v for k, v in self.state_dict().items() if not k.startswith("lora.")})
 
     @property
     def teacher(self) -> OptDecoder:
@@ -315,7 +341,11 @@ class OptMlpSuffix(nn.Module):
             scale = self.channel_scales[self.channel_offsets[index] : self.channel_offsets[index + 1]]
         else:
             scale = self.scales[index]
-        result = product * scale * self.output_gains[index] + self.mlp_biases[index]
+        logical = product * scale
+        if self.lora is not None:
+            adapter = self.lora[index]
+            logical = logical + ((flat @ adapter["a"].T) @ adapter["b"].T) * self.lora_multiplier
+        result = logical * self.output_gains[index] + self.mlp_biases[index]
         return result.reshape(*x.shape[:-1], spec.shape[0])
 
     def forward_features(self, hidden, q=None):
