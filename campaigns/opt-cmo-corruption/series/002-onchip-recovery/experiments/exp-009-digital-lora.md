@@ -1,7 +1,7 @@
 ---
 id: "exp-009"
 title: "Digital LoRA beside dense on-chip recovery"
-status: "planned"
+status: "running"
 hypotheses: []
 ---
 # exp-009: digital LoRA on the same faulty MLPs
@@ -79,11 +79,14 @@ frozen-target rewrite, alternate sources or independent array assignments.
 
 ## Execution, gates and budgets
 
-Use local nom-cool-2 and nom-cool-1 RTX3090s, one worker per GPU, persistent tmux
-workers dispatched by the existing single run-watch service. Do not disturb
-other users. A bounded P0 materialization uses loulou's 5090 once exp-008 releases
-it. At most two 3090s are occupied by this sweep; full fits use development
-measured timing and memory gates. Initial development reservation: 20,000 MiB
+Prepared placements are local nom-cool-2 and nom-cool-1 RTX3090s, and loulou and
+fifi RTX5090s, one worker per idle GPU, dispatched in persistent tmux by the
+existing single run-watch service. The 3090s became occupied by another campaign
+during preparation; loulou became free after exp-008 and fifi subsequently became
+free. Add the independently prepared 5090 placements through recorded operational
+amendments, without changing scientific inputs or duplicating jobs. A bounded P0
+materialization already completed on loulou. Full fits use development-measured
+timing and memory gates. Initial development reservation: 20,000 MiB
 plus 2,000 MiB headroom. No automatic batch-size or scientific changes to fit.
 
 Cap the new comparison at **8 GPU-hours**, **40 GB** retained evidence across
@@ -92,6 +95,8 @@ for the LoRA queue), and stop admission if the next job cannot finish before
 **07:30 Paris on October 12**. Retain final checkpoints, development endpoints,
 upstream artifacts, native manifests, metrics and failed-attempt evidence.
 No per-minibatch checkpoints. No automatic scientific retries or extensions.
+The user's final delivery deadline is **09:00 Paris on October 12**; the earlier
+compute cutoff reserves 90 minutes for collection, validation and review.
 
 Before final fits: workflow regression tests and tiny native end-to-end replay
 must pass; each rank's development run must validate finite metrics, exact
@@ -105,4 +110,30 @@ The existing service's five-minute semantic polling, self-watchdog, tested
 read-only incident invocation, restart recovery, idempotent queue and durable
 budgets remain authoritative. This campaign adds jobs and gates, not a second
 watchdog. Host preparation, native plan/dry-run, job IDs and completion receipts
-will be recorded here before handoff.
+are retained under `results/lifecycles/opt125m-cmo-l6-exp3-lora/`.
+
+## Live handoff
+
+Campaign ID: `opt-cmo-exp3-lora-20261012`. The three development job IDs are
+`opt125m-cmo-l6-exp3-lora-r{4,16,64}-dev`. Only the selected full-pass job at each
+rank is released automatically, after native validation and its frozen LR gate;
+the other six candidate full-pass jobs remain held without a passing gate.
+
+The rank-64 screen started on loulou at 00:58 Paris, attempt
+`0850757294b04f7aa37f1f9f6a6df203`. Controller/original 3090 revision:
+`8943cf689c3436cd3e2afeace7629be9853e53cd`; loulou worker revision:
+`59f6bd93c5b4b9c58cd1de8de1f165bd975129c3`. The revision difference adds only
+prepared-placement support; numerical training code and scientific inputs match.
+All 12 plans and native dry-runs passed on each prepared host. Workflow regression
+and native LoRA replay checks passed (309 passed, one skipped); dispatcher and
+placement-amendment checks passed (121 tests).
+
+Portable P0 SHA-256:
+`8068397182b3ffe3b0a92298fb36d0205d2e717c420abacb0c061e975c523e4f`.
+The original held apparent-state hash is preserved exactly:
+`34578c8c1f1a87bcd38597d7808e34eb4f0859a77af0a41183986f454a583db6`.
+The portable-state job charged 6.07 GPU-seconds, within its separate allowance.
+Readiness, placement amendments, storage measurements, LR-selection receipts and
+per-rank reports are in `readiness/`, `prepared/`, `collected/` and `reviews/`
+under the evidence root. The original campaign manifest remains immutable;
+durable amendments record additional placements.
