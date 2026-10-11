@@ -1,0 +1,64 @@
+{
+  "cdt_zero": {
+    "attempt": "fef0c764e7a347118f5da4a5d577114a",
+    "job": "exp1e-cosine-cdt_random_3pct",
+    "mean_development_kl": 0.07576591790306803,
+    "native_result": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-cosine-20261010/results/lifecycles/opt125m-cmo-l6-exp1e/exp1e-cosine-cdt_random_3pct/runs/opt125m-cmo-l6-exp1e--4b89e0da80f4/stages/cdt_random_3pct/local/hwa__cdt_random_3pct/attempt-001/runs/20261010T192141.749870Z-9bb418d5-2da675b4/result.json",
+    "receipt": "/home/filip/analog-research/hwa/results/lifecycles/opt125m-cmo-l6-exp1e-cosine/collected/exp1e-cosine-cdt_random_3pct/fef0c764e7a347118f5da4a5d577114a/collection.json",
+    "receipt_sha256": "09aceb08ff9ac4b2c1353fa331def3b2f0fa1ea71cd46596a9530e5ff94911ab",
+    "result": "/home/filip/analog-research/hwa/results/lifecycles/opt125m-cmo-l6-exp1e-cosine/collected/exp1e-cosine-cdt_random_3pct/fef0c764e7a347118f5da4a5d577114a/hwa__cdt_random_3pct/result.json",
+    "result_sha256": "d29bc2bba13c8fd7c39d444294b0edf9070d8c6923b4b080aa981477eeca7d98",
+    "source_path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-cosine-20261010/results/lifecycles/opt125m-cmo-l6-exp1e/exp1e-cosine-cdt_random_3pct/runs/opt125m-cmo-l6-exp1e--4b89e0da80f4/stages/cdt_random_3pct/local/hwa__cdt_random_3pct/attempt-001/runs/20261010T192141.749870Z-9bb418d5-2da675b4/checkpoints/source.pt",
+    "source_sha256": "fae5a56c0fc01c26e3ff33d024cd1fee9e053d8ccfe0a5f739804f322f4a3a5e",
+    "target": "fifi"
+  },
+  "cosine_deployments": {
+    "path": "/home/filip/analog-research/hwa/results/lifecycles/opt125m-cmo-l6-exp1e-cosine/collected/deployments.json",
+    "sha256": "36e72accb45432bd33999b73b6e4e2d580e502ea7def6a7d2f05dcf1254adea0"
+  },
+  "standard_grid": [
+    {
+      "attempt": "d07ae74a340c4e74a6c9825f0d2196d3",
+      "job": "opt125m-cmo-l6-exp1e-digital-lr0-values",
+      "mean_development_kl": 0.08527921801615579,
+      "native_result": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-values-20261011/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr0/runs/opt125m-cmo-l6-exp1e-digital-lr0--aae82c6233d6/stages/standard_hwa_model/local/hwa__standard_hwa_model/attempt-001/runs/20261010T235121.066849Z-e9cc3f8a-f729bd82/result.json",
+      "receipt": "/home/filip/analog-research/hwa/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr/collected/opt125m-cmo-l6-exp1e-digital-lr0-values/d07ae74a340c4e74a6c9825f0d2196d3/collection.json",
+      "receipt_sha256": "3d10eee0abea390a7806cbc5fbfd5087e32b82700fc980dc8a127f919692d9b1",
+      "result": "/home/filip/analog-research/hwa/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr/collected/opt125m-cmo-l6-exp1e-digital-lr0-values/d07ae74a340c4e74a6c9825f0d2196d3/hwa__standard_hwa_model/result.json",
+      "result_sha256": "efa1f2bef6d4cc871eebee85d859c0daf6fa9433f54af3486824f8e1409fbae8",
+      "source_path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-values-20261011/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr0/runs/opt125m-cmo-l6-exp1e-digital-lr0--aae82c6233d6/stages/standard_hwa_model/local/hwa__standard_hwa_model/attempt-001/runs/20261010T235121.066849Z-e9cc3f8a-f729bd82/checkpoints/source.pt",
+      "source_sha256": "95ea4d17a319a71d95d155818dac9129cdd1d26cfbd1d4c4b325fa2a46e51036",
+      "target": "fifi"
+    },
+    {
+      "attempt": "ccb0dfd543b848a4a11facc6ce7611bb",
+      "job": "opt125m-cmo-l6-exp1e-digital-lr1em5-values",
+      "mean_development_kl": 0.07877010283809083,
+      "native_result": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-values-20261011/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr1em5/runs/opt125m-cmo-l6-exp1e-digital-lr1em5--cdac54a85970/stages/standard_hwa_model/local/hwa__standard_hwa_model/attempt-001/runs/20261011T013506.097920Z-d4e9bdc7-e50b689b/result.json",
+      "receipt": "/home/filip/analog-research/hwa/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr/collected/opt125m-cmo-l6-exp1e-digital-lr1em5-values/ccb0dfd543b848a4a11facc6ce7611bb/collection.json",
+      "receipt_sha256": "1946b55b25a1cf241d4483bda15c040439f365cade59f3a19936ea7e5b4d8056",
+      "result": "/home/filip/analog-research/hwa/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr/collected/opt125m-cmo-l6-exp1e-digital-lr1em5-values/ccb0dfd543b848a4a11facc6ce7611bb/hwa__standard_hwa_model/result.json",
+      "result_sha256": "119e3b646effa043353a6131dcccadbd0fcd1334811568df192460053101a134",
+      "source_path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-values-20261011/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr1em5/runs/opt125m-cmo-l6-exp1e-digital-lr1em5--cdac54a85970/stages/standard_hwa_model/local/hwa__standard_hwa_model/attempt-001/runs/20261011T013506.097920Z-d4e9bdc7-e50b689b/checkpoints/source.pt",
+      "source_sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028",
+      "target": "loulou"
+    },
+    {
+      "attempt": "c085c7fee1b24d1cbcd56dd80bd120a0",
+      "job": "opt125m-cmo-l6-exp1e-digital-lr1em4-values",
+      "mean_development_kl": 0.08911832235023087,
+      "native_result": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-values-20261011/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr1em4/runs/opt125m-cmo-l6-exp1e-digital-lr1em4--27bf55b99a57/stages/standard_hwa_model/local/hwa__standard_hwa_model/attempt-001/runs/20261010T235106.763381Z-a498cab6-16310bf2/result.json",
+      "receipt": "/home/filip/analog-research/hwa/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr/collected/opt125m-cmo-l6-exp1e-digital-lr1em4-values/c085c7fee1b24d1cbcd56dd80bd120a0/collection.json",
+      "receipt_sha256": "c78b3de86d4f425f8b0a43b5675ed413b548a23b055feb57dffa47dff8ebf1fc",
+      "result": "/home/filip/analog-research/hwa/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr/collected/opt125m-cmo-l6-exp1e-digital-lr1em4-values/c085c7fee1b24d1cbcd56dd80bd120a0/hwa__standard_hwa_model/result.json",
+      "result_sha256": "ce4a8cf80b766e2260c81d6370fd390b673f8c669572e7a057c812d36527d03d",
+      "source_path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-values-20261011/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr1em4/runs/opt125m-cmo-l6-exp1e-digital-lr1em4--27bf55b99a57/stages/standard_hwa_model/local/hwa__standard_hwa_model/attempt-001/runs/20261010T235106.763381Z-a498cab6-16310bf2/checkpoints/source.pt",
+      "source_sha256": "36b2d04d83ceadd0304b0e48870d5356c8a7badd5bac2d953af95729862ea499",
+      "target": "loulou"
+    }
+  ],
+  "standard_transfer": {
+    "path": "/home/filip/analog-research/hwa/results/lifecycles/opt125m-cmo-l6-exp1e-digital-transfer/collected/deployments.json",
+    "sha256": "65aad9f8ee55e4c262291a83844e7615a1a502697678a8ba8197ee6ad93c936e"
+  }
+}
