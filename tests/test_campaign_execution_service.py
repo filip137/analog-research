@@ -191,6 +191,17 @@ def test_incident_dedup_and_remaining_budget_persist(setup):
     assert snapshot["remaining_budget"]["gpu_seconds_available"] == 3600
 
 
+def test_incident_snapshot_preserves_collection_failure_log(setup):
+    scheduler, _, _ = ready(setup)
+    payload = {"receipt": {"state": "failed", "run_exit_code": 1}, "log_tail": "ValueError: gate calibration rejected"}
+    scheduler.store.db.execute("INSERT INTO collections VALUES(?,?,?,?,?)", ("collect-one", "one", 1000, "failed", json.dumps(payload)))
+    scheduler.campaigns.incident("one", "queue_anomaly", {"reason": "collection failed"})
+    incident = scheduler.store.db.execute("SELECT * FROM campaign_incidents").fetchone()
+    history = scheduler.campaigns.snapshot(incident)["collection_history"]
+    assert len(history) == 1 and history[0]["payload"] == payload
+    assert history[0]["job_id"] == "one" and history[0]["state"] == "failed"
+
+
 def test_read_only_invocation_has_no_approval_or_inherited_tools(tmp_path):
     command = investigator_command({"command": ["codex"]}, tmp_path)
     assert "--ignore-user-config" in command
@@ -338,6 +349,43 @@ def test_handoff_phase_calibration_is_frozen_without_overwriting_other_phase_or_
             "deploy": {**measured, "expected_seconds": 500}}})
     with pytest.raises(ValueError, match="handoff"):
         scheduler.campaigns.gate("study", "other", receipt)
+
+
+@pytest.mark.parametrize("phases", [False, True])
+def test_required_gate_calibration_is_immutable_and_scoped_to_its_case(setup, phases):
+    scheduler, _, job, manifest = setup
+    job("one"); job("two")
+    doc = manifest(("one", "two"))
+    doc["cases"][0]["required_gates"] = ["selected-r64"]
+    if phases:
+        for case in doc["cases"]:
+            case["progress"]["phases"] = phase_thresholds()
+    sha = scheduler.campaigns.register(doc)
+    measured = {"startup_seconds": 600, "stale_seconds": 900, "expected_seconds": 1961}
+    key = "phase_progress_calibration" if phases else "progress_calibration"
+    stage = "deploy" if phases else "training"
+    receipt = {"manifest_sha256": sha, "passed": True, "evidence": ["validated-r64-screen"], key: {stage: measured}}
+    scheduler.campaigns.gate("study", "selected-r64", receipt)
+    scheduler.campaigns.gate("study", "selected-r64", receipt)
+    assert scheduler.campaigns.progress_expectation("one", "lab", stage) == measured
+    expected = phase_thresholds()[stage] if phases else doc["cases"][1]["progress"]
+    assert scheduler.campaigns.progress_expectation("two", "lab", stage) == expected
+    assert scheduler.campaigns.contract("study")["manifest"] == doc
+    with pytest.raises(ValueError, match="immutable"):
+        scheduler.campaigns.gate("study", "selected-r64", {**receipt, key: {stage: {**measured, "expected_seconds": 3000}}})
+    with pytest.raises(ValueError, match="declared required gate"):
+        scheduler.campaigns.gate("study", "undeclared-selection", receipt)
+
+
+def test_failed_required_gate_cannot_supply_calibration(setup):
+    scheduler, _, job, manifest = setup
+    job()
+    doc = manifest(); doc["cases"][0]["required_gates"] = ["selection"]
+    sha = scheduler.campaigns.register(doc)
+    scheduler.campaigns.gate("study", "selection", {"manifest_sha256": sha, "passed": False,
+        "evidence": ["failed canary"], "progress_calibration": {"training": {
+            "startup_seconds": 900, "stale_seconds": 900, "expected_seconds": 2000}}})
+    assert scheduler.campaigns.progress_expectation("one") == doc["cases"][0]["progress"]
 
 
 @pytest.mark.parametrize("calibration", [None, [], {"wrong": {}},
