@@ -1,0 +1,26 @@
+{
+  "cdt3": {
+    "mean_development_kl": 0.0695650268565206,
+    "origin_host": "fifi",
+    "original_result": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1f-cdt-lr-20261011/results/lifecycles/opt125m-cmo-l6-exp1f-cdt-lr1em5/runs/opt125m-cmo-l6-exp1f-cdt-lr1em5--21f313aa529b/stages/cdt_random_3pct_model/local/hwa__cdt_random_3pct_model/attempt-001/runs/20261011T131338.096342Z-c5ad6e40-6680fc51/result.json",
+    "original_source": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1f-cdt-lr-20261011/results/lifecycles/opt125m-cmo-l6-exp1f-cdt-lr1em5/runs/opt125m-cmo-l6-exp1f-cdt-lr1em5--21f313aa529b/stages/cdt_random_3pct_model/local/hwa__cdt_random_3pct_model/attempt-001/runs/20261011T131338.096342Z-c5ad6e40-6680fc51/checkpoints/source.pt",
+    "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/exp1g-frozen-sources/cdt3/20261011T131338.096342Z-c5ad6e40-6680fc51/checkpoints/source.pt",
+    "receipt": "/home/filip/analog-research/hwa/results/lifecycles/opt125m-cmo-l6-exp1f-cdt-lr/collected/source/opt125m-cmo-l6-exp1f-cdt-lr1em5/a6e0289cbcbf439eab24303b19bc1ed9/collection.json",
+    "receipt_sha256": "bd43a3ff173652514a4abdab147559cb23362201f767e3f074f645fe30101c40",
+    "result": "/home/filip/analog-research/opt-cmo-exp1/inputs/exp1g-frozen-sources/cdt3/20261011T131338.096342Z-c5ad6e40-6680fc51/result.json",
+    "result_sha256": "9c08757b682bfe076d9aa140c3588d8df3f68b7869b8774a831cd4e00e73ec48",
+    "sha256": "8a44f11ba6ed8a833fa66954c6124847d41a2dd74a7023ae04d775a1c729ac89"
+  },
+  "std3": {
+    "mean_development_kl": 0.07877010283809083,
+    "origin_host": "loulou",
+    "original_result": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-values-20261011/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr1em5/runs/opt125m-cmo-l6-exp1e-digital-lr1em5--cdac54a85970/stages/standard_hwa_model/local/hwa__standard_hwa_model/attempt-001/runs/20261011T013506.097920Z-d4e9bdc7-e50b689b/result.json",
+    "original_source": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1e-digital-values-20261011/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr1em5/runs/opt125m-cmo-l6-exp1e-digital-lr1em5--cdac54a85970/stages/standard_hwa_model/local/hwa__standard_hwa_model/attempt-001/runs/20261011T013506.097920Z-d4e9bdc7-e50b689b/checkpoints/source.pt",
+    "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/exp1g-frozen-sources/std3/20261011T013506.097920Z-d4e9bdc7-e50b689b/checkpoints/source.pt",
+    "receipt": "/home/filip/analog-research/hwa/results/lifecycles/opt125m-cmo-l6-exp1e-digital-lr/collected/opt125m-cmo-l6-exp1e-digital-lr1em5-values/ccb0dfd543b848a4a11facc6ce7611bb/collection.json",
+    "receipt_sha256": "1946b55b25a1cf241d4483bda15c040439f365cade59f3a19936ea7e5b4d8056",
+    "result": "/home/filip/analog-research/opt-cmo-exp1/inputs/exp1g-frozen-sources/std3/20261011T013506.097920Z-d4e9bdc7-e50b689b/result.json",
+    "result_sha256": "119e3b646effa043353a6131dcccadbd0fcd1334811568df192460053101a134",
+    "sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028"
+  }
+}

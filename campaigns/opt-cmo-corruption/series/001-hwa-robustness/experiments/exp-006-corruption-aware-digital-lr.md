@@ -1,7 +1,7 @@
 ---
 id: "exp-006"
 title: "Corruption-aware HWA with smaller digital learning rates"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-006: corruption-aware HWA with split learning rates
@@ -121,7 +121,7 @@ Large artifacts and failed/partial evidence remain on their execution hosts.
 Exact prepared specs, hashes, attempts and first semantic observations are
 recorded in the handoff below.
 
-## Current execution and monitoring handoff
+## Completed execution and monitoring handoff
 
 Frozen worker/controller revision: `176bce6bd226918858c701f84bf394178e6011d3`.
 Campaign manifest SHA-256:
@@ -172,32 +172,57 @@ Collection writes `collected/source/`, the immutable `selection.json`, then
 report explicitly identifies reused test evidence. No live coordinator is needed
 for these frozen transitions. Leave the shared service running after this phase.
 
-At **15:15 Paris**, both full fits are running; they started around 15:14:25.
-The service has observed both live workers and GPU reservations. Direct native
-checks confirmed prepare/devices completion and finite HWA progress at update
-206/25,600, with analog rate approximately 0.005 and the correct digital rate
-on each host. Exact observations are `readiness/{fifi,loulou}-first-full-observation.json`;
-the complete handoff snapshot is `readiness/full-handoff.json`.
+Both full fits started around **15:14:25 Paris on 2026-10-11**. Their first
+observations confirmed live workers, reservations and finite progress at update
+206/25,600 with the correct group rates. Historical observations are
+`readiness/{fifi,loulou}-first-full-observation.json` and
+`readiness/full-handoff.json`.
 
-| Host | Digital peak | Attempt | Native worker PID |
-|---|---:|---|---:|
-| fifi | 1e-5 | `a6e0289cbcbf439eab24303b19bc1ed9` | 1122039 |
-| loulou | 1e-4 | `f5cd534869a54627841159f92f1f12e3` | 868652 |
+At the **17:47 Paris completion check**, the canary, both 25,600-update fits and
+the selected-source deployment were complete, validated and collected. The
+service selected digital peak **1e-5** from development data alone and evaluated
+its frozen checkpoint on all five arrays and six fault rates. The unselected
+1e-4 deployment was cancelled before any attempt, as required by the frozen
+winner-only rule. This is complete declared coverage, not a missing test run.
 
-To view the active tmux sessions:
+| Host | Completed work | Attempt | Charged GPU-hours |
+|---|---|---|---:|
+| fifi | 512-update canary | `a1777f0165764adabcf16ea4e681113e` | 0.040526 |
+| fifi | Digital peak 1e-5 fit | `a6e0289cbcbf439eab24303b19bc1ed9` | 1.730585 |
+| loulou | Digital peak 1e-4 fit | `f5cd534869a54627841159f92f1f12e3` | 1.701213 |
+| fifi | Selected 1e-5 deployment | `c51a3dc1611c4b35b6187d937e8ba603` | 0.091384 |
 
-```bash
-ssh -t filip@fifi 'tmux attach -t opt125m-cmo-l6-exp1f-cdt-lr1em5-a6e0289cbcbf439eab24303b19bc1ed9'
-ssh -t filip@loulou 'tmux attach -t opt125m-cmo-l6-exp1f-cdt-lr1em4-f5cd534869a54627841159f92f1f12e3'
-```
+All four executed attempts have execution and validation exit codes zero. All
+140 compact-file hashes across their four collection receipts were rechecked;
+the development selection was reproduced, and transfer source lineage and
+matched physical identities were verified. No incident, duplicate launch or
+compute retry occurred. Native deployment `attempt-002` follows the preparatory
+dry run; it is not a second GPU attempt after a failed execution.
 
-Expected completed comparison, including selected-source deployment/collection:
-**17:15–17:45 Paris on 2026-10-11**. The six-hour phase window ends around
-**21:08:57 Paris**, earlier than the morning availability boundary. The two full
-workers reserve 5 GPU-hours in total; after the canary charge, 0.959474 GPU-hours
-remain unreserved, with unused worker allowances returned on completion. Actual
-charges continue accruing against the original 6-hour cap. Retained storage at
-admission was 1.902 GB against 16 GB, with 3 GB reserved for the active fits.
-No incident, duplicate launch or compute retry occurred. The watchdog heartbeat
-is fresh and host probes are error-free. Its next semantic check is within five
-minutes; collection and winner-only deployment remain automatic and gated.
+Final charge is **3.563708 of 6 GPU-hours**, leaving **2.436292 GPU-hours**
+unspent, with no active reservations. Retained storage is **7.242 of 16 GB**.
+`readiness/latest-observation.json` records the terminal job states and preserved
+budgets. The shared watchdog remains active with a fresh heartbeat and no host
+probe errors. Both 5090s have no compute processes or reservations at this check;
+their experiment tmux workers have exited normally. Logs and native artifacts
+remain at the paths above.
+
+The [completed result and review](../results/exp-006.md) records the development
+choice, all held-out comparisons, healthy-performance costs and material-effect
+verdict. Small digital updates help corruption-aware HWA, but the improvement
+over its analog-only counterpart is below the declared material threshold at
+3% faults. Additional training seeds remain a later phase; nothing further was
+dispatched. The automatic transfer report retains its collection-time
+`awaiting_scientific_review` marker; the linked result note owns the completed
+scientific review.
+
+## User decision after review, 2026-10-11
+
+The user confirmed: “ok I'd freeze this lr”, then asked to recall the scientific
+questions and design the larger training comparison. Freeze the HWA analog and
+existing calibration peak/final rates at **5e-3 / 1e-3**, and the additional
+digital peak/final rates at **1e-5 / 2e-6**, with the current warm-up/cosine form.
+These are HWA rates, not rates for future on-chip adaptation. The larger run's
+proposed cases, replication and budget are in
+[exp-007](exp-007-corruption-rate-sweep.md); the completed exp-006 configurations and
+source identities are unchanged.
