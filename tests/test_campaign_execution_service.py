@@ -367,8 +367,21 @@ def test_missing_tmux_recovery_requires_repair_and_keeps_the_prepared_command(se
     else:
         scheduler.campaigns.recover_missing_tmux("one", receipt)
         after = scheduler.store.job("one")
-        assert after["spec"] == before["spec"] and after["used_seconds"] == before["used_seconds"]
+        expected = before["spec"]; expected["placements"]["lab"]["allow_existing_run_dir"] = True
+        assert after["spec"] == expected and after["used_seconds"] == before["used_seconds"]
         assert after["state"] == "queued" and not after["spec"]["retry_safe"]
+        # Simulate an older audited recovery that was rejected before execution
+        # because its same-job receipt directory already existed.
+        spec = after["spec"]; del spec["placements"]["lab"]["allow_existing_run_dir"]
+        db.execute("UPDATE jobs SET spec=? WHERE id='one'", (json.dumps(spec),))
+        db.execute("INSERT INTO attempts(token,job_id,target,gpu_uuid,gpu_name,state,issued,launch_before,progress_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            ("refused", "one", "lab", "gpu", "5090", "rejected", 1001, 1046, 1001))
+        scheduler.store.update_job("one", "attention", "result_path_exists; explicitly declare reuse if intentional")
+        scheduler.campaigns.recover_missing_tmux("one", receipt)
+        repaired_job = scheduler.store.job("one")
+        assert repaired_job["state"] == "queued" and repaired_job["used_seconds"] == 45
+        assert repaired_job["spec"]["placements"]["lab"]["allow_existing_run_dir"] is True
+        assert db.execute("SELECT COUNT(*) FROM campaign_retries").fetchone()[0] == 1
 
 
 def test_missing_tmux_before_creation_is_terminal_without_inventing_worker_receipt():

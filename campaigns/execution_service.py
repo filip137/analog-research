@@ -864,9 +864,27 @@ class CampaignLedger:
         if not ((failure_class == "node_failure" and driver_failure) or (failure_class == "transport_before_start" and launcher_failure)):
             raise ValueError("evidence does not classify the operational failure and its recovery")
         with self.store.transaction():
-            old = self.db.execute("SELECT evidence FROM campaign_retries WHERE job_id=?", (job_id,)).fetchone()
+            old = self.db.execute("SELECT evidence,at FROM campaign_retries WHERE job_id=?", (job_id,)).fetchone()
             if old:
                 if old["evidence"] == canonical(receipt):
+                    job = self.store.job(job_id)
+                    later = [a for a in self.store.attempts() if a["job_id"] == job_id and a["issued"] > old["at"]]
+                    # A refused admission has not consumed the authorized compute
+                    # replay. Older recovery receipts omitted explicit directory
+                    # reuse; repair only that omission on the same owned path.
+                    if (failure_class == "transport_before_start" and job["state"] == "attention"
+                            and job["reason"] == "result_path_exists; explicitly declare reuse if intentional"
+                            and later and all(a["state"] == "rejected" for a in later)):
+                        revised = json.loads(canonical(job["spec"]))
+                        target = evidence["failed_target"]
+                        placement = revised["placements"][target]
+                        if not self.db.execute("SELECT 1 FROM destinations WHERE job_id=? AND path=?", (job_id, placement["run_dir"])).fetchone():
+                            raise ValueError("recovery output path is not owned by this job")
+                        placement["allow_existing_run_dir"] = True
+                        self.db.execute("UPDATE jobs SET spec=? WHERE id=?", (canonical(revised), job_id))
+                        self.store.event(job_id, "campaign_recovery_admission_repair", {"receipt_sha256": digest(receipt),
+                            "target": target, "run_dir": placement["run_dir"], "used_seconds": job["used_seconds"]}, self.clock())
+                        self.store.update_job(job_id, "queued", "same authorized replay; reuse owned receipt directory", self.clock())
                     return digest(receipt)
                 raise ValueError("one operational replay allowance already consumed")
             case, job = self.case(job_id), self.store.job(job_id)
@@ -894,6 +912,11 @@ class CampaignLedger:
             revised = json.loads(canonical(job["spec"]))
             if failure_class == "node_failure":
                 del revised["placements"][attempt["target"]]
+            else:
+                placement = revised["placements"][attempt["target"]]
+                if not self.db.execute("SELECT 1 FROM destinations WHERE job_id=? AND path=?", (job_id, placement["run_dir"])).fetchone():
+                    raise ValueError("recovery output path is not owned by this job")
+                placement["allow_existing_run_dir"] = True
             if not revised["placements"]:
                 raise ValueError("driver recovery needs another existing prepared host")
             self.db.execute("INSERT INTO campaign_retries VALUES(?,?,?,?)", (job_id, failure_class, canonical(receipt), self.clock()))
