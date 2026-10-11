@@ -148,3 +148,15 @@ incident 8 required a controller-only gate-calibration fix, recorded in
 worker implementation. The service restart preserved every active attempt and
 its budget; no GPU computation was repeated. Development measurements and the
 incident diagnosis are recorded in the [result note](../results/exp-009.md).
+
+For read-only live inspection, list sessions with `ssh fifi tmux ls` or
+`ssh loulou tmux ls`, then attach using `ssh -t HOST 'tmux attach -r -t SESSION'`.
+The session name is the exact job ID followed by its queue attempt token.
+Rank 4's full fit has completed. Following the documented fifi driver crash,
+rank 16 restarted unchanged on the now-free local RTX3090. Rank 64 uses the
+existing 3090/5090 placements after repairing the missing nom-cool-1 tmux
+dependency. Neither recovery preempts the other campaign or increases the
+scientific/GPU-hour budget. The service controller is now
+`8a8b4b3b4420ddceb6b2f3776054f801251779bd`; root-side audited recovery commands
+are recorded through `af6c621`. Latest states, costs and incident evidence are in
+the [result note](../results/exp-009.md) and the persistent campaign ledger.
