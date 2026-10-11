@@ -334,6 +334,13 @@ arm starts from the same P0, model, minibatch order and seeds. Each final
 state is saved and replayed exactly. The persistent OM state is reported only
 as a named diagnostic.
 
+Optional `onchip.training_cohort` selects `recovery` (the existing default) or
+`hwa` (the already prepared HWA training cohort). Both use the pinned training
+split; validation and test cohorts cannot be selected. This permits a full-corpus
+adaptation pass with an unchanged frozen HWA source and feature cache. The
+`onchip_cohort` metric names the actual cohort and example count, and presentation
+counts use that cohort. Omission preserves historical lifecycle identities.
+
 ## Stages, artifacts and reuse
 
 | Stage | Runs | Inputs | Artifact kinds |

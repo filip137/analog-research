@@ -140,8 +140,13 @@ def _rows(run_dir: Path, result: dict) -> list[dict]:
     path = run_dir / record["path"]
     if sha256_file(path) != record["sha256"]:
         raise ValueError(f"Expected unchanged measurements in {run_dir}.")
+    return _measurement_rows(json.loads(path.read_text()), run_dir)
+
+
+def _measurement_rows(measurements: list[dict], run_dir: Path) -> list[dict]:
+    """Flatten already verified native measurements, locally or after collection."""
     rows = []
-    for row in json.loads(path.read_text()):
+    for row in measurements:
         split = "test" if "test" in row["final"] else "development"
         # Every metric the family reports as a number, at clean, deployed and final state.
         metrics = sorted(k for k, v in row["final"][split].items() if isinstance(v, (int, float)))

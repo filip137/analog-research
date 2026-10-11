@@ -25,6 +25,7 @@ on-chip learning, rewriting and digital-calibration comparison.
 - [Ledger](ledger.md)
 - [Series 001: HWA source robustness](series/001-hwa-robustness/README.md), [Experiment 1](series/001-hwa-robustness/experiments/exp-001-hwa-source-robustness.md)
 - [Latest result](series/001-hwa-robustness/results/exp-007.md), [Four-arm comparison](series/001-hwa-robustness/experiments/exp-007-corruption-rate-sweep.md)
+- [Proposed overnight on-chip recovery comparison](series/002-onchip-recovery/experiments/exp-008-overnight-recovery.md) (not launched)
 - [Lifecycle definitions](lifecycles/README.md)
 - [Lifecycle contract](../../docs/crossbar_lifecycle.md), [CMO device contract](../../docs/reram_cmo_device.md)
 

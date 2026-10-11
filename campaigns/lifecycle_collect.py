@@ -27,7 +27,7 @@ import sys
 import tempfile
 
 from experiments.artifacts import atomic_write_json, content_hash, sha256_file
-from workflow.__main__ import _deployment_rows
+from workflow.__main__ import _deployment_rows, _measurement_rows
 from workflow.lifecycle import parse_lifecycle, stage_inputs, stage_selections, STAGE_OUTPUTS, provenance, verify_provenance
 from workflow.runtime import validate_source_fit
 
@@ -98,12 +98,13 @@ def checked_reused_source(exported, lifecycle, arm):
     return {"path": str(run / relative), "sha256": artifact["sha256"]}, metrics
 
 
-def checked_payload(payload, expected_root, *, source_only=False, deployment_only=False):
+def checked_payload(payload, expected_root, *, source_only=False, deployment_only=False,
+                    recovery=False, recovery_assignments=()):
     """Recheck identities, native lineage, coverage and collected values."""
     root = Path(expected_root)
-    if source_only and deployment_only:
-        raise ValueError("Source-only and deployment-only are mutually exclusive")
-    schema = "lifecycle.deployment_export.v1" if deployment_only else "lifecycle.source_export.v1" if source_only else "lifecycle.compact_export.v1"
+    if sum((source_only, deployment_only, recovery)) > 1 or (recovery_assignments and not recovery):
+        raise ValueError("Source-only, deployment-only and recovery are mutually exclusive")
+    schema = "lifecycle.recovery_export.v1" if recovery else "lifecycle.deployment_export.v1" if deployment_only else "lifecycle.source_export.v1" if source_only else "lifecycle.compact_export.v1"
     if payload.get("schema") != schema or payload.get("campaign_root") != str(root):
         raise ValueError("Compact export campaign identity mismatch")
     contract = json.loads(payload["campaign_resolved"])
@@ -128,10 +129,12 @@ def checked_payload(payload, expected_root, *, source_only=False, deployment_onl
         raise ValueError("Incomplete native campaign stage")
     lifecycle = None
     selected_arm = None
+    external_source = deployment_only or (recovery and "reused_source" in payload)
     artifacts, manifests, results = {}, {}, {}
     for stage_id, exported in payload["stages"].items():
         run, files = Path(exported["native_run"]), exported["files"]
-        if not run.is_absolute() or not run.is_relative_to(root) or set(files) != EXPORT_FILES:
+        expected_files = EXPORT_FILES | ({"measurements.json"} if recovery and stage_id.startswith("onchip__") else set())
+        if not run.is_absolute() or not run.is_relative_to(root) or set(files) != expected_files:
             raise ValueError("Unexpected native run location or control-file coverage")
         record = records[stage_id]
         if str(run / "result.json") != record["run_result"] or text_sha(files["result.json"]) != record["run_result_sha256"]:
@@ -162,7 +165,7 @@ def checked_payload(payload, expected_root, *, source_only=False, deployment_onl
                 finite(json.loads(line))
         kinds = unique(result["artifacts"], "kind", "artifact kind")
         kind = selection["kind"]
-        if kind not in {"prepare", "devices", "hwa", "deploy"}:
+        if kind not in ({"prepare", "devices", "hwa", "deploy", "onchip"} if recovery else {"prepare", "devices", "hwa", "deploy"}):
             raise ValueError("Expected source and deployment stages only")
         for output in STAGE_OUTPUTS[kind]:
             if output not in kinds:
@@ -197,14 +200,16 @@ def checked_payload(payload, expected_root, *, source_only=False, deployment_onl
             if lc.devices.technology == "om" and metrics.get("kernel_adequate") is not True:
                 raise ValueError("Device kernel validation failed")
         elif kind == "hwa":
+            if external_source:
+                raise ValueError("Reused source must not also be trained in the recovery slice")
             if selected_arm is not None:
                 raise ValueError("Expected exactly one source per slice")
             selected_arm = selection["hwa_arm"]
             if metrics.get("test_used_for_selection") is not False:
                 raise ValueError("Missing no-test-selection receipt")
             validate_source_fit(lc, lc.hwa.arm(selected_arm), metrics["fit"])
-        else:
-            if deployment_only:
+        elif kind == "deploy":
+            if external_source:
                 if selected_arm not in {None, selection["hwa_arm"]}:
                     raise ValueError("Expected one reused HWA source per deployment slice")
                 selected_arm = selection["hwa_arm"]
@@ -225,10 +230,33 @@ def checked_payload(payload, expected_root, *, source_only=False, deployment_onl
                             raise ValueError("Missing declared deployment evaluation domain")
                         if lc.network.family == "opt_mlp_suffix" and scores[split].get("sequences") != sizes[split]:
                             raise ValueError("Deployment evaluation cohort size mismatch")
+        else:
+            if lc.onchip is None or text_sha(files["measurements.json"]) != kinds["measurements"]["sha256"]:
+                raise ValueError("On-chip measurements are missing or changed")
+            measured = json.loads(files["measurements.json"])
+            expected = {(c.label, a.arm_id) for c in lc.defects.cases for a in lc.onchip.arms}
+            if (len(measured) != len(expected) or {(r["case"], r["onchip_arm"]) for r in measured} != expected
+                    or metrics.get("exact_replays") != len(expected)):
+                raise ValueError("On-chip trajectory coverage or replay gate failed")
+            finite(measured)
+            arms = {a.arm_id: a for a in lc.onchip.arms}
+            for row in measured:
+                arm = arms[row["onchip_arm"]]
+                count = lc.data.cohort_size(lc.onchip.cohort_key)
+                presentations = lc.onchip.epochs * count if arm.trains else 0
+                if (row["lifecycle_id"] != lc.lifecycle_id or row["hwa_arm"] != selection["hwa_arm"]
+                        or row["array_seed"] != selection["array_seed"] or row.get("replay_exact") is not True
+                        or row["weights"] != arm.weights or row["calibration"] != arm.calibration
+                        or row.get("sequence_presentations", row.get("image_presentations")) != presentations
+                        or [r["epoch"] for r in row["curve"]] != list(range(1, (lc.onchip.epochs if arm.trains else 0) + 1))):
+                    raise ValueError("On-chip identity, schedule or training cohort mismatch")
+                state = kinds.get(f"onchip_state.{row['case']}.{arm.arm_id}", {})
+                if state.get("sha256") != row["state_sha256"]:
+                    raise ValueError("On-chip final state identity mismatch")
         manifests[stage_id], results[stage_id] = manifest, result
     if lifecycle is None or selected_arm is None:
         raise ValueError("Missing lifecycle source")
-    if deployment_only:
+    if external_source:
         source, source_metrics = checked_reused_source(payload["reused_source"], lifecycle, selected_arm)
         artifacts["hwa__" + selected_arm] = {"hwa_source": source}
         for result in results.values():
@@ -236,10 +264,18 @@ def checked_payload(payload, expected_root, *, source_only=False, deployment_onl
                 raise ValueError("Reused source teacher or mapping differs from deployment")
     elif "reused_source" in payload:
         raise ValueError("Reused source requires explicit deployment-only collection")
-    kinds = {"prepare", "devices", "deploy"} if deployment_only else {"prepare", "devices", "hwa"} if source_only else {"prepare", "devices", "hwa", "deploy"}
+    kinds = {"prepare", "devices", "deploy"} if external_source else {"prepare", "devices", "hwa"} if source_only else {"prepare", "devices", "hwa", "deploy"}
+    if recovery:
+        kinds.add("onchip")
+        selected_arrays = tuple(recovery_assignments) or lifecycle.devices.assignment_seeds
+        if (len(set(selected_arrays)) != len(selected_arrays)
+                or not set(selected_arrays) <= set(lifecycle.devices.assignment_seeds)
+                or payload.get("recovery_assignments") != list(selected_arrays)):
+            raise ValueError("Recovery assignment selection differs from its declared scope")
     expected_selections = {item.stage_id: item for item in stage_selections(lifecycle)
                            if item.kind in kinds
-                           and item.hwa_arm in {None, selected_arm}}
+                           and item.hwa_arm in {None, selected_arm}
+                           and (item.kind != "onchip" or item.array_seed in selected_arrays)}
     if set(records) != set(expected_selections):
         raise ValueError("Expected exact source-only coverage" if source_only else
                          "Expected the source and every declared deployment assignment")
@@ -259,7 +295,7 @@ def checked_payload(payload, expected_root, *, source_only=False, deployment_onl
                     raise ValueError("Teacher input differs from the frozen manifest")
             else:
                 expected = artifacts[upstream[0]][upstream[1]]
-                if deployment_only and upstream[1] == "hwa_source":
+                if external_source and upstream[1] == "hwa_source":
                     if reference.get("path") != expected["path"] or any(inputs[role].get(key) != value for key, value in expected.items()):
                         raise ValueError("Frozen external source lineage mismatch")
                 elif (reference["stage"] != upstream[0] or reference["artifact_kind"] != upstream[1]
@@ -281,10 +317,37 @@ def checked_payload(payload, expected_root, *, source_only=False, deployment_onl
     expected_csv = [{key: "" if value is None else str(value) for key, value in row.items()} for row in rows]
     if csv_rows != expected_csv:
         raise ValueError("Native collected CSV differs from its validated JSON rows")
+    if recovery:
+        expected_recovery = []
+        for stage_id, result in results.items():
+            selection = result["metrics"]["stage"]
+            if selection["kind"] != "onchip":
+                continue
+            deployed_id = f"deploy__{selected_arm}__{selection['array_seed']}"
+            deployment = results[deployed_id]["metrics"]
+            measured = json.loads(payload["stages"][stage_id]["files"]["measurements.json"])
+            for row in measured:
+                case = deployment["cases"][row["case"]]
+                if (row["p0_sha256"] != artifacts[deployed_id]["deployment"]["sha256"]
+                        or row["initial"] != case["initial"] or row["clean"] != deployment["clean"]
+                        or row["identity"] != case["identity"]
+                        or row["initial_apparent_sha256"] != case["programming"]["apparent_sha256"]):
+                    raise ValueError("On-chip initial state differs from the matched deployment")
+            expected_recovery.extend(_measurement_rows(measured, Path(payload["stages"][stage_id]["native_run"])))
+        expected_recovery = [{**row, "duplicate_coverage": False} for row in expected_recovery]
+        recovery_rows = json.loads(payload["rows_json"])
+        key = lambda row: (*rows_key(row), row["onchip_arm"])
+        if sorted(recovery_rows, key=key) != sorted(expected_recovery, key=key):
+            raise ValueError("Collected recovery rows differ from native measurements")
+        recovery_fields = sorted({key for row in recovery_rows for key in row})
+        if list(csv.DictReader(io.StringIO(payload["rows_csv"]))) != [
+                {key: "" if row.get(key) is None else str(row[key]) for key in recovery_fields}
+                for row in recovery_rows]:
+            raise ValueError("Recovery CSV differs from validated JSON rows")
     return payload
 
 
-def export(root, *, source_only=False, deployment_only=False):
+def export(root, *, source_only=False, deployment_only=False, recovery=False, recovery_assignments=()):
     root = root.resolve()
     contract_text = (root / "campaign.resolved.json").read_text()
     contract = json.loads(contract_text)
@@ -309,11 +372,13 @@ def export(root, *, source_only=False, deployment_only=False):
         files = {name: (run / name).read_text() for name in CONTROL_FILES}
         files["inspection.json"] = inspected.stdout
         files["stage-config.json"] = Path(planned[stage_id]["config"]).read_text()
+        if recovery and stage_id.startswith("onchip__"):
+            files["measurements.json"] = (run / "measurements.json").read_text()
         stages[stage_id] = {"native_run": str(run), "files": files}
     with tempfile.TemporaryDirectory(prefix="lifecycle-collect-") as folder:
         command = [sys.executable, "-m", "workflow", "collect"]
         command += [stage["native_run"] for name, stage in stages.items()
-                    if source_only or name.startswith("deploy__")]
+                    if source_only or name.startswith("deploy__") or (recovery and name.startswith("onchip__"))]
         completed = subprocess.run([*command, "--output", folder], capture_output=True, text=True, timeout=180)
         if completed.returncode:
             raise RuntimeError(completed.stdout[-4000:] + completed.stderr[-2000:])
@@ -321,8 +386,13 @@ def export(root, *, source_only=False, deployment_only=False):
         csv_path = Path(folder) / "deployments.csv"
         # Native collect emits no CSV when a declared source-only slice has no rows.
         csv = "" if source_only and not csv_path.exists() else csv_path.read_text()
-    extra = {}
-    if deployment_only:
+        extra = {}
+        if recovery:
+            lc = parse_lifecycle(json.loads(next(iter(stages.values()))["files"]["config.resolved.json"])["lifecycle"])
+            extra.update(rows_json=(Path(folder) / "rows.json").read_text(),
+                         rows_csv=(Path(folder) / "rows.csv").read_text(),
+                         recovery_assignments=list(tuple(recovery_assignments) or lc.devices.assignment_seeds))
+    if deployment_only or (recovery and not any(name.startswith("hwa__") for name in planned)):
         sources = {stage["inputs"]["weights"].get("path") for name, stage in planned.items() if name.startswith("deploy__")}
         if len(sources) != 1 or None in sources:
             raise ValueError("Expected one frozen external HWA source")
@@ -336,10 +406,10 @@ def export(root, *, source_only=False, deployment_only=False):
         files["inspection.json"] = inspected.stdout
         files["stage-config.json"] = files["config.resolved.json"]
         extra["reused_source"] = {"native_run": str(run), "files": files}
-    return checked_payload({"schema": "lifecycle.deployment_export.v1" if deployment_only else "lifecycle.source_export.v1" if source_only else "lifecycle.compact_export.v1", "campaign_root": str(root),
+    return checked_payload({"schema": "lifecycle.recovery_export.v1" if recovery else "lifecycle.deployment_export.v1" if deployment_only else "lifecycle.source_export.v1" if source_only else "lifecycle.compact_export.v1", "campaign_root": str(root),
         "campaign_resolved": contract_text, "source_manifest": manifest_path.read_text(), "aggregate": aggregate,
         "stages": stages, "deployments_json": deployments, "deployments_csv": csv, **extra}, root,
-        source_only=source_only, deployment_only=deployment_only)
+        source_only=source_only, deployment_only=deployment_only, recovery=recovery, recovery_assignments=recovery_assignments)
 
 
 def exact_attempt(dbpath, job_id):
@@ -378,7 +448,7 @@ def write_frozen(path, content):
     os.replace(temporary, path)
 
 
-def collect(queue_config, output, *, source_only=False, deployment_only=False):
+def collect(queue_config, output, *, source_only=False, deployment_only=False, recovery=False, recovery_assignments=()):
     job_id = os.environ["RUN_WATCH_JOB_ID"]
     cfg = json.loads(queue_config.read_text())
     dbpath = Path(cfg.get("state_dir", "~/.local/state/run-watch/queue")).expanduser() / "queue.sqlite3"
@@ -390,6 +460,10 @@ def collect(queue_config, output, *, source_only=False, deployment_only=False):
         argv.append("--source-only")
     if deployment_only:
         argv.append("--deployment-only")
+    if recovery:
+        argv.append("--recovery")
+        for seed in recovery_assignments:
+            argv.extend(["--recovery-assignment", str(seed)])
     if target.get("transport") == "local":
         command, cwd = argv, placement["workdir"]
     elif target.get("transport") == "ssh":
@@ -402,7 +476,8 @@ def collect(queue_config, output, *, source_only=False, deployment_only=False):
     if len(completed.stdout.encode()) > 64 * 1024 * 1024:
         raise ValueError("Compact collection unexpectedly exceeds 64 MB")
     payload = checked_payload(json.loads(completed.stdout), Path(placement["campaign_result_root"]),
-                              source_only=source_only, deployment_only=deployment_only)
+                              source_only=source_only, deployment_only=deployment_only,
+                              recovery=recovery, recovery_assignments=recovery_assignments)
     with collection_lock(output):
         _, current = exact_attempt(dbpath, job_id)
         if current["token"] != attempt["token"]:
@@ -417,7 +492,9 @@ def collect(queue_config, output, *, source_only=False, deployment_only=False):
                  "deployments.csv": payload["deployments_csv"]}
         for stage_id, stage in payload["stages"].items():
             files.update({f"{stage_id}/{name}": content for name, content in stage["files"].items()})
-        if deployment_only:
+        if recovery:
+            files.update({"rows.json": payload["rows_json"], "rows.csv": payload["rows_csv"]})
+        if "reused_source" in payload:
             files.update({f"reused-source/{name}": content for name, content in payload["reused_source"]["files"].items()})
             files["reused-source/origin.json"] = json.dumps({"native_run": payload["reused_source"]["native_run"]}, sort_keys=True) + "\n"
         for name, content in files.items():
@@ -426,7 +503,7 @@ def collect(queue_config, output, *, source_only=False, deployment_only=False):
                    "stages": {name: stage["native_run"] for name, stage in payload["stages"].items()},
                    "files": {name: text_sha(content) for name, content in files.items()}}
         write_frozen(destination / "collection.json", json.dumps(receipt, sort_keys=True) + "\n")
-        entries, rows, seen = [], [], set()
+        entries, rows, recovered, seen = [], [], [], set()
         for path in sorted(output.glob("*/*/collection.json")):
             receipt = json.loads(path.read_text())
             if receipt["job"] in seen:
@@ -437,6 +514,8 @@ def collect(queue_config, output, *, source_only=False, deployment_only=False):
                     raise ValueError("Collected evidence changed after publication")
             entries.append({**{key: receipt[key] for key in ("job", "attempt", "target")}, "receipt": str(path)})
             rows.extend(json.loads((path.parent / "deployments.json").read_text()))
+            if (path.parent / "rows.json").is_file():
+                recovered.extend(json.loads((path.parent / "rows.json").read_text()))
         if len({rows_key(row) for row in rows}) != len(rows):
             raise ValueError("Duplicate deployment coverage across collected jobs")
         atomic_write_json(output / "index.json", entries)
@@ -444,6 +523,11 @@ def collect(queue_config, output, *, source_only=False, deployment_only=False):
                           if not row["lifecycle_id"].endswith("-smoke")], key=rows_key))
         atomic_write_json(output / "readiness-deployments.json", sorted([row for row in rows
                           if row["lifecycle_id"].endswith("-smoke")], key=rows_key))
+        if recovery:
+            key = lambda row: (*rows_key(row), row["onchip_arm"])
+            if len({key(row) for row in recovered}) != len(recovered):
+                raise ValueError("Duplicate recovery coverage across collected jobs")
+            atomic_write_json(output / "rows.json", sorted(recovered, key=key))
     return {"collected": str(destination), "deployment_rows": len(json.loads(payload["deployments_json"])),
             "scientific_gate": "awaiting_scientific_review"}
 
@@ -456,16 +540,22 @@ def main(argv=None):
         sub.add_argument("root", type=Path)
         sub.add_argument("--source-only", action="store_true")
         sub.add_argument("--deployment-only", action="store_true")
+        sub.add_argument("--recovery", action="store_true")
+        sub.add_argument("--recovery-assignment", type=int, action="append", default=[])
     comp = commands.add_parser("collect")
     comp.add_argument("--queue-config", type=Path, required=True)
     comp.add_argument("--output", type=Path, required=True)
     comp.add_argument("--source-only", action="store_true")
     comp.add_argument("--deployment-only", action="store_true")
+    comp.add_argument("--recovery", action="store_true")
+    comp.add_argument("--recovery-assignment", type=int, action="append", default=[])
     args = parser.parse_args(argv)
     if args.command == "collect":
-        result = collect(args.queue_config, args.output, source_only=args.source_only, deployment_only=args.deployment_only)
+        result = collect(args.queue_config, args.output, source_only=args.source_only, deployment_only=args.deployment_only,
+                         recovery=args.recovery, recovery_assignments=args.recovery_assignment)
     else:
-        result = export(args.root, source_only=args.source_only, deployment_only=args.deployment_only)
+        result = export(args.root, source_only=args.source_only, deployment_only=args.deployment_only,
+                        recovery=args.recovery, recovery_assignments=args.recovery_assignment)
         if args.command == "validate":
             result = {"valid": True, "campaign_root": result["campaign_root"],
                       "stages": sorted(result["stages"]), "deployment_rows": len(json.loads(result["deployments_json"]))}

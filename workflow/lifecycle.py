@@ -1220,6 +1220,13 @@ class Onchip:
     pulses_per_update: Optional[int] = None
     tolerance_steps: Optional[float] = None
     max_pulses_per_cell: Optional[int] = None
+    # Both cohorts contain training data. Selecting an existing cohort leaves
+    # the frozen HWA source and feature-cache provenance unchanged.
+    training_cohort: Optional[str] = None
+
+    @property
+    def cohort_key(self) -> str:
+        return "hwa" if self.training_cohort == "hwa" else "training"
 
     def to_dict(self) -> dict:
         value = {
@@ -1235,6 +1242,8 @@ class Onchip:
             value.update(pulses_per_update=self.pulses_per_update, tolerance_steps=self.tolerance_steps)
         if self.update_law.startswith("om_"):
             value["max_pulses_per_cell"] = self.max_pulses_per_cell
+        if self.training_cohort is not None:
+            value["training_cohort"] = self.training_cohort
         value["arms"] = [arm.to_dict() for arm in self.arms]
         return value
 
@@ -1257,6 +1266,8 @@ def _onchip(raw: Any, technology: str) -> Onchip:
         keys += ("pulses_per_update", "tolerance_steps", "max_pulses_per_cell")
     elif law == "om_open_loop_pulse_adam":
         keys += ("max_pulses_per_cell",)
+    if "training_cohort" in raw:
+        keys += ("training_cohort",)
     raw = _object(raw, "onchip", keys)
     arms = []
     for index, item in enumerate(_list(raw["arms"], "onchip.arms")):
@@ -1289,6 +1300,8 @@ def _onchip(raw: Any, technology: str) -> Onchip:
                 "onchip.arms", "to omit verified rewrite controls under the open-loop law", arm.to_dict()
             )
     extra = {}
+    if "training_cohort" in raw:
+        extra["training_cohort"] = _choice(raw["training_cohort"], "onchip.training_cohort", ("recovery", "hwa"))
     if law.startswith("om_"):
         cap = raw["max_pulses_per_cell"]
         extra["max_pulses_per_cell"] = (

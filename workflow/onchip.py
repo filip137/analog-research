@@ -254,7 +254,10 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
     initial_hash = tensor_hash(array.read())
     rewrite_count = torch.zeros_like(target, dtype=torch.int64)
     rewrite_reads = 0
-    training = cache["training"]
+    training = cache[onchip.cohort_key]
+    store.append_metric({"stage": "onchip_cohort", "case": label, "arm": arm.arm_id,
+                         "cohort": onchip.cohort_key, "examples": network_family.examples(training),
+                         "epochs": onchip.epochs if arm.trains else 0, "batch_size": onchip.batch_size})
     curve = []
     for epoch in range(1, (onchip.epochs if arm.trains else 0) + 1):
         started = time.monotonic()
@@ -340,6 +343,10 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
         }
         curve.append(row)
         store.append_metric({"stage": "onchip_epoch", "case": label, "arm": arm.arm_id, **row})
+        if torch.device(device).type == "cuda":
+            store.append_metric({"stage": "onchip_memory", "case": label, "arm": arm.arm_id,
+                                 "peak_allocated_bytes": torch.cuda.max_memory_allocated(device),
+                                 "peak_reserved_bytes": torch.cuda.max_memory_reserved(device)})
         print(json.dumps({"case": label, "arm": arm.arm_id, "epoch": epoch,
                           "teacher_kl": row[lifecycle.data.evaluation]["teacher_kl"]}), flush=True)
     return {

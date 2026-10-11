@@ -379,6 +379,45 @@ def test_streamed_epochs_are_optional_and_leave_digests_unchanged():
         small(**{"hwa.sequences_per_epoch": 0})
 
 
+def test_onchip_can_select_existing_training_cohorts_without_changing_source_provenance():
+    original = small()
+    assert original.onchip.cohort_key == "training"
+    assert "training_cohort" not in original.to_dict()["onchip"]
+    expanded = small(**{"onchip.training_cohort": "hwa"})
+    assert expanded.onchip.cohort_key == "hwa"
+    assert parse_lifecycle(expanded.to_dict()) == expanded
+    for kind in ("feature_cache", "device_bundle", "hwa_source", "deployment"):
+        arm = "standard_hwa" if kind in {"hwa_source", "deployment"} else None
+        verify_provenance(provenance(original, kind, hwa_arm=arm), expanded, kind, hwa_arm=arm)
+    for forbidden in ("test", "development", "validation", "unknown", None):
+        with pytest.raises(ConfigError, match="onchip.training_cohort"):
+            small(**{"onchip.training_cohort": forbidden})
+
+
+def test_full_hwa_cohort_recovery_uses_all_examples_and_replays(cmo_inputs, tmp_path):
+    weights, digest = cmo_inputs
+    lc = small(**{
+        "data.corpus": {"name": "synthetic", "sha256": digest},
+        "data.sequence_length": 9, "data.max_examples": 0,
+        "data.hwa_sequences": 12, "data.recovery_sequences": 4,
+        "data.development_sequences": 4, "data.test_sequences": 4,
+        "defects.cases": [case_doc("random", 50000)],
+        "hwa.arms": [{"id": "digital", "method": "none"}],
+        "onchip.training_cohort": "hwa", "onchip.batch_size": 4,
+        "onchip.arms": [{"id": "none", "weights": "hold", "calibration": False},
+                        {"id": "learn", "weights": "learn", "calibration": False}],
+    })
+    results = run_lifecycle(lc, weights, tmp_path / "runs")
+    run, result = results["onchip__digital__271001"]
+    rows = json.loads((run / "measurements.json").read_text())
+    assert [r["sequence_presentations"] for r in rows] == [0, 12]
+    assert all(r["replay_exact"] for r in rows)
+    assert rows[1]["cost"]["max_onchip_device_writes"] == 3
+    records = [json.loads(line) for line in (run / "metrics.jsonl").read_text().splitlines()]
+    cohorts = [r for r in records if r.get("stage") == "onchip_cohort"]
+    assert all(r["cohort"] == "hwa" and r["examples"] == 12 for r in cohorts)
+
+
 def test_corruption_aware_hwa_sticks_active_and_reference_devices():
     q = torch.full((40_000,), 0.25)
     generator = torch.Generator().manual_seed(4)

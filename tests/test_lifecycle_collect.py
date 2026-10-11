@@ -13,7 +13,7 @@ from campaigns.runner import _campaign_contract_record
 from campaigns.schema import CampaignSpec
 from experiments.artifacts import sha256_file
 from test_workflow_cmo import cmo_inputs, model_arm, small
-from workflow.lifecycle import stage_selections, stage_inputs, StageConfig, Execution
+from workflow.lifecycle import stage_selections, stage_inputs, StageConfig, Execution, parse_lifecycle
 from workflow.runtime import validate_source_fit
 from workflow_helpers import run_stage
 
@@ -31,12 +31,24 @@ def native(cmo_inputs, tmp_path, request):
             {"label": label, "corpus": {"name": "synthetic", "sha256": corpus}, "split": "test", "sequences": count}
             for label, count in (("wikitext", 3), ("generated", 2))]})
     mode = getattr(request, "param", False)
-    source_only, deployment_only = mode is True, mode == "deployment"
+    source_only, deployment_only = mode is True, mode in {"deployment", "recovery-external"}
+    recovery = mode in {"recovery", "recovery-external"}
+    if recovery:
+        doc = lc.to_dict()
+        doc["onchip"] = small().onchip.to_dict()
+        doc["onchip"].update(training_cohort="hwa", batch_size=4, arms=[
+            {"id": "none", "weights": "hold", "calibration": False},
+            {"id": "learn", "weights": "learn", "calibration": False}])
+        doc["devices"]["assignment_seeds"] = [271001, 271002]
+        doc["defects"]["cases"] = [doc["defects"]["cases"][1]]
+        lc = parse_lifecycle(doc)
     root = tmp_path / "campaign"
     plan = tmp_path / "plan"
     plan.mkdir()
     results, records, stages = {}, [], []
     for selection in stage_selections(lc):
+        if recovery and selection.kind == "onchip" and selection.array_seed != 271001:
+            continue
         if source_only and selection.kind == "deploy":
             continue
         stage_root = tmp_path / "external-source" if deployment_only and selection.kind == "hwa" else root
@@ -69,6 +81,39 @@ def native(cmo_inputs, tmp_path, request):
     (root / "aggregate").mkdir()
     (root / "aggregate/results.json").write_text(json.dumps({"stages": records}))
     return root, lc
+
+
+@pytest.mark.parametrize("native", ["recovery", "recovery-external"], indirect=True)
+def test_recovery_collection_checks_selected_array_complete_trajectories_and_lineage(native):
+    root, lc = native
+    options = {"recovery": True, "recovery_assignments": [271001]}
+    payload = collector.export(root, **options)
+    assert collector.checked_payload(payload, root, **options) == payload
+    rows = json.loads(payload["rows_json"])
+    assert len(rows) == 2 and {r["array_seed"] for r in rows} == {271001}
+    assert len(json.loads(payload["deployments_json"])) == 2
+    assert next(r for r in rows if r["onchip_arm"] == "learn")["sequence_presentations"] == 8
+    for other in ({}, {"recovery": True}, {"recovery": True, "recovery_assignments": [271002]}):
+        with pytest.raises(ValueError):
+            collector.checked_payload(payload, root, **other)
+    for failure in ("rows", "csv", "measurement", "replay", "lineage"):
+        changed = copy.deepcopy(payload)
+        stage = next(name for name in changed["stages"] if name.startswith("onchip__"))
+        files = changed["stages"][stage]["files"]
+        if failure == "rows":
+            changed["rows_json"] = "[]"
+        elif failure == "csv":
+            changed["rows_csv"] = "changed\n"
+        elif failure == "measurement":
+            files["measurements.json"] = "[]"
+        elif failure == "replay":
+            replace_result(changed, stage, lambda metrics: metrics.update(exact_replays=0))
+        else:
+            manifest = json.loads(files["manifest.json"])
+            next(item for item in manifest["inputs"] if item["role"] == "device_state")["sha256"] = "0" * 64
+            files["manifest.json"] = json.dumps(manifest)
+        with pytest.raises(ValueError):
+            collector.checked_payload(changed, root, **options)
 
 
 @pytest.mark.parametrize("native", ["deployment"], indirect=True)
