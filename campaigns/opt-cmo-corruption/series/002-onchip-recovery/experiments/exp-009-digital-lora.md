@@ -149,14 +149,34 @@ worker implementation. The service restart preserved every active attempt and
 its budget; no GPU computation was repeated. Development measurements and the
 incident diagnosis are recorded in the [result note](../results/exp-009.md).
 
-For read-only live inspection, list sessions with `ssh fifi tmux ls` or
-`ssh loulou tmux ls`, then attach using `ssh -t HOST 'tmux attach -r -t SESSION'`.
-The session name is the exact job ID followed by its queue attempt token.
 Rank 4's full fit has completed. Following the documented fifi driver crash,
 rank 16 restarted unchanged on the now-free local RTX3090. Rank 64 uses the
-existing 3090/5090 placements after repairing the missing nom-cool-1 tmux
-dependency. Neither recovery preempts the other campaign or increases the
+nom-cool-1 RTX3090 after repairing its missing tmux dependency. Both fits have
+live workers, finite training metrics and a fresh observation from the persistent
+service. Neither recovery preempts the other campaign or increases the
 scientific/GPU-hour budget. The service controller is now
 `8a8b4b3b4420ddceb6b2f3776054f801251779bd`; root-side audited recovery commands
 are recorded through `af6c621`. Latest states, costs and incident evidence are in
 the [result note](../results/exp-009.md) and the persistent campaign ledger.
+
+The unattended handoff passed at approximately 01:44 Paris on October 12;
+receipt: `readiness/overnight-handoff-20261012.json`. It verifies the service
+heartbeat and systemd watchdog, one active attempt per remaining fit, semantic
+training progress, automatic collection callbacks, preserved incident/retry
+history, sufficient remaining budgets and six unselected candidates still held.
+The active attempt tokens are `0d67c53629454367ab060c25b7200d75` (rank 16,
+local) and `1b8653de57c4417eabf2fdae963a3df6` (rank 64, nom-cool-1).
+Each tmux session is named `JOB_ID-ATTEMPT_TOKEN`:
+
+```bash
+tmux attach -r -t opt125m-cmo-l6-exp3-lora-r16-lr3em3-50m-0d67c53629454367ab060c25b7200d75
+ssh -t nom-cool-1 'tmux attach -r -t opt125m-cmo-l6-exp3-lora-r64-lr1em3-50m-1b8653de57c4417eabf2fdae963a3df6'
+```
+
+The local collection controller automatically validates each completed native
+bundle and writes its per-rank report. The service continues independently of
+interactive Codex sessions; terminal scientific interpretation still requires
+review of the remaining two reports. Current 3090 throughput projects completion
+and collection before approximately 03:00 Paris, conditional on continued
+healthy progress. The frozen 07:30 compute cutoff and 09:00 delivery deadline
+remain in force.
