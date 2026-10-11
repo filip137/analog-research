@@ -1,7 +1,7 @@
 ---
 id: "exp-008"
 title: "Dense on-chip baseline over the full synthetic corpus"
-status: "planned"
+status: "running"
 hypotheses: []
 ---
 # exp-008: dense on-chip recovery after standard HWA
@@ -129,7 +129,17 @@ The [controller](../../../launch/exp2_dense_baseline.py) invokes public
 
 ## Execution handoff
 
-Preparation in progress; no GPU launch recorded yet. Local evidence root:
+Source revision `ba8086809c852add58bd51c67e28a3a738505ec0` is staged in
+`/home/filip/analog-research/opt-cmo-exp1/hwa-exp2-dense-20261011` on loulou.
+Both readiness jobs passed native validation, exact state replay and collection.
+The full pass launched on loulou at **00:07 Paris on October 12** after the
+measured handoff gate. Its worker PID is **1000812**, attempt token
+`94b82b892e63418582faaff9d600c962`; source revision and scientific inputs match
+the prepared manifest. Conservative completion estimate: **00:50 Paris**. Canary timing was
+0.2041 seconds/update including epoch-end evaluation; the frozen conservative
+full-job projection is **2,581 seconds (43 minutes)**, with 35% training margin
+and 900 seconds for other stages. Peak reserved GPU memory was 18.2 GiB.
+See `readiness/handoff.json` and `readiness/canary-timing.json`. Local evidence root:
 `results/lifecycles/opt125m-cmo-l6-exp2-onchip/`. Prepared host plans, exact source
 revision, queue specs and gates live under `prepared/` and `readiness/` there.
 Large native device states stay in the frozen loulou checkout; compact validated
@@ -138,13 +148,25 @@ records are collected under `collected/{l1-smoke,l6-canary,50m}/`.
 The existing persistent **run-watch-queue.service** is the sole execution owner,
 with campaign ID `opt-cmo-exp2-dense-baseline-20261011`, a durable SQLite ledger,
 locked idempotent dispatcher, tmux workers and five-minute semantic checks.
-Its systemd heartbeat/restart, bounded read-only Codex incident investigator,
-and restart/no-duplicate handoff tests are already validated in exp-007. Recheck
-its heartbeat and observation of each new active worker. Reuse those unchanged
-service checks; retain incident and budget history. Missing workers, nonfinite
+The new live handoff test passed at 00:02 Paris on October 12:
+`readiness/live-handoff.json` records restart from PID 752113 to 865779, the same
+canary worker PID 998410 and attempt token, no duplicate submissions, preserved
+budgets and incident history, and a fresh semantic observation of the active job.
+Synthetic incident 7 invoked a bounded read-only Codex investigator; its report
+is durable and its input snapshot hash is unchanged. Systemd heartbeat, restart
+and user lingering remain enabled. Recheck observation of the full worker after
+admission; retain incident and budget history. Missing workers, nonfinite
 metrics, failed replay or validation, termination, stalls and budget/storage
 risks block downstream dispatch. Retries need an explicitly classified
 operational failure; bad scientific performance is not such a failure.
+
+Full baseline session on loulou:
+`opt125m-cmo-l6-exp2-dense-50m-94b82b892e63418582faaff9d600c962`.
+The completed canary remains visible as
+`opt125m-cmo-l6-exp2-dense-l6-canary-1c22d1fe47e141ca996d19eb56d8055e`.
+Worker receipts and pane logs are under
+`/home/filip/analog-research/opt-cmo-exp1/worker-receipts/ba8086809c852add58bd51c67e28a3a738505ec0/`.
+Attach read-only with `tmux attach -r -t SESSION` on loulou.
 
 The completion hook collects the full baseline and writes `collected/review.json`,
 with no automatic sparse run or broader sweep. The result note will record the
