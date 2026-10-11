@@ -155,7 +155,12 @@ budgets and incident history, and a fresh semantic observation of the active job
 Synthetic incident 7 invoked a bounded read-only Codex investigator; its report
 is durable and its input snapshot hash is unchanged. Systemd heartbeat, restart
 and user lingering remain enabled. Recheck observation of the full worker after
-admission; retain incident and budget history. Missing workers, nonfinite
+admission; retain incident and budget history. At **00:13 Paris**, the watcher
+observed the full run alive in the on-chip stage, with finite metrics at batch
+1,100. The learning-arm cohort record confirms 195,226 sequences, one epoch and
+batch 32. `readiness/full-active-handoff.json` preserves that observation, the
+unique attempt and live worker, and remaining budget/storage accounting.
+Next semantic check is due by approximately **00:18 Paris**. Missing workers, nonfinite
 metrics, failed replay or validation, termination, stalls and budget/storage
 risks block downstream dispatch. Retries need an explicitly classified
 operational failure; bad scientific performance is not such a failure.
