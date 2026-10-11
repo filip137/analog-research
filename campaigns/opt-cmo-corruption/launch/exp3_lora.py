@@ -145,7 +145,7 @@ def queue(receipts,output,controller,evidence):
                 [('onchip',c['expected_seconds']),('collection',300),('validation',300)]}}})
         p=output/'jobs'/(lc.lifecycle_id+'.json');write_frozen(p,job);jobs.append(str(p))
     manifest={'version':1,'id':PHASE,'poll_seconds':300,'required_adapters':['tmux'],
-        'budgets':{'gpu_hours':8,'storage_bytes':40000000000,'window_seconds':24000},'cases':cases,
+        'budgets':{'gpu_hours':7.9,'storage_bytes':38000000000,'window_seconds':24000},'cases':cases,
         'storage_roots':[{'target':h,'path':data['source']} for h,data in hosts.items()] +
             [{'target':h,'path':str(Path(data['base'])/'worker-receipts'/data['source_revision'])} for h,data in hosts.items()]}
     from campaigns.execution_service import validate_manifest

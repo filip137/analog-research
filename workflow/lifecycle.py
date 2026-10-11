@@ -1286,7 +1286,7 @@ def _onchip(raw: Any, technology: str) -> Onchip:
     arms = []
     for index, item in enumerate(_list(raw["arms"], "onchip.arms")):
         path = f"onchip.arms[{index}]"
-        keys = ("id", "weights", "calibration") + (("digital_adapter",) if "digital_adapter" in item else ())
+        keys = ("id", "weights", "calibration") + (("digital_adapter",) if isinstance(item, Mapping) and "digital_adapter" in item else ())
         item = _object(item, path, keys)
         adapter = None
         if "digital_adapter" in item:

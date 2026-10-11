@@ -87,7 +87,8 @@ measured timing and memory gates. Initial development reservation: 20,000 MiB
 plus 2,000 MiB headroom. No automatic batch-size or scientific changes to fit.
 
 Cap the new comparison at **8 GPU-hours**, **40 GB** retained evidence across
-workers/controller, and stop admission if the next job cannot finish before
+workers/controller, (0.1 GPU-hour/2 GB reserved for portable-state preparation, 7.9 GPU-hours/38 GB
+for the LoRA queue), and stop admission if the next job cannot finish before
 **07:30 Paris on October 12**. Retain final checkpoints, development endpoints,
 upstream artifacts, native manifests, metrics and failed-attempt evidence.
 No per-minibatch checkpoints. No automatic scientific retries or extensions.
