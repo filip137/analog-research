@@ -161,6 +161,70 @@ def gate(queue_config,evidence,name,payload):
     service(queue_config,'gate',PHASE,name,path)
 
 
+def followup_decision(report, selection, tolerance):
+    """One lower-rate follow-up, decided exclusively from development KL."""
+    if not 0 <= tolerance <= .1:
+        raise ValueError('Invalid development-loss tolerance')
+    original = selection['selected_learning_rate']
+    if report['learning_rate'] != original:
+        return {'triggered':False, 'reason':'The bounded follow-up never triggers another fit.'}
+    screen = selection['screen']
+    original_screen = next(r['development_kl'] for r in screen if r['learning_rate'] == original)
+    initial = report['effects']['development']['deployment']['teacher_kl']
+    final = report['effects']['development']['lora']['teacher_kl']
+    if any(not math.isfinite(x) or x <= 0 for x in (original_screen, initial, final)):
+        raise ValueError('Invalid development metric requires investigation')
+    reference = min(initial, original_screen)
+    lower = [r for r in screen if r['learning_rate'] < original]
+    decision = {'initial_development_kl':initial, 'screen_development_kl':original_screen,
+                'final_development_kl':final, 'relative_tolerance':tolerance,
+                'reference_development_kl':reference, 'triggered':False}
+    if final <= reference * (1 + tolerance):
+        return {**decision, 'reason':'No material development-loss worsening.'}
+    if not lower:
+        return {**decision, 'reason':'No previously validated lower LR is available.'}
+    chosen = min(lower, key=lambda r:(r['development_kl'],r['learning_rate']))
+    return {**decision, 'triggered':True, 'learning_rate':chosen['learning_rate'],
+            'reason':'Final development KL worsened; use the best validated lower LR.'}
+
+
+def lr_followup(queue_config, evidence, report, label):
+    policy_path = evidence/'readiness/lr-followup-policy.json'
+    if not policy_path.exists():
+        return {'enabled':False}
+    policy = json.loads(policy_path.read_text())
+    from campaigns.execution_service import digest
+    manifest = json.loads((evidence/'prepared/queue/campaign.json').read_text())
+    if (policy.get('version') != 1 or policy.get('manifest_sha256') != digest(manifest)
+            or policy.get('user_authorization') != 'if the loss worsens tune the lr'
+            or policy.get('max_followups_per_rank') != 1 or policy.get('deadline') != DEADLINE):
+        raise ValueError('Invalid explicit LR-follow-up authorization')
+    rank = report['rank']
+    selection = json.loads((evidence/'readiness'/f'selection-r{rank}.json').read_text())
+    if PREFIX+'-'+label != selection['selected_job']:
+        return {'enabled':True, 'triggered':False, 'reason':'Bounded additional fit; no recursive tuning.'}
+    decision = {**followup_decision(report,selection,policy['relative_tolerance']),
+                'rank':rank, 'original_job':selection['selected_job'], 'authorization':str(policy_path),
+                'evidence':[str(evidence/'reviews'/(label+'.json')),str(policy_path)]}
+    path = evidence/'readiness'/f'lr-followup-r{rank}.json'
+    write_frozen(path,decision)
+    if decision['triggered']:
+        rate = next(tag for tag,value in RATES.items() if value == decision['learning_rate'])
+        target = f'r{rank}-lr{rate}-50m'
+        gate(queue_config,evidence,'selected-'+target,{**decision,
+            'progress_calibration':selection['progress_calibration'],
+            'phase_progress_calibration':selection['phase_progress_calibration']})
+        transition(queue_config,'release',PREFIX+'-'+target)
+    return decision
+
+
+def reconcile_followups(queue_config,evidence):
+    with (evidence/'.completion.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        return {p.stem:lr_followup(queue_config,evidence,json.loads(p.read_text()),p.stem)
+                for p in sorted((evidence/'reviews').glob('r*-50m.json'))}
+
+
 def collect(queue_config,evidence):
     from campaigns.recovery_collect import collect as native_collect
     label=os.environ['RUN_WATCH_JOB_ID'].removeprefix(PREFIX+'-')
@@ -206,6 +270,7 @@ def collect(queue_config,evidence):
                 'collection':str(folder/'collection.json'),'parent_p0_sha256':'f80a9447469697cf9e4ff657cb17545d2824e60ae4f12d4694f01f3e4ebaf873',
                 'scope':'Single-array exploratory comparison; independently tuned digital LoRA and user-selected dense LR.'}
             write_frozen(evidence/'reviews'/(label+'.json'),report); result['review']=report
+            result['lr_followup']=lr_followup(queue_config,evidence,report,label)
     return result
 
 
@@ -215,10 +280,12 @@ def main():
     a=sub.add_parser('prepare-host');a.add_argument('--host',required=True);a.add_argument('--base',type=Path,default=DEFAULT_BASE);a.add_argument('--reused',type=Path,required=True)
     a=sub.add_parser('queue');a.add_argument('receipts',type=Path,nargs='+');a.add_argument('--output',type=Path,required=True);a.add_argument('--controller',type=Path,required=True);a.add_argument('--evidence',type=Path,required=True)
     a=sub.add_parser('collect');a.add_argument('--queue-config',type=Path,required=True);a.add_argument('--evidence',type=Path,required=True)
+    a=sub.add_parser('reconcile-followups');a.add_argument('--queue-config',type=Path,required=True);a.add_argument('--evidence',type=Path,required=True)
     a=p.parse_args()
     if a.mode=='generate': result=generate()
     elif a.mode=='prepare-host':result=prepare_host(a.host,a.base,a.reused)
     elif a.mode=='queue':result=queue(a.receipts,a.output,a.controller,a.evidence)
+    elif a.mode=='reconcile-followups':result=reconcile_followups(a.queue_config,a.evidence)
     else:result=collect(a.queue_config,a.evidence)
     print(json.dumps(result,indent=2,allow_nan=False))
 
