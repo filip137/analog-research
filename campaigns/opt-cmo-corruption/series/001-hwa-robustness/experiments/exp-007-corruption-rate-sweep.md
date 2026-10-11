@@ -1,7 +1,7 @@
 ---
 id: "exp-007"
 title: "Four-arm HWA comparison with frozen whole-model learning rates"
-status: "ready"
+status: "running"
 hypotheses: []
 ---
 # exp-007: four-arm HWA robustness
@@ -34,14 +34,14 @@ addressed fault-rate overestimation with a different training recipe.
 
 | Label | Gaussian weight noise | Temporary stuck-device rate | Source | Execution |
 |---|---:|---:|---|---|
-| std3 | 3% | 0% | Existing selected whole-model source | riri evaluation |
-| cdt3 | 3% | 3% | Existing selected whole-model source | riri evaluation |
+| std3 | 3% | 0% | Existing selected whole-model source | trex evaluation; riri prepared fallback |
+| cdt3 | 3% | 3% | Existing selected whole-model source | trex evaluation; riri prepared fallback |
 | cdt5 | 3% | 5% | New whole-model fit from the teacher | fifi training then deployment |
 | std9 | 9% | 0% | New whole-model fit from the teacher | loulou training then deployment |
 
 Zero faults means no temporary stuck devices, with Gaussian noise still present.
 Temporary HWA masks are resampled during training; deployed faults are permanent.
-Existing-source evaluation on riri repeats the existing matched test grid as the
+Existing-source evaluation repeats the existing matched test grid as the
 user requested. It is an evaluation replay, not a new independent array or
 training replicate; preserve earlier evaluations as reference evidence.
 
@@ -101,13 +101,15 @@ selection remain campaign-specific choices; neither paper establishes this ratio
 Strict definitions: `campaigns/opt-cmo-corruption/lifecycles/opt125m-cmo-l6-exp1g-*.json`.
 Preparation/completion: `campaigns/opt-cmo-corruption/launch/exp1g_four_arm.py`.
 Exact reused source catalog: `campaigns/opt-cmo-corruption/launch/exp1g_four_arm_sources.json`.
-Native training/deployment/inspection and collection use the existing public CLIs;
-no workflow, optimizer, physical model or dispatcher runtime is changed.
+Native training/deployment/inspection and collection use the existing public CLIs.
+The worker, optimizer, physical model and running dispatcher remain at their
+frozen revisions. A tested operational CLI amendment adds a byte-identical
+prepared placement for held jobs without execution history; its audit is below.
 
 Local evidence: `results/lifecycles/opt125m-cmo-l6-exp1g-four-arm/`.
-Remote checkout/results on fifi/loulou/riri:
+Remote checkout/results on fifi/loulou/trex (also staged on riri):
 `/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/`.
-The exact old source bundles are copied, without changes, to riri under
+The exact old source bundles are copied, without changes, to trex and riri under
 `/home/filip/analog-research/opt-cmo-exp1/inputs/exp1g-frozen-sources/` and checked
 against their source/result hashes and original full native artifact records.
 
@@ -132,16 +134,77 @@ No automatic compute retries or scientific modifications. Failed mandatory gates
 or inadequate remaining budget block dependent work.
 
 All jobs are registered held. After pinned-input, native dry-run and service
-preflight checks, release the canary and both riri evaluations. The validated,
+preflight checks, release the canary and both existing-source evaluations. The validated,
 collected canary opens the immutable handoff gate and releases both full fits
 automatically. Each full native campaign trains then deploys its own selected
-checkpoint, with source-fit validation before deployment. The riri manifests
+checkpoint, with source-fit validation before deployment. The existing-source manifests
 contain no HWA stage. Completion hooks collect exact bundles and update the
 four-arm paired report; no interactive coordinator is needed.
 
 ## Current handoff
 
-Preparation is in progress. Frozen revision, manifest hash, readiness evidence,
-worker attempts/tmux handles and first semantic observations will be recorded
-here after staging and admission. Existing source identities are pinned; the
-new runs have not yet been admitted.
+Worker and local completion-controller revision:
+`7aa2d71c984a05f25b04c64c2c67d8dd095464cb`. All three worker checkouts are clean;
+all five strict lifecycle checks and native dry runs passed. The completion,
+collection and dispatcher checks passed **152 tests**. Input and reused-source
+hashes were verified on their execution hosts.
+
+The durable five-job manifest is
+`results/lifecycles/opt125m-cmo-l6-exp1g-four-arm/prepared/queue/campaign.json`.
+Registration was repeated successfully with exactly five held jobs and zero
+attempts; its receipt is `readiness/registration.json` under the local evidence
+root. `readiness/preflight.json` records the live service, idle GPUs, pinned
+inputs and retained restart/investigator evidence. A first preflight receipt
+omitted the required evidence-list field and was rejected before release;
+that draft is preserved as `preflight-rejected-missing-evidence-list.json`.
+The corrected gate passed without changing any scientific or runtime setting.
+
+Manifest SHA-256:
+`b8b4ff36dfa03f50232487a3000ecac0f00ba0fc708007cb05107fa8049e5145`.
+The canary started at 19:08:43 Paris, completed and validated in 146.095 s,
+and was collected automatically. Its handoff gate released both full fits.
+They started at **19:14:21 (cdt5/fifi)** and **19:14:23 (std9/loulou)**.
+Direct native observations found both beyond warm-up at update 357, with finite
+losses and LRs `0.0049996464` / `0.000009999293`. Expected final collection is
+around **21:15–21:45 Paris** on 2026-10-11.
+
+Riri was claimed by another user's job after preflight but before either
+evaluation launched. Both evaluation jobs were held, with zero attempts, while
+trex was prepared. Its CUDA/PyTorch versions match, and both native dry runs,
+checkpoint/corpus hashes and the complete prepared placement payloads match
+riri exactly. The operational amendment
+`readiness/trex-placement-amendment.json` adds trex to the same two job IDs,
+retains riri's artifact ownership, includes all extra staged storage, and keeps
+the original budgets and scientific commands. Neither evaluation is duplicated.
+The amendment was applied twice to verify idempotency before release. The
+public CLI addition is committed at `5c17a2d`; 125 relevant checks passed,
+including six relocation checks. The running dispatcher code was unchanged.
+
+Live tmux sessions:
+
+```bash
+ssh -t fifi tmux attach -r -t opt125m-cmo-l6-exp1g-cdt5-60bcf22b16924e04a7ca1d808430250c
+ssh -t loulou tmux attach -r -t opt125m-cmo-l6-exp1g-std9-0f1c1e901f1047b9a213bedd006966a9
+ssh -t trex tmux attach -r -t opt125m-cmo-l6-exp1g-cdt3-746eb69566264ce780f3f0d1e335207b
+```
+
+The same attempt tokens key the durable job ledger and worker receipt directories
+under `/home/filip/analog-research/opt-cmo-exp1/worker-receipts/7aa2d71c984a05f25b04c64c2c67d8dd095464cb/`.
+Service observations are retained locally in `readiness/latest-observation.json`.
+The final collector produces `collected/review.json`, with 120 deployment rows
+and 72 per-rate/per-domain paired contrasts required for complete coverage.
+
+The live restart test passed at **19:22 Paris**: service PID changed from 342022
+to 752113 while all three worker identities and attempt tokens were preserved,
+with no duplicate submission. Job state, incident history, the relocation
+amendment, original start time and remaining budgets survived. The restarted
+watchdog semantically observed every active worker: cdt5 at update 1,381, std9
+at update 1,637, and trex deploying cdt3 on its second assignment. Metrics and
+artifacts were valid, with zero campaign incidents. The standard-HWA evaluation
+remained queued behind cdt3. Complete evidence is `readiness/live-handoff.json`.
+Measured storage was 7.214 GB of the 24 GB cap, with 146.095 s charged for the
+canary and 956.908 s estimated across active workers; reservation accounting
+still leaves enough budget for the queued evaluation.
+
+Native HWA logs call each 256-update block an epoch. Track completion by
+`global_step / 25600`; the full run represents approximately 4.196 corpus passes.

@@ -4,7 +4,7 @@
 
 Sources: campaign experiment metadata and reviewer-written result notes. No raw evidence or live job state is inferred.
 
-Counts: complete=6, ready=1.
+Counts: complete=6, running=1.
 
 ## Experiments
 
@@ -16,7 +16,7 @@ Counts: complete=6, ready=1.
 | [exp-004 — Experiment 1d: cross-domain evaluation of WikiText-trained and generated-text-trained L6 HWA sources](series/001-hwa-robustness/experiments/exp-004-cross-domain-evaluation.md) | complete | None declared | [validated-local](series/001-hwa-robustness/results/exp-004.md): Training corpus x test domain (L6): pure domain specialization - each corpus wins on its own test domain at every rate (34-150 % lower KL); corruption-aware HWA's high-rate advantage holds in-domain (from 3 %) but largely vanishes out of domain |
 | [exp-005 — Experiment 1e: HWA scopes and digital learning-rate development](series/001-hwa-robustness/experiments/exp-005-whole-model-hwa.md) | complete | None declared | [validated-local](series/001-hwa-robustness/results/exp-005.md): Frozen-checkpoint transfer complete (60/60): digital peak LR 1e-5 lowers 3%-fault test KL by 7.0% on WikiText and 8.3% on synthetic text, with 5/5 array wins; healthy WikiText worsens 2.0%, and no rate/domain meets the 10% material-effect rule |
 | [exp-006 — Corruption-aware HWA with smaller digital learning rates](series/001-hwa-robustness/experiments/exp-006-corruption-aware-digital-lr.md) | complete | None declared | [validated-local](series/001-hwa-robustness/results/exp-006.md): Complete one-seed comparison: digital peak 1e-5 wins development selection and improves every matched test condition over corruption-aware analog-only; at 3% faults KL falls 5.3% on WikiText and 9.8% on generated text, below the 10% material threshold |
-| [exp-007 — Four-arm HWA comparison with frozen whole-model learning rates](series/001-hwa-robustness/experiments/exp-007-corruption-rate-sweep.md) | ready | None declared | No result recorded. |
+| [exp-007 — Four-arm HWA comparison with frozen whole-model learning rates](series/001-hwa-robustness/experiments/exp-007-corruption-rate-sweep.md) | running | None declared | No result recorded. |
 
 ## Hypothesis evidence
 
