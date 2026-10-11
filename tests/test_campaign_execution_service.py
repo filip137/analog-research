@@ -349,6 +349,40 @@ def test_driver_recovery_fails_closed(setup, tmp_path, failure):
     assert db.execute("SELECT COUNT(*) FROM campaign_retries").fetchone()[0] == 0
 
 
+@pytest.mark.parametrize("repaired", [True, False])
+def test_missing_tmux_recovery_requires_repair_and_keeps_the_prepared_command(setup, tmp_path, repaired):
+    receipt = driver_crash_receipt(setup, tmp_path)
+    scheduler = setup[0]; db = scheduler.store.db
+    path = Path(receipt["evidence"]["path"])
+    evidence = {"failure_class": "transport_before_start", "failed_attempt": "failed-one", "failed_target": "lab",
+        "launcher_log": 'if tmux(spec, "has-session", check=False)\nFileNotFoundError: [Errno 2] No such file or directory: \'tmux\'',
+        "tmux_probe": {"passed": repaired}}
+    path.write_text(json.dumps(evidence)); receipt["evidence"]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    terminal = {"alive": False, "reservation_held": False, "campaign_worker_unstarted": {"reason": "tmux_not_found"}}
+    db.execute("UPDATE attempts SET receipt=?", (json.dumps(terminal),))
+    before = scheduler.store.job("one")
+    if not repaired:
+        with pytest.raises(ValueError): scheduler.campaigns.recover_missing_tmux("one", receipt)
+        assert scheduler.store.job("one") == before
+    else:
+        scheduler.campaigns.recover_missing_tmux("one", receipt)
+        after = scheduler.store.job("one")
+        assert after["spec"] == before["spec"] and after["used_seconds"] == before["used_seconds"]
+        assert after["state"] == "queued" and not after["spec"]["retry_safe"]
+
+
+def test_missing_tmux_before_creation_is_terminal_without_inventing_worker_receipt():
+    observed = {"receipt": {"state": "failed", "started_at": 1000, "elapsed_seconds": .2},
+        "alive": False, "reservation_held": False,
+        "log_tail": 'if tmux(spec, "has-session", check=False)\nFileNotFoundError: [Errno 2] No such file or directory: \'tmux\''}
+    value = merge_terminal_worker_receipt(observed, {"missing": True})
+    assert value["receipt"]["state"] == "failed" and value["receipt"]["elapsed_seconds"] == .2
+    assert value["campaign_worker_unstarted"]["reason"] == "tmux_not_found"
+    assert "campaign_worker_terminal" not in value and "probe_error" not in value
+    unknown = {**observed, "log_tail": "FileNotFoundError: unrelated file"}
+    assert "probe_error" in merge_terminal_worker_receipt(unknown, {"missing": True})
+
+
 def test_cycles_and_unsupported_slurm_are_rejected(setup):
     _, _, _, manifest = setup
     bad = manifest()
