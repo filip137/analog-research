@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import sqlite3
@@ -76,6 +77,62 @@ def test_prepared_job_is_atomically_held_and_registration_idempotent(setup):
     scheduler.store.update_job("one", "running")
     assert scheduler.campaigns.register(manifest()) == sha
     assert scheduler.campaigns.contract("study")["started"] is None
+
+
+def relocation(setup, tmp_path):
+    scheduler, _, job, manifest = setup
+    value = job()
+    sha = scheduler.campaigns.register(manifest())
+    placement = value["spec"]["placements"]["lab"]
+    proof = tmp_path / "prepared.json"
+    proof.write_text(json.dumps({"host": "spare", "cases": [{"id": "one", "dry_run_passed": True, "placement": placement}]}))
+    return {"version": 1, "id": "move-one", "manifest_sha256": sha,
+        "authorization": "existing GPU allocation", "reason": "original GPU occupied", "evidence": [str(proof)],
+        "relocations": [{"job_id": "one", "from_target": "lab", "to_target": "spare", "to_canonical_host": "spare",
+            "placement_sha256": digest(placement), "prepared_receipt": {"path": str(proof), "sha256": hashlib.sha256(proof.read_bytes()).hexdigest()}}],
+        "storage_roots": [{"target": "spare", "path": str(tmp_path / "one")}]}
+
+
+def test_queued_relocation_preserves_identity_budget_and_is_idempotent(setup, tmp_path):
+    amendment = relocation(setup, tmp_path)
+    scheduler = setup[0]
+    before = scheduler.store.job("one")
+    scheduler.campaigns.storage("study", 10)
+    sha = scheduler.campaigns.amend("study", amendment)
+    assert scheduler.campaigns.amend("study", amendment) == sha
+    after = scheduler.store.job("one")
+    assert after["state"] == "held" and after["used_seconds"] == 0
+    assert set(after["spec"]["placements"]) == {"lab", "spare"}
+    assert after["spec"]["placements"]["spare"] == before["spec"]["placements"]["lab"]
+    assert {k:v for k,v in after["spec"].items() if k != "placements"} == {k:v for k,v in before["spec"].items() if k != "placements"}
+    assert scheduler.campaigns.remaining("study")["storage_bytes_observed"] is None
+    assert scheduler.campaigns.contract("study")["effective_budgets"]["gpu_hours"] == 1
+    assert scheduler.store.db.execute("SELECT job_id FROM destinations WHERE host='spare'").fetchone()[0] == "one"
+
+
+@pytest.mark.parametrize("failure", ["runnable", "history", "changed_placement", "changed_receipt", "destination"])
+def test_queued_relocation_fails_closed(setup, tmp_path, failure):
+    amendment = relocation(setup, tmp_path)
+    scheduler = setup[0]
+    if failure == "runnable":
+        scheduler.store.update_job("one", "queued")
+    elif failure == "history":
+        scheduler.store.db.execute("INSERT INTO attempts(token,job_id,target,gpu_uuid,gpu_name,state,issued,launch_before,progress_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            ("old", "one", "lab", "gpu", "5090", "complete", 900, 945, 900))
+    elif failure == "changed_placement":
+        proof = tmp_path / "prepared.json"
+        doc = json.loads(proof.read_text()); doc["cases"][0]["placement"]["argv"] = ["different-science"]
+        proof.write_text(json.dumps(doc))
+        amendment["relocations"][0]["prepared_receipt"]["sha256"] = hashlib.sha256(proof.read_bytes()).hexdigest()
+    elif failure == "changed_receipt":
+        (tmp_path / "prepared.json").write_text("{}")
+    else:
+        setup[2]("other")
+        scheduler.store.db.execute("INSERT INTO destinations VALUES(?,?,?)", ("spare", str(tmp_path / "one"), "other"))
+    with pytest.raises(ValueError):
+        scheduler.campaigns.amend("study", amendment)
+    assert set(scheduler.store.job("one")["spec"]["placements"]) == {"lab"}
+    assert not scheduler.campaigns.contract("study")["amendments"]
 
 
 def test_registration_rejects_runnable_unowned_job(setup):

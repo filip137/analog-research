@@ -286,7 +286,7 @@ class CampaignLedger:
         amendment = json.loads(canonical(raw))
         allowed = {"version", "id", "manifest_sha256", "authorization", "reason", "evidence",
                    "template_case_id", "scientific_inputs", "cases", "storage_roots", "target_progress_calibration",
-                   "storage_estimates"}
+                   "storage_estimates", "relocations"}
         if set(amendment) - allowed or amendment.get("version") != 1:
             raise ValueError("unsupported operational amendment fields/version")
         for key in ("id", "authorization", "reason"):
@@ -308,8 +308,45 @@ class CampaignLedger:
             roots = amendment.get("storage_roots", [])
             calibration = amendment.get("target_progress_calibration", {})
             storage_estimates = amendment.get("storage_estimates", [])
-            if not additions and not roots and not calibration and not storage_estimates:
+            relocations = amendment.get("relocations", [])
+            if not additions and not roots and not calibration and not storage_estimates and not relocations:
                 raise ValueError("operational amendment has no additions")
+            if not isinstance(relocations, list):
+                raise ValueError("relocations must be a list")
+            relocated = {}
+            for move in relocations:
+                if set(move) != {"job_id", "from_target", "to_target", "to_canonical_host", "placement_sha256", "prepared_receipt"}:
+                    raise ValueError("relocation requires exact targets, placement hash and preparation receipt")
+                jid, source, target = move["job_id"], move["from_target"], move["to_target"]
+                if jid in relocated or source == target or not isinstance(target, str) or not target:
+                    raise ValueError("invalid or duplicate relocation")
+                case, job = self.case(jid), self.store.job(jid)
+                if not case or case["campaign_id"] != campaign_id or not job or job["state"] != "held":
+                    raise ValueError("relocation requires a held campaign job")
+                if any(a["job_id"] == jid for a in self.store.attempts()) or job["used_seconds"]:
+                    raise ValueError("relocation requires no execution history")
+                placements = job["spec"]["placements"]
+                if set(placements) != {source} or digest(placements[source]) != move["placement_sha256"]:
+                    raise ValueError("relocation must preserve the exact prepared placement")
+                proof = move["prepared_receipt"]
+                if set(proof) != {"path", "sha256"} or not Path(proof["path"]).is_absolute():
+                    raise ValueError("relocation requires a pinned preparation receipt")
+                data = Path(proof["path"]).read_bytes()
+                if hashlib.sha256(data).hexdigest() != proof["sha256"]:
+                    raise ValueError("relocation preparation receipt changed")
+                prepared = json.loads(data)
+                matches = [c for c in prepared.get("cases", []) if c["id"] == jid]
+                if prepared.get("host") != target or len(matches) != 1 or matches[0].get("dry_run_passed") is not True or canonical(matches[0]["placement"]) != canonical(placements[source]):
+                    raise ValueError("relocation preparation changed the scientific command or pinned files")
+                revised = json.loads(canonical(job["spec"]))
+                # Retain the original destination for artifact/storage ownership;
+                # the one job ID still admits at most one of its placements.
+                revised["placements"][target] = placements[source]
+                destination = self.db.execute("SELECT job_id FROM destinations WHERE host=? AND path=?",
+                    (move["to_canonical_host"], placements[source]["run_dir"])).fetchone()
+                if destination and destination["job_id"] != jid:
+                    raise ValueError("relocation destination belongs to another job")
+                relocated[jid] = (job, revised, move)
             if not isinstance(storage_estimates, list):
                 raise ValueError("storage_estimates must be a list of measured case estimates")
             estimates_by_case = {}
@@ -332,6 +369,7 @@ class CampaignLedger:
                 estimates_by_case[case_id] = {**case["contract"], "expected_storage_bytes": estimate["expected_bytes"]}
             known_targets = {target for case in contract["effective_cases"]
                              for target in self.store.job(case["id"])["spec"]["placements"]}
+            known_targets.update(move["to_target"] for _, _, move in relocated.values())
             template = self.case(amendment.get("template_case_id")) if additions else None
             scientific = amendment.get("scientific_inputs", [])
             if additions:
@@ -386,6 +424,14 @@ class CampaignLedger:
                         positive(value, key)
                     if min(progress["startup_seconds"], progress["stale_seconds"]) < 600:
                         raise ValueError("target progress thresholds must cover two five-minute polls")
+            for jid, (job, revised, move) in relocated.items():
+                self.db.execute("INSERT OR IGNORE INTO destinations VALUES(?,?,?)",
+                    (move["to_canonical_host"], revised["placements"][move["to_target"]]["run_dir"], jid))
+                self.db.execute("UPDATE jobs SET spec=?,updated=? WHERE id=?", (canonical(revised), self.clock(), jid))
+                self.store.event(jid, "campaign_queued_relocation", {"amendment_id": amendment["id"],
+                    "from_target": move["from_target"], "to_target": move["to_target"],
+                    "previous_spec_sha256": digest(job["spec"]), "spec_sha256": digest(revised),
+                    "used_seconds": job["used_seconds"]}, self.clock())
             for case in additions:
                 self.db.execute("INSERT INTO campaign_cases VALUES(?,?,?)", (case["id"], campaign_id, canonical(case)))
             for case_id, revised in estimates_by_case.items():
@@ -1393,7 +1439,12 @@ def main(argv=None):
     if args.command == "register":
         print(scheduler.campaigns.register(json.loads(args.manifest.read_text()))); return
     if args.command == "amend":
-        print(scheduler.campaigns.amend(args.campaign_id, json.loads(args.amendment.read_text()))); return
+        amendment = json.loads(args.amendment.read_text())
+        for move in amendment.get("relocations", []):
+            target = cfg["targets"].get(move["to_target"])
+            if not target or not target["enabled"] or move["to_canonical_host"] != target["canonical_host"]:
+                raise ValueError("relocation target is not enabled in the shared queue")
+        print(scheduler.campaigns.amend(args.campaign_id, amendment)); return
     if args.command == "extend":
         print(scheduler.campaigns.extend(args.campaign_id, json.loads(args.receipt.read_text()))); return
     if args.command == "gate":
