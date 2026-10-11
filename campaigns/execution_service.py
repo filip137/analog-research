@@ -536,8 +536,9 @@ class CampaignLedger:
         if receipt.get("manifest_sha256") != contract["sha256"] or not isinstance(receipt.get("passed"), bool) or not receipt.get("evidence"):
             raise ValueError("gate requires matching manifest_sha256, boolean passed and concrete evidence")
         calibration = receipt.get("progress_calibration", {})
-        if calibration and name != "handoff":
-            raise ValueError("only the frozen handoff gate may supply progress calibration")
+        calibration_gates = {"handoff"} | {gate for case in contract["effective_cases"] for gate in case["required_gates"]}
+        if calibration and name not in calibration_gates:
+            raise ValueError("only the frozen handoff or a declared required gate may supply progress calibration")
         for stage, progress in calibration.items():
             if stage not in {case["stage"] for case in contract["effective_cases"]}:
                 raise ValueError("progress calibration names an unknown campaign stage")
@@ -550,8 +551,8 @@ class CampaignLedger:
         phase_calibration = receipt.get("phase_progress_calibration", {})
         if not isinstance(phase_calibration, dict) or set(phase_calibration) - PROGRESS_PHASES:
             raise ValueError("phase progress calibration must name native stages, collection or validation")
-        if phase_calibration and name != "handoff":
-            raise ValueError("only the frozen handoff gate may supply phase progress calibration")
+        if phase_calibration and name not in calibration_gates:
+            raise ValueError("only the frozen handoff or a declared required gate may supply phase progress calibration")
         for phase, thresholds in phase_calibration.items():
             if not isinstance(thresholds, dict) or set(thresholds) != PROGRESS_FIELDS:
                 raise ValueError("phase progress calibration requires exactly startup, stale and expected seconds")
@@ -604,16 +605,24 @@ class CampaignLedger:
     def progress_expectation(self, job_id, target=None, stage=None):
         case = self.case(job_id)
         progress = case["contract"]["progress"]
-        if "phases" in progress:
-            # Measured phase calibration is frozen once in the handoff gate.
-            # Other phases retain their case-specific estimates (e.g. HWA scope).
-            kind = stage.get("kind") if isinstance(stage, dict) else stage
-            row = self.db.execute("SELECT receipt FROM campaign_gates WHERE campaign_id=? AND name='handoff'",
-                                  (case["campaign_id"],)).fetchone()
+        # A measured gate required by this case takes precedence over the global
+        # handoff. Never borrow another rank's or another case's calibration.
+        names = list(dict.fromkeys([name for name in case["contract"]["required_gates"] if name != "handoff"] + ["handoff"]))
+        receipts = []
+        for name in names:
+            row = self.db.execute("SELECT receipt FROM campaign_gates WHERE campaign_id=? AND name=?",
+                                  (case["campaign_id"], name)).fetchone()
             if row:
                 receipt = json.loads(row["receipt"])
+                if receipt["passed"]:
+                    receipts.append(receipt)
+        if "phases" in progress:
+            # Measured phase calibration is frozen once in a declared gate.
+            # Other phases retain their case-specific estimates (e.g. HWA scope).
+            kind = stage.get("kind") if isinstance(stage, dict) else stage
+            for receipt in receipts:
                 calibrated = receipt.get("phase_progress_calibration", {}).get(kind)
-                if receipt["passed"] and calibrated:
+                if calibrated:
                     return calibrated
             return progress["phases"].get(kind, {key: progress[key] for key in PROGRESS_FIELDS})
         contract = self.contract(case["campaign_id"])
@@ -628,13 +637,10 @@ class CampaignLedger:
             calibrated = contract["target_progress_calibration"].get(target, {}).get(case["contract"]["stage"])
             if calibrated:
                 return calibrated
-        row = self.db.execute("SELECT receipt FROM campaign_gates WHERE campaign_id=? AND name='handoff'", (case["campaign_id"],)).fetchone()
-        if row:
-            receipt = json.loads(row["receipt"])
-            if receipt["passed"]:
-                calibrated = receipt.get("progress_calibration", {}).get(case["contract"]["stage"])
-                if calibrated:
-                    return calibrated
+        for receipt in receipts:
+            calibrated = receipt.get("progress_calibration", {}).get(case["contract"]["stage"])
+            if calibrated:
+                return calibrated
         return case["contract"]["progress"]
 
     def storage(self, campaign_id, size, observed=None):
@@ -787,6 +793,8 @@ class CampaignLedger:
                 "latest_observation": observation,
                 "remaining_budget": self.remaining(incident["campaign_id"]),
                 "execution_history": [a for a in self.store.attempts() if a["job_id"] == job["id"]],
+                "collection_history": [{**dict(r), "payload": json.loads(r["payload"]) if r["payload"] else None}
+                    for r in self.db.execute("SELECT * FROM collections WHERE job_id=? ORDER BY issued DESC LIMIT 8", (job["id"],))],
                 "events": [dict(r) for r in self.db.execute("SELECT * FROM events WHERE job_id=? ORDER BY id DESC LIMIT 40", (job["id"],))]}
 
     def authorize_retry(self, job_id, failure_class, evidence):
