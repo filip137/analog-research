@@ -739,6 +739,67 @@ class CampaignLedger:
             self.db.execute("UPDATE jobs SET mode=? WHERE id=?", (mode, job_id))
             self.store.update_job(job_id, "collecting" if mode == "collection_retry" else "queued", "classified operational replay", self.clock())
 
+    def recover_driver_crash(self, job_id, raw):
+        """One audited restart after a proven native CUDA-driver SIGSEGV.
+
+        Keep retry_safe=false: this receipt authorizes only this terminal fault,
+        from original inputs, on an already prepared host other than the failed
+        host. It cannot change a command, scientific input or resource allowance.
+        """
+        receipt = json.loads(canonical(raw))
+        if set(receipt) != {"version", "manifest_sha256", "job_spec_sha256", "failed_attempt", "authorization", "evidence", "restart_from_original_inputs"} or receipt["version"] != 1:
+            raise ValueError("invalid driver recovery receipt")
+        if not isinstance(receipt["authorization"], str) or not receipt["authorization"].strip() or receipt["restart_from_original_inputs"] is not True:
+            raise ValueError("driver recovery requires authority and an explicit fresh restart")
+        proof = receipt["evidence"]
+        if set(proof) != {"path", "sha256"} or not Path(proof["path"]).is_absolute():
+            raise ValueError("driver recovery requires pinned evidence")
+        data = Path(proof["path"]).read_bytes()
+        if hashlib.sha256(data).hexdigest() != proof["sha256"]:
+            raise ValueError("driver evidence hash mismatch")
+        evidence = json.loads(data)
+        stage = evidence.get("stage_result", {})
+        pid = evidence.get("native_pid")
+        if (evidence.get("failure_class") != "node_failure" or stage.get("returncode") != -11 or stage.get("status") != "failed"
+                or not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0
+                or not any(f"[{pid}]: segfault" in line and "libcuda.so" in line for line in evidence.get("kernel_log", []))):
+            raise ValueError("evidence does not classify a native CUDA-driver SIGSEGV")
+        with self.store.transaction():
+            old = self.db.execute("SELECT evidence FROM campaign_retries WHERE job_id=?", (job_id,)).fetchone()
+            if old:
+                if old["evidence"] == canonical(receipt):
+                    return digest(receipt)
+                raise ValueError("one operational replay allowance already consumed")
+            case, job = self.case(job_id), self.store.job(job_id)
+            if not case or not job or job["state"] != "attention":
+                raise ValueError("driver recovery requires a failed campaign job")
+            contract = self.contract(case["campaign_id"])
+            if receipt["manifest_sha256"] != contract["sha256"] or receipt["job_spec_sha256"] != digest(job["spec"]):
+                raise ValueError("driver recovery contract changed")
+            attempts = [a for a in self.store.attempts() if a["job_id"] == job_id]
+            if not attempts or any(a["state"] in ACTIVE for a in attempts):
+                raise ValueError("active or unknown worker prevents driver recovery")
+            attempt = attempts[-1]
+            if attempt["state"] != "failed" or attempt["token"] != receipt["failed_attempt"] or attempt["token"] != evidence.get("failed_attempt") or attempt["target"] != evidence.get("failed_target"):
+                raise ValueError("driver recovery does not match the last failed attempt")
+            observed = json.loads(attempt["receipt"] or "{}")
+            terminal = observed.get("campaign_worker_terminal", {})
+            if observed.get("alive") is not False or observed.get("reservation_held") is not False or terminal.get("worker_alive") is not False or terminal.get("supervisor_alive") is not False:
+                raise ValueError("all workers and reservations must be confirmed terminal")
+            allowed, reason = self.eligible(job)
+            if not allowed:
+                raise ValueError(reason)
+            revised = json.loads(canonical(job["spec"]))
+            del revised["placements"][attempt["target"]]
+            if not revised["placements"]:
+                raise ValueError("driver recovery needs another existing prepared host")
+            self.db.execute("INSERT INTO campaign_retries VALUES(?,?,?,?)", (job_id, "node_failure", canonical(receipt), self.clock()))
+            self.db.execute("UPDATE jobs SET spec=?,mode='run' WHERE id=?", (canonical(revised), job_id))
+            self.store.event(job_id, "campaign_driver_recovery", {"receipt": receipt, "excluded_target": attempt["target"],
+                "previous_spec_sha256": digest(job["spec"]), "spec_sha256": digest(revised), "used_seconds": job["used_seconds"]}, self.clock())
+            self.store.update_job(job_id, "queued", "classified CUDA-driver failure; one unchanged restart on another prepared host", self.clock())
+        return digest(receipt)
+
     def status(self):
         results = []
         for row in self.db.execute("SELECT id FROM campaign_contracts ORDER BY created"):
@@ -1368,6 +1429,8 @@ def main(argv=None):
     waiver.add_argument("campaign_id"); waiver.add_argument("name"); waiver.add_argument("receipt", type=Path)
     storage = commands.add_parser("storage")
     storage.add_argument("campaign_id"); storage.add_argument("bytes", type=int)
+    recovery = commands.add_parser("recover-driver-crash")
+    recovery.add_argument("case_id"); recovery.add_argument("receipt", type=Path)
     args = parser.parse_args(argv)
     if args.command == "probe-artifacts":
         print(canonical(artifact_probe(args.root))); return
@@ -1410,6 +1473,8 @@ def main(argv=None):
         print(scheduler.campaigns.waive_gate(args.campaign_id, args.name, json.loads(args.receipt.read_text()))); return
     if args.command == "storage":
         scheduler.campaigns.storage(args.campaign_id, args.bytes); return
+    if args.command == "recover-driver-crash":
+        print(scheduler.campaigns.recover_driver_crash(args.case_id, json.loads(args.receipt.read_text()))); return
     if args.command == "incident":
         print(scheduler.campaigns.incident(args.case_id, args.kind, json.loads(args.evidence.read_text()))); return
     from queue_recovery import Recovery
