@@ -341,3 +341,19 @@ Readiness reserves at most 0.5 GPU-hours, screens at most 1.5, confirmation at
 most 3, summing to the original five-hour cap. All phases share one absolute
 six-hour deadline from first readiness admission; no phase resets it. Probe
 measurements must support these bounds before main admission.
+
+The conservative fixed deadline is **October 13, 02:54:37 Paris**, six hours
+from the first eligibility time, so scheduler delays consume that window.
+The first readiness registration was cancelled before any attempt because its
+storage roots included hosts without prepared execution/collection paths. Its
+replacement is `opt125m-cmo-l6-exp014-context-readiness-v2`; no GPU time or
+scientific trajectory was spent by the cancelled registration. The replacement
+accounts trex and the local controller and keeps the same worker computation.
+Main jobs have priority 90, below existing exp-013 jobs at priority 100.
+
+The screen accounts both hosts and local evidence. Confirmation executes only
+on loulou, so its storage cap is 80 GB for loulou plus local evidence. Before
+release, collection measures trex's completed storage and requires at most
+35 GB; another 5 GB is reserved for staging archives and prior worker receipts.
+These reservations preserve the original aggregate 120 GB cap. A regression
+check requires every monitored remote root to have a prepared placement.

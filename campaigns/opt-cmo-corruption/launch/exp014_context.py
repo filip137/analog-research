@@ -255,10 +255,15 @@ def queue(receipts,evidence,controller):
                  'progress':{**thresholds(600),'phases':{'onchip':thresholds(600),
                             'validation':thresholds(180),'collection':thresholds(180)}}})
         revision=next(iter(hosts.values()))['source_revision']
+        tracked_hosts=hosts if phase=='screen' else {'loulou':hosts['loulou']}
+        # Confirmation has no trex execution placement. Freeze its completed
+        # storage below 35 GB before selection, then reserve 80 GB here and
+        # leave 5 GB for source bundles/old receipt directories.
         manifest={'version':1,'id':PHASE+'-'+phase,'poll_seconds':300,'required_adapters':['tmux'],
-                  'budgets':{'gpu_hours':hours,'storage_bytes':120000000000,'window_seconds':21600},'cases':cases,
-                  'storage_roots':[{'target':h,'path':d['source']} for h,d in hosts.items()]+
-                     [{'target':h,'path':str(DEFAULT_BASE/'worker-receipts'/revision)} for h in hosts]+
+                  'budgets':{'gpu_hours':hours,'storage_bytes':120000000000 if phase=='screen' else 80000000000,
+                             'window_seconds':21600},'cases':cases,
+                  'storage_roots':[{'target':h,'path':d['source']} for h,d in tracked_hosts.items()]+
+                     [{'target':h,'path':str(DEFAULT_BASE/'worker-receipts'/revision)} for h in tracked_hosts]+
                      [{'target':'local','path':str(evidence)}]}
         validate_manifest(manifest);write_frozen(directory/'campaign.json',manifest)
         outputs[phase]={'manifest':str(directory/'campaign.json'),'jobs':jobs}
@@ -290,6 +295,17 @@ def collect(queue_config,evidence):
         fcntl.flock(lock,fcntl.LOCK_EX);write_frozen(evidence/'reviews'/(label+'.json'),report)
         screens=[evidence/'reviews'/(l+'.json') for l in labels('screen')]
         if all(p.exists() for p in screens):
+            storage_receipt=evidence/'reviews/trex-final-storage.json'
+            if not storage_receipt.exists():
+                from campaigns.execution_service import remote_command
+                host=json.loads((evidence/'hosts/trex.json').read_text())
+                placement=host['cases'][0]['placement']
+                measured=remote_command(json.loads(queue_config.read_text()),'trex',
+                    [placement['campaign_python'],'-m','campaigns.execution_service','probe-storage',
+                     host['source'],str(DEFAULT_BASE/'worker-receipts'/host['source_revision'])],cwd=host['source'])
+                if measured['storage_bytes']>35000000000:
+                    raise ValueError('Completed trex storage exceeds confirmation reservation')
+                write_frozen(storage_receipt,measured)
             chosen=selection([json.loads(p.read_text()) for p in screens])
             write_frozen(evidence/'reviews/selection.json',{'selected_contexts':chosen,'test_data_used':False})
             manifest=json.loads((evidence/'prepared/confirm/campaign.json').read_text())
