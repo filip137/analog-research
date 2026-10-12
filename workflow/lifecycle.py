@@ -1240,6 +1240,7 @@ class Onchip:
     threshold_sigma: Optional[float] = None
     accumulate_updates: Optional[bool] = None
     development_every_steps: Optional[int] = None
+    max_write_attempts_per_device: Optional[int] = None
 
     @property
     def cohort_key(self) -> str:
@@ -1263,6 +1264,8 @@ class Onchip:
             value["training_cohort"] = self.training_cohort
         if self.update_law == "cmo_thresholded_write_adam":
             value.update(threshold_sigma=self.threshold_sigma, accumulate_updates=self.accumulate_updates)
+            if self.max_write_attempts_per_device is not None:
+                value["max_write_attempts_per_device"] = self.max_write_attempts_per_device
         if self.development_every_steps is not None:
             value["development_every_steps"] = self.development_every_steps
         value["arms"] = [arm.to_dict() for arm in self.arms]
@@ -1289,6 +1292,8 @@ def _onchip(raw: Any, technology: str) -> Onchip:
         keys += ("max_pulses_per_cell",)
     elif law == "cmo_thresholded_write_adam":
         keys += ("threshold_sigma", "accumulate_updates")
+        if "max_write_attempts_per_device" in raw:
+            keys += ("max_write_attempts_per_device",)
     if "training_cohort" in raw:
         keys += ("training_cohort",)
     if "development_every_steps" in raw:
@@ -1343,6 +1348,13 @@ def _onchip(raw: Any, technology: str) -> Onchip:
             threshold_sigma=_number(raw["threshold_sigma"], "onchip.threshold_sigma", positive=True),
             accumulate_updates=_boolean(raw["accumulate_updates"], "onchip.accumulate_updates"),
         )
+        cap = raw.get("max_write_attempts_per_device")
+        if cap is not None:
+            extra["max_write_attempts_per_device"] = _integer(
+                cap, "onchip.max_write_attempts_per_device", minimum=0, maximum=2**31 - 1
+            )
+            if any(arm.weights == "rewrite" for arm in arms):
+                raise config_error("onchip.arms", "to omit rewrite under a thresholded write-attempt cap", raw["arms"])
     if "development_every_steps" in raw:
         extra["development_every_steps"] = _integer(
             raw["development_every_steps"], "onchip.development_every_steps", minimum=1

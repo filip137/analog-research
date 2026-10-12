@@ -58,7 +58,7 @@ def generate():
     return paths
 
 
-def prepare_host(host, base, reused):
+def prepare_host(host, base, reused, *, prepared_lifecycles=None, screen_budget=900, screen_expected=300):
     if host not in ('loulou', 'trex'):
         raise ValueError('Unprepared GPU host')
     if command(['git','status','--porcelain'],cwd=ROOT).strip():
@@ -71,8 +71,9 @@ def prepare_host(host, base, reused):
     env = {'EBL_CORPUS_ROOT':str(base/'inputs/corpora'),'EBL_CAMPAIGN_STREAM':'1',
            'PYTHONUNBUFFERED':'1','OMP_NUM_THREADS':'1'}
     cases = []
-    for label in labels():
-        lc = lifecycle(label)
+    definitions = ([(label, lifecycle(label)) for label in labels()]
+                   if prepared_lifecycles is None else prepared_lifecycles)
+    for label, lc in definitions:
         config = ROOT/'campaigns/opt-cmo-corruption/lifecycles'/(lc.lifecycle_id+'.json')
         if parse_lifecycle(json.loads(config.read_text())).digest() != lc.digest():
             raise ValueError('Scientific lifecycle changed')
@@ -87,7 +88,7 @@ def prepare_host(host, base, reused):
         manifest = root/'campaign.json'; write_frozen(manifest,raw)
         command([python,'-m','ebl','campaign','run','--manifest',str(manifest),'--output-dir',str(root/'dry-run'),
                  '--dry-run','--fail-fast'],cwd=ROOT,env=dict(os.environ,**env),logs=root/'preparation/dry-run')
-        budget, expected = (900,300) if label.endswith('-dev') else (4500,2400)
+        budget, expected = (screen_budget,screen_expected) if label.endswith('-dev') else (4500,2400)
         receipt_root = base/'worker-receipts'/revision/lc.lifecycle_id
         worker = root/'tmux-worker.json'; native_root = root/'runs'/raw['campaign_id']
         write_frozen(worker,{'case_id':lc.lifecycle_id,'state_root':str(receipt_root),'cwd':str(ROOT),

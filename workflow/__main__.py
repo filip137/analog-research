@@ -33,6 +33,8 @@ def summary(lifecycle) -> dict:
     state_bytes_per_weight = STATE_BYTES_PER_WEIGHT[devices.technology]
     if onchip is not None and onchip.accumulate_updates:
         state_bytes_per_weight += 4  # Saved FP32 pending command per weight.
+    if onchip is not None and onchip.max_write_attempts_per_device is not None:
+        state_bytes_per_weight += 4  # Controller-owned int32 attempt count per weight.
     return {
         "lifecycle_id": lifecycle.lifecycle_id,
         "lifecycle_sha256": lifecycle.digest(),

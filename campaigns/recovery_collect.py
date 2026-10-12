@@ -94,6 +94,12 @@ def checked(payload, inputs):
                     or row['final_apparent_sha256'] != row['initial_apparent_sha256']
                     or any(row['cost'][k] != 0 for k in ('device_writes','device_programs','verify_reads','stuck_write_attempts'))):
                 raise ValueError('Digital-only LoRA contract violated')
+        if a.weights == 'learn' and lc.onchip.max_write_attempts_per_device is not None:
+            cap = lc.onchip.max_write_attempts_per_device
+            cost = row['cost']
+            if (not 0 <= cost['max_onchip_device_writes'] <= cost['max_onchip_device_write_attempts'] <= cap
+                    or cost['issued_write_attempts'] != cost['device_writes'] + cost['stuck_write_attempts']):
+                raise ValueError('Thresholded per-device write-attempt cap violated')
     flat = [{**r,'duplicate_coverage':False} for r in _measurement_rows(rows,run)]
     if json.loads(payload['rows_json']) != flat:
         raise ValueError('Native collect differs from measurements')

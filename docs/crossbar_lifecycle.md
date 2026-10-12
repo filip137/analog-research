@@ -355,6 +355,19 @@ residual is flushed at the endpoint. Checkpoints retain pending commands and
 threshold settings. Physical costs retain the existing device-write and
 stuck-attempt definitions. No verification, retry or conductance clamp is added.
 
+Optional `onchip.max_write_attempts_per_device` adds a nonnegative integer cap
+to the thresholded law (omitted or `null` means uncapped). Each active device has
+a digital int32 count, initially zero at adaptation, incremented for every issued
+command including stuck attempts. Initial programming is excluded; reference
+devices receive no adaptation writes. A cell at its cap receives no further
+commands or pending accumulation, while other cells continue training. No hidden
+fault identities or successful-write counters enter this decision. Cap zero is
+a no-write control. Capped configurations reject rewrite arms, whose separate
+programming schedule is not controlled by this law. Counts are checkpointed;
+metrics report total and maximum issued attempts and the number of capped cells.
+Physical successful writes are checked against the per-cell attempt counts and
+the declared cap. This is a cap on idealized write events, not measured pulses.
+
 Optional positive `onchip.development_every_steps` records held-state evaluation
 on the fixed development cohort at that optimizer-step interval. It never
 selects a checkpoint or changes the fixed final endpoint; test cohorts are not

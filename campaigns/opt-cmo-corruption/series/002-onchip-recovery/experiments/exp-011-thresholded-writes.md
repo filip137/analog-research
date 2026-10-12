@@ -1,7 +1,7 @@
 ---
 id: "exp-011"
 title: "Noise-referenced write thresholds with optional signed accumulation"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-011: thresholded physical writes
@@ -109,9 +109,10 @@ No interactive coordinator is needed after the verified handoff. Preserve all
 failed attempts and negative outcomes; scientific underperformance is not an
 operational retry condition.
 
-The unchanged gate selected `accum-s2-50m`, which is running on loulou's RTX5090
-in attempt `a5ab01cb747b4763ba7fc2928494c500`, worker PID 1199369.
-Read-only tmux attachment:
+The unchanged gate selected `accum-s2-50m`, which completed on loulou's RTX5090
+in attempt `a5ab01cb747b4763ba7fc2928494c500`. Its former worker PID was 1199369;
+execution, validation and collection succeeded, and its GPU reservation is
+released. The completed tmux session was:
 
 ```sh
 ssh -t loulou tmux attach -r -t opt125m-cmo-l6-exp5-threshold-accum-s2-50m-a5ab01cb747b4763ba7fc2928494c500
@@ -125,10 +126,12 @@ The tmux `run.log` and receipts are under
 Queue campaign: `opt-cmo-exp5-threshold-20261012`; immutable manifest digest
 `ffa275efff2c1b06b9755be78a73e8b3737640c77fbe3e669dfe7c105cad5903`.
 The shared service remains the only dispatcher and monitor. Screen charge is
-426.06 GPU-seconds from the original 7,200-second allowance; the selected full
-job reserves 4,500 seconds including validation. No allowance was reset.
-The original 17:30 Paris deadline remains binding. A live observation saw the
-full worker beyond update 800/6,101 with finite loss and fixed-development progress.
+426.06 GPU-seconds and full-pass charge is 1,146.07 seconds including validation.
+The total is 1,572.13 GPU-seconds (0.437 GPU-hours) of the original 7,200-second
+allowance; 5,627.87 seconds remain unused. No allowance was reset. Completion was
+confirmed before the original 17:30 Paris deadline. All 6,101 full-pass updates
+and final evaluation completed; measurements and interpretation are in the
+[result note](../results/exp-011.md).
 
 Handoff evidence is under `readiness/`: submission and selection receipts,
 restart snapshots and active-worker restart probes. Test incident **13** invoked
@@ -142,7 +145,11 @@ and produced a fresh semantic observation for that same attempt. The final
 `readiness/handoff.json` verifies one active job, one matching watchdog observation,
 five unique compute attempts (four completed screens and the full pass), a fresh
 service heartbeat, and no operational incident beyond the intentional test.
-At handoff, observed storage is 11.06 GB; 2,273.94 GPU-seconds remain unreserved
-in addition to the active full job's existing allowance. The service owns final
-validation and collection into `reviews/accum-s2-50m.json` without a live Codex
-coordinator. The three unselected full candidates stay held.
+At the original handoff, observed storage was 11.06 GB and 2,273.94 GPU-seconds
+were unreserved in addition to the full job's allowance. The service completed
+final validation and collection into `reviews/accum-s2-50m.json` without a live
+Codex coordinator. Final observed storage is 12.08 GB, within the 20 GB cap.
+The three unselected full candidates stay held. The watchdog remains alive; the
+only incident for this campaign is the intentional handoff test. At the completion
+check, loulou and trex were idle and released; fifi and riri remained occupied by
+another user's jobs. No additional run is dispatched by this experiment.

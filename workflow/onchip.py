@@ -196,7 +196,7 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
     contract = "crossbar_lifecycle.cmo_thresholded_write_adam.v1"
 
     def __init__(self, array, *, learning_rate, threshold_sigma, accumulate_updates,
-                 acceptance_percent, noise_scale):
+                 acceptance_percent, noise_scale, max_write_attempts_per_device=None):
         super().__init__(array, learning_rate=learning_rate)
         from training.reram_cmo import HALF_RANGE_US, MID_US, programming_sigma
 
@@ -205,24 +205,38 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
         self.threshold_q = self.threshold_sigma * self.noise_std_q
         self.accumulate_updates = bool(accumulate_updates)
         self.pending = torch.zeros_like(self.first) if self.accumulate_updates else None
+        self.max_write_attempts_per_device = max_write_attempts_per_device
+        # Controller-owned issued-command history, never the plant's successful
+        # write counters: failed/stuck attempts consume the same allowance.
+        self.attempt_counts = (None if max_write_attempts_per_device is None
+                               else torch.zeros_like(self.first, dtype=torch.int32))
 
     @torch.no_grad()
     def step(self, gradient):
         command = _adam_command(self, gradient)
         if self.learning_rate == 0:
             return
+        eligible = None
+        if self.attempt_counts is not None:
+            eligible = self.attempt_counts < self.max_write_attempts_per_device
+            command = torch.where(eligible, command, 0.0)
         if self.pending is not None:
             self.pending.add_(command)
             command = self.pending
         if not bool(torch.isfinite(command).all()):
             raise FloatingPointError("Nonfinite thresholded write command.")
-        issued = torch.where(command.abs() > self.threshold_q, command, 0.0)
+        requested = command.abs() > self.threshold_q
+        if eligible is not None:
+            requested &= eligible
+        issued = torch.where(requested, command, 0.0)
         self.array.write(issued)
+        if self.attempt_counts is not None:
+            self.attempt_counts.add_(requested)
         if self.pending is not None:
             self.pending.sub_(issued)
 
     def diagnostics(self):
-        return {
+        values = {
             "threshold_reference": "nominal_midrange",
             "threshold_sigma": self.threshold_sigma,
             "noise_std_q": self.noise_std_q,
@@ -231,10 +245,20 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
             "pending_nonzero": 0 if self.pending is None else int((self.pending != 0).sum()),
             "pending_rms_q": 0.0 if self.pending is None else float(self.pending.square().mean().sqrt()),
         }
+        if self.attempt_counts is not None:
+            values.update(
+                max_write_attempts_per_device=self.max_write_attempts_per_device,
+                issued_write_attempts=int(self.attempt_counts.sum()),
+                max_onchip_device_write_attempts=int(self.attempt_counts.max()),
+                capped_devices=int((self.attempt_counts >= self.max_write_attempts_per_device).sum()),
+            )
+        return values
 
     def state_dict(self):
         return {**super().state_dict(), **self.diagnostics(),
-                "pending": None if self.pending is None else self.pending.detach().cpu().clone()}
+                "pending": None if self.pending is None else self.pending.detach().cpu().clone(),
+                **({"attempt_counts": self.attempt_counts.detach().cpu().clone()}
+                   if self.attempt_counts is not None else {})}
 
 
 def make_writer(array, lifecycle):
@@ -261,6 +285,7 @@ def make_writer(array, lifecycle):
             accumulate_updates=onchip.accumulate_updates,
             acceptance_percent=lifecycle.program_verify.acceptance_percent,
             noise_scale=lifecycle.devices.noise_scale,
+            max_write_attempts_per_device=onchip.max_write_attempts_per_device,
         )
     raise ValueError(f"Expected an OM or CMO writer update law. Provided value: {onchip.update_law!r}.")
 
@@ -416,6 +441,17 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                 max_onchip_device_writes=int(writes.max()),
                 out_of_range_devices=array.out_of_range(),
             )
+            if isinstance(writer, ThresholdedWriteAdam) and writer.attempt_counts is not None:
+                attempts = writer.attempt_counts
+                if (bool((attempts > writer.max_write_attempts_per_device).any())
+                        or bool((writes > attempts).any())
+                        or int(attempts.sum()) != cost["device_writes"] + cost["stuck_write_attempts"]):
+                    raise RuntimeError("CMO write-attempt cap or physical accounting violated.")
+                cost.update(
+                    issued_write_attempts=int(attempts.sum()),
+                    max_onchip_device_write_attempts=int(attempts.max()),
+                    capped_devices=int((attempts >= writer.max_write_attempts_per_device).sum()),
+                )
         row = {
             "epoch": epoch,
             "train_loss_mean": loss_sum / len(order),
