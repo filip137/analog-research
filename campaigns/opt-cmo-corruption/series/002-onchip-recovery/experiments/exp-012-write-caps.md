@@ -1,7 +1,7 @@
 ---
 id: "exp-012"
 title: "Recovery retained under hard per-device write-attempt caps"
-status: "ready"
+status: "running"
 hypotheses: []
 ---
 # exp-012: maximum writes per device
@@ -96,7 +96,7 @@ collection. Focused tests pass (20), including stuck-attempt charging, exhausted
 cell freezing, cap-zero no-write behavior, exact nonbinding-cap trajectories,
 strict configuration rejection and a tiny native lifecycle with exact replay.
 The workflow and campaign checks pass **334 tests with one existing optional
-AIHWKit skip**. No GPU job has launched yet. `workflow describe` gives a 12.17 GB
+AIHWKit skip**. `workflow describe` gives a 12.17 GB
 conservative bound for the generic five-assignment/ten-trajectory lifecycle.
 Each recovery-only manifest selects only assignment 271001 and two trajectories,
 or 2.43 GB; all five cases together retain the same 12.17 GB conservative bound
@@ -104,5 +104,48 @@ before source/collection overhead. All five lifecycle files preserve upstream
 provenance and differ only in their declared attempt cap and question identity.
 Existing watchdog, restart/idempotence and bounded read-only incident-agent
 handoff checks are recorded in exp-011.
-The shared service will remain the sole dispatcher and monitoring owner, polling
+The shared service remains the sole dispatcher and monitoring owner, polling
 semantic progress, budget and storage every five minutes and preserving incidents.
+
+All five cases are registered and released under campaign
+`opt-cmo-exp6-writecap-20261012`, immutable manifest digest
+`312269b7a4fcc7d92df05380fd1246768ba025add64ea624c74436a97fc14129`.
+Worker and completion-controller source is
+`bd8cad10c212638b345ea732dc59ce06cb4a8de4`. All ten host/case native plans and
+dry runs passed; `readiness/preflight.json` records the passed launch gate.
+The prior uncapped reference is frozen by SHA-256
+`7f0ff1dceb4a5c8cf6ca4f25e3ec786bd918d4a929b3b512bdcbbecb4ec99771`.
+
+At the first live check, cap 1 on loulou (attempt
+`fdcc7c9162ae4dd1b8945714ec570db8`, worker PID 1229384) and cap 2 on trex
+(attempt `8b84ccf27b304551addb472e3f8d554f`, PID 2278768) both reached all 256
+updates with finite metrics and maximum issued counts of exactly 1 and 2.
+Peak reserved memory was 19.99 GB, within the 26,000 MiB reservation.
+The other three cases remain with the dispatcher and need no interactive launch.
+
+Caps 1 and 2 subsequently completed all validation and collection gates, charging
+214.84 GPU-seconds together. Their [partial result](../results/exp-012.md) is
+reviewed. The dispatcher then launched cap 4 on loulou (attempt
+`6c04a369eaec4227b82082abe5b4fbb4`, PID 1231147) and cap 8 on trex
+(`776934e837be46e8834ac5a2925c86dd`, PID 2281315). Both have real training
+metrics; `readiness/second-wave-live.json` records their identities and progress.
+Cap 16 remains queued while those workers hold their reservations. Its current
+budget-wait reason reflects reserved allowances, not an exhausted campaign;
+the prior measured durations leave ample allowance when the workers finish.
+The service has no incident for this campaign and retains a fresh heartbeat.
+
+Worker roots on each host:
+`/home/filip/analog-research/opt-cmo-exp1/hwa-exp6-writecap-20261012/`.
+Native run roots are `results/lifecycles/<job-id>/runs/<job-id>` beneath that
+checkout. Logs and tmux receipts are under
+`/home/filip/analog-research/opt-cmo-exp1/worker-receipts/bd8cad10c212638b345ea732dc59ce06cb4a8de4/<job-id>/<attempt>/`.
+Read-only attachment is `ssh -t <host> tmux attach -r -t <job-id>-<attempt>`
+while the session exists. The durable queue owns attempt identity and cleanup.
+
+Completion hooks run native inspection, exact-replay/lineage and cap-accounting
+validation, then collect into `collected/<job-id>/<attempt>/` and
+`reviews/cap<N>-dev.json` under the evidence root. The last successful hook writes
+`reviews/summary.json`; it launches nothing further. Prepared commands, inputs,
+paths and hashes are in `prepared/{loulou,trex}.json` and
+`prepared/queue/jobs/`. The unchanged service is independently supervised by
+systemd; budgets and history remain in the shared durable campaign ledger.
