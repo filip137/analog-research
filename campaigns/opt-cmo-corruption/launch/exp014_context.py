@@ -243,7 +243,7 @@ def queue(receipts,evidence,controller):
                 raise ValueError('Unprepared case '+label)
             job={'id':lc.lifecycle_id,'project_dir':str(controller),'handoff':NOTE,'authorization':AUTHORIZATION,
                  'peak_memory_mib':26000,'headroom_mib':2700,'expected_seconds':300,'budget_seconds':720,
-                 'deadline':window['deadline'],'priority':100,'startup_grace_seconds':600,'stale_seconds':900,
+                 'deadline':window['deadline'],'priority':90,'startup_grace_seconds':600,'stale_seconds':900,
                  'recovery':False,'retry_safe':False,'placements':{h:c['placement'] for h,c in prepared.items()},
                  'completion':{'argv':[sys.executable,str(controller/'campaigns/opt-cmo-corruption/launch/exp014_context.py'),
                     'collect','--queue-config',str(Path.home()/'.config/run-watch/queue.json'),'--evidence',str(evidence)],
