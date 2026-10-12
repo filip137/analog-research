@@ -1,7 +1,7 @@
 ---
 id: "exp-009"
 title: "Digital LoRA beside dense on-chip recovery"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-009: digital LoRA on the same faulty MLPs
@@ -149,12 +149,11 @@ worker implementation. The service restart preserved every active attempt and
 its budget; no GPU computation was repeated. Development measurements and the
 incident diagnosis are recorded in the [result note](../results/exp-009.md).
 
-Rank 4's full fit has completed. Following the documented fifi driver crash,
-rank 16 restarted unchanged on the now-free local RTX3090. Rank 64 uses the
-nom-cool-1 RTX3090 after repairing its missing tmux dependency. Both fits have
-live workers, finite training metrics and a fresh observation from the persistent
-service. Neither recovery preempts the other campaign or increases the
-scientific/GPU-hour budget. The service controller is now
+All three full fits have completed, collected and validated. Following the
+documented fifi driver crash, rank 16 restarted unchanged on the local RTX3090.
+Rank 64 completed on the nom-cool-1 RTX3090 after repairing its missing tmux
+dependency. Neither recovery preempted the other campaign or increased the
+scientific/GPU-hour budget. The service controller at that recovery was
 `8a8b4b3b4420ddceb6b2f3776054f801251779bd`; root-side audited recovery commands
 are recorded through `af6c621`. Latest states, costs and incident evidence are in
 the [result note](../results/exp-009.md) and the persistent campaign ledger.
@@ -164,22 +163,19 @@ receipt: `readiness/overnight-handoff-20261012.json`. It verifies the service
 heartbeat and systemd watchdog, one active attempt per remaining fit, semantic
 training progress, automatic collection callbacks, preserved incident/retry
 history, sufficient remaining budgets and six unselected candidates still held.
-The active attempt tokens are `0d67c53629454367ab060c25b7200d75` (rank 16,
+The then-active attempt tokens were `0d67c53629454367ab060c25b7200d75` (rank 16,
 local) and `1b8653de57c4417eabf2fdae963a3df6` (rank 64, nom-cool-1).
-Each tmux session is named `JOB_ID-ATTEMPT_TOKEN`:
+Their historical tmux session names were `JOB_ID-ATTEMPT_TOKEN`:
 
 ```bash
 tmux attach -r -t opt125m-cmo-l6-exp3-lora-r16-lr3em3-50m-0d67c53629454367ab060c25b7200d75
 ssh -t nom-cool-1 'tmux attach -r -t opt125m-cmo-l6-exp3-lora-r64-lr1em3-50m-1b8653de57c4417eabf2fdae963a3df6'
 ```
 
-The local collection controller automatically validates each completed native
-bundle and writes its per-rank report. The service continues independently of
-interactive Codex sessions; terminal scientific interpretation still requires
-review of the remaining two reports. Current 3090 throughput projects completion
-and collection before approximately 03:00 Paris, conditional on continued
-healthy progress. The frozen 07:30 compute cutoff and 09:00 delivery deadline
-remain in force.
+The local collection controller validated each completed native bundle and
+wrote its per-rank report. All three reports have now been reviewed in the
+[result note](../results/exp-009.md). The single persistent service owns the
+retained ledger and incident history; no LoRA worker remains active.
 
 The user's subsequent instruction, "if the loss worsens tune the lr", authorizes
 the bounded [development-triggered follow-up](exp-010-lr-followup.md). It adds a

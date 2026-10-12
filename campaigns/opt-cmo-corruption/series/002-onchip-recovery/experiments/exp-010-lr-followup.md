@@ -1,7 +1,7 @@
 ---
 id: "exp-010"
 title: "Development-triggered LR follow-up for dense recovery and LoRA"
-status: "running"
+status: "blocked"
 hypotheses: []
 ---
 # exp-010: bounded LR follow-up
@@ -124,8 +124,16 @@ and monitor; the local completion controller collects each validated endpoint
 and evaluates the full-fit selection gate only after all five screens finish.
 
 That first screen subsequently completed, including native validation and
-automatic compact collection, charging 96.42 GPU-seconds. The unattended handoff
-passed with the shared service's fresh heartbeat, both active LoRA jobs observed,
-the remaining four dense screens queued, and all five dense full-fit candidates
-still held. Receipt: `readiness/unattended-handoff.json`. Original execution
-history, charged budgets and both LR-selection policies are preserved.
+automatic compact collection, charging 96.42 GPU-seconds. The original
+`readiness/unattended-handoff.json` reported a passing handoff from worker and
+heartbeat checks. The morning review found that this missed an existing storage
+observation incident; it was not sufficient evidence of healthy dispatch.
+
+Morning outcome: all three LoRA fits completed without triggering retuning.
+Only dense LRs 1e-3 and 1e-2 completed; the remaining three development jobs
+expired at their deadline without launching. No full follow-up was selected.
+The local storage-probe bug, repair and partial scientific evidence are recorded
+in the [result note](../results/exp-010.md). Execution history, charged budgets,
+original failed handoff evidence and both LR-selection policies are preserved.
+Further GPU execution requires an extended window beyond the user's 09:00
+deadline; the operational correction alone does not authorize that extension.
