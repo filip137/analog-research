@@ -1673,6 +1673,8 @@ def main(argv=None):
                       "investigations": [dict(row) for row in db.execute("SELECT * FROM campaign_investigations")],
                       "campaigns": [dict(row) for row in db.execute("SELECT * FROM campaign_contracts")],
                       "incidents": [dict(row) for row in db.execute("SELECT * FROM campaign_incidents")]}
+            if db.execute("SELECT 1 FROM sqlite_master WHERE name='campaign_escalations'").fetchone():
+                output["escalations"] = [dict(row) for row in db.execute("SELECT * FROM campaign_escalations")]
         status_file = root / "service-status.json"
         output["service"] = json.loads(status_file.read_text()) if status_file.exists() else None
         print(json.dumps(output, indent=2)); return
@@ -1709,6 +1711,9 @@ def main(argv=None):
     from queue_recovery import Recovery
     ordinary_recovery = Recovery(scheduler)
     investigator = Investigator(scheduler.campaigns, cfg["recovery"])
+    from campaigns.incident_escalation import IncidentEscalator
+    escalator = IncidentEscalator(scheduler.campaigns, cfg.get("campaign_escalation"),
+                                  cfg["recovery"], args.queue_config)
     def stop(*_):
         scheduler.stopping = True
     signal.signal(signal.SIGTERM, stop)
@@ -1717,8 +1722,10 @@ def main(argv=None):
         notify_systemd("READY=1")
         while not scheduler.stopping:
             scheduler.cycle()
-            investigator.cycle()
-            ordinary_recovery.cycle()
+            if not escalator.busy():
+                investigator.cycle()
+                ordinary_recovery.cycle()
+            escalator.cycle()
             notify_systemd("WATCHDOG=1")
             if args.command == "once":
                 break

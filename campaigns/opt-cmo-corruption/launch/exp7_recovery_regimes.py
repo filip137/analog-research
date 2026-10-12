@@ -311,7 +311,11 @@ def collect(queue_config, evidence):
         completed = [json.loads(p.read_text()) for name in labels() if (p:=evidence/'reviews'/(name+'.json')).exists()]
         atomic_write_json(evidence/'reviews/progress.json',{'completed_jobs':len(completed),'expected_jobs':27,
                           'completed_trajectories':6*len(completed),'reports':[r['label'] for r in completed]})
-        if len(completed)==27: write_frozen(evidence/'reviews/summary.json',summarize(completed))
+        if len(completed)==27:
+            summary = summarize(completed)
+            write_frozen(evidence/'reviews/summary.json', summary)
+            from exp7_recovery_report import render
+            render(summary, evidence/'reviews/figures')
     return {'collected':str(folder),'label':label,'validated_rates':6}
 
 
