@@ -627,6 +627,48 @@ def test_remote_only_campaign_accounts_its_prepared_local_controller(setup, tmp_
     assert set(scheduler.store.job('one')['spec']['placements']) == {'lab'}
 
 
+@pytest.mark.parametrize("failure", [None, "missing_controller", "nonlocal_target", "probe_error"])
+def test_storage_observation_of_remote_jobs_and_local_collection(setup, tmp_path, monkeypatch, failure):
+    scheduler, now, job, manifest = setup
+    value = job()
+    controller = str(tmp_path / "evidence/controller")
+    if failure != "missing_controller":
+        value["spec"]["completion"] = {"argv": ["true"], "workdir": controller,
+                                       "timeout_seconds": 60, "retry_safe": True}
+        scheduler.store.db.execute("UPDATE jobs SET spec=? WHERE id=?", (json.dumps(value["spec"]), "one"))
+    scheduler.cfg["targets"]["local"] = {"transport": "ssh" if failure == "nonlocal_target" else "local",
+                                           "python": "python3"}
+    roots = [{"target": "lab", "path": str(tmp_path / "one")},
+             {"target": "local", "path": str(tmp_path / "evidence")}]
+    scheduler.campaigns.register(manifest(storage_roots=roots))
+    scheduler.campaigns.storage("study", 7, now[0] - 300)
+    calls = []
+    def remote(cfg, target, argv, *, cwd):
+        calls.append(target)
+        assert argv == ["python3", "-m", "campaigns.execution_service", "probe-storage",
+                        next(root["path"] for root in roots if root["target"] == target)]
+        assert cwd == (controller if target == "local" else str(tmp_path))
+        if target == "local" and failure == "probe_error":
+            raise OSError("storage unavailable")
+        return {"storage_bytes": 20 if target == "local" else 10}
+    monkeypatch.setattr("campaigns.execution_service.remote_command", remote)
+    scheduler.probe_campaigns(now[0])
+    incident = scheduler.store.db.execute("SELECT * FROM campaign_incidents WHERE kind='storage_observation_failed'").fetchone()
+    if failure is None:
+        assert calls == ["lab", "local"]
+        assert incident is None
+        assert scheduler.campaigns.remaining("study")["storage_bytes_observed"] == 30
+    else:
+        assert incident is not None
+        evidence = json.loads(incident["evidence"])
+        assert evidence["target"] == "local"
+        assert evidence["paths"] == [str(tmp_path / "evidence")]
+        assert ("OSError: storage unavailable" if failure == "probe_error" else "RuntimeError: no prepared") in evidence["error"]
+        # A partial observation must not replace the previous complete total.
+        assert scheduler.campaigns.remaining("study")["storage_bytes_observed"] == 7
+    assert set(scheduler.store.job("one")["spec"]["placements"]) == {"lab"}
+
+
 def test_shared_dispatcher_lock_prevents_second_owner(module, tmp_path):
     with module.owner_lock(tmp_path):
         with pytest.raises(RuntimeError, match="already running"):

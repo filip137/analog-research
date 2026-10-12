@@ -1219,12 +1219,22 @@ def scheduler_type(queue_module):
                     total = 0
                     try:
                         for target_name in sorted({root["target"] for root in roots}):
+                            paths = [root["path"] for root in roots if root["target"] == target_name]
+                            workdir = None
                             target = self.cfg["targets"][target_name]
                             # The code is staged on each execution host. Probe itself
                             # requires no GPU, user credentials or result mutation.
-                            workdir = next(p["workdir"] for c in contract["effective_cases"]
-                                           for name, p in self.store.job(c["id"])["spec"]["placements"].items() if name == target_name)
-                            paths = [root["path"] for root in roots if root["target"] == target_name]
+                            specs = [self.store.job(c["id"])["spec"] for c in contract["effective_cases"]]
+                            workdir = next((p["workdir"] for spec in specs
+                                            for name, p in spec["placements"].items() if name == target_name), None)
+                            # Remote-only GPU campaigns can also collect locally.
+                            # Use their prepared CPU collector without inventing a
+                            # local GPU placement or reusing a remote filesystem path.
+                            if workdir is None and target_name == "local" and target.get("transport") == "local":
+                                workdir = next((spec["completion"]["workdir"] for spec in specs
+                                                if spec.get("completion", {}).get("workdir")), None)
+                            if workdir is None:
+                                raise RuntimeError(f"no prepared execution or local collection workdir for storage target {target_name!r}")
                             value = remote_command(self.cfg, target_name,
                                 [target["python"], "-m", "campaigns.execution_service", "probe-storage", *paths], cwd=workdir)
                             total += value["storage_bytes"]
@@ -1234,7 +1244,9 @@ def scheduler_type(queue_module):
                                                     {"storage_bytes": total, "limit": contract["effective_budgets"]["storage_bytes"]})
                     except Exception as exc:
                         for case in contract["effective_cases"]:
-                            self.campaigns.incident(case["id"], "storage_observation_failed", {"error": str(exc)[:1000]})
+                            self.campaigns.incident(case["id"], "storage_observation_failed", {
+                                "error": f"{type(exc).__name__}: {exc}"[:1000],
+                                "target": target_name, "paths": paths, "workdir": workdir})
                             break
             for attempt in self.store.attempts(active=True):
                 case = self.campaigns.case(attempt["job_id"])
