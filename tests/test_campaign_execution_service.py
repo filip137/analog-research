@@ -79,6 +79,53 @@ def test_prepared_job_is_atomically_held_and_registration_idempotent(setup):
     assert scheduler.campaigns.contract("study")["started"] is None
 
 
+@pytest.mark.parametrize("failure", [None, "authority", "hash", "history", "active", "past", "duplicate", "reserved"])
+def test_user_window_extension_retains_science_budgets_and_history(setup, failure):
+    scheduler, now, job, manifest = setup
+    one, two = job(), job("two")
+    doc = manifest(("one", "two")); doc["budgets"]["window_seconds"] = 100
+    sha = scheduler.campaigns.register(doc)
+    scheduler.store.db.execute("UPDATE campaign_contracts SET started=800 WHERE id='study'")
+    scheduler.store.update_job("one", "expired", "deadline passed")
+    scheduler.store.update_job("two", "complete")
+    scheduler.store.db.execute("UPDATE jobs SET used_seconds=40 WHERE id='two'")
+    incident = scheduler.campaigns.incident("one", "storage_observation_failed", {"error": "preserve"})
+    receipt = {"version": 1, "id": "window", "author": "user", "authorization": "launch them now",
+        "manifest_sha256": sha, "reason": "restart after fixed dispatch failure", "evidence": ["user instruction"],
+        "execution_window": {"deadline": "1970-01-01T01:00:00+00:00", "job_ids": ["one"]}}
+    if failure == "authority": receipt["author"] = "agent"
+    if failure == "hash": receipt["manifest_sha256"] = "wrong"
+    if failure == "past": receipt["execution_window"]["deadline"] = "1970-01-01T00:10:00+00:00"
+    if failure == "duplicate": receipt["execution_window"]["job_ids"].append("one")
+    if failure == "active": scheduler.store.update_job("one", "running")
+    if failure == "history":
+        scheduler.store.db.execute("INSERT INTO attempts(token,job_id,target,gpu_uuid,gpu_name,state,issued,launch_before,progress_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            ("old", "one", "lab", "gpu", "5090", "failed", 900, 945, 900))
+    if failure == "reserved":
+        scheduler.store.db.execute("INSERT INTO campaign_reservations VALUES(?,?,?,?,?,?)", ("one", "study", "old", 900, 100, 900))
+    before = scheduler.store.job("one")
+    if failure:
+        with pytest.raises(ValueError): scheduler.campaigns.extend_window("study", receipt)
+        assert scheduler.store.job("one") == before
+        assert not scheduler.campaigns.contract("study")["amendments"]
+        return
+    identity = scheduler.campaigns.extend_window("study", receipt)
+    assert scheduler.store.job("one")["state"] == "held"
+    spec = dict(scheduler.store.job("one")["spec"]); spec.pop("deadline")
+    original = dict(one["spec"]); original.pop("deadline", None)
+    assert spec == original
+    scheduler.store.update_job("one", "queued")
+    assert scheduler.campaigns.extend_window("study", receipt) == identity
+    assert scheduler.store.job("one")["state"] == "queued"  # idempotence never re-holds a launched/released case
+    restarted = CampaignLedger(scheduler.store, lambda: now[0])
+    assert restarted.contract("study")["manifest"] == doc
+    assert restarted.contract("study")["effective_budgets"] == {**doc["budgets"], "window_seconds": 2800}
+    assert restarted.remaining("study")["gpu_seconds_charged"] == 40
+    assert restarted.remaining("study")["window_seconds_remaining"] == 2600
+    assert scheduler.store.job("two")["state"] == "complete"
+    assert scheduler.store.db.execute("SELECT evidence FROM campaign_incidents WHERE id=?", (incident,)).fetchone()[0] == '{"error":"preserve"}'
+
+
 def test_registration_rejects_runnable_unowned_job(setup):
     scheduler, _, job, manifest = setup
     job()

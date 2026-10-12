@@ -164,6 +164,10 @@ class CampaignLedger:
         roots = list(manifest.get("storage_roots", []))
         calibrations = {}
         for amendment in amendments:
+            window = amendment["payload"].get("execution_window")
+            if window:
+                budgets["window_seconds"] = max(budgets["window_seconds"],
+                    datetime.fromisoformat(window["deadline"]).timestamp() - row["started"])
             roots.extend(amendment["payload"].get("storage_roots", []))
             for target, stages in amendment["payload"].get("target_progress_calibration", {}).items():
                 calibrations.setdefault(target, {}).update(stages)
@@ -177,6 +181,59 @@ class CampaignLedger:
     def case(self, job_id):
         row = self.db.execute("SELECT * FROM campaign_cases WHERE job_id=?", (job_id,)).fetchone()
         return {**dict(row), "contract": json.loads(row["contract"])} if row else None
+
+    def extend_window(self, campaign_id, raw):
+        """Reopen unstarted cases after explicit user authorization, retaining all costs."""
+        receipt = json.loads(canonical(raw))
+        fields = {"version", "id", "author", "authorization", "manifest_sha256", "reason", "evidence", "execution_window"}
+        if set(receipt) != fields or receipt["version"] != 1 or receipt["author"] != "user":
+            raise ValueError("execution window extension requires explicit user authority and exact fields")
+        if any(not isinstance(receipt[k], str) or not receipt[k].strip() for k in ("id", "authorization", "reason")) or not receipt["evidence"]:
+            raise ValueError("execution window extension requires authorization, reason and evidence")
+        window = receipt["execution_window"]
+        if not isinstance(window, dict) or set(window) != {"deadline", "job_ids"}:
+            raise ValueError("execution window requires deadline and job_ids")
+        end = datetime.fromisoformat(window["deadline"])
+        if end.tzinfo is None:
+            raise ValueError("execution deadline must include a timezone")
+        ids = window["job_ids"]
+        if not isinstance(ids, list) or not ids or not all(isinstance(jid, str) for jid in ids) or len(set(ids)) != len(ids):
+            raise ValueError("execution window requires unique case IDs")
+        identity = digest(receipt)
+        with self.store.transaction():
+            old = self.db.execute("SELECT * FROM campaign_amendments WHERE id=?", (receipt["id"],)).fetchone()
+            if old:
+                if old["campaign_id"] != campaign_id or old["sha256"] != identity:
+                    raise ValueError("window amendment id already exists with different content")
+                return identity
+            contract = self.contract(campaign_id)
+            if receipt["manifest_sha256"] != contract["sha256"] or contract["started"] is None:
+                raise ValueError("window extension requires the frozen hash of a started campaign")
+            if end.timestamp() <= max(self.clock(), contract["started"] + contract["effective_budgets"]["window_seconds"]):
+                raise ValueError("new execution deadline must extend the existing window into the future")
+            revised = []
+            for jid in ids:
+                case, job = self.case(jid), self.store.job(jid)
+                if not case or case["campaign_id"] != campaign_id or not job or job["state"] not in {"held", "expired"}:
+                    raise ValueError("window extension requires held or expired cases in this campaign")
+                if job["used_seconds"] or any(a["job_id"] == jid for a in self.store.attempts()) or self.db.execute(
+                        "SELECT 1 FROM campaign_reservations WHERE job_id=?", (jid,)).fetchone():
+                    raise ValueError("window extension requires unstarted cases without reservations")
+                spec = json.loads(canonical(job["spec"]))
+                if spec.get("windows") or (spec.get("deadline") and datetime.fromisoformat(spec["deadline"]).timestamp() >= end.timestamp()):
+                    raise ValueError("window extension cannot override dated windows or shorten a deadline")
+                spec["deadline"] = window["deadline"]
+                revised.append((job, spec))
+            for job, spec in revised:
+                self.db.execute("UPDATE jobs SET spec=? WHERE id=?", (canonical(spec), job["id"]))
+                self.store.update_job(job["id"], "held", "user-authorized execution window extension", self.clock())
+                self.store.event(job["id"], "campaign_execution_window_extended_by_user", {
+                    "amendment_id": receipt["id"], "previous_state": job["state"], "previous_spec_sha256": digest(job["spec"]),
+                    "spec_sha256": digest(spec), "previous_deadline": job["spec"].get("deadline"),
+                    "deadline": window["deadline"], "used_seconds": job["used_seconds"]}, self.clock())
+            self.db.execute("INSERT INTO campaign_amendments VALUES(?,?,?,?,?)",
+                (receipt["id"], campaign_id, identity, self.clock(), canonical(receipt)))
+        return identity
 
     def extend(self, campaign_id, raw):
         """Append explicitly user-authorized 5090 cases and resource allowances.
@@ -1469,6 +1526,8 @@ def main(argv=None):
     amendment.add_argument("campaign_id"); amendment.add_argument("amendment", type=Path)
     extension = commands.add_parser("extend")
     extension.add_argument("campaign_id"); extension.add_argument("receipt", type=Path)
+    window = commands.add_parser("extend-window")
+    window.add_argument("campaign_id"); window.add_argument("receipt", type=Path)
     gate = commands.add_parser("gate")
     gate.add_argument("campaign_id"); gate.add_argument("name"); gate.add_argument("receipt", type=Path)
     waiver = commands.add_parser("waive-gate")
@@ -1515,6 +1574,8 @@ def main(argv=None):
         print(scheduler.campaigns.amend(args.campaign_id, json.loads(args.amendment.read_text()))); return
     if args.command == "extend":
         print(scheduler.campaigns.extend(args.campaign_id, json.loads(args.receipt.read_text()))); return
+    if args.command == "extend-window":
+        print(scheduler.campaigns.extend_window(args.campaign_id, json.loads(args.receipt.read_text()))); return
     if args.command == "gate":
         scheduler.campaigns.gate(args.campaign_id, args.name, json.loads(args.receipt.read_text())); return
     if args.command == "waive-gate":
