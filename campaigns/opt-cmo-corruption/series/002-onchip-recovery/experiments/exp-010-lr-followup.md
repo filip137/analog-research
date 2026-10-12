@@ -1,7 +1,7 @@
 ---
 id: "exp-010"
 title: "Development-triggered LR follow-up for dense recovery and LoRA"
-status: "blocked"
+status: "running"
 hypotheses: []
 ---
 # exp-010: bounded LR follow-up
@@ -137,3 +137,36 @@ in the [result note](../results/exp-010.md). Execution history, charged budgets,
 original failed handoff evidence and both LR-selection policies are preserved.
 Further GPU execution requires an extended window beyond the user's 09:00
 deadline; the operational correction alone does not authorize that extension.
+
+## User-authorized morning continuation
+
+At approximately 09:24 Paris on October 12 the user instructed, "omg, launch
+them on a 5090 now". This authorizes reopening the three unstarted screens
+(3e-4, 3e-3, 3e-2) on loulou's idle RTX5090 and the existing conditional full
+fit, with an execution cutoff of **11:30 Paris**. Expected screen completion is
+15–20 minutes including five-minute dispatch cadence and collection; a qualifying
+full fit adds approximately 25–35 minutes. The same two-GPU-hour and 20 GB caps
+apply, retaining 192.83 GPU-seconds already charged. No completed screen is rerun.
+
+The audited `extend-window` operation preserves the original manifest, scientific
+configs, job IDs, dependencies, selection gates, receipts and charged time. It
+changes only the deadline of the eight unstarted jobs and the campaign's effective
+execution window; the five full candidates remain held until the original
+selection rule passes. Explicit authorization and the prior ledger snapshot are
+in `readiness/user-reopen-20261012.json` and `readiness/user-reopen-before.json`.
+The native worker remains at source `4e2ddc7`; outputs remain under
+`results/lifecycles/opt125m-cmo-l6-exp4-dense-lr/`. The existing run-watch service
+continues to own dispatch, monitoring, native validation and collection.
+
+The first reopened trial (3e-2) launched at approximately 09:30 Paris, attempt
+`5b7f98e0212a4d34a0a978175e14ef1d`, in tmux session
+`opt125m-cmo-l6-exp4-dense-lr-3em2-dev-5b7f98e0212a4d34a0a978175e14ef1d`.
+The immediate probe confirmed both worker and supervisor alive, 11 native
+artifacts and finite training loss at update 200/256. The other two development
+jobs are queued on that same GPU. Service source is `b3997bc`; root window
+extension source is `28ad588`. Dispatcher and LR-decision checks passed 157
+tests at root; the deployed service passed 140 dispatcher tests. The new
+amendment SHA-256 is
+`01e9f7fedfc71dae98bb7e146e84ea3938bb9e4d68cb96aab5acfaa3616a36f3`.
+Live observation: `readiness/user-reopen-first-live.json`; reconciled ownership
+and budget handoff: `readiness/user-reopen-handoff.json`.
