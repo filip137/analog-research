@@ -375,6 +375,34 @@ evaluated at this extra cadence. Omitting it preserves existing configs.
 
 ## Stages, artifacts and reuse
 
+### Recovery context views (OPT)
+
+Optional top-level `recovery_views` keeps frozen HWA/deployment data unchanged
+while varying on-chip context. Its strict fields are `context_length`,
+`parent_length`, `parent_sequences`, `score_stride`, and `evaluation_lengths`.
+Complete parent windows from the pinned train stream are selected using
+`data.data_seed`; epoch order uses `onchip.seed + epoch - 1`. Children of a
+parent remain adjacent and an effective batch must contain whole parents.
+The loss excludes the last predictor position of each `score_stride` block at
+every context. Context must divide parent length and score stride must divide
+context. Explicit view cohorts require `data.max_examples: 0`; probes declare
+their own small counts. The view's parent count defines recovery exposure.
+
+Existing evaluation cohorts retain their original context. Each additional
+evaluation length reshapes the identical token prefix into a separately named
+`context<L>_<split>` cohort; counts must divide exactly. Ordinary unmasked
+next-token metrics apply to evaluation. Views bind feature-cache provenance,
+but never alter the dependencies of frozen HWA sources or P0. Legacy documents
+retain their original digests and reject a view-specific cache.
+
+Optional `onchip.microbatch_size` divides the effective OPT batch. Gradients are
+weighted by sequence count (equal scored positions per sequence) and accumulated;
+Adam and the physical writer act once per effective batch. Rows record input
+tokens, scored tokens and optimizer updates for context views. Optional
+`onchip.case_labels` selects a nonempty subset of the already deployed defect
+cases, preserving complete P0 provenance and reporting only that subset as
+on-chip coverage. Neither field changes frozen source identity.
+
 ### Digital LoRA recovery controls
 
 For `opt_mlp_suffix`, an on-chip hold arm may declare

@@ -1,0 +1,139 @@
+{
+  "271001": {
+    "artifacts": {
+      "teacher_weights": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9",
+        "size_bytes": 250540281
+      },
+      "device_data": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp3-lora-20261012/results/reused-inputs/prepare/checkpoints/cache.pt",
+        "sha256": "ec0d875a5027ccc2c53b7fb50655c2c5c39670441da09127de986185b813eebf",
+        "size_bytes": 420013092
+      },
+      "device_model": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp3-lora-20261012/results/reused-inputs/devices/checkpoints/devices.pt",
+        "sha256": "40f624d3f0ce631b2e3d25f97910212147f317d76cd8e82663f918b2318f8f78",
+        "size_bytes": 2047
+      },
+      "device_state": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp3-lora-20261012/results/reused-inputs/portable.pt",
+        "sha256": "8068397182b3ffe3b0a92298fb36d0205d2e717c420abacb0c061e975c523e4f",
+        "size_bytes": 954176857
+      }
+    },
+    "array_seed": 271001,
+    "parent_p0_sha256": "f80a9447469697cf9e4ff657cb17545d2824e60ae4f12d4694f01f3e4ebaf873",
+    "apparent_sha256": {
+      "random_30000ppm": "34578c8c1f1a87bcd38597d7808e34eb4f0859a77af0a41183986f454a583db6"
+    }
+  },
+  "271002": {
+    "artifacts": {
+      "teacher_weights": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9",
+        "size_bytes": 250540281
+      },
+      "device_data": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp7-recovery-20261012/results/reused/std3/cache.pt",
+        "sha256": "b7438a37a18a0079dade05eda219d37f830fadd5dd33b01d24f05fd7b642b027",
+        "size_bytes": 420013028
+      },
+      "device_model": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp7-recovery-20261012/results/reused/std3/devices.pt",
+        "sha256": "7bc1bd14e7e386a8de25295848727832076079565c7e8e3f7cf835c6e900f99b",
+        "size_bytes": 2047
+      },
+      "device_state": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp7-recovery-20261012/results/reused/std3-271002/portable.pt",
+        "sha256": "3e35ce9bd8a29c28f14adeab78bc4b89b69108ba97fcb1f49c7df7064a7a60e6",
+        "size_bytes": 2653192961
+      }
+    },
+    "array_seed": 271002,
+    "hwa_arm": "standard_hwa_model",
+    "source_sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028",
+    "parent_p0_sha256": "abcd1c460128e55a82c789d56c6427bff8c2bf8cc519de4fdf024f929ff682a2",
+    "apparent_sha256": {
+      "nominal": "282fb65e62d4145a4091a01d7d8e51d0e69613e14dcb53fd5a4ca1bae1d7b313",
+      "random_10000ppm": "04238dc815012ff3289d4283c0a85ee5c799ae6adae7b1e6ee53dff782a56ab6",
+      "random_20000ppm": "e4e8a2c494684957139ef303a44e57e299294a2cc97548b06fb38d1ed662a681",
+      "random_30000ppm": "dd51ca6a6d083ff90c9217ececb4038e042d926cc2cee9edcd97637ee52ec2da",
+      "random_40000ppm": "c0eb217b7d7d9ef8990dd984773f2364385d42885c64f373ea192a09ae08128a",
+      "random_50000ppm": "0888eb7cb84e92acb7db32c785d7f116097a4f3f3571e37d99e10b9d8ee974df"
+    }
+  },
+  "271003": {
+    "artifacts": {
+      "teacher_weights": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9",
+        "size_bytes": 250540281
+      },
+      "device_data": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp7-recovery-20261012/results/reused/std3/cache.pt",
+        "sha256": "b7438a37a18a0079dade05eda219d37f830fadd5dd33b01d24f05fd7b642b027",
+        "size_bytes": 420013028
+      },
+      "device_model": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp7-recovery-20261012/results/reused/std3/devices.pt",
+        "sha256": "7bc1bd14e7e386a8de25295848727832076079565c7e8e3f7cf835c6e900f99b",
+        "size_bytes": 2047
+      },
+      "device_state": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp7-recovery-20261012/results/reused/std3-271003/portable.pt",
+        "sha256": "cb49bfe29abb5094b648cea5666014b2a0026d294ef6c3705031ee9d5cb18071",
+        "size_bytes": 2653192961
+      }
+    },
+    "array_seed": 271003,
+    "hwa_arm": "standard_hwa_model",
+    "source_sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028",
+    "parent_p0_sha256": "eed96e76e05eacb11f2b057983cd208af4231b98dac59668fa40e291bbee4e80",
+    "apparent_sha256": {
+      "nominal": "71c1893e2151b58a5be7551bb45dffec903e11d150aaa74999573598a3eefcb7",
+      "random_10000ppm": "f43d2757ae496f979a437940df72a3e73f5e0b4d1f02c911d4c8ca11d7b7b2ff",
+      "random_20000ppm": "2182b7df7c77fb57954bacc39d1aebd3e97ba2dc2cb338afadaaf8ab138b6f6c",
+      "random_30000ppm": "12b2db4d216f99d49e2805e04240402ea78c3ade433a7f13ce04c5f70bf614a6",
+      "random_40000ppm": "aacf8881debbea96d5d522d40ab71c1fcedc94906deb915085dfaea6bc793f16",
+      "random_50000ppm": "a5602c893e53e9f95af7e4aaf3d4e623024ed8dd4b5f3fb7299f3f2f012745e6"
+    }
+  },
+  "271004": {
+    "artifacts": {
+      "teacher_weights": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9",
+        "size_bytes": 250540281
+      },
+      "device_data": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp7-recovery-20261012/results/reused/std3/cache.pt",
+        "sha256": "b7438a37a18a0079dade05eda219d37f830fadd5dd33b01d24f05fd7b642b027",
+        "size_bytes": 420013028
+      },
+      "device_model": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp7-recovery-20261012/results/reused/std3/devices.pt",
+        "sha256": "7bc1bd14e7e386a8de25295848727832076079565c7e8e3f7cf835c6e900f99b",
+        "size_bytes": 2047
+      },
+      "device_state": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp7-recovery-20261012/results/reused/std3-271004/portable.pt",
+        "sha256": "fcc2afa4820a15437dcd542cd27a0a915668e67ea6d9460befd5df0eb66c3033",
+        "size_bytes": 2653192961
+      }
+    },
+    "array_seed": 271004,
+    "hwa_arm": "standard_hwa_model",
+    "source_sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028",
+    "parent_p0_sha256": "6b09c6cc045705ebc6c0e07f113959a83aa6ce9091841955434007f8d9be98d9",
+    "apparent_sha256": {
+      "nominal": "4f5c72e109bae5d59bdac1028c276cd906c7deb65f4d92e51bda75c80df2dad7",
+      "random_10000ppm": "9b539e3d03173c009ff23ba6c7a5e56abe85a603b58bc4fd667d1e6aa7318a16",
+      "random_20000ppm": "c9060e936e7ed484455327ed113fbc932f7f7a93e826612d3afea340b368f6cd",
+      "random_30000ppm": "41da525321749a9f9166a680866d5c2fabc12dab46bdbf11e95e5f294bc0feca",
+      "random_40000ppm": "3a9f67be0efeba82e88418aed50f00499e43f8f29ed52363842e8756e4cc16bb",
+      "random_50000ppm": "f70abd578fc6b719e8161cfffc60daf7091fcd86b75b598aa5288793d68ec9c8"
+    }
+  }
+}

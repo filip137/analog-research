@@ -1241,6 +1241,8 @@ class Onchip:
     accumulate_updates: Optional[bool] = None
     development_every_steps: Optional[int] = None
     max_write_attempts_per_device: Optional[int] = None
+    case_labels: Optional[tuple[str, ...]] = None
+    microbatch_size: Optional[int] = None
 
     @property
     def cohort_key(self) -> str:
@@ -1268,6 +1270,10 @@ class Onchip:
                 value["max_write_attempts_per_device"] = self.max_write_attempts_per_device
         if self.development_every_steps is not None:
             value["development_every_steps"] = self.development_every_steps
+        if self.case_labels is not None:
+            value["case_labels"] = list(self.case_labels)
+        if self.microbatch_size is not None:
+            value["microbatch_size"] = self.microbatch_size
         value["arms"] = [arm.to_dict() for arm in self.arms]
         return value
 
@@ -1298,6 +1304,10 @@ def _onchip(raw: Any, technology: str) -> Onchip:
         keys += ("training_cohort",)
     if "development_every_steps" in raw:
         keys += ("development_every_steps",)
+    if "case_labels" in raw:
+        keys += ("case_labels",)
+    if "microbatch_size" in raw:
+        keys += ("microbatch_size",)
     raw = _object(raw, "onchip", keys)
     arms = []
     for index, item in enumerate(_list(raw["arms"], "onchip.arms")):
@@ -1343,6 +1353,13 @@ def _onchip(raw: Any, technology: str) -> Onchip:
                 "onchip.arms", "to omit verified rewrite controls under the open-loop law", arm.to_dict()
             )
     extra = {}
+    if "microbatch_size" in raw:
+        extra["microbatch_size"] = _integer(raw["microbatch_size"], "onchip.microbatch_size", minimum=1)
+    if "case_labels" in raw:
+        labels = tuple(_list(raw["case_labels"], "onchip.case_labels"))
+        if any(not isinstance(label, str) for label in labels) or len(set(labels)) != len(labels):
+            raise config_error("onchip.case_labels", "to contain unique case labels", labels)
+        extra["case_labels"] = labels
     if law == "cmo_thresholded_write_adam":
         extra.update(
             threshold_sigma=_number(raw["threshold_sigma"], "onchip.threshold_sigma", positive=True),
@@ -1398,17 +1415,58 @@ SECTIONS = (
 )
 # Optional sections are omitted from the document and from every provenance
 # record when absent, so lifecycles without them keep their digests.
-OPTIONAL_SECTIONS = ("transfer_tests",)
+OPTIONAL_SECTIONS = ("transfer_tests", "recovery_views")
 LIFECYCLE_KEYS = ("schema", "schema_version", "lifecycle_id") + SECTIONS
 
 # Upstream artifacts are reusable exactly when the sections they depend on are
 # unchanged; the question text, unrelated arms and later stages may change.
 ARTIFACT_SECTIONS = {
-    "feature_cache": ("network", "data", "transfer_tests"),
+    "feature_cache": ("network", "data", "transfer_tests", "recovery_views"),
     "device_bundle": ("network", "devices", "program_verify"),
     "hwa_source": ("network", "data", "devices", "deployment", "program_verify"),
     "deployment": ("network", "data", "devices", "defects", "deployment", "program_verify", "transfer_tests"),
 }
+
+
+@dataclass(frozen=True)
+class RecoveryViews:
+    """Token-matched recovery contexts independent of frozen HWA provenance."""
+
+    context_length: int
+    parent_length: int
+    parent_sequences: int
+    score_stride: int
+    evaluation_lengths: tuple[int, ...]
+
+    @property
+    def sequences(self):
+        return self.parent_sequences * self.parent_length // self.context_length
+
+    @property
+    def input_tokens(self):
+        return self.parent_sequences * self.parent_length
+
+    @property
+    def scored_tokens(self):
+        return self.input_tokens // self.score_stride * (self.score_stride - 1)
+
+    def to_dict(self):
+        return {"context_length": self.context_length, "parent_length": self.parent_length,
+                "parent_sequences": self.parent_sequences, "score_stride": self.score_stride,
+                "evaluation_lengths": list(self.evaluation_lengths)}
+
+
+def _recovery_views(raw):
+    raw = _object(raw, "recovery_views", ("context_length", "parent_length", "parent_sequences",
+                                           "score_stride", "evaluation_lengths"))
+    sizes = {name: _integer(raw[name], f"recovery_views.{name}", minimum=2, maximum=2048)
+             for name in ("context_length", "parent_length", "score_stride")}
+    lengths = tuple(_integer(v, "recovery_views.evaluation_lengths", minimum=2, maximum=2048)
+                    for v in _list(raw["evaluation_lengths"], "recovery_views.evaluation_lengths"))
+    if len(set(lengths)) != len(lengths):
+        raise config_error("recovery_views.evaluation_lengths", "to be unique", lengths)
+    return RecoveryViews(**sizes, parent_sequences=_integer(raw["parent_sequences"],
+                         "recovery_views.parent_sequences", minimum=1), evaluation_lengths=lengths)
 
 
 @dataclass(frozen=True)
@@ -1425,6 +1483,17 @@ class Lifecycle:
     # None: a deployment-only loop with no on-chip stage.
     onchip: Optional[Onchip]
     transfer_tests: Optional[TransferTests] = None
+    recovery_views: Optional[RecoveryViews] = None
+
+    @property
+    def onchip_cases(self):
+        labels = None if self.onchip is None else self.onchip.case_labels
+        return tuple(c for c in self.defects.cases if labels is None or c.label in labels)
+
+    @property
+    def recovery_examples(self):
+        return (self.recovery_views.sequences if self.recovery_views is not None
+                else self.data.cohort_size(self.onchip.cohort_key))
 
     def present_sections(self) -> tuple[str, ...]:
         return SECTIONS + tuple(name for name in OPTIONAL_SECTIONS if getattr(self, name) is not None)
@@ -1460,6 +1529,31 @@ class Lifecycle:
 def _cross_validate(lifecycle: Lifecycle) -> None:
     devices, data, network = lifecycle.devices, lifecycle.data, lifecycle.network
     family = network.family
+    if lifecycle.onchip and lifecycle.onchip.microbatch_size is not None:
+        if family != OPT_FAMILY or lifecycle.onchip.batch_size % lifecycle.onchip.microbatch_size:
+            raise config_error("onchip.microbatch_size", "to divide the OPT effective batch", lifecycle.onchip.microbatch_size)
+    if lifecycle.onchip and lifecycle.onchip.case_labels is not None:
+        labels = lifecycle.onchip.case_labels
+        if not labels or not set(labels) <= {c.label for c in lifecycle.defects.cases}:
+            raise config_error("onchip.case_labels", "to select declared defect cases", labels)
+    views = lifecycle.recovery_views
+    if views is not None:
+        if family != OPT_FAMILY or lifecycle.onchip is None or lifecycle.onchip.cohort_key != "training":
+            raise config_error("recovery_views", "to accompany OPT recovery training", views.to_dict())
+        if (views.parent_length % views.context_length or views.context_length % views.score_stride
+                or views.parent_length > network.max_positions
+                or any(length > network.max_positions for length in views.evaluation_lengths)):
+            raise config_error("recovery_views", "to use divisible context/parent/score lengths within the model", views.to_dict())
+        if data.max_examples:
+            raise config_error("data.max_examples", "to be zero with explicit recovery views (use small declared cohorts for probes)", data.max_examples)
+        chunks = views.parent_length // views.context_length
+        if lifecycle.onchip.batch_size % chunks or views.sequences % lifecycle.onchip.batch_size:
+            raise config_error("onchip.batch_size", "to group whole parents without a partial update", lifecycle.onchip.batch_size)
+        counts = [data.development_sequences] + ([data.test_sequences] if data.evaluation == "test" else [])
+        if lifecycle.transfer_tests:
+            counts += [test.sequences for test in lifecycle.transfer_tests.tests]
+        if any(count * data.sequence_length % length for count in counts for length in views.evaluation_lengths):
+            raise config_error("recovery_views.evaluation_lengths", "to exactly divide each evaluation token prefix", views.evaluation_lengths)
     if lifecycle.onchip and any(a.digital_adapter for a in lifecycle.onchip.arms) and family != OPT_FAMILY:
         raise config_error("onchip.arms.digital_adapter", "to be absent outside opt_mlp_suffix", family)
     if lifecycle.question.primary_metric not in PRIMARY_METRICS[family]:
@@ -1574,6 +1668,7 @@ def parse_lifecycle(payload: Any) -> Lifecycle:
         program_verify=_program_verify(raw["program_verify"], technology),
         onchip=None if raw["onchip"] is None else _onchip(raw["onchip"], technology),
         transfer_tests=_transfer_tests(raw["transfer_tests"]) if "transfer_tests" in raw else None,
+        recovery_views=_recovery_views(raw["recovery_views"]) if "recovery_views" in raw else None,
     )
     _cross_validate(lifecycle)
     return lifecycle
@@ -1786,6 +1881,8 @@ def verify_provenance(
     changed = sorted(
         name for name, digest in expected["sections"].items() if record["sections"].get(name) != digest
     )
+    if kind == "feature_cache" and record["sections"].get("recovery_views") != expected["sections"].get("recovery_views"):
+        changed = sorted(set(changed) | {"recovery_views"})
     if changed:
         raise ValueError(
             f"Expected the {kind} artifact to share the lifecycle sections it depends on. "

@@ -534,6 +534,8 @@ def build_cache(teacher, network, lifecycle, device) -> dict:
         cohort = _cohort(stream[: count * length].reshape(count, length), test.split, range(count))
         cohort["cohort"]["corpus"] = {"name": test.corpus, "sha256": test.corpus_sha256, "path": str(other_path)}
         cache[transfer_split(test)] = cohort
+    from workflow import context_views
+    context_views.build(cache, corpus, lifecycle)
     return cache
 
 
@@ -563,10 +565,14 @@ def check_cache(cache: dict, lifecycle) -> None:
             raise ValueError(f"Expected the {name} cohort to come from its declared corpus.")
     if cache["corpus"]["sha256"] != data.corpus_sha256:
         raise ValueError("Expected the cache to come from the lifecycle corpus.")
+    from workflow import context_views
+    context_views.check(cache, lifecycle)
 
 
 def _splits(cache: dict) -> tuple:
-    return SPLITS + tuple(sorted(name for name in cache if name.startswith("transfer_")))
+    return SPLITS + tuple(sorted(name for name in cache
+                                if name.startswith("transfer_") or (name.startswith("context") and name != "context")
+                                or name == "recovery_context"))
 
 
 def to_device(cache: dict, device) -> dict:

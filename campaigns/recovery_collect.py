@@ -70,7 +70,7 @@ def checked(payload, inputs):
     rows = json.loads(files['measurements.json']); finite(rows); finite(result['metrics'])
     if kinds['measurements']['sha256'] != text_sha(files['measurements.json']):
         raise ValueError('Measurements changed')
-    expected_rows = {(c.label,a.arm_id) for c in lc.defects.cases for a in lc.onchip.arms}
+    expected_rows = {(c.label,a.arm_id) for c in lc.onchip_cases for a in lc.onchip.arms}
     if len(rows) != len(expected_rows) or {(r['case'],r['onchip_arm']) for r in rows} != expected_rows or result['metrics']['exact_replays'] != len(rows):
         raise ValueError('Trajectory coverage or exact replay mismatch')
     arms = {a.arm_id:a for a in lc.onchip.arms}
@@ -81,12 +81,18 @@ def checked(payload, inputs):
                 or row['array_seed'] != inputs['array_seed'] or row['array_seed'] != selection['array_seed']
                 or row['p0_sha256'] != inputs['artifacts']['device_state']['sha256']
                 or row['weights'] != a.weights or row['calibration'] != a.calibration
-                or row['sequence_presentations'] != epochs * lc.data.cohort_size(lc.onchip.cohort_key)
+                or row['sequence_presentations'] != epochs * lc.recovery_examples
                 or [r['epoch'] for r in row['curve']] != list(range(1,epochs+1))
                 or not row['replay_exact']
                 or row['state_sha256'] != kinds[f"onchip_state.{row['case']}.{a.arm_id}"]['sha256']
                 or row['initial_apparent_sha256'] != inputs['apparent_sha256'][row['case']]):
             raise ValueError('Recovery identity, state, schedule or cohort mismatch')
+        if lc.recovery_views:
+            from workflow.context_views import accounting, extra_evaluation_names
+            if any(row.get(k) != v for k,v in accounting(lc, epochs).items()):
+                raise ValueError('Recovery context token/update budget mismatch')
+            if any(name not in row['initial'] or name not in row['final'] for name in extra_evaluation_names(lc)):
+                raise ValueError('Missing fixed context evaluation')
         if a.digital_adapter:
             meta = row.get('digital_adapter', {})
             if (any(meta.get(k) != v for k,v in a.digital_adapter.to_dict().items())

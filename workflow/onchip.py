@@ -31,6 +31,7 @@ from experiments.cifar_crossbar.devices import clone_cpu
 from experiments.cifar_crossbar.model import tensor_hash
 from workflow import data as data_stage
 from workflow import devices as device_stage
+from workflow import context_views
 from workflow.networks import family
 
 
@@ -346,22 +347,22 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
     initial_hash = tensor_hash(array.read())
     rewrite_count = torch.zeros_like(target, dtype=torch.int64)
     rewrite_reads = 0
-    training = cache[onchip.cohort_key]
+    training = cache["recovery_context" if lifecycle.recovery_views else onchip.cohort_key]
     store.append_metric({"stage": "onchip_cohort", "case": label, "arm": arm.arm_id,
                          "cohort": onchip.cohort_key, "examples": network_family.examples(training),
-                         "epochs": onchip.epochs if arm.trains else 0, "batch_size": onchip.batch_size})
+                         "epochs": onchip.epochs if arm.trains else 0, "batch_size": onchip.batch_size,
+                         **({"recovery_view": training["cohort"]} if lifecycle.recovery_views else {})})
     curve = []
     global_step = 0
     for epoch in range(1, (onchip.epochs if arm.trains else 0) + 1):
         started = time.monotonic()
         order = torch.randperm(
             network_family.examples(training), generator=torch.Generator().manual_seed(data.data_seed + epoch)
-        )
+        ) if lifecycle.recovery_views is None else context_views.order(lifecycle, epoch)
         network.train()
         loss_sum = 0.0
         for batch, begin in enumerate(range(0, len(order), onchip.batch_size)):
             index = order[begin : begin + onchip.batch_size]
-            x, t, y = network_family.batch(network, training, index, device)
             network.zero_grad(set_to_none=True)
             if optimizer:
                 optimizer.zero_grad(set_to_none=True)
@@ -370,10 +371,23 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                 q = observed.requires_grad_(learn)
             else:
                 q = master + (observed - master).detach() if learn else observed
-            loss = network_family.objective(network.forward_features(x, q), t, y, onchip.objective)
-            if not bool(torch.isfinite(loss)):
-                raise FloatingPointError("Nonfinite on-chip training objective.")
-            loss.backward()
+            microbatch = onchip.microbatch_size or len(index)
+            loss_value = 0.0
+            for offset in range(0, len(index), microbatch):
+                micro_index = index[offset:offset + microbatch]
+                x, t, y = network_family.batch(network, training, micro_index, device)
+                logits = network.forward_features(x, q)
+                if lifecycle.recovery_views:
+                    mask = context_views.loss_mask(lifecycle, device)
+                    logits, t, y = logits[:, mask], t[:, mask], y[:, mask]
+                loss = network_family.objective(logits, t, y, onchip.objective)
+                if not bool(torch.isfinite(loss)):
+                    raise FloatingPointError("Nonfinite on-chip training objective.")
+                fraction = len(micro_index) / len(index)
+                # Sum normalized gradients; Adam and the physical writer run once.
+                (loss * fraction).backward()
+                loss_value += float(loss.detach()) * fraction
+                del x, t, y, logits, loss
             if optimizer:
                 optimizer.step()
             if writer:
@@ -401,12 +415,12 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                             break
                         port.pulse(error.sign().to(torch.int8) * active)
                         rewrite_count += active
-            loss_sum += float(loss.detach()) * len(index)
+            loss_sum += loss_value * len(index)
             global_step += 1
             if batch % 100 == 0:
                 store.append_metric(
                     {"stage": "onchip", "case": label, "arm": arm.arm_id, "epoch": epoch, "batch": batch,
-                     "train_loss": float(loss.detach())}
+                     "train_loss": loss_value}
                 )
             if onchip.development_every_steps and global_step % onchip.development_every_steps == 0:
                 was_training = network.training
@@ -415,6 +429,9 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                 store.append_metric({"stage": "onchip_development", "case": label, "arm": arm.arm_id,
                                      "epoch": epoch, "global_step": global_step,
                                      "development": development, "cost": cost_now,
+                                     **({name: network_family.evaluate(network, cache[name], device, q=array.read())
+                                         for name in context_views.extra_evaluation_names(lifecycle)
+                                         if name.endswith("_development")}),
                                      **({"writer": writer.diagnostics()}
                                         if isinstance(writer, ThresholdedWriteAdam) else {})})
                 network.train(was_training)
@@ -456,7 +473,9 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
             "epoch": epoch,
             "train_loss_mean": loss_sum / len(order),
             network_family.PRESENTATIONS: epoch * len(order),
+            **(context_views.accounting(lifecycle, epoch) if lifecycle.recovery_views else {}),
             "cost": cost,
+            **({"training_seconds": time.monotonic() - started} if lifecycle.recovery_views else {}),
             **evaluations(network, array, cache, lifecycle, device),
             "epoch_seconds": time.monotonic() - started,
         }

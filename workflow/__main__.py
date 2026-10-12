@@ -29,7 +29,8 @@ def summary(lifecycle) -> dict:
     devices, hwa, onchip = lifecycle.devices, lifecycle.hwa, lifecycle.onchip
     stages = stage_selections(lifecycle)
     deployments = len(hwa.arms) * len(devices.assignment_seeds) * len(lifecycle.defects.cases)
-    trajectories = 0 if onchip is None else deployments * len(onchip.arms)
+    trajectories = (0 if onchip is None else len(hwa.arms) * len(devices.assignment_seeds)
+                    * len(lifecycle.onchip_cases) * len(onchip.arms))
     state_bytes_per_weight = STATE_BYTES_PER_WEIGHT[devices.technology]
     if onchip is not None and onchip.accumulate_updates:
         state_bytes_per_weight += 4  # Saved FP32 pending command per weight.
@@ -169,11 +170,12 @@ def _measurement_rows(measurements: list[dict], run_dir: Path) -> list[dict]:
             # Transfer test cohorts (another pinned corpus), as extra columns.
             **{
                 f"{state}_{name}_{k}": row[state][name][k]
-                for name in sorted(n for n in row["final"] if n.startswith("transfer_"))
+                for name in sorted(n for n in row["final"] if n.startswith(("transfer_", "context")))
                 for state in ("clean", "initial", "final")
                 for k in metrics
             },
-            **{k: row[k] for k in ("image_presentations", "sequence_presentations") if k in row},
+            **{k: row[k] for k in ("image_presentations", "sequence_presentations", "input_token_presentations",
+                                  "scored_token_presentations", "optimizer_updates") if k in row},
             "failed_devices": row["identity"]["failed_devices"],
             "hwa_convergence_review_required": row["hwa_convergence_review_required"],
             "run_dir": str(run_dir),

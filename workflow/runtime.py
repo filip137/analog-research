@@ -310,6 +310,7 @@ def deploy(stage: Stage):
 
 
 def train_onchip(stage: Stage):
+    from workflow.context_views import accounting, extra_evaluation_names
     lifecycle, network, device = stage.lifecycle, stage.network, stage.device
     arm_id, seed = stage.selection.hwa_arm, stage.selection.array_seed
     split = data_stage.evaluation_split(lifecycle)
@@ -325,7 +326,11 @@ def train_onchip(stage: Stage):
         raise ValueError("Expected deployment targets mapped from the deployed source model.")
     rows, index, artifacts = [], {}, []
     presentations, metrics = stage.family.PRESENTATIONS, stage.family.SUMMARY_METRICS
-    for case in lifecycle.defects.cases:
+    clean = dict(p0["clean"])
+    if lifecycle.recovery_views:
+        for name in extra_evaluation_names(lifecycle):
+            clean[name] = stage.family.evaluate(network, cache[name], device)
+    for case in lifecycle.onchip_cases:
         deployed = p0["cases"][case.label]
         index[case.label] = {}
         for arm in lifecycle.onchip.arms:
@@ -337,6 +342,8 @@ def train_onchip(stage: Stage):
             device_stage.load_array_state(array, deployed["array"], stage.technology, target)
             if tensor_hash(array.read()) != deployed["programming"]["apparent_sha256"]:
                 raise RuntimeError("Expected the exact deployed apparent state before on-chip training.")
+            initial = (onchip.evaluations(network, array, cache, lifecycle, device)
+                       if lifecycle.recovery_views else deployed["initial"])
             outcome = onchip.train_arm(
                 lifecycle=lifecycle,
                 arm=arm,
@@ -379,12 +386,14 @@ def train_onchip(stage: Stage):
                     "identity": deployed["identity"],
                     "programming": deployed["programming"],
                     "p0_sha256": p0_sha256,
-                    "clean": p0["clean"],
-                    "initial": deployed["initial"],
+                    "clean": clean,
+                    "initial": initial,
                     "final": final,
                     "curve": outcome["curve"],
                     "cost": outcome["curve"][-1]["cost"] if outcome["curve"] else {},
                     presentations: outcome["curve"][-1][presentations] if outcome["curve"] else 0,
+                    **(accounting(
+                        lifecycle, lifecycle.onchip.epochs if arm.trains else 0) if lifecycle.recovery_views else {}),
                     "initial_apparent_sha256": outcome["initial_apparent_sha256"],
                     "final_apparent_sha256": outcome["final_apparent_sha256"],
                     "state_sha256": state_sha256,
