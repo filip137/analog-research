@@ -213,8 +213,10 @@ def queue(receipts, output, controller, evidence):
     deadline = json.loads((evidence/'readiness/execution-window.json').read_text())['deadline']
     for label in labels():
         lc = lifecycle(label)
-        prepared = {host:next(c for c in h['cases'] if c['label']==label)
-                    for host,h in hosts.items() if eligible(label,host)}
+        prepared = {host:c for host,h in hosts.items() for c in h['cases']
+                    if c['label']==label and eligible(label,host)}
+        if not prepared:
+            raise ValueError('Scientific case has no validated placement: '+label)
         if any(not c['dry_run_passed'] or c['lifecycle_sha256'] != lc.digest() for c in prepared.values()):
             raise ValueError('Unprepared scientific case')
         job = {'id':PREFIX+'-'+label,'project_dir':str(controller),'handoff':NOTE,'authorization':AUTHORIZATION,
@@ -227,7 +229,11 @@ def queue(receipts, output, controller, evidence):
                     'workdir':str(controller),'timeout_seconds':900,'retry_safe':True}}
         path = output/'jobs'/(job['id']+'.json'); write_frozen(path, job); jobs.append(str(path))
     revision = next(iter(hosts.values()))['source_revision']
-    write_frozen(output/'campaign.json', campaign_manifest(controller,evidence,revision))
+    # CPU collection can live in a newer operational controller checkout while
+    # prepared GPU workers retain their exact original source and native inputs.
+    workers = {h['source'] for h in hosts.values()}
+    if len(workers) != 1: raise ValueError('Expected the declared common worker path')
+    write_frozen(output/'campaign.json', campaign_manifest(Path(next(iter(workers))),evidence,revision))
     return {'manifest':str(output/'campaign.json'),'jobs':jobs}
 
 
@@ -263,7 +269,9 @@ def checked_report(label, rows, records, collection):
                        'initial_apparent_sha256':hold['initial_apparent_sha256']})
     memory = max(m['peak_reserved_bytes'] for m in records if m.get('stage')=='onchip_memory')
     if memory>PEAK_MIB*1024**2: raise ValueError('Measured CUDA peak exceeds reservation')
-    return {'label':label,'rows':values,'peak_reserved_bytes':memory,'collection':str(collection)}
+    elapsed = next(m['elapsed_seconds'] for m in records if m.get('stage')=='onchip' and m.get('terminal'))
+    if not math.isfinite(elapsed) or elapsed <= 0: raise ValueError('Invalid stage timing')
+    return {'label':label,'rows':values,'peak_reserved_bytes':memory,'onchip_seconds':elapsed,'collection':str(collection)}
 
 
 def summarize(reports):
@@ -305,8 +313,12 @@ def collect(queue_config, evidence):
         write_frozen(evidence/'reviews'/(label+'.json'),report)
         canaries = [evidence/'reviews'/(name+'.json') for name in CANARIES]
         if all(p.exists() for p in canaries):
+            measured = {name:json.loads(path.read_text())['onchip_seconds']
+                        for name,path in zip(CANARIES,canaries)}
             gate(queue_config,evidence,'handoff',{'evidence':[str(p) for p in canaries],
-                'validated_hosts':list(HOSTS),'scientific_settings_unchanged':True})
+                'validated_hosts':list(HOSTS),'scientific_settings_unchanged':True,
+                'measured_onchip_seconds':measured,
+                'phase_progress_calibration':{'onchip':thresholds(max(600,math.ceil(1.25*max(measured.values())+120)))}})
             for name in labels(): transition(queue_config,'release',PREFIX+'-'+name)
         completed = [json.loads(p.read_text()) for name in labels() if (p:=evidence/'reviews'/(name+'.json')).exists()]
         atomic_write_json(evidence/'reviews/progress.json',{'completed_jobs':len(completed),'expected_jobs':27,

@@ -27,7 +27,8 @@ def evidence(label):
                 'final_apparent_sha256':ref['cases'][case.label]['apparent_sha256'], 'final':initial,
                 'cost':{} if arm=='none' else {'max_onchip_device_writes':1,'max_onchip_device_write_attempts':1,
                     'device_writes':4,'stuck_write_attempts':1,'issued_write_attempts':5}})
-    return rows,[{'stage':'onchip_memory','peak_reserved_bytes':1000}]
+    return rows,[{'stage':'onchip_memory','peak_reserved_bytes':1000},
+                 {'stage':'onchip','terminal':True,'elapsed_seconds':100.0}]
 
 
 def reports():

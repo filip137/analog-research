@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from campaigns.incident_escalation import IncidentEscalator, validate_settings
+from campaigns.incident_escalation import IncidentEscalator, repair_command, validate_settings
 
 
 @pytest.fixture
@@ -223,7 +223,8 @@ def test_blocked_does_not_retry_and_prompt_restricts_authority(harness):
     command = json.loads((folder / "launch.json").read_text())["argv"]
     assert command[:4] == ["timeout", "--signal=TERM", "--kill-after=10s", "300s"]
     assert command[command.index("-m") + 1] == "configured-model"
-    assert command[command.index("--sandbox") + 1] == "workspace-write"
+    assert "--approve-for-me" in command
+    assert "--sandbox" not in command
     h.finish(owner, "blocked")
     owner.cycle()
     h.now[0] += 100000
@@ -287,3 +288,28 @@ def test_reopening_database_retains_daily_claims(harness):
         assert db.execute("SELECT incident_id,state FROM campaign_escalations").fetchall() == [(1, "running")]
     finally:
         db.close()
+
+
+def test_installed_cli_accepts_owner_flags_before_schema_loading(tmp_path):
+    """--help alone skips conflict checks, so also fail at a missing schema.
+
+    Both paths terminate before starting a model or admitting any workload.
+    The negative control reproduces the exact live canary's argument error.
+    """
+    codex = Path.home() / ".local/bin/codex"
+    if not codex.exists():
+        pytest.skip("installed Codex CLI is required for parser regression")
+    recovery = {"command": [str(codex)], "model": "configured-model", "effort": "medium"}
+    command = repair_command(recovery, {"timeout_seconds": 10}, tmp_path, tmp_path)[4:]
+    help_result = subprocess.run([*command, "--help"], stdin=subprocess.DEVNULL,
+                                 capture_output=True, text=True, timeout=10)
+    assert help_result.returncode == 0, help_result.stderr
+    assert not (tmp_path / "schema.json").exists()
+    result = subprocess.run(command, input="Parser regression only.", capture_output=True, text=True, timeout=10)
+    assert result.returncode == 1, result.stderr
+    assert "Failed to read output schema file" in result.stderr
+    assert "cannot be used with" not in result.stderr
+    incompatible = [*command[:-1], "--sandbox", "workspace-write", command[-1]]
+    negative = subprocess.run(incompatible, input="Parser regression only.", capture_output=True, text=True, timeout=10)
+    assert negative.returncode == 2
+    assert "cannot be used with" in negative.stderr

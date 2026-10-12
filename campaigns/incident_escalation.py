@@ -44,7 +44,7 @@ def validate_settings(raw):
 def repair_command(recovery, settings, folder, project_dir):
     """Reuse the installed queue's bounded Codex launcher and model selection."""
     return ["timeout", "--signal=TERM", "--kill-after=10s", f"{settings['timeout_seconds']}s",
-            *recovery["command"], "exec", "--approve-for-me", "--sandbox", "workspace-write",
+            *recovery["command"], "exec", "--approve-for-me",
             "--skip-git-repo-check", "-C", str(project_dir), "-m", recovery["model"],
             "-c", "model_reasoning_effort=" + json.dumps(recovery["effort"]),
             "--output-schema", str(folder / "schema.json"), "--json",
