@@ -1,7 +1,7 @@
 ---
 id: "exp-012"
 title: "Recovery retained under hard per-device write-attempt caps"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-012: maximum writes per device
@@ -89,6 +89,13 @@ Preparation helper: `campaigns/opt-cmo-corruption/launch/exp6_writecap.py`.
 Evidence root: `results/lifecycles/opt125m-cmo-l6-exp6-writecap/`.
 
 ## Current execution and monitoring handoff
+
+**Final status, October 12:** all five caps completed execution, collection and
+native validation. The complete [result](../results/exp-012.md) records the curve
+and its one-array limits. Local review verified 55 compact hashes, five native
+inspection receipts and two exact replays per case. Total charged compute is
+531.50 of 1,800 GPU-seconds. No further job is dispatched. The launch and partial
+handoff snapshots below are retained as execution history.
 
 The controller-owned attempt cap is implemented in the shared lifecycle parser
 and `ThresholdedWriteAdam`, with physical accounting gates in training and native

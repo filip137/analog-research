@@ -1,7 +1,7 @@
 ---
 id: "exp-013"
 title: "Recovery across three HWA recipes, six fault rates and three assignments"
-status: "ready"
+status: "running"
 hypotheses: []
 ---
 # exp-013: recovery across HWA and corruption regimes
@@ -103,7 +103,7 @@ Only classified operational recovery within the original allowance is permitted.
 Never alter scientific settings or steal another workload's GPU.
 
 Evidence root: `results/lifecycles/opt125m-cmo-l6-exp7-recovery-regimes/`.
-The frozen worker checkout on each host is
+The frozen GPU worker checkout on each host is
 `/home/filip/analog-research/opt-cmo-exp1/hwa-exp7-recovery-20261012`.
 Preparation checks input binding, native plans and dry runs; execution checks
 finite metrics, exact held-state replay, fault persistence, full coverage and cap
@@ -111,6 +111,60 @@ accounting. Final plots show recovery versus corruption and writes by source.
 
 ## Current execution handoff
 
-Implementation and frozen input staging are in progress. No new recovery job has
-launched. Source revision, service incident/restart checks, readiness receipts,
-timing measurements and active handles will be recorded here before handoff.
+**October 12, 19:12 Europe/Paris:** all 27 jobs are registered; the three initial
+cap-4 jobs are running, and the other 24 remain held behind their validation gate.
+The existing service has observed all three live workers and native semantic
+progress, with finite metrics and no artifact errors. This is execution progress,
+not completed scientific coverage.
+
+| Host | Initial job suffix | Attempt |
+| --- | --- | --- |
+| loulou RTX5090 | `std9-271002-cap4` | `ce0abf35cc9a48b59c5454818d33e860` |
+| nom-cool-1 RTX3090 | `cdt3-271002-cap4` | `af6a73cfb7074082a87e60fb7585311f` |
+| local RTX3090 | `std3-271002-cap4` | `0d3cd4a8fa4d4d778c19137966c4659c` |
+
+Each job ID is `opt125m-cmo-l6-exp7-recovery-regimes-` plus its suffix. Its tmux
+session adds `-` and the attempt token. On the corresponding host, for example:
+`tmux attach -r -t opt125m-cmo-l6-exp7-recovery-regimes-std3-271002-cap4`.
+Exact handles and log paths are in `readiness/{local,nom-cool-1,loulou}-live.json`
+under the evidence root. The prefix is unambiguous for these first attempts.
+
+GPU workers are frozen at `9adbd20b7cf16962b8a48a658a909b97150679c4`; the separate
+CPU dispatcher/collector is at `20acc18cefeace618ea8099abb82d8ad72e4cbc2`, in
+`<evidence-root>/controller`. The later controller change fixes incident-owner
+CLI arguments, admits only validated placements and calibrates native on-chip
+progress from the three initial jobs. It changes no worker science or inputs.
+The main manifest is pinned by
+`ece11e5b6ed9269d0ed50ebfde7e8fe5689d8ed0d3dc9b1f2d4980082d83bdfd`.
+
+Nine original deployments were materialized and validated with no new writes;
+preparation consumed 83.82 GPU-seconds. Native planning, dry runs and hash binding
+passed on all admitted placements; 187 targeted tests passed. Observed GPU usage
+was 20,369 MiB locally (including display usage), 19,393 MiB on nom-cool-1 and
+19,620 MiB on loulou; all are within their memory allowance.
+
+The nom-cool-1 Ethernet link is 100 Mb/s. To avoid delaying all workers for its
+full input transfer, launch used its first source/assignment group, then added
+the other two cdt3 assignments through an explicit prepared-placement amendment.
+Validated placement counts are loulou 25, local 6, nom-cool-1 9. Every scientific
+job already has a prepared placement. Further copies do not authorize additional
+submissions or change job identities, budgets or source selection.
+
+Handoff checks are recorded in `readiness/supervision.json` and
+`readiness/active-worker-restart.json`. The read-only investigator's test write
+was rejected. The first bounded repair-owner invocation exposed mutually
+exclusive CLI flags; that failed attempt is preserved. After correction, the
+second test produced a `no_action` report and a clean terminal receipt. Dispatcher
+restart preserved ledger state, incident history and budgets; duplicate prepare
+and registration were idempotent. A second restart with three active jobs
+preserved all worker/supervisor identities and attempt tokens. Systemd monitors
+the service heartbeat and restarts it on failure; user lingering is enabled.
+The single service, not an interactive agent, owns subsequent polling and dispatch.
+
+The deadline remains **October 13, 18:46:44 Europe/Paris**, measured from initial
+preparation admission. Limits remain 12 GPU-hours total and 600 GB. Successful
+native validation and collection of all three initial jobs automatically opens
+the next gate. The final collector requires all 162 endpoints and produces
+`reviews/summary.json`, assignment-level CSV, grouped descriptive statistics and
+PNG/PDF recovery-versus-corruption and recovery-versus-writes figures. Scientific
+interpretation remains pending completed evidence.
