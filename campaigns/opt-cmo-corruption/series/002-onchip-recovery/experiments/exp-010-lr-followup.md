@@ -1,7 +1,7 @@
 ---
 id: "exp-010"
 title: "Development-triggered LR follow-up for dense recovery and LoRA"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-010: bounded LR follow-up
@@ -163,10 +163,19 @@ The first reopened trial (3e-2) launched at approximately 09:30 Paris, attempt
 `opt125m-cmo-l6-exp4-dense-lr-3em2-dev-5b7f98e0212a4d34a0a978175e14ef1d`.
 The immediate probe confirmed both worker and supervisor alive, 11 native
 artifacts and finite training loss at update 200/256. The other two development
-jobs are queued on that same GPU. Service source is `b3997bc`; root window
+jobs were queued on that same GPU. Service source is `b3997bc`; root window
 extension source is `28ad588`. Dispatcher and LR-decision checks passed 157
 tests at root; the deployed service passed 140 dispatcher tests. The new
 amendment SHA-256 is
 `01e9f7fedfc71dae98bb7e146e84ea3938bb9e4d68cb96aab5acfaa3616a36f3`.
 Live observation: `readiness/user-reopen-first-live.json`; reconciled ownership
 and budget handoff: `readiness/user-reopen-handoff.json`.
+
+All five development screens and their native validation/collection chains
+completed by **09:43:57 Paris**, without a new incident. The automatic
+development decision did not qualify any LR for the conditional full fit;
+all five unused candidates remain held. The experiment's declared decision
+is complete and no GPU work remains active. The final
+[result note](../results/exp-010.md) reports all endpoints, write costs and the
+scoped negative conclusion. Evidence: `readiness/selection.json` and
+`readiness/completion-review.json` under the original evidence root.
