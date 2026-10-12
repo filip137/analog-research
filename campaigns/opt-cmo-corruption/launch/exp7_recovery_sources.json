@@ -1,0 +1,2234 @@
+{
+  "cdt3-271002": {
+    "array_seed": 271002,
+    "cases": {
+      "nominal": {
+        "apparent_sha256": "ec686b22b4a719c7b541e605ee7032ff2bbb11c2a6291704d57b52f62e7128fd",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.9918623802708644,
+            "next_token_accuracy_percent": 53.700980392156865,
+            "perplexity": 7.329170762758013,
+            "prediction_sha256": "daad50aea3592fc12eeb37dc2eb3d2dcadd468f2013779f72946633b7d197214",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 87.92585784313725,
+            "teacher_kl": 0.0556822782053667
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0132826562021293,
+            "next_token_accuracy_percent": 53.404820261437905,
+            "perplexity": 7.487857108060372,
+            "prediction_sha256": "23047b28cdc98f3751f3391e8ab3549873d47d7ad292d97080e1ed1899dd16f4",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 88.2015931372549,
+            "teacher_kl": 0.05269445841218911
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9895659895504223,
+            "next_token_accuracy_percent": 30.96047794117647,
+            "perplexity": 54.03143406678222,
+            "prediction_sha256": "e8786bbdc02bef600ceecf1d6d159621c7e725f776ebe3ea2cb5d9ed5fd82334",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 79.98429840686275,
+            "teacher_kl": 0.1141973365171283
+          }
+        }
+      },
+      "random_10000ppm": {
+        "apparent_sha256": "f1a69e54c61facfb0e4023cf92551cae165011719ef802b77e1ebad6380092b7",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.9983518955754298,
+            "next_token_accuracy_percent": 53.57383578431372,
+            "perplexity": 7.376888192624969,
+            "prediction_sha256": "b869169900bc53c7c464851ff244bc51f38da2be3cbdc2b30e6f6a76cd177e30",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 86.91023284313725,
+            "teacher_kl": 0.06368867778310588
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0186956312142166,
+            "next_token_accuracy_percent": 53.299632352941174,
+            "perplexity": 7.528498587903897,
+            "prediction_sha256": "ff55ff74da9a1a2e3d0fe210706b4302a362c48711784f26221a9a03cf67ad1d",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 87.24162581699346,
+            "teacher_kl": 0.060763555531408275
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.998792512744081,
+            "next_token_accuracy_percent": 30.993030024509803,
+            "perplexity": 54.532263249513626,
+            "prediction_sha256": "a61306444947bfcab7ac494b9573da435cbfa9724f979e0449687d9d06d14bfc",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 78.9437806372549,
+            "teacher_kl": 0.12595344752657647
+          }
+        }
+      },
+      "random_20000ppm": {
+        "apparent_sha256": "dbbe8f42519aa339163d0f30d25531a18bfd61f9cbbb4cd1ec3a6a3f7ed402db",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.006270516152475,
+            "next_token_accuracy_percent": 53.370098039215684,
+            "perplexity": 7.435534865184917,
+            "prediction_sha256": "9a60d6efc268f686b90d35ad9dd863f7a5c73afb9add9e735c72779af1c0f74d",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 85.79503676470588,
+            "teacher_kl": 0.07284736615770003
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.026923476325141,
+            "next_token_accuracy_percent": 53.177083333333336,
+            "perplexity": 7.590697438566155,
+            "prediction_sha256": "b33b27290d5135315f9a01d0d37b5c3e5f82541c6795a5dfb44cd3e8bd5c2894",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 86.14379084967321,
+            "teacher_kl": 0.06991974419238521
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.003516919940126,
+            "next_token_accuracy_percent": 31.034007352941178,
+            "perplexity": 54.79050540664827,
+            "prediction_sha256": "9093d4be566bc31811a4e092a0d02a4934dfa9ddd13c544f2937dd316c8efe16",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 77.95036764705883,
+            "teacher_kl": 0.13810903210850323
+          }
+        }
+      },
+      "random_30000ppm": {
+        "apparent_sha256": "0fc2ba1c65983140283ba9e395f55096fb92bfd592f0a51527f9f4c629a604ea",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0162483271430522,
+            "next_token_accuracy_percent": 53.16789215686274,
+            "perplexity": 7.510096589487372,
+            "prediction_sha256": "53c8870b2e8971fee2d10b6d0170cdeeed89c72207183392ba49bbbf205d2c98",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 84.89430147058823,
+            "teacher_kl": 0.0836822603263107
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.036351352267795,
+            "next_token_accuracy_percent": 52.8625408496732,
+            "perplexity": 7.662600003981954,
+            "prediction_sha256": "e246bf4310af16972c4181a67efda03c6d15ca27b2106da6b44db1eb1a720d40",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 85.01123366013071,
+            "teacher_kl": 0.07980931560977611
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.015158990785188,
+            "next_token_accuracy_percent": 30.80499387254902,
+            "perplexity": 55.432107896281686,
+            "prediction_sha256": "c30b36fca3e2ba1e3c19225c798b9e1f746a56e49d75ccdf7bb923b3e3d4a1d1",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 76.70572916666667,
+            "teacher_kl": 0.1520255555124844
+          }
+        }
+      },
+      "random_40000ppm": {
+        "apparent_sha256": "6ffa3cca1fb28212564b957acaee47fb88eff9a7a278e8a8702eefe9724eed21",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0259363698024377,
+            "next_token_accuracy_percent": 53.14185049019608,
+            "perplexity": 7.583208308505349,
+            "prediction_sha256": "d18aa9a22c1e3e8ad1625e2603db60ce8af36de141c04ad0ecb0db5b9b23bb6e",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 83.96446078431373,
+            "teacher_kl": 0.09465225344779445
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0456801084131975,
+            "next_token_accuracy_percent": 52.75531045751634,
+            "perplexity": 7.7344169916150625,
+            "prediction_sha256": "acaffc4491aa674e3af59d37d905ef4bbb3044fa9d892391c3244507982bd20d",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 83.94709967320262,
+            "teacher_kl": 0.09062921755454119
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.020404194850547,
+            "next_token_accuracy_percent": 30.602405024509803,
+            "perplexity": 55.723624477595365,
+            "prediction_sha256": "333e97af3db9a5605c75a135863097e206d25efa567a9cc6c5dc41b11b2d3cf2",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 75.32015931372548,
+            "teacher_kl": 0.16748492034042584
+          }
+        }
+      },
+      "random_50000ppm": {
+        "apparent_sha256": "80d58efd56a65abd0a0a0fda273758c3dc4803d97443213a09ad3c599273d2c3",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0381124328164493,
+            "next_token_accuracy_percent": 52.86611519607843,
+            "perplexity": 7.676106349191278,
+            "prediction_sha256": "6bef676eaf9cf32b23fbd27d46f557ebb8b6f93b6ab8664205315436a2f55ef7",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 82.74050245098039,
+            "teacher_kl": 0.10736013008098977
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0593219775779574,
+            "next_token_accuracy_percent": 52.44076797385621,
+            "perplexity": 7.84065186990953,
+            "prediction_sha256": "88d23374226e42a8a1352946da52e60c94ee0c367d065f9600fd1fd3df31ad50",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 82.93300653594771,
+            "teacher_kl": 0.10273681836190567
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.04138201825759,
+            "next_token_accuracy_percent": 30.62576593137255,
+            "perplexity": 56.90493214217869,
+            "prediction_sha256": "c8b01399536a46a1c61af6ae5b59739e9dc9ca0cda90d77e1ef127617bb604f2",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 74.72617953431373,
+            "teacher_kl": 0.18173273527154735
+          }
+        }
+      }
+    },
+    "deployment": {
+      "kind": "deployment",
+      "path": "checkpoints/deployment.pt",
+      "sha256": "afa457aaa1e40bc67c9b4f3c8b9319fc83b9c5851fb3d67cd6dfb8fbf4ba23e7",
+      "size_bytes": 614696663
+    },
+    "hwa_arm": "cdt_random_3pct_model",
+    "inputs": {
+      "device_data": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-cdt3/runs/opt125m-cmo-l6-exp1g-cdt3/stages/shared/local/prepare/attempt-001/runs/20261011T171959.521385Z-0cdf2fef-8a5299ba/checkpoints/cache.pt",
+        "role": "device_data",
+        "sha256": "fd8e77bf83f7040aa39220d748007eb990d9a5f288709582b7c4813de163d882"
+      },
+      "device_model": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-cdt3/runs/opt125m-cmo-l6-exp1g-cdt3/stages/shared/local/devices/attempt-001/runs/20261011T172006.102073Z-3eb7498e-77a56b09/checkpoints/devices.pt",
+        "role": "device_model",
+        "sha256": "e1c7380c08b10595b3e30bb06128992bb17c35b989a49fc18c3815a12574eb77"
+      },
+      "teacher_weights": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "role": "teacher_weights",
+        "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9"
+      }
+    },
+    "mapping_sha256": "65ad76292f6ea876ade17217ef4e8dbb24f1cf13512e7a3a88cc42b60a766ccb",
+    "origin_host": "trex",
+    "origin_run": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-cdt3/runs/opt125m-cmo-l6-exp1g-cdt3/stages/cdt_random_3pct_model__271002/local/deploy__cdt_random_3pct_model__271002/attempt-001/runs/20261011T172119.181141Z-7ef98ca2-7eae3c9d",
+    "run_files": {
+      "config.resolved.json": "3f8b29b561b6586243e979cec58282b54410583040cda1281d006f986bcad2f8",
+      "result.json": "9e47fa2aaaeff0df409652fbacfd68614becae316c67352cf612680d7e73e479"
+    },
+    "source_sha256": "8a44f11ba6ed8a833fa66954c6124847d41a2dd74a7023ae04d775a1c729ac89",
+    "tag": "cdt3"
+  },
+  "cdt3-271003": {
+    "array_seed": 271003,
+    "cases": {
+      "nominal": {
+        "apparent_sha256": "b4169246b336681c4a4ab289b4a73a49d1f2db8e71888797824ef2a4cef202e0",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.9921830869188495,
+            "next_token_accuracy_percent": 53.81587009803921,
+            "perplexity": 7.331521653498842,
+            "prediction_sha256": "1343670465fbdcbb4acb4abbb42941b28ed12d6400237ee5d4145ea731e42536",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 88.07138480392157,
+            "teacher_kl": 0.05558630315696492
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.013777454226625,
+            "next_token_accuracy_percent": 53.38031045751634,
+            "perplexity": 7.49156300172397,
+            "prediction_sha256": "6f0334f032c15b9bf41d103fe45a4a616a83038782dc9e51847552eabdaddeb8",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 88.22099673202614,
+            "teacher_kl": 0.05266687073349174
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9875105586706425,
+            "next_token_accuracy_percent": 30.95894607843137,
+            "perplexity": 53.92049024645926,
+            "prediction_sha256": "011dd72a9c54f93e8cbe2c4525d4f3879acb20a0cea72819a7413c5113120ed6",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 80.02604166666667,
+            "teacher_kl": 0.11397669543238247
+          }
+        }
+      },
+      "random_10000ppm": {
+        "apparent_sha256": "37a83315d84dfddb8573cca40463cfdfb9f1172a1e71447c51aecf1bcc1613c6",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.000703648959889,
+            "next_token_accuracy_percent": 53.661151960784316,
+            "perplexity": 7.394257230239943,
+            "prediction_sha256": "91e015cc6490731bc62bbbb38c7aca06a9d289bc8dfac4b5fe4cb1223abd6a38",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 86.88725490196079,
+            "teacher_kl": 0.06406236723357556
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0218104755177215,
+            "next_token_accuracy_percent": 53.232230392156865,
+            "perplexity": 7.551985248500397,
+            "prediction_sha256": "a42d371be20862c3344780f4f3992cae298a506c31062df17bb8c684eb95b2be",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 87.13950163398692,
+            "teacher_kl": 0.06102303963860655
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9946692653730804,
+            "next_token_accuracy_percent": 30.924096200980394,
+            "perplexity": 54.30787615808126,
+            "prediction_sha256": "603a28070f39a90c6e22bdf875cccef4b5950d089c468fdb604da166f6b48b48",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 79.07015931372548,
+            "teacher_kl": 0.12554896561538473
+          }
+        }
+      },
+      "random_20000ppm": {
+        "apparent_sha256": "bece5120c2cc6d1d4b8d3ea23c6b9859314cb5ff09fbc43259b287713cd740e6",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0076839185228534,
+            "next_token_accuracy_percent": 53.4359681372549,
+            "perplexity": 7.446051698296029,
+            "prediction_sha256": "284e405deae6c5cf08f2f1c7f03446cb7964183fb3c255561430f6221571cd52",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 86.06770833333333,
+            "teacher_kl": 0.07291625486869438
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0297709371529375,
+            "next_token_accuracy_percent": 53.18729575163399,
+            "perplexity": 7.61234245422035,
+            "prediction_sha256": "10d68bd13bc48c908faa19adc4ba9c8490256108957a67a0b06790b3ee095ed1",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 86.10396241830065,
+            "teacher_kl": 0.06979593603439581
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9956562921112657,
+            "next_token_accuracy_percent": 31.001072303921568,
+            "perplexity": 54.36150594660702,
+            "prediction_sha256": "7f48021576a3bb3fcae43fa9ea44c219bb2d1867395165cbc3e677bac7f2a340",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 78.07138480392157,
+            "teacher_kl": 0.1368526808479253
+          }
+        }
+      },
+      "random_30000ppm": {
+        "apparent_sha256": "cf76e4e187f3f5a3b4c6d854ac3d5627a91feb7f868517e3eb2d10e44a24e06b",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0159117305980008,
+            "next_token_accuracy_percent": 53.345588235294116,
+            "perplexity": 7.507569142311204,
+            "prediction_sha256": "8d8c97303096074a6561c34d33446f1a62e2158f7998665206d3c9b4b68fd69b",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 84.96476715686275,
+            "teacher_kl": 0.0831128435976365
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.036332347346287,
+            "next_token_accuracy_percent": 53.00755718954248,
+            "perplexity": 7.662454378254137,
+            "prediction_sha256": "de81ae65f50b765369fd5db038d3fe140e0aea850b93db1432b51c0994892421",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 85.16135620915033,
+            "teacher_kl": 0.07919270166384629
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.01373150956397,
+            "next_token_accuracy_percent": 30.809589460784313,
+            "perplexity": 55.35303605341969,
+            "prediction_sha256": "abdd220c6ebea9240db3f2ff17ebfc5d1e02c6ba3c972351391f696d5d189cef",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 76.97074142156863,
+            "teacher_kl": 0.15199528368664722
+          }
+        }
+      },
+      "random_40000ppm": {
+        "apparent_sha256": "fcfef431ea279240397b6d7be06d979c067eae59d0affac42e242b47ce2de0e6",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0249838632695814,
+            "next_token_accuracy_percent": 53.10968137254902,
+            "perplexity": 7.575988691963292,
+            "prediction_sha256": "72b6e1de974e5a857d132ce7be952ce29cc60eee5bd90cc7e5dc2c3b4023878d",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 83.9813112745098,
+            "teacher_kl": 0.09445470980569429
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0455706964131273,
+            "next_token_accuracy_percent": 52.76143790849673,
+            "perplexity": 7.733570799875243,
+            "prediction_sha256": "8e9b949320aea3206bf98344dfd172d77767c4e3b720ad7ad8f005e54ea4ca86",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 84.23406862745098,
+            "teacher_kl": 0.09025125924278708
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.027429838741527,
+            "next_token_accuracy_percent": 30.73376225490196,
+            "perplexity": 56.116497295742185,
+            "prediction_sha256": "deb53c46cd5931590cc494a1b4c53d154aff07c15b7dedc19acf2de76f16b676",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 75.48751531862744,
+            "teacher_kl": 0.1681033990546769
+          }
+        }
+      },
+      "random_50000ppm": {
+        "apparent_sha256": "df722505cb82c23b8abe774c9e84ccaab1b53a09cc6b43841e26c86569ecd32d",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0403414090474445,
+            "next_token_accuracy_percent": 52.72518382352941,
+            "perplexity": 7.693235290700101,
+            "prediction_sha256": "881d1aadca3647d4dc6e7c5b2b6f3a132d8bce605cb727066ad0bcb962a06869",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 83.18933823529412,
+            "teacher_kl": 0.10734110159032485
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0557171478770138,
+            "next_token_accuracy_percent": 52.556168300653596,
+            "perplexity": 7.812438537855001,
+            "prediction_sha256": "6bcd36e60deead3c658fc7c5cbd4c690c27a5733f0333e3e81f7fb6592c057a7",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 83.31290849673202,
+            "teacher_kl": 0.10260277082717496
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.03584727305992,
+            "next_token_accuracy_percent": 30.813802083333332,
+            "perplexity": 56.59084783238259,
+            "prediction_sha256": "a05ab7f448902d00a43852812b8328556c1f32a434319e8cad2b5a91a64a8f67",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 74.62162990196079,
+            "teacher_kl": 0.18426607817995783
+          }
+        }
+      }
+    },
+    "deployment": {
+      "kind": "deployment",
+      "path": "checkpoints/deployment.pt",
+      "sha256": "bd9eefd8b5eee51eabdbaeb8b0614a37f588a23a81ba4d81db2f208da6eadd71",
+      "size_bytes": 614696663
+    },
+    "hwa_arm": "cdt_random_3pct_model",
+    "inputs": {
+      "device_data": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-cdt3/runs/opt125m-cmo-l6-exp1g-cdt3/stages/shared/local/prepare/attempt-001/runs/20261011T171959.521385Z-0cdf2fef-8a5299ba/checkpoints/cache.pt",
+        "role": "device_data",
+        "sha256": "fd8e77bf83f7040aa39220d748007eb990d9a5f288709582b7c4813de163d882"
+      },
+      "device_model": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-cdt3/runs/opt125m-cmo-l6-exp1g-cdt3/stages/shared/local/devices/attempt-001/runs/20261011T172006.102073Z-3eb7498e-77a56b09/checkpoints/devices.pt",
+        "role": "device_model",
+        "sha256": "e1c7380c08b10595b3e30bb06128992bb17c35b989a49fc18c3815a12574eb77"
+      },
+      "teacher_weights": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "role": "teacher_weights",
+        "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9"
+      }
+    },
+    "mapping_sha256": "65ad76292f6ea876ade17217ef4e8dbb24f1cf13512e7a3a88cc42b60a766ccb",
+    "origin_host": "trex",
+    "origin_run": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-cdt3/runs/opt125m-cmo-l6-exp1g-cdt3/stages/cdt_random_3pct_model__271003/local/deploy__cdt_random_3pct_model__271003/attempt-001/runs/20261011T172227.609917Z-1f3f0b8e-0f7baf46",
+    "run_files": {
+      "config.resolved.json": "f40e3a857421e7fb0bb976a1db8174fe9e4d75da8b2190cca2fcb17de517b492",
+      "result.json": "a4297d936aabe046b320c28a8e40f01db88460b5f759500b8b129a6a31e9474b"
+    },
+    "source_sha256": "8a44f11ba6ed8a833fa66954c6124847d41a2dd74a7023ae04d775a1c729ac89",
+    "tag": "cdt3"
+  },
+  "cdt3-271004": {
+    "array_seed": 271004,
+    "cases": {
+      "nominal": {
+        "apparent_sha256": "341a4dc7b6ede7137dacf20a773b0ef67b72953d5fc7ac02d9d4aab88d9ef76b",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.9917791366577149,
+            "next_token_accuracy_percent": 53.69178921568628,
+            "perplexity": 7.328560681495367,
+            "prediction_sha256": "3b397b730067e226c5e6ace0c38e8608302bdd44bc291960665f26b1667b3b82",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 88.00398284313725,
+            "teacher_kl": 0.05566475788752238
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0132859236274667,
+            "next_token_accuracy_percent": 53.420138888888886,
+            "perplexity": 7.48788157411438,
+            "prediction_sha256": "fe60e0c5a4910cbae6710d72644f94a92fae5a110612cc298b0f6f37d11cb762",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 88.18321078431373,
+            "teacher_kl": 0.05270483926230786
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9887859213585948,
+            "next_token_accuracy_percent": 31.005284926470587,
+            "perplexity": 53.98930229867043,
+            "prediction_sha256": "b6164a1fa54f480c61e43c58af0ad443103adef0420e48d26075d16da1b51c2a",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 80.02068014705883,
+            "teacher_kl": 0.11398139371007096
+          }
+        }
+      },
+      "random_10000ppm": {
+        "apparent_sha256": "9423bc20ae5d4074e663f15c689f780593bae64321ad0b23d73440aa932116fe",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.9981208539476583,
+            "next_token_accuracy_percent": 53.53860294117647,
+            "perplexity": 7.375184021243903,
+            "prediction_sha256": "f43534623bbd0b8ca426d277580cb11e5e9a28bc9627fc3b10f868d98f08923e",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 86.9515931372549,
+            "teacher_kl": 0.06400966907248777
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.019139537312626,
+            "next_token_accuracy_percent": 53.306781045751634,
+            "perplexity": 7.531841276203904,
+            "prediction_sha256": "7adc571cb04ca4b5871fc8a005042d25ce13e02f186e9133a708b99ffb278ca9",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 87.24775326797386,
+            "teacher_kl": 0.06094829299870659
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9945187241423366,
+            "next_token_accuracy_percent": 30.985370710784313,
+            "perplexity": 54.29970119891498,
+            "prediction_sha256": "4a98675ecb19bd0a020763792f9477f2b306a18853f8460473b67cc928bd109c",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 78.96599264705883,
+            "teacher_kl": 0.12480457457257252
+          }
+        }
+      },
+      "random_20000ppm": {
+        "apparent_sha256": "b90202aa06238b998d6ac30f1f48c0a0e540df27422d80d515ae2cc086073e69",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.00960703831093,
+            "next_token_accuracy_percent": 53.448223039215684,
+            "perplexity": 7.46038512569144,
+            "prediction_sha256": "ea2f5485b4090f81de2293a316c377e27025ca16a8f8d4ffeda9d3edcf9b1078",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 85.83946078431373,
+            "teacher_kl": 0.07353581768624923
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.029757863088371,
+            "next_token_accuracy_percent": 53.181168300653596,
+            "perplexity": 7.612242930614191,
+            "prediction_sha256": "7edec650472c02f29968eff0a2b30643c206a649e11203d513031964a2cd0cf7",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 86.23059640522875,
+            "teacher_kl": 0.06986061661851173
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.007270769979439,
+            "next_token_accuracy_percent": 30.94937193627451,
+            "perplexity": 54.99656726821179,
+            "prediction_sha256": "47087ba9dbaf9597d7bc516c77335739b7459ef987b51b3fdd7e9b386677261d",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 77.98177083333333,
+            "teacher_kl": 0.1378295417509827
+          }
+        }
+      },
+      "random_30000ppm": {
+        "apparent_sha256": "5ab6e0be8bd744317d981e8900889722e5316c121f8ee4e473f6bd1e2a5664d1",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0135035150191363,
+            "next_token_accuracy_percent": 53.239889705882355,
+            "perplexity": 7.489511049960278,
+            "prediction_sha256": "f73ad888477c02357593d256dbbe2a389efde9ff2c7446b79e5d0aa90053d4e6",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 85.01072303921569,
+            "teacher_kl": 0.08320618669191997
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0344821799035167,
+            "next_token_accuracy_percent": 52.99325980392157,
+            "perplexity": 7.648290661296111,
+            "prediction_sha256": "5cfebff77961f6230334ccd3740abb065abb3a33a4a1ef9a4b4eb291857a652b",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 85.203227124183,
+            "teacher_kl": 0.07947874782132168
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.012373579249663,
+            "next_token_accuracy_percent": 30.840226715686274,
+            "perplexity": 55.277921499481195,
+            "prediction_sha256": "bc7bdcbba5675d931015f2f4a4d4d9b459189ac89c1311b78e5f38544529300c",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 76.79151348039215,
+            "teacher_kl": 0.15202308133536693
+          }
+        }
+      },
+      "random_40000ppm": {
+        "apparent_sha256": "cc807085b7340b43de75d21d02f4fa01d5d147666fedfd71491c5ef9fd13449d",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.026998456319173,
+            "next_token_accuracy_percent": 53.06985294117647,
+            "perplexity": 7.591266610352778,
+            "prediction_sha256": "b472caf1d8ff5e1626312a825ceafc20ba9e8d206484b58a41cdee3bd6ad1f41",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 84.17126225490196,
+            "teacher_kl": 0.09484411776065826
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0462478107876247,
+            "next_token_accuracy_percent": 52.73488562091503,
+            "perplexity": 7.738809085089001,
+            "prediction_sha256": "95a3e47f4aa810f141792c610f902790d700e8870b45a7e2553f9da07a570018",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 84.16156045751634,
+            "teacher_kl": 0.0911532510729397
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.036811472387875,
+            "next_token_accuracy_percent": 30.531173406862745,
+            "perplexity": 56.64543900398709,
+            "prediction_sha256": "14d527454aa019df69b3124e15f1b0c944bb4a7a6d85091d8eff3d65e11dd283",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 75.33700980392157,
+            "teacher_kl": 0.1674337654721503
+          }
+        }
+      },
+      "random_50000ppm": {
+        "apparent_sha256": "f9045ec1329a2c0253b3764ebfcfff6771b12d350084bc40707d7a95980042a3",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0369183128955317,
+            "next_token_accuracy_percent": 52.896752450980394,
+            "perplexity": 7.6669456282728365,
+            "prediction_sha256": "208efe35a85364115de8e1bfaecbdc985d2666fe27460376cc44847d5fdf91ad",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 82.94117647058823,
+            "teacher_kl": 0.10706164918693842
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.05821400000379,
+            "next_token_accuracy_percent": 52.51633986928105,
+            "perplexity": 7.831969414342069,
+            "prediction_sha256": "8e662d88d03039313664925b8aca883145840e91ed9d1b09eae28a878b6b5cf3",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 83.12908496732027,
+            "teacher_kl": 0.10245470217629975
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.03599871747634,
+            "next_token_accuracy_percent": 30.686657475490197,
+            "perplexity": 56.59941884930722,
+            "prediction_sha256": "ee6987dedfdaef5c23b0f4532004c91f6235bfc8c5e08ad68415fb6693ccd5c5",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 74.62852328431373,
+            "teacher_kl": 0.1819192363350999
+          }
+        }
+      }
+    },
+    "deployment": {
+      "kind": "deployment",
+      "path": "checkpoints/deployment.pt",
+      "sha256": "8573afc17f42a39b88f80eac054f848c97c6027e3190d4ad17a606fa9bfd870d",
+      "size_bytes": 614696663
+    },
+    "hwa_arm": "cdt_random_3pct_model",
+    "inputs": {
+      "device_data": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-cdt3/runs/opt125m-cmo-l6-exp1g-cdt3/stages/shared/local/prepare/attempt-001/runs/20261011T171959.521385Z-0cdf2fef-8a5299ba/checkpoints/cache.pt",
+        "role": "device_data",
+        "sha256": "fd8e77bf83f7040aa39220d748007eb990d9a5f288709582b7c4813de163d882"
+      },
+      "device_model": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-cdt3/runs/opt125m-cmo-l6-exp1g-cdt3/stages/shared/local/devices/attempt-001/runs/20261011T172006.102073Z-3eb7498e-77a56b09/checkpoints/devices.pt",
+        "role": "device_model",
+        "sha256": "e1c7380c08b10595b3e30bb06128992bb17c35b989a49fc18c3815a12574eb77"
+      },
+      "teacher_weights": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "role": "teacher_weights",
+        "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9"
+      }
+    },
+    "mapping_sha256": "65ad76292f6ea876ade17217ef4e8dbb24f1cf13512e7a3a88cc42b60a766ccb",
+    "origin_host": "trex",
+    "origin_run": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-cdt3/runs/opt125m-cmo-l6-exp1g-cdt3/stages/cdt_random_3pct_model__271004/local/deploy__cdt_random_3pct_model__271004/attempt-001/runs/20261011T172336.257896Z-d21b540c-46934044",
+    "run_files": {
+      "config.resolved.json": "15449988b8a3dbae72c38ae596dd581ec2bc692d4af535a6bca9bfbb97aeb9bb",
+      "result.json": "9742eb4909fc1b04b3db950737c94bd8ecc9492889c2b95b7962ed4d82559e84"
+    },
+    "source_sha256": "8a44f11ba6ed8a833fa66954c6124847d41a2dd74a7023ae04d775a1c729ac89",
+    "tag": "cdt3"
+  },
+  "std3-271002": {
+    "array_seed": 271002,
+    "cases": {
+      "nominal": {
+        "apparent_sha256": "282fb65e62d4145a4091a01d7d8e51d0e69613e14dcb53fd5a4ca1bae1d7b313",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.9522219760745179,
+            "next_token_accuracy_percent": 54.35968137254902,
+            "perplexity": 7.044322520026596,
+            "prediction_sha256": "3b3e4a5ad498cfd9cb1430f88ab598e0930179e5e24899547dba79ac86e969f4",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 92.5,
+            "teacher_kl": 0.02084147943293347
+          },
+          "transfer_generated": {
+            "cross_entropy": 1.9769230618196376,
+            "next_token_accuracy_percent": 54.00326797385621,
+            "perplexity": 7.2204917631121335,
+            "prediction_sha256": "488db4e7e7d7eb6dc8c72c95a55d0608c213e3c6c4403aad2eebc3b133ea4d49",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 92.71650326797386,
+            "teacher_kl": 0.01992749207549625
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9037026667127424,
+            "next_token_accuracy_percent": 31.998697916666668,
+            "perplexity": 49.5857089751002,
+            "prediction_sha256": "1a09c6b18f2b2b1dc90580cb883654af19866c106c05c11d4dfff1d903cad12e",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 87.01401654411765,
+            "teacher_kl": 0.04428273685568688
+          }
+        }
+      },
+      "random_10000ppm": {
+        "apparent_sha256": "04238dc815012ff3289d4283c0a85ee5c799ae6adae7b1e6ee53dff782a56ab6",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.9880243366839838,
+            "next_token_accuracy_percent": 53.62898284313726,
+            "perplexity": 7.301094998382906,
+            "prediction_sha256": "1c4f35607a0d4b94f9042545ba7c592c0dc312a4bb1d11b3fe202cb2e854ac56",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 86.58547794117646,
+            "teacher_kl": 0.05656955008413277
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0107960358164667,
+            "next_token_accuracy_percent": 53.334354575163395,
+            "perplexity": 7.469260780516317,
+            "prediction_sha256": "ad90e466c95e395f43b53fbdd87a42ec74d89dfd179b954ee2d119d2d163b58e",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 86.78104575163398,
+            "teacher_kl": 0.055397977899102606
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9438135137744976,
+            "next_token_accuracy_percent": 31.73062193627451,
+            "perplexity": 51.61506120804247,
+            "prediction_sha256": "89ba691a900321e79e69db23a16dbded1dbb3bc0950553a793b64870414be656",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 81.18949142156863,
+            "teacher_kl": 0.08791602601607641
+          }
+        }
+      },
+      "random_20000ppm": {
+        "apparent_sha256": "e4e8a2c494684957139ef303a44e57e299294a2cc97548b06fb38d1ed662a681",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.027751157798019,
+            "next_token_accuracy_percent": 53.166360294117645,
+            "perplexity": 7.596982718948525,
+            "prediction_sha256": "7aad377eaf824842d0e586f8ab0ca582d15dc039a8aa51fa9cebce22624db457",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 82.98406862745098,
+            "teacher_kl": 0.09262686862665064
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0505035194696166,
+            "next_token_accuracy_percent": 52.77777777777778,
+            "perplexity": 7.771813380622341,
+            "prediction_sha256": "0c8faab329715ca321f2b1f0413c9037a35f17725f236cbfe9379683b05eda5b",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 83.07700163398692,
+            "teacher_kl": 0.09107871223119349
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9759372318492217,
+            "next_token_accuracy_percent": 31.344592524509803,
+            "perplexity": 53.30004800612826,
+            "prediction_sha256": "249fdb81e991294b0b3ffbef6908ba9f6f2e98f22ef6406c4419bc457ad13434",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 77.34375,
+            "teacher_kl": 0.13285264039740843
+          }
+        }
+      },
+      "random_30000ppm": {
+        "apparent_sha256": "dd51ca6a6d083ff90c9217ececb4038e042d926cc2cee9edcd97637ee52ec2da",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0733632947884355,
+            "next_token_accuracy_percent": 52.095588235294116,
+            "perplexity": 7.951521506249183,
+            "prediction_sha256": "1852cf7262fd7f930e1462f5bdd38d67b8b62f2bb1ad2913ef12c8d5d144e9b9",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 79.7748161764706,
+            "teacher_kl": 0.13720058752041236
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.094613564559837,
+            "next_token_accuracy_percent": 51.856617647058826,
+            "perplexity": 8.122301618472237,
+            "prediction_sha256": "c4439223bfb8962fb7332ff8f756cc69ed6c4b8b2a9e3991147484ad0f45286f",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 79.97549019607843,
+            "teacher_kl": 0.13420209705440048
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.052061891555786,
+            "next_token_accuracy_percent": 30.432751225490197,
+            "perplexity": 57.51592647103419,
+            "prediction_sha256": "73ec14ffbcb848cd20b896c53e28c5440b02cea68e59a55df19863801450f4df",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 72.7960324754902,
+            "teacher_kl": 0.191031993487302
+          }
+        }
+      },
+      "random_40000ppm": {
+        "apparent_sha256": "c0eb217b7d7d9ef8990dd984773f2364385d42885c64f373ea192a09ae08128a",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.123821688633339,
+            "next_token_accuracy_percent": 51.53952205882353,
+            "perplexity": 8.363037418102236,
+            "prediction_sha256": "dae6115b3c97551820cd001db05bd4a190decfdee997124fe5d21097bee5d681",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 77.59037990196079,
+            "teacher_kl": 0.18304020762443543
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.1437486162372665,
+            "next_token_accuracy_percent": 51.20710784313726,
+            "perplexity": 8.531358551053252,
+            "prediction_sha256": "690613f608d1cd05cb5ea7e6cb0b6d83db50feac1fcb73eb5eb33048abb7023d",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 77.35089869281046,
+            "teacher_kl": 0.17779157216252844
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.093787847780714,
+            "next_token_accuracy_percent": 29.759880514705884,
+            "perplexity": 59.966606429720684,
+            "prediction_sha256": "e76e486fddb202db2b0315aabe58ebaee60339bfa1db55f1246976e13de10208",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 69.61780024509804,
+            "teacher_kl": 0.24641367559339486
+          }
+        }
+      },
+      "random_50000ppm": {
+        "apparent_sha256": "0888eb7cb84e92acb7db32c785d7f116097a4f3f3571e37d99e10b9d8ee974df",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.1892301409852273,
+            "next_token_accuracy_percent": 50.38756127450981,
+            "perplexity": 8.92833690752814,
+            "prediction_sha256": "fcb4dfc75f69d7180fe9275edd32c655857db85d957af6f07418f9ea168d4efb",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 74.53737745098039,
+            "teacher_kl": 0.23655320312462602
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.2065249798344633,
+            "next_token_accuracy_percent": 50.10927287581699,
+            "perplexity": 9.084094070677097,
+            "prediction_sha256": "3f561ba0da7a6197e49fbb92591e74f91f6aee4700b9be84ffbe7756ebacfcac",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 74.6875,
+            "teacher_kl": 0.22912312769422344
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.187521327710619,
+            "next_token_accuracy_percent": 28.80782781862745,
+            "perplexity": 65.85934474647135,
+            "prediction_sha256": "1923eb868e0b716bac38735240e9049e0a63e013c73647254507128da3fc378d",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 66.59926470588235,
+            "teacher_kl": 0.313664044936498
+          }
+        }
+      }
+    },
+    "deployment": {
+      "kind": "deployment",
+      "path": "checkpoints/deployment.pt",
+      "sha256": "abcd1c460128e55a82c789d56c6427bff8c2bf8cc519de4fdf024f929ff682a2",
+      "size_bytes": 614696599
+    },
+    "hwa_arm": "standard_hwa_model",
+    "inputs": {
+      "device_data": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std3/runs/opt125m-cmo-l6-exp1g-std3/stages/shared/local/prepare/attempt-001/runs/20261011T172704.560084Z-f31142ba-1d10e5e5/checkpoints/cache.pt",
+        "role": "device_data",
+        "sha256": "b7438a37a18a0079dade05eda219d37f830fadd5dd33b01d24f05fd7b642b027"
+      },
+      "device_model": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std3/runs/opt125m-cmo-l6-exp1g-std3/stages/shared/local/devices/attempt-001/runs/20261011T172710.983686Z-c38a0362-bc018726/checkpoints/devices.pt",
+        "role": "device_model",
+        "sha256": "7bc1bd14e7e386a8de25295848727832076079565c7e8e3f7cf835c6e900f99b"
+      },
+      "teacher_weights": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "role": "teacher_weights",
+        "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9"
+      }
+    },
+    "mapping_sha256": "65ad76292f6ea876ade17217ef4e8dbb24f1cf13512e7a3a88cc42b60a766ccb",
+    "origin_host": "trex",
+    "origin_run": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std3/runs/opt125m-cmo-l6-exp1g-std3/stages/standard_hwa_model__271002/local/deploy__standard_hwa_model__271002/attempt-001/runs/20261011T172823.929932Z-698b8f03-ef8ae318",
+    "run_files": {
+      "config.resolved.json": "d5e341449c371196b38cf614490af41e23c51d9d0d075d74a0b2cc15aa1e3217",
+      "result.json": "5e64076770d0f7ef7bdd92f0615352b831e615a6b645f12d3a8346577f0c7746"
+    },
+    "source_sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028",
+    "tag": "std3"
+  },
+  "std3-271003": {
+    "array_seed": 271003,
+    "cases": {
+      "nominal": {
+        "apparent_sha256": "71c1893e2151b58a5be7551bb45dffec903e11d150aaa74999573598a3eefcb7",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.953193053077249,
+            "next_token_accuracy_percent": 54.33210784313726,
+            "perplexity": 7.0511664220657435,
+            "prediction_sha256": "97c2ac336cfd272a77ff55d0fe6a881de6d21c78133c0a377ab1a0ff90edf8df",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 92.55208333333333,
+            "teacher_kl": 0.02077129835299417
+          },
+          "transfer_generated": {
+            "cross_entropy": 1.9780684832653967,
+            "next_token_accuracy_percent": 53.974673202614376,
+            "perplexity": 7.228767007643054,
+            "prediction_sha256": "7a25a6121c5d8874aa0599ef987cff168c035e4a2c8298750e343374eb39996a",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 92.64910130718954,
+            "teacher_kl": 0.01983507452837003
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.902028606452194,
+            "next_token_accuracy_percent": 31.98376225490196,
+            "perplexity": 49.502768952881254,
+            "prediction_sha256": "e017d4e1a6d0571ca897c694d04979cad95aed26f6492a5186da32e45049f3f6",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 87.05920649509804,
+            "teacher_kl": 0.043803280906057826
+          }
+        }
+      },
+      "random_10000ppm": {
+        "apparent_sha256": "f43d2757ae496f979a437940df72a3e73f5e0b4d1f02c911d4c8ca11d7b7b2ff",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.991313637004179,
+            "next_token_accuracy_percent": 53.653492647058826,
+            "perplexity": 7.3251500329266666,
+            "prediction_sha256": "415a2ff3b11e794d6456dc1c7a802c19b9fac32ca9083fd504f40baed55d9c1d",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 86.89338235294117,
+            "teacher_kl": 0.05524035125386481
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.016029053108365,
+            "next_token_accuracy_percent": 53.262867647058826,
+            "perplexity": 7.508450000840969,
+            "prediction_sha256": "33a64bb4de00d0215a59f9bf5d9bbe9937478a59c676e8ebdf7d502eb01a53f1",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 86.875,
+            "teacher_kl": 0.054047438716576766
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9455212312586165,
+            "next_token_accuracy_percent": 31.50620404411765,
+            "perplexity": 51.70328045584779,
+            "prediction_sha256": "6bed8b5427eff0d7990e55279626e3db3d21ec85ab0fda168c7915ea28a6ae02",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 81.30935968137256,
+            "teacher_kl": 0.08751314451881484
+          }
+        }
+      },
+      "random_20000ppm": {
+        "apparent_sha256": "2182b7df7c77fb57954bacc39d1aebd3e97ba2dc2cb338afadaaf8ab138b6f6c",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.029770113440121,
+            "next_token_accuracy_percent": 53.135723039215684,
+            "perplexity": 7.612336183838888,
+            "prediction_sha256": "0f5fff4abb9635a4a9b3dbbfbd934f5859abed7dcfa2d83fe04eb438c810b0f3",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 83.08976715686275,
+            "teacher_kl": 0.0930434159788431
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0556247362124376,
+            "next_token_accuracy_percent": 52.654207516339866,
+            "perplexity": 7.811716610763074,
+            "prediction_sha256": "756d76c8c441d59b1995ebd67c4fc78672236310b3f9759b0ce020d72329e45c",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 82.89930555555556,
+            "teacher_kl": 0.09156467895102657
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9687959063286873,
+            "next_token_accuracy_percent": 31.395909926470587,
+            "perplexity": 52.92077089559069,
+            "prediction_sha256": "f70ae7bd0dc04f29a9172dfb1937311ca90a8bfd71b3d59033744f73bd84bad9",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 77.21660539215686,
+            "teacher_kl": 0.13204230134393655
+          }
+        }
+      },
+      "random_30000ppm": {
+        "apparent_sha256": "12b2db4d216f99d49e2805e04240402ea78c3ade433a7f13ce04c5f70bf614a6",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0787254183900123,
+            "next_token_accuracy_percent": 52.1829044117647,
+            "perplexity": 7.994273064522096,
+            "prediction_sha256": "615cbf4114af9143a47c6cb13225deeaf2eb588802ebc09b88430586abb7855d",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 80.01838235294117,
+            "teacher_kl": 0.13762980839785408
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.099598425821541,
+            "next_token_accuracy_percent": 51.78104575163399,
+            "perplexity": 8.162891247951439,
+            "prediction_sha256": "fc5140fdf418ff8f74a1008013ab00a5a080260198d154395fc16a76aadc1dae",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 79.84375,
+            "teacher_kl": 0.1341834510853088
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.044935120788275,
+            "next_token_accuracy_percent": 30.53079044117647,
+            "perplexity": 57.10748082561115,
+            "prediction_sha256": "9faa22c776b7b609573dfc3522e007718aa8e2eff98aa8eb1093b24f6467834d",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 73.42601102941177,
+            "teacher_kl": 0.18793453393029233
+          }
+        }
+      },
+      "random_40000ppm": {
+        "apparent_sha256": "aacf8881debbea96d5d522d40ab71c1fcedc94906deb915085dfaea6bc793f16",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.1270908542707856,
+            "next_token_accuracy_percent": 51.432291666666664,
+            "perplexity": 8.39042231114029,
+            "prediction_sha256": "4280b7964e9c3e0cd0898be08a00ea842186aca4fbab12febb283c82cd0bfa0b",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 76.80147058823529,
+            "teacher_kl": 0.1866077747999453
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.147128934174581,
+            "next_token_accuracy_percent": 51.02328431372549,
+            "perplexity": 8.560246052355415,
+            "prediction_sha256": "2677aa65dc060048d82f4b77c31a82a911bde50c524129adb93c2904fdbdf0bb",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 77.03022875816994,
+            "teacher_kl": 0.18139239939209684
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.119943195230821,
+            "next_token_accuracy_percent": 29.57261029411765,
+            "perplexity": 61.55574550519809,
+            "prediction_sha256": "3bfb5c7628ed63200dfc6083000e5bfcf94bf2c49dcf287a53b7f16fd675956d",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 69.5718443627451,
+            "teacher_kl": 0.24979606551282546
+          }
+        }
+      },
+      "random_50000ppm": {
+        "apparent_sha256": "a5602c893e53e9f95af7e4aaf3d4e623024ed8dd4b5f3fb7299f3f2f012745e6",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.190688974717084,
+            "next_token_accuracy_percent": 50.54381127450981,
+            "perplexity": 8.941371371824662,
+            "prediction_sha256": "780ba425140cbf1e0ad506bae4075cf7da860ecd2811b1b32c2e85e9ef823585",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 75.18075980392157,
+            "teacher_kl": 0.2353463715197993
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.200420830296535,
+            "next_token_accuracy_percent": 50.47589869281046,
+            "perplexity": 9.02881229780998,
+            "prediction_sha256": "062aca2a6fb96d5d1a0c3dd6b7a72e34c2a91eedc5c3c29c8910c4024291c7aa",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 75.31147875816994,
+            "teacher_kl": 0.2274456245447296
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.165120534335865,
+            "next_token_accuracy_percent": 29.58639705882353,
+            "perplexity": 64.40044444045948,
+            "prediction_sha256": "a189e813df0dd3030187a205c05815e3d9a9224dea11661313e4703ef9bc8604",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 67.6470588235294,
+            "teacher_kl": 0.3058988663495756
+          }
+        }
+      }
+    },
+    "deployment": {
+      "kind": "deployment",
+      "path": "checkpoints/deployment.pt",
+      "sha256": "eed96e76e05eacb11f2b057983cd208af4231b98dac59668fa40e291bbee4e80",
+      "size_bytes": 614696599
+    },
+    "hwa_arm": "standard_hwa_model",
+    "inputs": {
+      "device_data": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std3/runs/opt125m-cmo-l6-exp1g-std3/stages/shared/local/prepare/attempt-001/runs/20261011T172704.560084Z-f31142ba-1d10e5e5/checkpoints/cache.pt",
+        "role": "device_data",
+        "sha256": "b7438a37a18a0079dade05eda219d37f830fadd5dd33b01d24f05fd7b642b027"
+      },
+      "device_model": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std3/runs/opt125m-cmo-l6-exp1g-std3/stages/shared/local/devices/attempt-001/runs/20261011T172710.983686Z-c38a0362-bc018726/checkpoints/devices.pt",
+        "role": "device_model",
+        "sha256": "7bc1bd14e7e386a8de25295848727832076079565c7e8e3f7cf835c6e900f99b"
+      },
+      "teacher_weights": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "role": "teacher_weights",
+        "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9"
+      }
+    },
+    "mapping_sha256": "65ad76292f6ea876ade17217ef4e8dbb24f1cf13512e7a3a88cc42b60a766ccb",
+    "origin_host": "trex",
+    "origin_run": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std3/runs/opt125m-cmo-l6-exp1g-std3/stages/standard_hwa_model__271003/local/deploy__standard_hwa_model__271003/attempt-001/runs/20261011T172932.528408Z-0afcf722-0d8264e7",
+    "run_files": {
+      "config.resolved.json": "69f4f0d0d10d526c611b6e1cacc60c409dfdd40f915be13b46aab499de67c8d2",
+      "result.json": "1e5c6eb42fbe7de9eef45547bf05641583886be43a1e37655ec36a76300a06f7"
+    },
+    "source_sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028",
+    "tag": "std3"
+  },
+  "std3-271004": {
+    "array_seed": 271004,
+    "cases": {
+      "nominal": {
+        "apparent_sha256": "4f5c72e109bae5d59bdac1028c276cd906c7deb65f4d92e51bda75c80df2dad7",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.95176124011769,
+            "next_token_accuracy_percent": 54.28462009803921,
+            "perplexity": 7.04107769491133,
+            "prediction_sha256": "5f66aca56be9d822fe0302cf2a925575b69d353ea72d03c952a28a8081aeacf7",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 92.4310661764706,
+            "teacher_kl": 0.02088052922604131
+          },
+          "transfer_generated": {
+            "cross_entropy": 1.9761328983930202,
+            "next_token_accuracy_percent": 54.01858660130719,
+            "perplexity": 7.214788648091916,
+            "prediction_sha256": "1bebff0c9d1084fc5f9f331115b9eda4f07f2a30a51c379ba53315c498dd7c0d",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 92.78084150326798,
+            "teacher_kl": 0.019987754221835168
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9018347983266795,
+            "next_token_accuracy_percent": 32.06763174019608,
+            "perplexity": 49.49317584366401,
+            "prediction_sha256": "fafe491aa1496beb0ac7ad8a5ed850effc756d6368065a64fa7084130a5579f4",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 87.21813725490196,
+            "teacher_kl": 0.043695132368627716
+          }
+        }
+      },
+      "random_10000ppm": {
+        "apparent_sha256": "9b539e3d03173c009ff23ba6c7a5e56abe85a603b58bc4fd667d1e6aa7318a16",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.988543774099911,
+            "next_token_accuracy_percent": 53.627450980392155,
+            "perplexity": 7.30488844544618,
+            "prediction_sha256": "0ce8185ed54cdd4c13b2d02fc3f314685568f8ba36698afb17df010366a3380d",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 86.81832107843137,
+            "teacher_kl": 0.0561726126016355
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0111680224050885,
+            "next_token_accuracy_percent": 53.348651960784316,
+            "perplexity": 7.4720397621935,
+            "prediction_sha256": "41f124e511aa3bb9d84eba420979b486705ffc42bc0a2752630ee25d465af56a",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 86.9015522875817,
+            "teacher_kl": 0.054832810572549406
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9426236666885077,
+            "next_token_accuracy_percent": 31.616498161764707,
+            "perplexity": 51.55368370003661,
+            "prediction_sha256": "85dcc7039664bec340ec1efcbf81a90bbfc775a091373983b2105e619278d261",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 81.17378982843137,
+            "teacher_kl": 0.08753072753840802
+          }
+        }
+      },
+      "random_20000ppm": {
+        "apparent_sha256": "c9060e936e7ed484455327ed113fbc932f7f7a93e826612d3afea340b368f6cd",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.035010915644029,
+            "next_token_accuracy_percent": 53.06678921568628,
+            "perplexity": 7.65233565519475,
+            "prediction_sha256": "0ade94036b3ecb3e91aff8770e0b7f42c5faf63c1fbb0244ffc764a0055e5777",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 83.08057598039215,
+            "teacher_kl": 0.09353053207490958
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0570664916942323,
+            "next_token_accuracy_percent": 52.641952614379086,
+            "perplexity": 7.82298731885913,
+            "prediction_sha256": "f7a3e6d4a402e560ad22c04405786a5e86710ae17701399f4fce8425b17c2484",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 83.06781045751634,
+            "teacher_kl": 0.09187163344395706
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.993910000370998,
+            "next_token_accuracy_percent": 30.979243259803923,
+            "perplexity": 54.26665773820897,
+            "prediction_sha256": "abb5b436948d2633b94b1585e37447c4145391c4d1af41a8632b4a4382e7473a",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 77.07261029411765,
+            "teacher_kl": 0.13729285101095837
+          }
+        }
+      },
+      "random_30000ppm": {
+        "apparent_sha256": "41da525321749a9f9166a680866d5c2fabc12dab46bdbf11e95e5f294bc0feca",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0693282688365264,
+            "next_token_accuracy_percent": 52.30851715686274,
+            "perplexity": 7.9195015547262075,
+            "prediction_sha256": "db9cdd4df21d438a6dfefc4e8ff8a8ffcd1f41a26524611343c7c4c3b63e7100",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 80.31862745098039,
+            "teacher_kl": 0.13454394889812843
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0929441233865576,
+            "next_token_accuracy_percent": 51.91482843137255,
+            "perplexity": 8.108753225997333,
+            "prediction_sha256": "075e6d0641127b9321743a03bbe5d5d70017a18f0487d3145b45aa202c3eb80e",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 80.19199346405229,
+            "teacher_kl": 0.13189469310972426
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.038359763575535,
+            "next_token_accuracy_percent": 30.58938419117647,
+            "perplexity": 56.73321056845414,
+            "prediction_sha256": "7bbae795007f4135c6a2e39446768cebc11b86b779af450000141c807a7e6194",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 73.42218137254902,
+            "teacher_kl": 0.18644751736930773
+          }
+        }
+      },
+      "random_40000ppm": {
+        "apparent_sha256": "3a9f67be0efeba82e88418aed50f00499e43f8f29ed52363842e8756e4cc16bb",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.125172809526032,
+            "next_token_accuracy_percent": 51.548713235294116,
+            "perplexity": 8.374344529601377,
+            "prediction_sha256": "6f7fdaca56be7d68ae7da0111efe5663d60c6850a7a1b7422a7f1ff06cb6d95e",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 77.29779411764706,
+            "teacher_kl": 0.185881820379519
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.1447246233622232,
+            "next_token_accuracy_percent": 51.10906862745098,
+            "perplexity": 8.539689282549974,
+            "prediction_sha256": "48a341ddd1794f10a885ce956ab3910c06a8dcb8a19776b7915aaf16131f1e71",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 77.31004901960785,
+            "teacher_kl": 0.18249765860488992
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.115092656191657,
+            "next_token_accuracy_percent": 29.801623774509803,
+            "perplexity": 61.25788992259458,
+            "prediction_sha256": "7072ab60efd20938a2c59796f81c2bff00e39f9e7e23c07af083b2a2cf2b83e2",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 68.67647058823529,
+            "teacher_kl": 0.25524045129617057
+          }
+        }
+      },
+      "random_50000ppm": {
+        "apparent_sha256": "f70abd578fc6b719e8161cfffc60daf7091fcd86b75b598aa5288793d68ec9c8",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.1878806226393754,
+            "next_token_accuracy_percent": 50.614276960784316,
+            "perplexity": 8.91629607956,
+            "prediction_sha256": "5072bed175ef8df9ddd10835c743499a61c4dc87a12ad501d337accf4096e1ac",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 74.83149509803921,
+            "teacher_kl": 0.2374012173390856
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.2058797474780114,
+            "next_token_accuracy_percent": 50.18688725490196,
+            "perplexity": 9.0782346098138,
+            "prediction_sha256": "e4ec3579701a4effaac254ec2a7bb7520b8d96fc81b642e812b3c6081d162044",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 74.69362745098039,
+            "teacher_kl": 0.23126083324158114
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.1715430988984945,
+            "next_token_accuracy_percent": 29.278875612745097,
+            "perplexity": 64.81539153864775,
+            "prediction_sha256": "173e27d425e50d765b82c6b289d4c7746bba43922870e5620f63a9c8cae2fd5a",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 67.14805453431373,
+            "teacher_kl": 0.31072037079755
+          }
+        }
+      }
+    },
+    "deployment": {
+      "kind": "deployment",
+      "path": "checkpoints/deployment.pt",
+      "sha256": "6b09c6cc045705ebc6c0e07f113959a83aa6ce9091841955434007f8d9be98d9",
+      "size_bytes": 614696599
+    },
+    "hwa_arm": "standard_hwa_model",
+    "inputs": {
+      "device_data": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std3/runs/opt125m-cmo-l6-exp1g-std3/stages/shared/local/prepare/attempt-001/runs/20261011T172704.560084Z-f31142ba-1d10e5e5/checkpoints/cache.pt",
+        "role": "device_data",
+        "sha256": "b7438a37a18a0079dade05eda219d37f830fadd5dd33b01d24f05fd7b642b027"
+      },
+      "device_model": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std3/runs/opt125m-cmo-l6-exp1g-std3/stages/shared/local/devices/attempt-001/runs/20261011T172710.983686Z-c38a0362-bc018726/checkpoints/devices.pt",
+        "role": "device_model",
+        "sha256": "7bc1bd14e7e386a8de25295848727832076079565c7e8e3f7cf835c6e900f99b"
+      },
+      "teacher_weights": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "role": "teacher_weights",
+        "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9"
+      }
+    },
+    "mapping_sha256": "65ad76292f6ea876ade17217ef4e8dbb24f1cf13512e7a3a88cc42b60a766ccb",
+    "origin_host": "trex",
+    "origin_run": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std3/runs/opt125m-cmo-l6-exp1g-std3/stages/standard_hwa_model__271004/local/deploy__standard_hwa_model__271004/attempt-001/runs/20261011T173041.155247Z-89d07cb4-95fd7abf",
+    "run_files": {
+      "config.resolved.json": "d190ee6a0016316fa775ac0c036e0311340cb291c257dbc4989330bbccbbc8b2",
+      "result.json": "e5ff87738e4fd82fb98b4d4a8bc3539e23a896dcd36bdcb397d7b67e5eb728a8"
+    },
+    "source_sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028",
+    "tag": "std3"
+  },
+  "std9-271002": {
+    "array_seed": 271002,
+    "cases": {
+      "nominal": {
+        "apparent_sha256": "c5a91a6715e011fe02c52e32c5ca91f6fef6e11f160d6a6798b7674403d68f6d",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.9672302788379146,
+            "next_token_accuracy_percent": 54.14981617647059,
+            "perplexity": 7.150843192958367,
+            "prediction_sha256": "2d5340959b291261b8c58383ff83e23dafed741ac11ec2f5b9b201c8e5baec8c",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 90.7123161764706,
+            "teacher_kl": 0.0332240076918228
+          },
+          "transfer_generated": {
+            "cross_entropy": 1.9928248929042442,
+            "next_token_accuracy_percent": 53.74489379084967,
+            "perplexity": 7.336228578282787,
+            "prediction_sha256": "2d33db289020fec3bf26eade36354118a64ec8f75f640f91ce542c73c1119f4e",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 90.95588235294117,
+            "teacher_kl": 0.03163563151375141
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9352702748541737,
+            "next_token_accuracy_percent": 31.536841299019606,
+            "perplexity": 51.17597966810355,
+            "prediction_sha256": "049ef7f70cc7a36488dba5e81dd401afa0a1f2a7d4dd5f088bab46665a15f3be",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 83.80323223039215,
+            "teacher_kl": 0.0709351732450373
+          }
+        }
+      },
+      "random_10000ppm": {
+        "apparent_sha256": "2cc24f51bdfb941c758f7f84aebc780d747f79f96a582fe3aac361299ed1d54e",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.9849757129070806,
+            "next_token_accuracy_percent": 53.69485294117647,
+            "perplexity": 7.2788706007,
+            "prediction_sha256": "4cb2a01926de24a02b4afec9944371892e4688dde81957b512f30966a9a65fbd",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 87.98560049019608,
+            "teacher_kl": 0.05093105090599434
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0088288151360807,
+            "next_token_accuracy_percent": 53.439542483660134,
+            "perplexity": 7.454581539628815,
+            "prediction_sha256": "c47c4fde6931d6382adbb14be03f67b40b657f8f2e59ec3096c3be19671f71c3",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 88.21486928104575,
+            "teacher_kl": 0.04899744640767964
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9596002990124273,
+            "next_token_accuracy_percent": 31.366038602941178,
+            "perplexity": 52.4363628938678,
+            "prediction_sha256": "9bc4d6e0bdc8fbb716cbc1a3a8fcfd216ed235b77ee71d1ec15d2dcd32e34670",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 81.0845588235294,
+            "teacher_kl": 0.09493234259825127
+          }
+        }
+      },
+      "random_20000ppm": {
+        "apparent_sha256": "f8c2cce1b37c4a08b3a22220ab08439129ac5fe02e11bfc8c84fe17199dcb2a8",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.002417068855435,
+            "next_token_accuracy_percent": 53.44056372549019,
+            "perplexity": 7.406937557951663,
+            "prediction_sha256": "3a35ae6da9aac1e06558e9de96381c8b63be341902e3b98dc45f9ca6ef267767",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 85.67861519607843,
+            "teacher_kl": 0.06967358846290439
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.027503338358761,
+            "next_token_accuracy_percent": 53.16789215686274,
+            "perplexity": 7.595100272214143,
+            "prediction_sha256": "e4fb22a4d14d53f674083522d49c3d6196312427c96302dcd1e2cb770ed83e62",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 85.92116013071896,
+            "teacher_kl": 0.06779523371091856
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.973421845716589,
+            "next_token_accuracy_percent": 31.24923406862745,
+            "perplexity": 53.166146282376054,
+            "prediction_sha256": "6ef94c2c1e77f59c6d23689a8877c2ea15b6242318c0d3387122bf8dc8cf6d62",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 79.00773590686275,
+            "teacher_kl": 0.11915841000337227
+          }
+        }
+      },
+      "random_30000ppm": {
+        "apparent_sha256": "f1065504c9d1f9fd7a4b29268037cab4de3db1e7325399526cf023ce7b6ae216",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.025488722558115,
+            "next_token_accuracy_percent": 52.947303921568626,
+            "perplexity": 7.579814465881744,
+            "prediction_sha256": "489af7ee6706ddcccbc0e932b1ab3353c73d5e3b9c47a7508c6f41cc80c2bab5",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 83.56158088235294,
+            "teacher_kl": 0.09079880229398316
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0488288692399568,
+            "next_token_accuracy_percent": 52.688929738562095,
+            "perplexity": 7.7588092033229925,
+            "prediction_sha256": "94c3ce0e80785badbcc42756bc619718e14046ab8ca869270de1ffb0db978e4d",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 83.8827614379085,
+            "teacher_kl": 0.0878686770894169
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.004300704656862,
+            "next_token_accuracy_percent": 30.80154718137255,
+            "perplexity": 54.833466201216055,
+            "prediction_sha256": "db0acacffa00073696c3aa55444ae672dbfbd0c398a7e5dae0525c318a06720b",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 76.22510723039215,
+            "teacher_kl": 0.14823799732269025
+          }
+        }
+      },
+      "random_40000ppm": {
+        "apparent_sha256": "4743aa3172b475683b4d62480f292024bc972c473a92c8afaf9cbb43cf7f31af",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.047356123082778,
+            "next_token_accuracy_percent": 52.791053921568626,
+            "perplexity": 7.747390857111116,
+            "prediction_sha256": "64aec8e3af9e7d63de22822065921e1a3e6cafb57ba82f15d06e2e2623aacb61",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 82.30545343137256,
+            "teacher_kl": 0.11374222566099727
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0697576822019093,
+            "next_token_accuracy_percent": 52.42749183006536,
+            "perplexity": 7.922903024807066,
+            "prediction_sha256": "bf7910801e02f3b679bec9c65f01b00cea08d4269db8cec13d9a02ea6acefe34",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 82.18954248366013,
+            "teacher_kl": 0.10959109099082698
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.027428106233185,
+            "next_token_accuracy_percent": 30.35998774509804,
+            "perplexity": 56.11640007352676,
+            "prediction_sha256": "0f1d9ce0b66c423f88911feb40c7f71963e631ce6d6631f1613da131418718a5",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 74.05905330882354,
+            "teacher_kl": 0.1777694431590099
+          }
+        }
+      },
+      "random_50000ppm": {
+        "apparent_sha256": "b577154381532d38c1fe4b826ace0ebf9f92c87d84eaacfd2580963dbfcb898f",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.07589225582048,
+            "next_token_accuracy_percent": 52.2671568627451,
+            "perplexity": 7.971656043282619,
+            "prediction_sha256": "ae77b5ec4d0a8419bef5b79f19a014cde6a7fb15afc8dbfbd838c4292c211738",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 80.34926470588235,
+            "teacher_kl": 0.1382399979759665
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0983949561524233,
+            "next_token_accuracy_percent": 51.834150326797385,
+            "perplexity": 8.153073364869444,
+            "prediction_sha256": "f7381f5d9b7e994fd15bdf50dfb2e3f1a818653bf2d5ef3d5bfd9b9dacb386df",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 80.421772875817,
+            "teacher_kl": 0.133319379691205
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.073404852549235,
+            "next_token_accuracy_percent": 30.008042279411764,
+            "perplexity": 58.756680226853895,
+            "prediction_sha256": "30ffae7c756a4f3399d1360a939c08381878665b6a95702477f6d308a48d2d92",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 72.56548713235294,
+            "teacher_kl": 0.20852006603689754
+          }
+        }
+      }
+    },
+    "deployment": {
+      "kind": "deployment",
+      "path": "checkpoints/deployment.pt",
+      "sha256": "81a3cb730223c656373e001cf56bae8f34e27291640b5f57d23e886a1ba63c83",
+      "size_bytes": 614696599
+    },
+    "hwa_arm": "standard_hwa_9pct_model",
+    "inputs": {
+      "device_data": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std9/runs/opt125m-cmo-l6-exp1g-std9--5afac01e2846/stages/shared/local/prepare/attempt-001/runs/20261011T171309.962338Z-49930b63-eea14210/checkpoints/cache.pt",
+        "role": "device_data",
+        "sha256": "2d4521bd4b04f2b2a80089f70c99716ff32f52851f801b4a7de1b6ca7e5516a6"
+      },
+      "device_model": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std9/runs/opt125m-cmo-l6-exp1g-std9--5afac01e2846/stages/shared/local/devices/attempt-001/runs/20261011T171315.276503Z-f4d2988c-c4d98b4b/checkpoints/devices.pt",
+        "role": "device_model",
+        "sha256": "a5ca28852cc1e628ec1d00b9116cc4cbf7becfa5d3875c51ff4e2376578427c2"
+      },
+      "teacher_weights": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "role": "teacher_weights",
+        "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9"
+      }
+    },
+    "mapping_sha256": "65ad76292f6ea876ade17217ef4e8dbb24f1cf13512e7a3a88cc42b60a766ccb",
+    "origin_host": "loulou",
+    "origin_run": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std9/runs/opt125m-cmo-l6-exp1g-std9--5afac01e2846/stages/standard_hwa_9pct_model__271002/local/deploy__standard_hwa_9pct_model__271002/attempt-001/runs/20261011T185558.041713Z-1767c10b-6b18844d",
+    "run_files": {
+      "config.resolved.json": "8b2715a7f5188c38aa08d24257ac5ff5987134571758d206961461e47ae11273",
+      "result.json": "ca41f299d692800f5e5c30f8bea0fcf1228ca51decb8ca57b1cba9bcffabc1bd"
+    },
+    "source_sha256": "b5837bd8256c448289c74695e8d992c9116e9b06c2bc25f202ec150d689c814e",
+    "tag": "std9"
+  },
+  "std9-271003": {
+    "array_seed": 271003,
+    "cases": {
+      "nominal": {
+        "apparent_sha256": "36d03450ccef876eb1a6d75a029f8090a6893099599ea9ad64bba63f5f2e1a0c",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.967930300095502,
+            "next_token_accuracy_percent": 54.19117647058823,
+            "perplexity": 7.1558506876750005,
+            "prediction_sha256": "b74d480fa520100e6a79743dea77323a346745400304da34448b5272b377f39f",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 90.77512254901961,
+            "teacher_kl": 0.03320841166902991
+          },
+          "transfer_generated": {
+            "cross_entropy": 1.9936230653251699,
+            "next_token_accuracy_percent": 53.67544934640523,
+            "perplexity": 7.342086491108814,
+            "prediction_sha256": "ca985b0e29b4780c84c90f9a911fa98de1bc46cc16459c392c418bddaad5df24",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 90.91809640522875,
+            "teacher_kl": 0.03162789948625502
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9335715770721436,
+            "next_token_accuracy_percent": 31.564031862745097,
+            "perplexity": 51.08912093919963,
+            "prediction_sha256": "d7bba1931d59be61b4fdf00c098005a6949cc52ce878f6a5ecfaf4fcfd9dc05e",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 83.89973958333333,
+            "teacher_kl": 0.07087440268666137
+          }
+        }
+      },
+      "random_10000ppm": {
+        "apparent_sha256": "02194e37bd704ae08ce35af7f98bfaae628b885875a651fbfd6b5509c06d8377",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.9871190650790345,
+            "next_token_accuracy_percent": 53.86335784313726,
+            "perplexity": 7.294488515177836,
+            "prediction_sha256": "6a326d8985959a77d100319b6710c9006af26ddffe12267532fbe9f8855423aa",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 87.90287990196079,
+            "teacher_kl": 0.05083692085509207
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0123420067082822,
+            "next_token_accuracy_percent": 53.385416666666664,
+            "perplexity": 7.480816970731588,
+            "prediction_sha256": "aa0c303b71179d476d64b595ad606951a94945bb16edc0b028d947eec269f505",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 87.92585784313725,
+            "teacher_kl": 0.04910524736822041
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.954591530444575,
+            "next_token_accuracy_percent": 31.343060661764707,
+            "perplexity": 52.174377946295614,
+            "prediction_sha256": "9ad151a8cb05c4b0c8ca542ab2166a1960691389ec6884d66d178a864a9e2b60",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 81.2335324754902,
+            "teacher_kl": 0.09493514226347792
+          }
+        }
+      },
+      "random_20000ppm": {
+        "apparent_sha256": "fbca73e303cb1191548db4fce1705f52107bed60f1276bfd2954afa09289a507",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.006032491197773,
+            "next_token_accuracy_percent": 53.56158088235294,
+            "perplexity": 7.4337652329521156,
+            "prediction_sha256": "fb0ba244286ea85bdfb9b0bd750539d5f4537aaf079a54f636c47c814e782790",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 85.79503676470588,
+            "teacher_kl": 0.07036811335414064
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.032629292930653,
+            "next_token_accuracy_percent": 53.12397875816993,
+            "perplexity": 7.6341323640780345,
+            "prediction_sha256": "255526e78ecc63c352e2bd88376af3466e04ed7341524c1ec765957e0a5d489d",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 85.84558823529412,
+            "teacher_kl": 0.06842251478456983
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9664634798087324,
+            "next_token_accuracy_percent": 31.30782781862745,
+            "perplexity": 52.79748092439024,
+            "prediction_sha256": "82d286b3981b17bf6a96abac6415a1525a641cb15e55029b0e771e3555d93675",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 78.94492953431373,
+            "teacher_kl": 0.11945061452832877
+          }
+        }
+      },
+      "random_30000ppm": {
+        "apparent_sha256": "390b1787256f50a63fd05ad58716ec01ef72c48a2d3fc0457e3168a610b14a76",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.026652027578915,
+            "next_token_accuracy_percent": 53.020833333333336,
+            "perplexity": 7.588637232896248,
+            "prediction_sha256": "5a3f7dba5cf5708ce3bea31c8378c642b6b358620fbeea6376d8b1339583290d",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 83.75612745098039,
+            "teacher_kl": 0.09111294448375702
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.050247263440899,
+            "next_token_accuracy_percent": 52.748161764705884,
+            "perplexity": 7.769822061744119,
+            "prediction_sha256": "63570b65d3394ec5639045d6efa74aedb6e2703a4c19d20745b2d418c77412e6",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 83.9031862745098,
+            "teacher_kl": 0.08806956028626635
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.005707013373281,
+            "next_token_accuracy_percent": 30.721124387254903,
+            "perplexity": 54.9106332303013,
+            "prediction_sha256": "a364fd0295ffba64d784d519f35fc6e1cd47003cd2fc1cc9748562ab9f202851",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 76.66130514705883,
+            "teacher_kl": 0.14769991566153134
+          }
+        }
+      },
+      "random_40000ppm": {
+        "apparent_sha256": "82792b1994fde52b5d93aeb4f7f6021ca63f4419580afd31257afccb1786444f",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.047895097732544,
+            "next_token_accuracy_percent": 52.75122549019608,
+            "perplexity": 7.751567629871134,
+            "prediction_sha256": "bfb24610d903493115b95a662aca8d80c8c218f052af402924eb52cb2d36ce49",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 82.11397058823529,
+            "teacher_kl": 0.11306998472587736
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.069553501154083,
+            "next_token_accuracy_percent": 52.40298202614379,
+            "perplexity": 7.921285483306915,
+            "prediction_sha256": "9ca38d3982ae5b7d11eb766d0d9a9f5c0b394eb06a35ef6e80e1ebd9e36ba44e",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 82.22222222222223,
+            "teacher_kl": 0.10881442026375165
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.035476708879658,
+            "next_token_accuracy_percent": 30.47717524509804,
+            "perplexity": 56.569881176231064,
+            "prediction_sha256": "49cb15d5bd7aa649c39d441e639d224b32cd0159a203f76e037374f77c85dd2f",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 74.33478860294117,
+            "teacher_kl": 0.17668095751135957
+          }
+        }
+      },
+      "random_50000ppm": {
+        "apparent_sha256": "433f6b625f50ab03db71bd44b8994ca257af28603dbdbd2ccd4343198c549a23",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0784369478038713,
+            "next_token_accuracy_percent": 52.090992647058826,
+            "perplexity": 7.991967284476252,
+            "prediction_sha256": "cf4cac7f24c7ee8e1a9c854bda4396af03cec5cd402155ee7074cc8600446ae5",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 80.53155637254902,
+            "teacher_kl": 0.13823571520693162
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.094849016152176,
+            "next_token_accuracy_percent": 52.045547385620914,
+            "perplexity": 8.12421425247929,
+            "prediction_sha256": "926373033e1d6a2dab803816eaeebb603772c64c788a3d162fe38f4777e39bb2",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 80.80678104575163,
+            "teacher_kl": 0.13312065055946898
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.055313350640091,
+            "next_token_accuracy_percent": 30.635340073529413,
+            "perplexity": 57.70324151122089,
+            "prediction_sha256": "e91ed66abf1130d7c3fdc694695e13e932beca52c3285b7fc6b1947ce9fabafa",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 72.98598345588235,
+            "teacher_kl": 0.20759088712580065
+          }
+        }
+      }
+    },
+    "deployment": {
+      "kind": "deployment",
+      "path": "checkpoints/deployment.pt",
+      "sha256": "87b19ad8e19e7235fde688f9fff8501dcc6a74b64a3ad2a98220c022283ad39d",
+      "size_bytes": 614696599
+    },
+    "hwa_arm": "standard_hwa_9pct_model",
+    "inputs": {
+      "device_data": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std9/runs/opt125m-cmo-l6-exp1g-std9--5afac01e2846/stages/shared/local/prepare/attempt-001/runs/20261011T171309.962338Z-49930b63-eea14210/checkpoints/cache.pt",
+        "role": "device_data",
+        "sha256": "2d4521bd4b04f2b2a80089f70c99716ff32f52851f801b4a7de1b6ca7e5516a6"
+      },
+      "device_model": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std9/runs/opt125m-cmo-l6-exp1g-std9--5afac01e2846/stages/shared/local/devices/attempt-001/runs/20261011T171315.276503Z-f4d2988c-c4d98b4b/checkpoints/devices.pt",
+        "role": "device_model",
+        "sha256": "a5ca28852cc1e628ec1d00b9116cc4cbf7becfa5d3875c51ff4e2376578427c2"
+      },
+      "teacher_weights": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "role": "teacher_weights",
+        "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9"
+      }
+    },
+    "mapping_sha256": "65ad76292f6ea876ade17217ef4e8dbb24f1cf13512e7a3a88cc42b60a766ccb",
+    "origin_host": "loulou",
+    "origin_run": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std9/runs/opt125m-cmo-l6-exp1g-std9--5afac01e2846/stages/standard_hwa_9pct_model__271003/local/deploy__standard_hwa_9pct_model__271003/attempt-001/runs/20261011T185700.972284Z-315b1212-b2c69151",
+    "run_files": {
+      "config.resolved.json": "804e3b0126dbce21db67f00d1d282542b87b2b948783865a7b85bacfbea613a0",
+      "result.json": "89cce582dc78fa1cf81905e54953ce409bef4011aae581275d1b76843eae640e"
+    },
+    "source_sha256": "b5837bd8256c448289c74695e8d992c9116e9b06c2bc25f202ec150d689c814e",
+    "tag": "std9"
+  },
+  "std9-271004": {
+    "array_seed": 271004,
+    "cases": {
+      "nominal": {
+        "apparent_sha256": "de19b1a8b814bb641380e8127c9c972718f77dd05003d7064e61184ec9164474",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.9671281281639548,
+            "next_token_accuracy_percent": 54.11764705882353,
+            "perplexity": 7.150112766814221,
+            "prediction_sha256": "cc37550424578422aa617cfd36ee2eb50482b2b68dcb31019ccb9c588384bbc8",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 90.67095588235294,
+            "teacher_kl": 0.033269489045236626
+          },
+          "transfer_generated": {
+            "cross_entropy": 1.9925706495646558,
+            "next_token_accuracy_percent": 53.75510620915033,
+            "perplexity": 7.334363628114686,
+            "prediction_sha256": "d33dc2cee0d6e31e76157215087cdd2cd24657a87a70aa783d8e0e45bfea7637",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 90.97426470588235,
+            "teacher_kl": 0.031692188530186426
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.934610820284077,
+            "next_token_accuracy_percent": 31.597732843137255,
+            "perplexity": 51.14224255970003,
+            "prediction_sha256": "5190091e3bfeeac667a81d01a9f01bf7c26a0c9fc8a97c46fd988e6ab24e392c",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 83.93956801470588,
+            "teacher_kl": 0.0705824787125868
+          }
+        }
+      },
+      "random_10000ppm": {
+        "apparent_sha256": "d4927dd7cf3000369b80329eae002383dab2e6467d0ac0ceb918ce52e75702fb",
+        "initial": {
+          "development": {
+            "cross_entropy": 1.9844006211149927,
+            "next_token_accuracy_percent": 53.779105392156865,
+            "perplexity": 7.274685785403669,
+            "prediction_sha256": "7ecd3a41c3e46cdb21171b06d5d20e8b9b356ad77c9e84f9ef502afb4ca2e3cc",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 87.99325980392157,
+            "teacher_kl": 0.05115031459752251
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.008709161421832,
+            "next_token_accuracy_percent": 53.42524509803921,
+            "perplexity": 7.4536896246209645,
+            "prediction_sha256": "fd20487c41a4ff4eef74c0c2363d2041c77044dc8677ad12f88bb460de4fb427",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 88.16482843137256,
+            "teacher_kl": 0.04941192148557676
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.956158671659582,
+            "next_token_accuracy_percent": 31.370251225490197,
+            "perplexity": 52.2562066661752,
+            "prediction_sha256": "b62c5d3cd24fa0db19b0e2df45b5bbb5bfe421cca92d0b48aa0249e408f2ffa9",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 81.15732230392157,
+            "teacher_kl": 0.09404619280614104
+          }
+        }
+      },
+      "random_20000ppm": {
+        "apparent_sha256": "8dd245dd208596b2da8ccc73a9e34c8ede60782ec54e969e439bc43d75040f1c",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.007875774420944,
+            "next_token_accuracy_percent": 53.4390318627451,
+            "perplexity": 7.447480404280287,
+            "prediction_sha256": "4cb9c875a16af38a37e86bacf648e842d5077dc73553207f673eff1ed802a29d",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 85.88082107843137,
+            "teacher_kl": 0.06995806249917723
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0307520822761886,
+            "next_token_accuracy_percent": 53.15665849673203,
+            "perplexity": 7.61981493208899,
+            "prediction_sha256": "f40c6adfa0184913a5b5eea4ce188939ac3713bd76e243fab6a73ed950b034a9",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 85.95588235294117,
+            "teacher_kl": 0.06754287968274035
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 3.9805683781118955,
+            "next_token_accuracy_percent": 31.131280637254903,
+            "perplexity": 53.547460784435,
+            "prediction_sha256": "96b12ee948ced869d5f7028df1889d38194ca07a269e4b8f194985e35ecab2d2",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 79.04220281862744,
+            "teacher_kl": 0.1192697514798127
+          }
+        }
+      },
+      "random_30000ppm": {
+        "apparent_sha256": "0e6aaf0550b5348b58256ffb9e44192786c6554dbf5f7f96e8b39100d70f67ef",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0225590172935934,
+            "next_token_accuracy_percent": 53.05912990196079,
+            "perplexity": 7.55764034122219,
+            "prediction_sha256": "da0eac0e5cb460f784336429694c1e7fc3e4e309d30e7fc04447455c78b49cb3",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 83.88327205882354,
+            "teacher_kl": 0.09081563406130846
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0463191163306145,
+            "next_token_accuracy_percent": 52.66952614379085,
+            "perplexity": 7.739360924747286,
+            "prediction_sha256": "9da562ea1c8cc57ff4f827f9f7485168c53b1d776646a4be777ebc4d1eee1e02",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 83.95526960784314,
+            "teacher_kl": 0.08775637134227877
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.001551401848887,
+            "next_token_accuracy_percent": 30.846737132352942,
+            "perplexity": 54.6829194427586,
+            "prediction_sha256": "234fea14afc6f59c97d9385d4ac5c5758090c1d651693ad8328a166045ddffc8",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 76.41084558823529,
+            "teacher_kl": 0.14707815261448132
+          }
+        }
+      },
+      "random_40000ppm": {
+        "apparent_sha256": "cefa28b8984c31c7df311837ba89f498dde87fcd17cc7f497d03901e86b689ec",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0475441670885273,
+            "next_token_accuracy_percent": 52.59497549019608,
+            "perplexity": 7.748847844506572,
+            "prediction_sha256": "0e528662f1afe0425db4e770c88fbe4391148723f349d855d296a51a002b9fc3",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 82.1844362745098,
+            "teacher_kl": 0.11310780060057547
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0701578819673827,
+            "next_token_accuracy_percent": 52.28962418300654,
+            "perplexity": 7.926074403289598,
+            "prediction_sha256": "6b7ce6c347332e41fb9ad33dc30104a0e6cd9953ab8476170027b548166cbc72",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 82.26205065359477,
+            "teacher_kl": 0.11006342133665396
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.044731828278186,
+            "next_token_accuracy_percent": 30.338924632352942,
+            "perplexity": 57.09587248247384,
+            "prediction_sha256": "fa459feabdaf9764c74bf1229e11ff7e0de734d8c940782f0c50097a90db0248",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 73.62630208333333,
+            "teacher_kl": 0.17847768927321714
+          }
+        }
+      },
+      "random_50000ppm": {
+        "apparent_sha256": "6064b4755787b3f6f59e8c5f32e05ef6828698c061f572e966766b31edb8c1e9",
+        "initial": {
+          "development": {
+            "cross_entropy": 2.0728154603172753,
+            "next_token_accuracy_percent": 52.4234068627451,
+            "perplexity": 7.947166581667707,
+            "prediction_sha256": "47c1dc6de8ee902fa1e5ffe7a5a32b9b96fdf2347e4eb53055adbf4dc3387794",
+            "scored_tokens": 65280,
+            "sequences": 256,
+            "teacher_agreement_percent": 80.55147058823529,
+            "teacher_kl": 0.13764585057894388
+          },
+          "transfer_generated": {
+            "cross_entropy": 2.0958240272172914,
+            "next_token_accuracy_percent": 51.94035947712418,
+            "perplexity": 8.132139314154411,
+            "prediction_sha256": "01e9c200196f2b065bcb53443f2429b3428b3a4c8f6bd6f8f8466c440ad2f2b3",
+            "scored_tokens": 97920,
+            "sequences": 384,
+            "teacher_agreement_percent": 80.65053104575163,
+            "teacher_kl": 0.1328105689653384
+          },
+          "transfer_wikitext": {
+            "cross_entropy": 4.057864505169438,
+            "next_token_accuracy_percent": 30.333563112745097,
+            "perplexity": 57.85063933452899,
+            "prediction_sha256": "b346b6485539e6275160bf1d8ec9734c3efc55527b53ba2a635dad229045d454",
+            "scored_tokens": 261120,
+            "sequences": 1024,
+            "teacher_agreement_percent": 72.81901041666667,
+            "teacher_kl": 0.20480693526127758
+          }
+        }
+      }
+    },
+    "deployment": {
+      "kind": "deployment",
+      "path": "checkpoints/deployment.pt",
+      "sha256": "d713ec014765c0d606f8c07c8d445d91c6ae8d0a394595d980ea4f47529e7f2d",
+      "size_bytes": 614696599
+    },
+    "hwa_arm": "standard_hwa_9pct_model",
+    "inputs": {
+      "device_data": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std9/runs/opt125m-cmo-l6-exp1g-std9--5afac01e2846/stages/shared/local/prepare/attempt-001/runs/20261011T171309.962338Z-49930b63-eea14210/checkpoints/cache.pt",
+        "role": "device_data",
+        "sha256": "2d4521bd4b04f2b2a80089f70c99716ff32f52851f801b4a7de1b6ca7e5516a6"
+      },
+      "device_model": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std9/runs/opt125m-cmo-l6-exp1g-std9--5afac01e2846/stages/shared/local/devices/attempt-001/runs/20261011T171315.276503Z-f4d2988c-c4d98b4b/checkpoints/devices.pt",
+        "role": "device_model",
+        "sha256": "a5ca28852cc1e628ec1d00b9116cc4cbf7becfa5d3875c51ff4e2376578427c2"
+      },
+      "teacher_weights": {
+        "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "role": "teacher_weights",
+        "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9"
+      }
+    },
+    "mapping_sha256": "65ad76292f6ea876ade17217ef4e8dbb24f1cf13512e7a3a88cc42b60a766ccb",
+    "origin_host": "loulou",
+    "origin_run": "/home/filip/analog-research/opt-cmo-exp1/hwa-exp1g-four-arm-20261011/results/lifecycles/opt125m-cmo-l6-exp1g-std9/runs/opt125m-cmo-l6-exp1g-std9--5afac01e2846/stages/standard_hwa_9pct_model__271004/local/deploy__standard_hwa_9pct_model__271004/attempt-001/runs/20261011T185804.035954Z-1d8d635e-955b61da",
+    "run_files": {
+      "config.resolved.json": "7963b7ca9843b329a86748c3cd6bdab403e901889e6aa6204b7115601237f17f",
+      "result.json": "2c34a5b0588355ee6ccf56725d9e320a5b8d3a20664bb65e043fe81feb8d5563"
+    },
+    "source_sha256": "b5837bd8256c448289c74695e8d992c9116e9b06c2bc25f202ec150d689c814e",
+    "tag": "std9"
+  }
+}
