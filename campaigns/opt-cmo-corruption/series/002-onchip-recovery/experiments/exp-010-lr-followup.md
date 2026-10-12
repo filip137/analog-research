@@ -1,7 +1,7 @@
 ---
 id: "exp-010"
 title: "Development-triggered LR follow-up for dense recovery and LoRA"
-status: "planned"
+status: "running"
 hypotheses: []
 ---
 # exp-010: bounded LR follow-up
@@ -25,7 +25,8 @@ not a new confirmatory comparison or independent-array replicate.
 Retain the exact standard 3% Gaussian HWA source, held deployment P0, permanent
 3% random faults, assignment 271001, final six OPT-125M MLPs (layers 6–11,
 28,311,552 logical weights), teacher, objective, tokenization, batch size 32,
-initialization/shuffle seed 53, optimizer, update law and all evaluation cohorts.
+on-chip/adapter seed 53, data seed 20261008 and its existing epoch shuffle,
+optimizer, update law and all evaluation cohorts.
 Use the explicit portable P0 already validated in exp-009; its original parent
 SHA-256 is `f80a9447469697cf9e4ff657cb17545d2824e60ae4f12d4694f01f3e4ebaf873`.
 Every fit restarts from P0 with fresh optimizer state. No mid-run LR changes,
@@ -95,3 +96,36 @@ The shared service polls semantic progress every five minutes, invokes bounded
 read-only investigators for anomalies, validates native artifacts and collects
 reports. Preparation and first live observation must be recorded before calling
 the handoff armed.
+
+All ten dense native plans and dry-runs passed on loulou at source
+`4e2ddc74011676556ba315c8790b723e91f1e90d`. The local dense collection controller
+uses that same source. Root and deployed LoRA decision/replay checks passed
+(11 tests); its completion controller is `93f8bdf`. The policy was exercised on
+the completed rank-4 endpoint and correctly requested no follow-up.
+
+The dense manifest SHA-256 is
+`da3876f7a6af01f9bbaa70acc82f8ed47ac2a0cc6430fe01ff150b690e9b7c6b`.
+Five development jobs were released; all five full candidates remain held.
+Native validation and full-coverage development selection gate their release.
+The prepared source and receipt trees plus local collection root are included in
+storage accounting (0.433 GB before execution). A controller-storage amendment
+initially rejected the local collector of this remote-only campaign; the tested
+client fix at `8fa415c` admits only the prepared controller directory or its
+immediate evidence parent, without adding any GPU placement. Dispatcher and
+decision regression checks pass 145 tests. Submission and storage receipts are
+in `readiness/submission.json` and `readiness/storage-preflight.json`.
+
+The first dense screen, LR 1e-2, started on loulou in attempt
+`31cec0bd192641c8b9617fa50c33f413`. The immediate live probe confirmed both tmux
+processes and finite training loss at update 200/256; receipt:
+`readiness/first-live-probe.json`. The other four development jobs wait for that
+same GPU. The existing `run-watch-queue.service` remains their sole dispatcher
+and monitor; the local completion controller collects each validated endpoint
+and evaluates the full-fit selection gate only after all five screens finish.
+
+That first screen subsequently completed, including native validation and
+automatic compact collection, charging 96.42 GPU-seconds. The unattended handoff
+passed with the shared service's fresh heartbeat, both active LoRA jobs observed,
+the remaining four dense screens queued, and all five dense full-fit candidates
+still held. Receipt: `readiness/unattended-handoff.json`. Original execution
+history, charged budgets and both LR-selection policies are preserved.
