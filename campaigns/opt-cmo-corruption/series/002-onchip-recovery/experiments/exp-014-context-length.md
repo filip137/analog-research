@@ -319,9 +319,13 @@ on execution hosts, memory probes or independent-array scientific evidence.
 
 ## Current execution handoff
 
-October 12, 21:13 Paris: readiness passed and all 15 screen jobs were released.
-The context-64/cap-2 screen is running on trex; 14 screens are queued and all
-45 confirmation candidates remain held. `recovery_views` binds matched parent windows, common loss masks
+October 12, 22:12 Paris: ten of 15 screen jobs are complete and validated,
+covering every context under caps two and four. Five uncapped screens remain
+queued for loulou, which is finishing the earlier exp-013 study. Trex has
+completed all ten of its prepared placements. All 45 confirmation candidates
+remain held; automatic selection waits for the complete 15-fit screen. The
+[partial result](../results/exp-014.md) records the within-assignment finding
+and remaining confirmation requirement. `recovery_views` binds matched parent windows, common loss masks
 and fixed evaluation contexts to cache provenance without changing source/P0
 identity. `onchip.case_labels` selects the 3% case from existing multi-case P0
 bundles for confirmation. Effective batches accumulate gradients in 2,048-input-
@@ -395,11 +399,13 @@ Execution handles and evidence:
   `collected/`, writes per-fit `reviews/`, applies development-only selection,
   and releases only selected confirmation cases. Final states remain remote.
 
-The next scheduled campaign check is approximately 21:17 Paris. Each main
+Last queue/service observation was approximately 22:11 Paris; the next
+scheduled campaign check is approximately 22:16 Paris. Each main
 worker has a 660-second hard timeout and 720-second reservation; native
 evaluation precedes learning, so early progress is the held-P0 cohort before
 batch/development metrics. Expected full-fit runtime is below six minutes.
-Readiness charged 281.64 GPU-seconds; main limits remain 5,400 screen seconds
+Readiness plus ten screens charged 2,454.21 GPU-seconds (0.682 GPU-hours).
+Readiness alone charged 281.64 seconds; main limits remain 5,400 screen seconds
 and 10,800 confirmation seconds, with no reset of the absolute deadline.
 
 Operational anomalies are recorded by the service and diagnosed by its bounded
