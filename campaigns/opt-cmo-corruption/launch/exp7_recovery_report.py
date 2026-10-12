@@ -12,6 +12,21 @@ CAPS = ('cap2', 'cap4', 'uncapped')
 LOGICAL_WEIGHTS = 28_311_552
 
 
+def write_statistics(cost):
+    # Uncapped native writers retain successful writes and stuck attempts but
+    # do not allocate the capped writer's per-device attempted-write counters.
+    total = cost['device_writes'] + cost['stuck_write_attempts']
+    if cost.get('issued_write_attempts', total) != total:
+        raise ValueError('Issued attempts disagree with successful and stuck writes')
+    return {
+        'attempts_per_active_cell': total/LOGICAL_WEIGHTS,
+        'writes_per_active_cell': cost['device_writes']/LOGICAL_WEIGHTS,
+        'maximum_attempts_per_active_cell': cost.get('max_onchip_device_write_attempts'),
+        'maximum_writes_per_active_cell': cost['max_onchip_device_writes'],
+        'attempt_total_source': 'recorded' if 'issued_write_attempts' in cost else 'successful_plus_stuck',
+    }
+
+
 def render(summary, output: Path):
     import matplotlib
     matplotlib.use('Agg')
@@ -32,9 +47,7 @@ def render(summary, output: Path):
                 'kl_reduction': effect['kl_reduction'],
                 'retained_gain': row['retained_gain'][split],
                 'gain_over_best_hwa_only': row['vs_best_hwa_only'][split]['kl_reduction'],
-                'attempts_per_active_cell': row['cost']['issued_write_attempts']/LOGICAL_WEIGHTS,
-                'writes_per_active_cell': row['cost']['device_writes']/LOGICAL_WEIGHTS,
-                'maximum_attempts_per_active_cell': row['cost']['max_onchip_device_write_attempts'],
+                **write_statistics(row['cost']),
             })
     fields = ('deployment_kl', 'recovered_kl', 'kl_reduction', 'retained_gain',
               'gain_over_best_hwa_only', 'attempts_per_active_cell', 'writes_per_active_cell')

@@ -99,3 +99,16 @@ def test_preparation_dependency_and_handoff_gate():
         if label not in pilot.CANARIES:
             assert case['required_gates']==['handoff']
             assert all(pilot.PREFIX+'-'+c in case['dependencies'] for c in pilot.CANARIES)
+
+
+def test_uncapped_native_write_statistics_preserve_unrecorded_maximum():
+    from exp7_recovery_report import write_statistics, LOGICAL_WEIGHTS
+    # Actual uncapped writer schema: no issued total or per-device attempt max.
+    cost={'device_writes':45917749,'stuck_write_attempts':1724555,'max_onchip_device_writes':11}
+    out=write_statistics(cost)
+    assert out['attempts_per_active_cell']==47642304/LOGICAL_WEIGHTS
+    assert out['maximum_attempts_per_active_cell'] is None
+    assert out['maximum_writes_per_active_cell']==11
+    assert out['attempt_total_source']=='successful_plus_stuck'
+    with pytest.raises(ValueError,match='Issued attempts'):
+        write_statistics({**cost,'issued_write_attempts':45917749})
