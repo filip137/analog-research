@@ -111,6 +111,28 @@ accounting. Final plots show recovery versus corruption and writes by source.
 
 ## Current execution handoff
 
+**October 12, 20:24 Europe/Paris:** eight jobs / 48 endpoints have completed
+collection and validation; three jobs are running and 16 queued. All initial
+gates passed automatically. The [partial result](../results/exp-013.md) records
+the first matched comparisons. Native elapsed times are about 9.4 minutes on
+the 5090 and 23–25 minutes on the 3090s; allow another 2–3 hours including queue
+turnover and collection. This remains an estimate.
+
+All remaining inputs have reached nom-cool-1. Fourteen still-unstarted jobs
+received validated additional placements through amendment
+`942471495d9283ee852e4ebac22d6fce33e4f539765dc167b9029d1998a79edd`;
+their identities, scientific inputs and original budgets are unchanged. The CPU
+controller advanced to `7bf27fd2579e019930425c23644f2e5c12b6cbfc` for a report-only
+fix: uncapped native bundles record successful and stuck writes separately, but
+omit the cap controller's attempted-write counters. Total attempts are their
+sum; the unrecorded per-cell attempt maximum remains null, and the recorded
+maximum successful writes is retained. Eleven focused tests and a full synthetic
+figure render passed. GPU worker revision remains `9adbd20` and all running
+workers survived the brief controller maintenance. Evidence is in
+`readiness/reporting-and-placement-update.json`.
+
+The initial launch handoff follows as execution history.
+
 **October 12, 19:12 Europe/Paris:** all 27 jobs are registered; the three initial
 cap-4 jobs are running, and the other 24 remain held behind their validation gate.
 The existing service has observed all three live workers and native semantic
