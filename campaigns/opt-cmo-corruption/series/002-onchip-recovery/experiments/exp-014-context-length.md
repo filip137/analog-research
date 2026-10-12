@@ -1,7 +1,7 @@
 ---
 id: "exp-014"
 title: "Recovery context length after frozen HWA at matched tokens and updates"
-status: "ready"
+status: "running"
 hypotheses: []
 ---
 # exp-014: context length for recovery after HWA
@@ -217,10 +217,12 @@ SHA-256 `8068397182b3ffe3b0a92298fb36d0205d2e717c420abacb0c061e975c523e4f`,
 parent P0 `f80a9447469697cf9e4ff657cb17545d2824e60ae4f12d4694f01f3e4ebaf873`,
 held apparent-state hash
 `34578c8c1f1a87bcd38597d7808e34eb4f0859a77af0a41183986f454a583db6`.
-These are read from earlier receipts, not newly verified remote artifacts.
-Codifier must pin and validate the three confirmation P0 bundles before launch.
+All four original deployment, device-model and teacher hashes were verified
+on loulou before launch; the copied Stage A deployment and device model were
+also verified on trex. Host preparation checked lifecycle provenance against
+the new pinned caches for every placement.
 
-**Implemented shared data/metric extension; GPU readiness pending.** The current
+**Implemented shared data/metric extension; GPU readiness passed.** The original
 `data.sequence_length` controls HWA, recovery and all evaluation cohorts together.
 `build_cache` independently shuffles blocks at each length, and both HWA-source
 and deployment provenance include `data`. Editing that field would therefore
@@ -317,8 +319,9 @@ on execution hosts, memory probes or independent-array scientific evidence.
 
 ## Current execution handoff
 
-October 12: user authorized launch; implementation and CPU checks complete, GPU
-readiness pending. `recovery_views` binds matched parent windows, common loss masks
+October 12, 21:13 Paris: readiness passed and all 15 screen jobs were released.
+The context-64/cap-2 screen is running on trex; 14 screens are queued and all
+45 confirmation candidates remain held. `recovery_views` binds matched parent windows, common loss masks
 and fixed evaluation contexts to cache provenance without changing source/P0
 identity. `onchip.case_labels` selects the 3% case from existing multi-case P0
 bundles for confirmation. Effective batches accumulate gradients in 2,048-input-
@@ -357,3 +360,51 @@ release, collection measures trex's completed storage and requires at most
 35 GB; another 5 GB is reserved for staging archives and prior worker receipts.
 These reservations preserve the original aggregate 120 GB cap. A regression
 check requires every monitored remote root to have a prepared placement.
+
+The [readiness result](../results/exp-014.md) records measured resource use and
+local validation. GPU/runtime code was frozen at
+`defd54b45e79a69055b9e8c7af0457d2ebdb3686` for readiness. Main workers and the
+CPU collector use `d9885dc65b7f67a8664742198f85cdbf466334c0`; the intervening
+change repairs phase storage accounting and its test, without changing training.
+Both hosts use PyTorch 2.11.0+cu128, CUDA 12.8 and Transformers 5.8.0.
+
+The sole monitoring owner is the existing `run-watch-queue.service`, running
+`campaigns.execution_service`, host PID 1384148 at handoff. Its campaign checks
+run every 300 seconds; the queue observes workers between those checks. The
+service was verified through host systemd, queue receipts and native artifacts;
+no second scheduler or exp-013 service/configuration change was made.
+
+Execution handles and evidence:
+
+- Local root: `results/lifecycles/opt125m-cmo-l6-exp014-context/`. Exact host
+  placements are `hosts/{trex,loulou}.json`; the clean CPU collector is `controller/`.
+- Registered campaign IDs are `opt-cmo-exp014-context-20261012-screen` and
+  `opt-cmo-exp014-context-20261012-confirm`. Exact held job contracts and
+  manifests are in `prepared/{screen,confirm}/`; admission proof is
+  `readiness/screen-preflight.json`.
+- Both remote workers are `/home/filip/analog-research/opt-cmo-exp1/hwa-exp014-context-20261012`.
+  Native runs are beneath `results/lifecycles/<case>/runs/<case>/`; each contains
+  its resolved campaign, aggregate status and native stage bundle.
+- Worker receipt/log roots are
+  `/home/filip/analog-research/opt-cmo-exp1/worker-receipts/d9885dc65b7f67a8664742198f85cdbf466334c0/<case>/<attempt>/`.
+  First case: `opt125m-cmo-l6-exp014-context-screen-l64-cap2`; attempt
+  `a803e369c1aa485496dcde68ad7a6f40`, with native status running and its first
+  `onchip_cohort` metric observed at 21:13 Paris.
+- Completion executes the frozen `exp014_context.py collect` through the
+  native recovery collector. It validates compact evidence locally into
+  `collected/`, writes per-fit `reviews/`, applies development-only selection,
+  and releases only selected confirmation cases. Final states remain remote.
+
+The next scheduled campaign check is approximately 21:17 Paris. Each main
+worker has a 660-second hard timeout and 720-second reservation; native
+evaluation precedes learning, so early progress is the held-P0 cohort before
+batch/development metrics. Expected full-fit runtime is below six minutes.
+Readiness charged 281.64 GPU-seconds; main limits remain 5,400 screen seconds
+and 10,800 confirmation seconds, with no reset of the absolute deadline.
+
+Operational anomalies are recorded by the service and diagnosed by its bounded
+read-only investigator. They return to the Codifier in this experiment thread;
+automatic mutable retries are disabled. Preserve failed evidence, verify
+unchanged source/P0/corruption and the remaining original allowance before any
+classified retry. Scientific changes and budget extensions remain outside this
+handoff. Review is pending; readiness does not answer which context is sufficient.
