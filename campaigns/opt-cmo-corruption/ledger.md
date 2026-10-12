@@ -4,7 +4,7 @@
 
 Sources: campaign experiment metadata and reviewer-written result notes. No raw evidence or live job state is inferred.
 
-Counts: complete=10, ready=1.
+Counts: complete=10, running=1.
 
 ## Experiments
 
@@ -20,7 +20,7 @@ Counts: complete=10, ready=1.
 | [exp-008 — Dense on-chip baseline over the full synthetic corpus](series/002-onchip-recovery/experiments/exp-008-overnight-recovery.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-008.md): Full dense one-pass recovery completed and worsened both held-out domains at high write cost |
 | [exp-009 — Digital LoRA beside dense on-chip recovery](series/002-onchip-recovery/experiments/exp-009-digital-lora.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-009.md): All three full LoRA fits validate: ranks 4/16/64 reduce generated KL by 38%/47%/63% with zero device writes |
 | [exp-010 — Development-triggered LR follow-up for dense recovery and LoRA](series/002-onchip-recovery/experiments/exp-010-lr-followup.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-010.md): All five dense LR screens validate but worsen KL; best LR 3e-3 is 17.9% worse on development, so no full fit qualifies; LoRA needs no retry |
-| [exp-011 — Noise-referenced write thresholds with optional signed accumulation](series/002-onchip-recovery/experiments/exp-011-thresholded-writes.md) | ready | None declared | No result recorded. |
+| [exp-011 — Noise-referenced write thresholds with optional signed accumulation](series/002-onchip-recovery/experiments/exp-011-thresholded-writes.md) | running | None declared | [validated-local](series/002-onchip-recovery/results/exp-011.md): All four screens validate: discard makes no writes; accumulated 2-sigma gives 50.24% development-KL improvement with 165 times fewer writes; selected 50M pass is running |
 
 ## Hypothesis evidence
 

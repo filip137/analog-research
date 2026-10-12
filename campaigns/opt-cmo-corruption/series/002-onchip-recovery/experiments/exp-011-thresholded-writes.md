@@ -1,7 +1,7 @@
 ---
 id: "exp-011"
 title: "Noise-referenced write thresholds with optional signed accumulation"
-status: "ready"
+status: "running"
 hypotheses: []
 ---
 # exp-011: thresholded physical writes
@@ -98,7 +98,9 @@ The generic lifecycle retains the source's five assignment identities for
 provenance; the recovery-only native manifest selects **only assignment 271001**
 with explicit frozen inputs. The describe bound is 11.04 GB for all ten
 generic trajectories, or 2.21 GB for this two-trajectory accumulated slice.
-No launch is claimed until a native worker and semantic progress are observed.
+All four screens were executed, validated and collected through the native
+pipeline at source `ac126fc46a78e55c1e77cd646e8c0c0044082ab9`; their measurements
+and interpretation are in the [result note](../results/exp-011.md).
 The first bounded native screen also supplies the live canary; a full pass is
 held until all screen artifact/replay gates, the development rule and measured
 memory/time budget checks pass. The shared service owns dispatch, five-minute
@@ -106,3 +108,41 @@ semantic monitoring, read-only incident investigation and native collection.
 No interactive coordinator is needed after the verified handoff. Preserve all
 failed attempts and negative outcomes; scientific underperformance is not an
 operational retry condition.
+
+The unchanged gate selected `accum-s2-50m`, which is running on loulou's RTX5090
+in attempt `a5ab01cb747b4763ba7fc2928494c500`, worker PID 1199369.
+Read-only tmux attachment:
+
+```sh
+ssh -t loulou tmux attach -r -t opt125m-cmo-l6-exp5-threshold-accum-s2-50m-a5ab01cb747b4763ba7fc2928494c500
+```
+
+Native logs/results are under
+`/home/filip/analog-research/opt-cmo-exp1/hwa-exp5-threshold-20261012/results/lifecycles/opt125m-cmo-l6-exp5-threshold-accum-s2-50m/`.
+The tmux `run.log` and receipts are under
+`/home/filip/analog-research/opt-cmo-exp1/worker-receipts/ac126fc46a78e55c1e77cd646e8c0c0044082ab9/opt125m-cmo-l6-exp5-threshold-accum-s2-50m/a5ab01cb747b4763ba7fc2928494c500/`.
+
+Queue campaign: `opt-cmo-exp5-threshold-20261012`; immutable manifest digest
+`ffa275efff2c1b06b9755be78a73e8b3737640c77fbe3e669dfe7c105cad5903`.
+The shared service remains the only dispatcher and monitor. Screen charge is
+426.06 GPU-seconds from the original 7,200-second allowance; the selected full
+job reserves 4,500 seconds including validation. No allowance was reset.
+The original 17:30 Paris deadline remains binding. A live observation saw the
+full worker beyond update 800/6,101 with finite loss and fixed-development progress.
+
+Handoff evidence is under `readiness/`: submission and selection receipts,
+restart snapshots and active-worker restart probes. Test incident **13** invoked
+bounded read-only investigator `99bcbaee8a1f4107b260de61b5879af5`, which finished
+and reported a healthy completed screen with no training intervention warranted.
+The incident remains in history as a labeled intentional test; its diagnosis
+and recommendation are retained. Dispatcher restart preserved specifications,
+prior attempts, incident history and charged budgets, without duplicate compute.
+The active-worker restart test preserved the exact worker PID/start/boot identity
+and produced a fresh semantic observation for that same attempt. The final
+`readiness/handoff.json` verifies one active job, one matching watchdog observation,
+five unique compute attempts (four completed screens and the full pass), a fresh
+service heartbeat, and no operational incident beyond the intentional test.
+At handoff, observed storage is 11.06 GB; 2,273.94 GPU-seconds remain unreserved
+in addition to the active full job's existing allowance. The service owns final
+validation and collection into `reviews/accum-s2-50m.json` without a live Codex
+coordinator. The three unselected full candidates stay held.
