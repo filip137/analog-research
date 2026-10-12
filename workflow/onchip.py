@@ -183,6 +183,60 @@ class IdealizedWriteAdam:
         )
 
 
+class ThresholdedWriteAdam(IdealizedWriteAdam):
+    """Gate physical commands against a declared nominal mid-range noise scale.
+
+    Optional signed accumulation retains unissued Adam commands digitally. An
+    issued command is subtracted even when the addressed cell is stuck: the
+    controller receives no hidden fault map or realized noise. Residuals are
+    never forcibly flushed at the final endpoint. The physical write law is
+    unchanged, including its conductance-dependent noise and held errors.
+    """
+
+    contract = "crossbar_lifecycle.cmo_thresholded_write_adam.v1"
+
+    def __init__(self, array, *, learning_rate, threshold_sigma, accumulate_updates,
+                 acceptance_percent, noise_scale):
+        super().__init__(array, learning_rate=learning_rate)
+        from training.reram_cmo import HALF_RANGE_US, MID_US, programming_sigma
+
+        self.threshold_sigma = float(threshold_sigma)
+        self.noise_std_q = float(noise_scale * programming_sigma(MID_US, acceptance_percent) / HALF_RANGE_US)
+        self.threshold_q = self.threshold_sigma * self.noise_std_q
+        self.accumulate_updates = bool(accumulate_updates)
+        self.pending = torch.zeros_like(self.first) if self.accumulate_updates else None
+
+    @torch.no_grad()
+    def step(self, gradient):
+        command = _adam_command(self, gradient)
+        if self.learning_rate == 0:
+            return
+        if self.pending is not None:
+            self.pending.add_(command)
+            command = self.pending
+        if not bool(torch.isfinite(command).all()):
+            raise FloatingPointError("Nonfinite thresholded write command.")
+        issued = torch.where(command.abs() > self.threshold_q, command, 0.0)
+        self.array.write(issued)
+        if self.pending is not None:
+            self.pending.sub_(issued)
+
+    def diagnostics(self):
+        return {
+            "threshold_reference": "nominal_midrange",
+            "threshold_sigma": self.threshold_sigma,
+            "noise_std_q": self.noise_std_q,
+            "threshold_q": self.threshold_q,
+            "accumulate_updates": self.accumulate_updates,
+            "pending_nonzero": 0 if self.pending is None else int((self.pending != 0).sum()),
+            "pending_rms_q": 0.0 if self.pending is None else float(self.pending.square().mean().sqrt()),
+        }
+
+    def state_dict(self):
+        return {**super().state_dict(), **self.diagnostics(),
+                "pending": None if self.pending is None else self.pending.detach().cpu().clone()}
+
+
 def make_writer(array, lifecycle):
     """The declared OM or CMO update law for a weight-learning arm."""
 
@@ -201,6 +255,13 @@ def make_writer(array, lifecycle):
         )
     if onchip.update_law == "cmo_idealized_write_adam":
         return IdealizedWriteAdam(array, learning_rate=onchip.learning_rate)
+    if onchip.update_law == "cmo_thresholded_write_adam":
+        return ThresholdedWriteAdam(
+            array, learning_rate=onchip.learning_rate, threshold_sigma=onchip.threshold_sigma,
+            accumulate_updates=onchip.accumulate_updates,
+            acceptance_percent=lifecycle.program_verify.acceptance_percent,
+            noise_scale=lifecycle.devices.noise_scale,
+        )
     raise ValueError(f"Expected an OM or CMO writer update law. Provided value: {onchip.update_law!r}.")
 
 
@@ -265,6 +326,7 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                          "cohort": onchip.cohort_key, "examples": network_family.examples(training),
                          "epochs": onchip.epochs if arm.trains else 0, "batch_size": onchip.batch_size})
     curve = []
+    global_step = 0
     for epoch in range(1, (onchip.epochs if arm.trains else 0) + 1):
         started = time.monotonic()
         order = torch.randperm(
@@ -315,11 +377,22 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                         port.pulse(error.sign().to(torch.int8) * active)
                         rewrite_count += active
             loss_sum += float(loss.detach()) * len(index)
+            global_step += 1
             if batch % 100 == 0:
                 store.append_metric(
                     {"stage": "onchip", "case": label, "arm": arm.arm_id, "epoch": epoch, "batch": batch,
                      "train_loss": float(loss.detach())}
                 )
+            if onchip.development_every_steps and global_step % onchip.development_every_steps == 0:
+                was_training = network.training
+                development = network_family.evaluate(network, cache["development"], device, q=array.read())
+                cost_now = {key: value - baseline[key] for key, value in array.cost().items()}
+                store.append_metric({"stage": "onchip_development", "case": label, "arm": arm.arm_id,
+                                     "epoch": epoch, "global_step": global_step,
+                                     "development": development, "cost": cost_now,
+                                     **({"writer": writer.diagnostics()}
+                                        if isinstance(writer, ThresholdedWriteAdam) else {})})
+                network.train(was_training)
         device_stage.verify_fixed(array, technology, fixed)
         if network.prefix_hash() != prefix:
             raise RuntimeError("On-chip training changed the frozen digital prefix.")

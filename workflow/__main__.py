@@ -30,6 +30,9 @@ def summary(lifecycle) -> dict:
     stages = stage_selections(lifecycle)
     deployments = len(hwa.arms) * len(devices.assignment_seeds) * len(lifecycle.defects.cases)
     trajectories = 0 if onchip is None else deployments * len(onchip.arms)
+    state_bytes_per_weight = STATE_BYTES_PER_WEIGHT[devices.technology]
+    if onchip is not None and onchip.accumulate_updates:
+        state_bytes_per_weight += 4  # Saved FP32 pending command per weight.
     return {
         "lifecycle_id": lifecycle.lifecycle_id,
         "lifecycle_sha256": lifecycle.digest(),
@@ -55,7 +58,7 @@ def summary(lifecycle) -> dict:
         "trajectories": trajectories,
         "analog_weights": lifecycle.network.analog_weights,
         "onchip_state_gb_estimate": round(
-            trajectories * lifecycle.network.analog_weights * STATE_BYTES_PER_WEIGHT[devices.technology] / 1e9, 2
+            trajectories * lifecycle.network.analog_weights * state_bytes_per_weight / 1e9, 2
         ),
         "smoke_only": lifecycle.data.smoke,
     }

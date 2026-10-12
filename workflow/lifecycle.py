@@ -133,7 +133,7 @@ TECHNOLOGIES = {
         hwa_noise_model=ADDITIVE_GAUSSIAN,
         program_methods=("gaussian_endpoint",),
         relaxation_models=("none",),
-        update_laws=("cmo_idealized_write_adam",),
+        update_laws=("cmo_idealized_write_adam", "cmo_thresholded_write_adam"),
     ),
 }
 
@@ -1237,6 +1237,9 @@ class Onchip:
     # Both cohorts contain training data. Selecting an existing cohort leaves
     # the frozen HWA source and feature-cache provenance unchanged.
     training_cohort: Optional[str] = None
+    threshold_sigma: Optional[float] = None
+    accumulate_updates: Optional[bool] = None
+    development_every_steps: Optional[int] = None
 
     @property
     def cohort_key(self) -> str:
@@ -1258,6 +1261,10 @@ class Onchip:
             value["max_pulses_per_cell"] = self.max_pulses_per_cell
         if self.training_cohort is not None:
             value["training_cohort"] = self.training_cohort
+        if self.update_law == "cmo_thresholded_write_adam":
+            value.update(threshold_sigma=self.threshold_sigma, accumulate_updates=self.accumulate_updates)
+        if self.development_every_steps is not None:
+            value["development_every_steps"] = self.development_every_steps
         value["arms"] = [arm.to_dict() for arm in self.arms]
         return value
 
@@ -1280,8 +1287,12 @@ def _onchip(raw: Any, technology: str) -> Onchip:
         keys += ("pulses_per_update", "tolerance_steps", "max_pulses_per_cell")
     elif law == "om_open_loop_pulse_adam":
         keys += ("max_pulses_per_cell",)
+    elif law == "cmo_thresholded_write_adam":
+        keys += ("threshold_sigma", "accumulate_updates")
     if "training_cohort" in raw:
         keys += ("training_cohort",)
+    if "development_every_steps" in raw:
+        keys += ("development_every_steps",)
     raw = _object(raw, "onchip", keys)
     arms = []
     for index, item in enumerate(_list(raw["arms"], "onchip.arms")):
@@ -1327,6 +1338,15 @@ def _onchip(raw: Any, technology: str) -> Onchip:
                 "onchip.arms", "to omit verified rewrite controls under the open-loop law", arm.to_dict()
             )
     extra = {}
+    if law == "cmo_thresholded_write_adam":
+        extra.update(
+            threshold_sigma=_number(raw["threshold_sigma"], "onchip.threshold_sigma", positive=True),
+            accumulate_updates=_boolean(raw["accumulate_updates"], "onchip.accumulate_updates"),
+        )
+    if "development_every_steps" in raw:
+        extra["development_every_steps"] = _integer(
+            raw["development_every_steps"], "onchip.development_every_steps", minimum=1
+        )
     if "training_cohort" in raw:
         extra["training_cohort"] = _choice(raw["training_cohort"], "onchip.training_cohort", ("recovery", "hwa"))
     if law.startswith("om_"):

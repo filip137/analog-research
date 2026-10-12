@@ -341,6 +341,25 @@ adaptation pass with an unchanged frozen HWA source and feature cache. The
 `onchip_cohort` metric names the actual cohort and example count, and presentation
 counts use that cohort. Omission preserves historical lifecycle identities.
 
+CMO also supports `cmo_thresholded_write_adam`, with required positive
+`threshold_sigma` and Boolean `accumulate_updates`. The physical write law is
+unchanged. Digital Adam commands, in normalized q units, are issued only when
+their magnitude exceeds `threshold_sigma * noise_scale * sigma_PV(48.6) / 39.6`.
+This is a fixed **nominal mid-range** noise reference, not an oracle estimate
+of each cell's realized error or its conductance-dependent noise. With
+`accumulate_updates: true`, signed commands accumulate digitally between writes;
+the complete accumulated command is issued at threshold crossing and subtracted
+from the accumulator. Opposite commands cancel. Issued attempts are subtracted
+even on stuck cells, without querying the hidden fault map. No subthreshold
+residual is flushed at the endpoint. Checkpoints retain pending commands and
+threshold settings. Physical costs retain the existing device-write and
+stuck-attempt definitions. No verification, retry or conductance clamp is added.
+
+Optional positive `onchip.development_every_steps` records held-state evaluation
+on the fixed development cohort at that optimizer-step interval. It never
+selects a checkpoint or changes the fixed final endpoint; test cohorts are not
+evaluated at this extra cadence. Omitting it preserves existing configs.
+
 ## Stages, artifacts and reuse
 
 ### Digital LoRA recovery controls
