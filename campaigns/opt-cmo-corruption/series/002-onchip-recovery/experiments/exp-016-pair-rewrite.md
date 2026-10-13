@@ -6,6 +6,50 @@ hypotheses: []
 ---
 # exp-016: fault-aware pair rewrite after deployment
 
+## Active first phase: healthy and random 3% only
+
+The user selected this reduced phase and then assigned **implementation and
+execution**. This supersedes the launch-pending wording and broader coverage
+below for the current assignment. The full comparison remains deferred.
+
+- **Frozen comparison:** std3, cdt3 and std9; assignments 271002–271004;
+  `nominal` and `random_30000ppm`; all five arms listed below. Six analog MLPs
+  (layers 6–11), 28,311,552 logical weights. No HWA retraining or new deployment.
+- **Inputs:** the exact exp-013 held P0s and pinned teacher/cohorts, including
+  256 development, 384 generated-test and 1,024 WikiText-test sequences of
+  length 256. Arm 5 retains 2,097,152 recovery tokens, 256 updates, LR .003,
+  physical write noise and the cap of four issued attempts per active device.
+- **Selection:** three `opt125m-cmo-l6-exp16-pair-rewrite-<source>-random3.json`
+  lifecycles use `onchip.case_labels`; upstream defect declarations and hashes
+  stay unchanged. Nine single-stage jobs produce 18 starting conditions and
+  90 endpoints. All starts use their named P0; the rewrite seed stays 241016.
+- **Decision:** apply R0–R6 below at 3% only, independently by source and held-out
+  domain, across all three assignments. Other kinds and rates are untested in
+  this phase. Neither phase completion nor a favorable result completes the
+  broader study or establishes viability outside this regime.
+- **Physical assumptions:** the differential subtraction polarity stays fixed;
+  either per-weight device can be reprogrammed. Verify-based detection uses 5σ;
+  the hidden map is analysis-only. P&V is the fitted 2% CMO Gaussian endpoint
+  model, not a simulation of individual pulses. Read noise and drift stay off.
+- **Caps:** 6 GPU-hours, 200 GB across hosts, 24 hours. Projection: 1–2 GPU-hours
+  and about 70 GB of checkpoint payload, plus staging. No source evidence is
+  deleted. New inputs staged on fifi count toward the 200 GB cap.
+- **Placement:** idle fifi and loulou RTX 5090s, subject to the repository's
+  08:00–22:00 two-5090 limit and idle-only admission. Existing jobs are preserved.
+  Fifi receives a new copy of the frozen P0s; loulou reuses its existing copy.
+- **Evidence:** `results/lifecycles/opt125m-cmo-l6-exp16-pair-rewrite/random3/`.
+  Native workers retain full checkpoints; local collection retains validated
+  compact evidence and exact run locations.
+- **Readiness:** the first job is `std3-271002-random3`. Every job verifies native
+  replay and input hashes, and reproduces P0 hashes and held KL within 1e-6
+  relative. Only successful canary collection opens the handoff gate and
+  releases the remaining eight jobs. Poor recovery is a scientific outcome,
+  not a reason to retry or tune.
+- **Monitoring:** the existing shared execution service owns admission,
+  5-minute semantic progress checks, terminal validation and collection. This
+  session owns operational diagnosis and scientific review; no duplicate
+  watcher. Runtime/receipt identities and the deadline go in the handoff below.
+
 ## Question and authorization
 
 On October 13 the user approved drafting this comparison. Each weight is a pair

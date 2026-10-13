@@ -24,7 +24,7 @@ from workflow.lifecycle import parse_lifecycle, verify_provenance
 
 PREFIX = 'opt125m-cmo-l6-exp16-pair-rewrite'
 NOTE = 'campaigns/opt-cmo-corruption/series/002-onchip-recovery/experiments/exp-016-pair-rewrite.md'
-FAMILIES = ('random', 'kinds')
+FAMILIES = ('random', 'kinds', 'random3')
 KINDS = ('gmin', 'gmax', 'open')
 KIND_RATE_PPM = 30000
 # Shared by every rewrite arm, so a device receives the same partner draw in each arm.
@@ -42,19 +42,26 @@ RECOVERY_ARM = {'id': 'pair_rewrite_verify_recovery', 'weights': 'learn', 'calib
 PHASE = 'opt-cmo-exp16-pair-rewrite-20261013'
 # Recorded only from the user's explicit launch approval; queue() refuses without it.
 AUTHORIZATION = ''
-CANARIES = ('std3-deploy', 'std3-271002-random')
+RANDOM3_AUTHORIZATION = ('User assigned implementation and execution of the reduced exp-016 plan: '
+    'std3/cdt3/std9, assignments 271002-271004, held exp-013 nominal and random 3% P0s, '
+    'all five declared arms including cap-4 recovery after verify rewriting. '
+    'Six GPU-hours, 200 GB across hosts, 24 hours; only idle standing-authorized GPUs, '
+    'with the repository 08:00-22:00 two-5090 limit. Other rates and kinds are deferred.')
+CANARIES = ('std3-deploy', 'std3-271002-random', 'std3-271002-random3')
 PEAK_MIB, HEADROOM_MIB = 20500, 2048
 # From the October 13 probe on an RTX 3090 (42.6 s per held arm, 191 s for the
 # learning arm, per case); RTX 5090 times scale by exp-013's measured ratio.
 EXPECTED_SECONDS = {'random': {'3090': 2300, '5090': 1000}, 'kinds': {'3090': 650, '5090': 300},
-                    'deploy': {'3090': 900, '5090': 900}}
+                    'deploy': {'3090': 900, '5090': 900}, 'random3': {'3090': 900, '5090': 450}}
 BUDGET_SECONDS = 4800
-STORAGE_BYTES = {'random': 24_000_000_000, 'kinds': 9_000_000_000, 'deploy': 7_000_000_000}
+STORAGE_BYTES = {'random': 24_000_000_000, 'kinds': 9_000_000_000, 'deploy': 7_000_000_000,
+                 'random3': 9_000_000_000}
 # Provisional: the note's caps (6 GPU-hours, 200 GB) split across the two queue
 # phases. The probe projects about 300 GB in all, so the user must decide storage
 # before launch; update these with that decision.
 BUDGETS = {'main': {'gpu_hours': 5.0, 'storage_bytes': 160_000_000_000, 'window_seconds': 86400},
-           'kinds': {'gpu_hours': 1.0, 'storage_bytes': 40_000_000_000, 'window_seconds': 86400}}
+           'kinds': {'gpu_hours': 1.0, 'storage_bytes': 40_000_000_000, 'window_seconds': 86400},
+           'random3': {'gpu_hours': 6.0, 'storage_bytes': 200_000_000_000, 'window_seconds': 86400}}
 QUESTION = ('How much fault-induced teacher-KL loss does a one-shot fault-aware pair rewrite remove, against '
             'active-only rewriting, HWA-only deployment and noisy on-chip recovery?')
 DECISION = ('Frozen R0-R6 rules on assignments 271002-271004; oracle arms are non-physical bounds; '
@@ -67,7 +74,10 @@ def lifecycle(tag, family, *, probe_case=None):
     doc = exp13_lifecycle(f'{tag}-{ARRAYS[0]}-cap4').to_dict()
     doc['lifecycle_id'] = f'{PREFIX}-{tag}-{family}'
     doc['question'].update(text=QUESTION, decision=DECISION)
-    doc['onchip']['arms'] = HOLD_ARMS + ([RECOVERY_ARM] if family == 'random' else [])
+    doc['onchip']['arms'] = HOLD_ARMS + ([RECOVERY_ARM] if family in ('random', 'random3') else [])
+    if family == 'random3':
+        doc['onchip']['case_labels'] = ['nominal', 'random_30000ppm']
+        doc['question']['decision'] = ('First phase: healthy and random 3% only. ' + DECISION)
     if family == 'kinds':
         doc['defects']['cases'] = [{'kind': kind, 'rate_ppm': KIND_RATE_PPM, 'die_concentration': None,
                                     'array_concentration': None} for kind in KINDS]
@@ -80,10 +90,10 @@ def lifecycle(tag, family, *, probe_case=None):
     return parse_lifecycle(doc)
 
 
-def generate():
+def generate(phase='full'):
     out = []
     for tag in TAGS:
-        for family in FAMILIES:
+        for family in (('random3',) if phase == 'random3' else ('random', 'kinds')):
             lc = lifecycle(tag, family)
             path = ROOT/'campaigns/opt-cmo-corruption/lifecycles'/(lc.lifecycle_id+'.json')
             write_frozen(path, lc.to_dict()); out.append(str(path))
@@ -159,18 +169,23 @@ def probe(base, reused, output, case):
             'free_bytes_home': shutil.disk_usage(ROOT).free}
 
 
-GPU_MODELS = {'riri': '5090', 'loulou': '5090', 'trex': '5090', 'nom-cool-1': '3090', 'local': '3090'}
+GPU_MODELS = {'riri': '5090', 'loulou': '5090', 'trex': '5090', 'fifi': '5090',
+              'nom-cool-1': '3090', 'local': '3090'}
 
 
-def labels():
+def labels(phase='full'):
     """Native jobs: one deploy campaign per source, then one on-chip slice per source, assignment and family."""
 
+    if phase == 'random3':
+        return [f'{tag}-{array}-random3' for tag in TAGS for array in ARRAYS]
+    if phase != 'full':
+        raise ValueError('Unknown exp-016 phase')
     return ([f'{tag}-deploy' for tag in TAGS]
-            + [f'{tag}-{array}-{family}' for family in FAMILIES for tag in TAGS for array in ARRAYS])
+            + [f'{tag}-{array}-{family}' for family in ('random', 'kinds') for tag in TAGS for array in ARRAYS])
 
 
 def parts(label):
-    if label not in labels():
+    if label not in labels() + labels('random3'):
         raise ValueError('Unknown exp-016 job')
     if label.endswith('-deploy'):
         return label.removesuffix('-deploy'), None, 'deploy'
@@ -260,7 +275,7 @@ def kinds_contract(base, reused, kinds, tag, array, lc):
             'apparent_sha256': receipt['apparent_sha256']}
 
 
-def prepare_host(host, base, reused, *, sources=None, kinds=None):
+def prepare_host(host, base, reused, *, sources=None, kinds=None, phase='full'):
     """Prepare every eligible job whose inputs exist here: deploy campaigns, random slices, kinds slices."""
 
     if command(['git', 'status', '--porcelain'], cwd=ROOT).strip():
@@ -269,7 +284,7 @@ def prepare_host(host, base, reused, *, sources=None, kinds=None):
     env = {'EBL_CORPUS_ROOT': str(base/'inputs/corpora'), 'EBL_CAMPAIGN_STREAM': '1',
            'PYTHONUNBUFFERED': '1', 'OMP_NUM_THREADS': '1'}
     cases = []
-    for label in labels():
+    for label in labels(phase):
         if not eligible(label, host):
             continue
         tag, array, family = parts(label)
@@ -283,7 +298,7 @@ def prepare_host(host, base, reused, *, sources=None, kinds=None):
             validation = [sys.executable, '-m', 'campaigns.lifecycle_collect', 'validate', str(native), '--deployment-only']
             files, artifacts = [manifest], extra
         else:
-            if family == 'random':
+            if family in ('random', 'random3'):
                 if not (reused/f'{tag}-{array}/portable.pt').exists():
                     continue
                 inputs = reused_contract(base, reused, tag, array, lc)
@@ -302,7 +317,8 @@ def prepare_host(host, base, reused, *, sources=None, kinds=None):
             raise ValueError('Lifecycle changed')
         receipt = base/'worker-receipts'/revision/jid; receipt.parent.mkdir(parents=True, exist_ok=True)
         worker = root/'tmux-worker.json'
-        write_frozen(worker, {'case_id': jid, 'state_root': str(receipt), 'cwd': str(ROOT), 'timeout_seconds': 7200,
+        write_frozen(worker, {'case_id': jid, 'state_root': str(receipt), 'cwd': str(ROOT),
+            'timeout_seconds': 2100 if family == 'random3' else 7200,
             'lease_seconds': 900, 'env': env, 'argv': [sys.executable, '-m', 'ebl', 'campaign', 'run', '--manifest',
             str(manifest), '--output-dir', str(root/'runs'), '--resume', '--fail-fast']})
         cases.append({'id': jid, 'label': label, 'family': family, 'lifecycle_sha256': lc.digest(), 'dry_run_passed': True,
@@ -313,7 +329,8 @@ def prepare_host(host, base, reused, *, sources=None, kinds=None):
                 **({'recovery_inputs': str(root/'inputs.json'), 'recovery_input_contract': inputs}
                    if family != 'deploy' else {}),
                 'prepared_files': [{'path': str(p), 'sha256': sha256(p)} for p in [cfg, worker, *files]] + artifacts}})
-    return {'host': host, 'source': str(ROOT), 'source_revision': revision, 'base': str(base), 'cases': cases}
+    return {'host': host, 'source': str(ROOT), 'source_revision': revision, 'base': str(base),
+            'phase': phase, 'cases': cases}
 
 
 def check_realization(tag, array, teacher, portable, device='cuda:0'):
@@ -377,13 +394,15 @@ def campaign_manifest(phase, labels_, worker, evidence, revision, hosts, budget)
 def queue(receipts, output, controller, evidence, phase):
     """Queue the main phase (deploy campaigns and random slices) or, after materialization, the kinds slices."""
 
-    if not AUTHORIZATION:
+    authorization = RANDOM3_AUTHORIZATION if phase == 'random3' else AUTHORIZATION
+    if not authorization:
         raise ValueError('exp-016 has no recorded launch authorization')
     hosts = {json.loads(p.read_text())['host']: json.loads(p.read_text()) for p in receipts}
     if len({h['source_revision'] for h in hosts.values()}) != 1 or len({h['source'] for h in hosts.values()}) != 1:
         raise ValueError('Require prepared hosts at one frozen revision and worker path')
-    families = ('deploy', 'random') if phase == 'main' else ('kinds',)
-    selected = [label for label in labels() if parts(label)[2] in families]
+    families = {'main': ('deploy', 'random'), 'kinds': ('kinds',), 'random3': ('random3',)}[phase]
+    selected = [label for label in labels('random3' if phase == 'random3' else 'full')
+                if parts(label)[2] in families]
     deadline = json.loads((evidence/'readiness/execution-window.json').read_text())['deadline']
     jobs = []
     for label in selected:
@@ -394,9 +413,10 @@ def queue(receipts, output, controller, evidence, phase):
             raise ValueError('Scientific case has no validated placement: '+label)
         if any(not c['dry_run_passed'] or c['lifecycle_sha256'] != lc.digest() for c in prepared.values()):
             raise ValueError('Unprepared scientific case')
-        job = {'id': PREFIX+'-'+label, 'project_dir': str(controller), 'handoff': NOTE, 'authorization': AUTHORIZATION,
+        job = {'id': PREFIX+'-'+label, 'project_dir': str(controller), 'handoff': NOTE, 'authorization': authorization,
                'peak_memory_mib': PEAK_MIB, 'headroom_mib': HEADROOM_MIB,
-               'expected_seconds': EXPECTED_SECONDS[family]['3090'], 'budget_seconds': BUDGET_SECONDS,
+               'expected_seconds': EXPECTED_SECONDS[family]['3090'],
+               'budget_seconds': 2400 if phase == 'random3' else BUDGET_SECONDS,
                'deadline': deadline, 'priority': 120 if label in CANARIES else 100,
                'startup_grace_seconds': 600, 'stale_seconds': 900, 'recovery': False, 'retry_safe': False,
                'placements': {h: c['placement'] for h, c in prepared.items()},
@@ -408,6 +428,9 @@ def queue(receipts, output, controller, evidence, phase):
     budget = BUDGETS[phase]
     manifest = campaign_manifest(f'{PHASE}-{phase}', selected, Path(next(iter(hosts.values()))['source']),
                                  evidence, revision, sorted(hosts), budget)
+    if phase == 'random3' and 'fifi' in hosts:
+        # Inputs newly staged for this phase also consume its storage allowance.
+        manifest['storage_roots'].append({'target': 'fifi', 'path': str(DEFAULT_BASE/'exp16-reused')})
     write_frozen(output/'campaign.json', manifest)
     return {'manifest': str(output/'campaign.json'), 'jobs': jobs}
 
@@ -420,18 +443,22 @@ def checked_report(label, rows, records, collection):
 
     import math
     tag, array, family = parts(label); lc = lifecycle(tag, family)
-    expected = {(c.label, a.arm_id) for c in lc.defects.cases for a in lc.onchip.arms}
+    expected = {(c.label, a.arm_id) for c in lc.onchip_cases for a in lc.onchip.arms}
     if {(r['case'], r['onchip_arm']) for r in rows} != expected or len(rows) != len(expected):
         raise ValueError('Missing or duplicate case/arm coverage')
     values = []
-    for case in lc.defects.cases:
+    ref = json.loads(CATALOG.read_text())[f'{tag}-{array}']
+    for case in lc.onchip_cases:
         arms = {r['onchip_arm']: r for r in rows if r['case'] == case.label}
         hold = arms['none']
         if hold['final_apparent_sha256'] != hold['initial_apparent_sha256'] or hold['final'] != hold['initial']:
             raise ValueError('Held control changed')
+        if family in ('random', 'random3') and hold['initial_apparent_sha256'] != ref['cases'][case.label]['apparent_sha256']:
+            raise ValueError('Held control differs from the frozen exp-013 P0')
         for arm in lc.onchip.arms:
             row = arms[arm.arm_id]; rewrite = row.get('fault_rewrite')
-            if row['array_seed'] != array or row['initial_apparent_sha256'] != hold['initial_apparent_sha256']:
+            if (row['array_seed'] != array or row['hwa_arm'] != ref['hwa_arm']
+                    or row['initial_apparent_sha256'] != hold['initial_apparent_sha256']):
                 raise ValueError('Arms do not share their P0')
             if (rewrite is None) != (arm.fault_rewrite is None):
                 raise ValueError('Missing or unexpected rewrite receipt')
@@ -467,7 +494,7 @@ def held_reproduction(reports, exp13):
     worst, mismatched = 0.0, []
     for report in reports:
         for row in report['rows']:
-            if row['family'] != 'random' or row['arm'] != 'none':
+            if row['family'] not in ('random', 'random3') or row['arm'] != 'none':
                 continue
             ref = reference[row['tag'], row['array_seed'], row['case']]
             if row['initial_apparent_sha256'] != ref['initial_apparent_sha256']:
@@ -479,12 +506,21 @@ def held_reproduction(reports, exp13):
             'reproduced': not mismatched and worst <= 1e-6}
 
 
-def summarize(reports, exp13):
+def summarize(reports, exp13, phase='full'):
     """Frozen decision inputs: D, D0, every arm's KL and gap closed per unit; exp-013 references for R4."""
 
-    if {r['label'] for r in reports} != {l for l in labels() if parts(l)[2] != 'deploy'}:
+    expected = {l for l in labels(phase) if parts(l)[2] != 'deploy'}
+    if len(reports) != len(expected) or {r['label'] for r in reports} != expected:
         raise ValueError('Incomplete or duplicate scientific coverage')
     rows = {(r['tag'], r['array_seed'], r['case'], r['arm']): r for report in reports for r in report['rows']}
+    expected_rows = {(tag, array, c.label, a.arm_id)
+                     for label in expected for tag, array, family in [parts(label)]
+                     for c in lifecycle(tag, family).onchip_cases for a in lifecycle(tag, family).onchip.arms}
+    if set(rows) != expected_rows or len(rows) != sum(len(r['rows']) for r in reports):
+        raise ValueError('Incomplete or duplicate scientific coverage')
+    reproduction = held_reproduction(reports, exp13)
+    if not reproduction['reproduced']:
+        raise ValueError('Held controls do not reproduce exp-013')
     previous = json.loads((exp13/'reviews/summary.json').read_text())
     noisy = {(r['tag'], r['array_seed'], r['case'], r['cap']): r for r in previous['rows']}
     units = []
@@ -502,8 +538,9 @@ def summarize(reports, exp13):
                 for cap in ('uncapped', 'cap4'):
                     unit[f'exp013_{cap}'] = noisy[tag, array, case, cap]['effects'][split]['onchip']['teacher_kl']
             units.append(unit)
-    return {'coverage_complete': True, 'rows': list(rows.values()), 'units': units,
-            'held_reproduction': held_reproduction(reports, exp13),
+    return {'coverage_complete': True, 'phase': phase, 'full_study_complete': phase == 'full',
+            'starting_conditions': len({k[:3] for k in rows}), 'endpoints': len(rows),
+            'rows': list(rows.values()), 'units': units, 'held_reproduction': reproduction,
             'selection': 'Frozen R0-R6 inputs only; classification and verdict belong to the review.'}
 
 
@@ -511,6 +548,8 @@ def collect(queue_config, evidence):
     import fcntl
     from experiments.artifacts import atomic_write_json
     label = os.environ['RUN_WATCH_JOB_ID'].removeprefix(PREFIX+'-'); _, _, family = parts(label)
+    phase = 'random3' if family == 'random3' else 'full'
+    exp13 = evidence.parents[1]/'opt125m-cmo-l6-exp7-recovery-regimes' if phase == 'random3' else evidence.parent/'opt125m-cmo-l6-exp7-recovery-regimes'
     if family == 'deploy':
         from campaigns.lifecycle_collect import collect as deployment_collect
         result = deployment_collect(queue_config, evidence/'collected', deployment_only=True)
@@ -520,43 +559,61 @@ def collect(queue_config, evidence):
     report = checked_report(label, json.loads((folder/'measurements.json').read_text()),
         [json.loads(line) for line in (folder/'metrics.jsonl').read_text().splitlines() if line.strip()],
         folder/'collection.json')
+    reproduction = held_reproduction([report], exp13)
+    if not reproduction['reproduced']:
+        raise ValueError('Held controls do not reproduce exp-013')
     with (evidence/'.completion.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         write_frozen(evidence/'reviews'/(label+'.json'), report)
-        expected = [l for l in labels() if parts(l)[2] != 'deploy']
+        expected = [l for l in labels(phase) if parts(l)[2] != 'deploy']
+        if phase == 'random3' and label in CANARIES:
+            from exp1f_cdt_lr import service, transition
+            from campaigns.execution_service import digest
+            manifest = json.loads((evidence/'prepared/queue/campaign.json').read_text())
+            gate = evidence/'readiness/handoff.json'
+            write_frozen(gate, {'manifest_sha256': digest(manifest), 'passed': True,
+                               'evidence': [str(evidence/'reviews'/(label+'.json'))],
+                               'held_reproduction': reproduction, 'onchip_seconds': report['onchip_seconds']})
+            service(queue_config, 'gate', manifest['id'], 'handoff', gate)
+            for name in expected:
+                if name not in CANARIES:
+                    transition(queue_config, 'release', PREFIX+'-'+name)
         completed = [json.loads(p.read_text()) for l in expected if (p := evidence/'reviews'/(l+'.json')).exists()]
         atomic_write_json(evidence/'reviews/progress.json', {'completed_jobs': len(completed),
-                          'expected_jobs': len(expected), 'reports': [r['label'] for r in completed]})
+                          'expected_jobs': len(expected), 'phase': phase,
+                          'completed_endpoints': sum(len(r['rows']) for r in completed),
+                          'reports': [r['label'] for r in completed]})
         if len(completed) == len(expected):
             write_frozen(evidence/'reviews/summary.json',
-                         summarize(completed, evidence.parent/'opt125m-cmo-l6-exp7-recovery-regimes'))
+                         summarize(completed, exp13, phase))
     return {'collected': str(folder), 'label': label}
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__); sub = p.add_subparsers(dest='mode', required=True)
-    sub.add_parser('generate')
+    q = sub.add_parser('generate'); q.add_argument('--phase', choices=('full', 'random3'), default='full')
     q = sub.add_parser('probe'); q.add_argument('--base', type=Path, default=DEFAULT_BASE)
     q.add_argument('--reused', type=Path, required=True); q.add_argument('--output', type=Path, required=True)
     q.add_argument('--case', default='random_30000ppm')
     q = sub.add_parser('prepare-host'); q.add_argument('--host', required=True)
     q.add_argument('--base', type=Path, default=DEFAULT_BASE); q.add_argument('--reused', type=Path, required=True)
     q.add_argument('--sources', type=Path); q.add_argument('--kinds', type=Path)
+    q.add_argument('--phase', choices=('full', 'random3'), default='full')
     q = sub.add_parser('materialize'); q.add_argument('--tag', required=True)
     q.add_argument('--deploy-root', type=Path, required=True); q.add_argument('--reused', type=Path, required=True)
     q.add_argument('--output', type=Path, required=True)
     q = sub.add_parser('queue'); q.add_argument('receipts', type=Path, nargs='+')
     q.add_argument('--output', type=Path, required=True); q.add_argument('--controller', type=Path, required=True)
-    q.add_argument('--evidence', type=Path, required=True); q.add_argument('--phase', choices=('main', 'kinds'), required=True)
+    q.add_argument('--evidence', type=Path, required=True); q.add_argument('--phase', choices=('main', 'kinds', 'random3'), required=True)
     q = sub.add_parser('collect'); q.add_argument('--queue-config', type=Path, required=True)
     q.add_argument('--evidence', type=Path, required=True)
     q = sub.add_parser('check-realization'); q.add_argument('--tag', required=True)
     q.add_argument('--array', type=int, required=True); q.add_argument('--teacher', type=Path, required=True)
     q.add_argument('--portable', type=Path, required=True)
     a = p.parse_args()
-    if a.mode == 'generate': result = generate()
+    if a.mode == 'generate': result = generate(a.phase)
     elif a.mode == 'probe': result = probe(a.base, a.reused, a.output, a.case)
-    elif a.mode == 'prepare-host': result = prepare_host(a.host, a.base, a.reused, sources=a.sources, kinds=a.kinds)
+    elif a.mode == 'prepare-host': result = prepare_host(a.host, a.base, a.reused, sources=a.sources, kinds=a.kinds, phase=a.phase)
     elif a.mode == 'materialize': result = materialize_kinds(a.tag, a.deploy_root, a.reused, a.output)
     elif a.mode == 'queue': result = queue(a.receipts, a.output, a.controller, a.evidence, a.phase)
     elif a.mode == 'collect': result = collect(a.queue_config, a.evidence)
