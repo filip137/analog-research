@@ -153,17 +153,26 @@ class IdealizedWriteAdam:
 
     Every device with a nonzero command receives G <- G + dG + sigma(G + dG) xi
     (``training.reram_cmo``). There is no digital master, no verify read and
-    no retry, so earlier write errors persist in the held state.
+    no retry, so earlier write errors persist in the held state. A declared
+    ``write_noise_scale`` multiplies the write noise only (0 is the exact-write
+    oracle); undeclared, the physical law and its checkpoints are unchanged.
     """
 
     contract = "crossbar_lifecycle.cmo_idealized_write_adam.v1"
 
-    def __init__(self, array, *, learning_rate):
+    def __init__(self, array, *, learning_rate, write_noise_scale=None):
         self.array, self.learning_rate = array, float(learning_rate)
+        self.write_noise_scale = None if write_noise_scale is None else float(write_noise_scale)
         template = array.read()
         self.first = torch.zeros_like(template)
         self.second = torch.zeros_like(template)
         self.step_index = 0
+
+    def _write(self, command):
+        if self.write_noise_scale is None:
+            self.array.write(command)
+        else:
+            self.array.write(command, noise_factor=self.write_noise_scale)
 
     @torch.no_grad()
     def step(self, gradient):
@@ -171,7 +180,7 @@ class IdealizedWriteAdam:
         # A zero-learning-rate control must not write.
         if self.learning_rate == 0:
             return
-        self.array.write(command)
+        self._write(command)
 
     def state_dict(self):
         return clone_cpu(
@@ -180,6 +189,7 @@ class IdealizedWriteAdam:
                 "first": self.first,
                 "second": self.second,
                 "step_index": self.step_index,
+                **({} if self.write_noise_scale is None else {"write_noise_scale": self.write_noise_scale}),
             }
         )
 
@@ -197,10 +207,11 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
     contract = "crossbar_lifecycle.cmo_thresholded_write_adam.v1"
 
     def __init__(self, array, *, learning_rate, threshold_sigma, accumulate_updates,
-                 acceptance_percent, noise_scale, max_write_attempts_per_device=None):
-        super().__init__(array, learning_rate=learning_rate)
+                 acceptance_percent, noise_scale, max_write_attempts_per_device=None, write_noise_scale=None):
+        super().__init__(array, learning_rate=learning_rate, write_noise_scale=write_noise_scale)
         from training.reram_cmo import HALF_RANGE_US, MID_US, programming_sigma
 
+        # The threshold references the device noise scale, never the write-noise factor.
         self.threshold_sigma = float(threshold_sigma)
         self.noise_std_q = float(noise_scale * programming_sigma(MID_US, acceptance_percent) / HALF_RANGE_US)
         self.threshold_q = self.threshold_sigma * self.noise_std_q
@@ -230,7 +241,7 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
         if eligible is not None:
             requested &= eligible
         issued = torch.where(requested, command, 0.0)
-        self.array.write(issued)
+        self._write(issued)
         if self.attempt_counts is not None:
             self.attempt_counts.add_(requested)
         if self.pending is not None:
@@ -246,6 +257,8 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
             "pending_nonzero": 0 if self.pending is None else int((self.pending != 0).sum()),
             "pending_rms_q": 0.0 if self.pending is None else float(self.pending.square().mean().sqrt()),
         }
+        if self.write_noise_scale is not None:
+            values["write_noise_scale"] = self.write_noise_scale
         if self.attempt_counts is not None:
             values.update(
                 max_write_attempts_per_device=self.max_write_attempts_per_device,
@@ -279,7 +292,8 @@ def make_writer(array, lifecycle):
             array.port(), learning_rate=onchip.learning_rate, cap=onchip.max_pulses_per_cell, seed=onchip.seed
         )
     if onchip.update_law == "cmo_idealized_write_adam":
-        return IdealizedWriteAdam(array, learning_rate=onchip.learning_rate)
+        return IdealizedWriteAdam(array, learning_rate=onchip.learning_rate,
+                                  write_noise_scale=onchip.write_noise_scale)
     if onchip.update_law == "cmo_thresholded_write_adam":
         return ThresholdedWriteAdam(
             array, learning_rate=onchip.learning_rate, threshold_sigma=onchip.threshold_sigma,
@@ -287,6 +301,7 @@ def make_writer(array, lifecycle):
             acceptance_percent=lifecycle.program_verify.acceptance_percent,
             noise_scale=lifecycle.devices.noise_scale,
             max_write_attempts_per_device=onchip.max_write_attempts_per_device,
+            write_noise_scale=onchip.write_noise_scale,
         )
     raise ValueError(f"Expected an OM or CMO writer update law. Provided value: {onchip.update_law!r}.")
 

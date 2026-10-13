@@ -368,6 +368,17 @@ metrics report total and maximum issued attempts and the number of capped cells.
 Physical successful writes are checked against the per-cell attempt counts and
 the declared cap. This is a cap on idealized write events, not measured pulses.
 
+Optional `onchip.write_noise_scale` (CMO laws only, a nonnegative number)
+multiplies the noise of each on-chip write: G_a ← G_a + ΔG + f·noise_scale·σ(G_a+ΔG)·ξ.
+Omitted, the physical law (f = 1) and every existing lifecycle digest and
+checkpoint are unchanged. f = 0 is an exact-write oracle for diagnosing write
+noise; it is not a physical method. It leaves deployment programming noise,
+`devices.noise_scale`, the nominal threshold reference, stuck devices, the held
+state's device contract and all cost counters unchanged; the noise stream is
+still drawn, so it advances identically. Lifecycles that declare it reject
+`rewrite` arms, whose programming noise it does not cover. Writer checkpoints
+and thresholded diagnostics record the declared value.
+
 Optional positive `onchip.development_every_steps` records held-state evaluation
 on the fixed development cohort at that optimizer-step interval. It never
 selects a checkpoint or changes the fixed final endpoint; test cohorts are not

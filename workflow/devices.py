@@ -203,9 +203,9 @@ class CmoArray:
         for child, piece in zip(self.children, self._slices(target)):
             child.program(piece, reference)
 
-    def write(self, delta):
+    def write(self, delta, noise_factor=1.0):
         for child, piece in zip(self.children, self._slices(delta)):
-            child.write(piece)
+            child.write(piece, noise_factor)
 
     def read(self):
         return torch.cat([child.read() for child in self.children])

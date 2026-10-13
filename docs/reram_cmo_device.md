@@ -263,6 +263,10 @@ G_a  ← G_a + ΔG + noise_scale · σ_PV(G_a + ΔG) · ξ       (healthy active
 - A zero learning rate, and a device whose command is exactly zero, write
   nothing.
 - The requested G + ΔG is not clamped (see the open decisions below).
+- An optional `onchip.write_noise_scale` f multiplies the write term to
+  f · noise_scale · σ_PV(G_a + ΔG) · ξ. f = 0 is an exact-write oracle used to
+  diagnose write noise, not a device model; programming noise is unchanged
+  ([lifecycle contract](crossbar_lifecycle.md)).
 - The `rewrite` arm reprograms the active devices to their frozen deployment
   targets on the same schedule. That is the same law with ΔG = G_a\* − G_a,
   which gives G_a\* + σ_PV(G_a\*) · ξ on every step. References are not

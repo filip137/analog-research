@@ -1243,6 +1243,7 @@ class Onchip:
     max_write_attempts_per_device: Optional[int] = None
     case_labels: Optional[tuple[str, ...]] = None
     microbatch_size: Optional[int] = None
+    write_noise_scale: Optional[float] = None
 
     @property
     def cohort_key(self) -> str:
@@ -1274,6 +1275,8 @@ class Onchip:
             value["case_labels"] = list(self.case_labels)
         if self.microbatch_size is not None:
             value["microbatch_size"] = self.microbatch_size
+        if self.write_noise_scale is not None:
+            value["write_noise_scale"] = self.write_noise_scale
         value["arms"] = [arm.to_dict() for arm in self.arms]
         return value
 
@@ -1308,6 +1311,8 @@ def _onchip(raw: Any, technology: str) -> Onchip:
         keys += ("case_labels",)
     if "microbatch_size" in raw:
         keys += ("microbatch_size",)
+    if "write_noise_scale" in raw and law.startswith("cmo_"):
+        keys += ("write_noise_scale",)
     raw = _object(raw, "onchip", keys)
     arms = []
     for index, item in enumerate(_list(raw["arms"], "onchip.arms")):
@@ -1372,6 +1377,12 @@ def _onchip(raw: Any, technology: str) -> Onchip:
             )
             if any(arm.weights == "rewrite" for arm in arms):
                 raise config_error("onchip.arms", "to omit rewrite under a thresholded write-attempt cap", raw["arms"])
+    if "write_noise_scale" in raw:
+        # Scales on-chip write noise only. CMO rewrite arms reprogram with
+        # physical programming noise, so they would not be matched controls.
+        extra["write_noise_scale"] = _number(raw["write_noise_scale"], "onchip.write_noise_scale")
+        if any(arm.weights == "rewrite" for arm in arms):
+            raise config_error("onchip.arms", "to omit rewrite under a declared write_noise_scale", raw["arms"])
     if "development_every_steps" in raw:
         extra["development_every_steps"] = _integer(
             raw["development_every_steps"], "onchip.development_every_steps", minimum=1

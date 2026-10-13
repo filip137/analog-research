@@ -22,6 +22,7 @@ use this law; it injects declared constant-sigma weight noise
 from __future__ import annotations
 
 from hashlib import sha256
+import math
 
 import torch
 
@@ -132,9 +133,10 @@ class CmoMatrix:
         h.update(self.stuck.cpu().numpy().tobytes())
         return h.hexdigest()
 
-    def _draw(self, requested):
+    def _draw(self, requested, factor=1.0):
+        # The noise is drawn even when ``factor`` is zero, so the stream advances identically.
         noise = torch.randn(requested.shape, device=requested.device, generator=self.generator)
-        return requested + self.noise_scale * programming_sigma(requested, self.acceptance) * noise
+        return requested + (self.noise_scale * factor) * programming_sigma(requested, self.acceptance) * noise
 
     @torch.no_grad()
     def program(self, target, reference=True):
@@ -159,16 +161,23 @@ class CmoMatrix:
         self.stuck_write_attempts += failed
 
     @torch.no_grad()
-    def write(self, delta):
-        """G_a <- G_a + dG + sigma(G_a + dG) xi on every active device with a nonzero update."""
+    def write(self, delta, noise_factor=1.0):
+        """G_a <- G_a + dG + f sigma(G_a + dG) xi on every active device with a nonzero update.
+
+        ``noise_factor`` f scales write noise only; 1 is the physical law and 0 an
+        exact-write oracle. Programming noise and stuck devices are unaffected.
+        """
 
         if self.g is None:
             raise RuntimeError("Expected a programmed CMO matrix before writing to it.")
         if delta.shape != (self.size,) or not bool(torch.isfinite(delta).all()):
             raise ValueError("Expected one finite normalized update per weight.")
+        if isinstance(noise_factor, bool) or not math.isfinite(noise_factor) or noise_factor < 0:
+            raise ValueError(f"Expected a finite nonnegative write-noise factor. Provided value: {noise_factor!r}.")
         requested = delta != 0
         written = requested & ~self.mask[ACTIVE]
-        active = torch.where(written, self._draw(self.g[ACTIVE] + delta * HALF_RANGE_US), self.g[ACTIVE])
+        active = torch.where(written, self._draw(self.g[ACTIVE] + delta * HALF_RANGE_US, noise_factor),
+                             self.g[ACTIVE])
         self.g = torch.stack((active, self.g[REFERENCE]))
         self.writes += written
         self.device_writes += int(written.sum())
