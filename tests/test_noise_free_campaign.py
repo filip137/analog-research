@@ -63,7 +63,8 @@ def test_local_runs_only_the_anchor_and_canaries_are_exclusive():
         assert [h for h in oracle.HOSTS if oracle.eligible(label, h)] == [host]
 
 
-def test_queue_refuses_without_recorded_authorization(tmp_path):
+def test_queue_refuses_without_recorded_authorization(tmp_path, monkeypatch):
+    monkeypatch.setattr(oracle, "AUTHORIZATION", None)
     with pytest.raises(ValueError, match='authorization'):
         oracle.queue([], tmp_path, tmp_path, tmp_path)
 

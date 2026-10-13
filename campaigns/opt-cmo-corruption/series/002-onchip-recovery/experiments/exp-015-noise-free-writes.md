@@ -102,8 +102,8 @@ Confirmed by the user unless marked proposed.
 
 ## Measurements and decision
 
-Frozen before results; the numeric thresholds are **proposed** until the user
-confirms them at launch.
+Frozen before results. The user confirmed the 0.5 and 0.2 thresholds, the
+C-validity guard and no LR screen for C at launch approval on October 13.
 
 ```text
 Unit: source × assignment × fault rate × held-out domain (generated test,
@@ -193,6 +193,39 @@ Roles:
 
 ## Current execution handoff
 
-Planned. The material Explorer choices are confirmed; the numeric decision
-thresholds, hosts and budget await confirmation. The next step is the Codifier
-extension and its tests. Nothing has been launched.
+**Launch approved October 13, about 18:45 Paris time:**
+- hosts: riri (RTX 5090), nom-cool-1 and nom-cool-2 (RTX 3090);
+- caps: 8 GPU-hours, 250 GB, 24 hours from first admission;
+- this session is the single Monitor.
+
+The exact authorization text is in `launch/exp15_noise_free.py`.
+
+What changed (Codifier):
+- Commit `b0159b7` adds optional `onchip.write_noise_scale` (contract
+  extension point "on-chip update law"). Its tests show bitwise identity at
+  scale 1, exact writes at scale 0, unchanged threshold, counters and noise
+  stream, and unchanged exp-013 lifecycle sections. The workflow suite passes
+  (436 tests).
+- Commit `b24576c` adds `launch/exp15_noise_free.py`, the six lifecycles and
+  their tests. The helper refuses to queue without a recorded authorization.
+
+Local readiness on nom-cool-2:
+- The frozen worker checkout `/home/filip/analog-research/opt-cmo-exp1/hwa-exp15-noise-free-20261013`
+  is at `b24576c`, cloned from `launch/exp15-source-b24576c.bundle`.
+- The anchor lifecycle digest equals exp-013's (`84eaaf12…`), and its
+  preparation and dry run pass.
+- Readiness-only dry runs of `std3-271002-thresholded` (`6eb2ed76…`) and
+  `std3-271002-dense` (`d9bb127a…`) also pass. They are not local placements.
+
+Measured exp-013 on-chip times: about 566 s per job on an RTX 5090 and
+1,390–1,500 s on an RTX 3090, with an 18.5 GiB peak.
+
+Proposed placement:
+- **nom-cool-2 (3090):** the anchor only.
+- **nom-cool-1 (3090):** the `cdt3-271002-thresholded` canary, then the shared
+  queue.
+- **riri (5090):** the `std3-271002-dense` canary, then the shared queue. riri
+  first needs the exp-013 P0 inputs (about 24 GB) staged from nom-cool-1.
+
+Remaining jobs are released only after all three canaries validate and the
+anchor is exact.

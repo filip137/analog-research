@@ -24,6 +24,7 @@ from workflow.lifecycle import parse_lifecycle, verify_provenance
 PREFIX = 'opt125m-cmo-l6-exp15-noise-free'
 PHASE = 'opt-cmo-exp15-noise-free-20261013'
 NOTE = 'campaigns/opt-cmo-corruption/series/002-onchip-recovery/experiments/exp-015-noise-free-writes.md'
+# Arm A evidence; collect() rebinds it beside the declared exp-015 evidence root.
 EXP13 = ROOT/'results/lifecycles/opt125m-cmo-l6-exp7-recovery-regimes'
 ARMS = ('thresholded', 'dense')
 SPLITS = ('development', 'transfer_generated', 'transfer_wikitext')
@@ -34,8 +35,13 @@ HOSTS = ('riri', 'nom-cool-1', 'local')
 CANARIES = {ANCHOR: 'local', 'std3-271002-dense': 'riri', 'cdt3-271002-thresholded': 'nom-cool-1'}
 EXPECTED_SECONDS = {'riri': 900, 'nom-cool-1': 2100, 'local': 2100}
 PEAK_MIB, HEADROOM_MIB = 20500, 2048
-# Filled only from the user's explicit launch approval; queue() refuses without it.
-AUTHORIZATION = None
+# Recorded from the user's explicit launch approval; queue() refuses without it.
+AUTHORIZATION = ('User approved exp-015 on 2026-10-13: write-noise-only exact-write oracle, arms B '
+    '(thresholded nominal 2-sigma, accumulated, uncapped) and C (dense), LR .003, the full exp-013 grid '
+    '(std3/cdt3/std9, 0-5% faults, assignments 271002-271004), exp-013 uncapped reused as A only after an '
+    'exact anchor replay; thresholds 0.5/0.2 and the C-validity guard confirmed; no LR screen. riri RTX5090 '
+    'with P0 staging from nom-cool-1, nom-cool-1 and nom-cool-2 RTX3090s. Eight GPU-hours, 250 GB, 24h from '
+    'first admission; no scientific tuning or extension.')
 
 
 def labels():
@@ -339,6 +345,8 @@ def gate(queue_config, evidence, name, payload):
 
 def collect(queue_config, evidence):
     from campaigns.recovery_collect import collect as native_collect
+    global EXP13
+    EXP13 = evidence.parent/'opt125m-cmo-l6-exp7-recovery-regimes'
     label = os.environ['RUN_WATCH_JOB_ID'].removeprefix(PREFIX+'-'); parts(label)
     result = native_collect(queue_config,evidence/'collected'); folder = Path(result['collected'])
     report = checked_report(label,json.loads((folder/'measurements.json').read_text()),
