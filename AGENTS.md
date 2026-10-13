@@ -139,6 +139,14 @@ specified in the [CMO device contract](docs/reram_cmo_device.md):
   device and step on the held state, with no verify and no retry, so write
   errors persist.
 
+HWA training decisions — noise model, magnitude and scaling, weight clipping
+and mapping, corruption-aware masks, objective and distillation, training data
+and token budget, learning-rate schedule and checkpoint selection — consult the
+two reference papers in [`hwa_papers/`](hwa_papers/README.md): Rasch et al.
+2023 (arXiv:2302.08469) and Büchel et al. 2025, *Analog Foundation Models*
+(arXiv:2505.09663). The experiment note states which choices follow them and
+which deviate, and why.
+
 CMO drift and read noise are disabled initially. IBM optimized-material
 (OM) ReRAM (`"om"`: literal AIHWKit cells, pulse P&V and pulse laws) and
 Gaussian PCM (`"pcm"`) remain supported, separately declared regimes.

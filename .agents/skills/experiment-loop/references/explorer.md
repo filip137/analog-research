@@ -15,7 +15,10 @@ and `docs/*_results.md` (grep the network, technology, defect kind and arm names
 Campaign result notes carry a one-line `summary` in their frontmatter; read those first.
 Write a short linked list of what is already known and under which regime. If the
 question is already answered in that regime, stop and say so; if a related result
-exists, state what differs.
+exists, state what differs. For any question that touches HWA training, also read
+the two reference papers in [`hwa_papers/`](../../../../hwa_papers/README.md) (Rasch
+et al. 2023; Büchel et al. 2025, *Analog Foundation Models*) and note what they
+recommend for the choice at hand.
 
 ## 2. Question and decision
 
@@ -45,10 +48,15 @@ Starting proposals for OPT, from `examples/lifecycles/opt125m-cmo-mlp4-template.
   Choose the mean, the concentrations and the stuck `kind` per question, in one
   list that is never pooled. If 5 % destroys performance, lower the mean before
   testing recovery;
-- HWA sources: `digital` and `standard_hwa`, with the CMO `hwa.noise_std`
-  (constant-σ Gaussian weight noise) declared in the note; add `cdt_<kind>` only
-  when corruption-aware training is part of the question and the technology
-  supports it (not yet CMO);
+- HWA sources: `digital` and `standard_hwa`, with the CMO `hwa.noise_std` and
+  `hwa.noise_scaling` (Gaussian weight noise) declared in the note; add
+  `cdt_<kind>` only when corruption-aware training is part of the question (CMO
+  supports it: temporary stuck active and reference devices). Every HWA setting
+  must be checked against [`hwa_papers/`](../../../../hwa_papers/README.md). This
+  covers noise model, magnitude and scaling; clipping; corruption masks;
+  objective and distillation; training data and token budget; learning-rate
+  schedule; checkpoint selection. Mark each choice in the note as following
+  Rasch 2023 or Büchel 2025, or as a stated deviation with its reason;
 - on-chip arms: the five standard ones (`none`, `calibration`, `rewrite`,
   `onchip_weights`, `onchip_calibration`), `cmo_idealized_write_adam`;
 - arrays: one assignment for a labelled pilot, at least three for any claim;
