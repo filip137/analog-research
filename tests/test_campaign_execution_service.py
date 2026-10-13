@@ -330,8 +330,15 @@ def test_retry_requires_known_class_terminal_workers_and_only_once(setup):
         scheduler.campaigns.authorize_retry("one", "node_failure", evidence)
 
 
-def driver_crash_receipt(setup, tmp_path):
-    scheduler, _, _ = ready(setup)
+def driver_crash_receipt(setup, tmp_path, names=('one',)):
+    if names == ('one',):
+        scheduler, _, _ = ready(setup)
+    else:
+        scheduler, _, make_job, manifest = setup
+        for name in names: make_job(name)
+        sha = scheduler.campaigns.register(manifest(names))
+        scheduler.campaigns.gate('study', 'handoff', {'manifest_sha256': sha, 'passed': True, 'evidence': ['tested']})
+        scheduler.campaigns.storage('study', 10)
     job = scheduler.store.job("one")
     spec = job["spec"]
     spec["retry_safe"] = False
@@ -365,6 +372,53 @@ def test_driver_recovery_is_one_audited_replay_without_changing_science_or_budge
     assert scheduler.store.db.execute("SELECT COUNT(*) FROM campaign_retries").fetchone()[0] == 1
     with pytest.raises(ValueError, match="allowance already consumed"):
         scheduler.campaigns.recover_driver_crash("one", {**receipt, "authorization": "different retry"})
+
+
+@pytest.mark.parametrize('failure', [None, 'not_over_limit', 'daytime_window', 'active_worker', 'wrong_gpu', 'expanded_window', 'other_started'])
+def test_resource_preemption_restarts_once_in_a_narrowed_night_window(setup, tmp_path, failure):
+    from datetime import datetime
+    receipt = driver_crash_receipt(setup, tmp_path, names=('one', 'two'))
+    scheduler, now, _, _ = setup
+    now[0] = datetime.fromisoformat('2026-10-13T21:15:00+02:00').timestamp()
+    scheduler.campaigns.storage('study', 10)
+    scheduler.store.update_job('one', 'cancelled')
+    scheduler.store.db.execute("UPDATE attempts SET state='cancelled'")
+    path = Path(receipt['evidence']['path'])
+    evidence = {'failure_class': 'preempted', 'failed_attempt': 'failed-one', 'failed_target': 'lab',
+        'reason': 'daytime_5090_limit',
+        'resource_observation': {'observed_at': now[0], 'our_5090s': ['gpu', 'two', 'three']},
+        'worker_terminal': {'attempt_id': 'failed-one', 'worker_alive': False, 'supervisor_alive': False,
+                            'receipt': {'state': 'cancelled'}},
+        'execution_window': {'start': '2026-10-13T22:00:00+02:00', 'end': '2026-10-14T07:20:00+02:00'}}
+    if failure == 'not_over_limit': evidence['resource_observation']['our_5090s'].pop()
+    elif failure == 'daytime_window': evidence['execution_window']['end'] = '2026-10-14T09:00:00+02:00'
+    elif failure == 'active_worker': evidence['worker_terminal']['worker_alive'] = True
+    elif failure == 'wrong_gpu': evidence['resource_observation']['our_5090s'][0] = 'wrong'
+    elif failure == 'expanded_window':
+        spec = scheduler.store.job('one')['spec']
+        spec['windows'] = [{'start': '2026-10-13T23:00:00+02:00', 'end': '2026-10-14T06:00:00+02:00'}]
+        scheduler.store.db.execute("UPDATE jobs SET spec=? WHERE id='one'", (json.dumps(spec),))
+        receipt['job_spec_sha256'] = digest(spec)
+    elif failure == 'other_started':
+        scheduler.store.update_job('two', 'running')
+    path.write_text(json.dumps(evidence)); receipt['evidence']['sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+    before = scheduler.store.job('one')
+    if failure:
+        with pytest.raises(ValueError): scheduler.campaigns.recover_resource_preemption('one', receipt)
+        assert scheduler.store.job('one') == before
+    else:
+        identity = scheduler.campaigns.recover_resource_preemption('one', receipt)
+        after = scheduler.store.job('one')
+        expected = before['spec']; expected['windows'] = [evidence['execution_window']]
+        expected['placements']['lab']['allow_existing_run_dir'] = True
+        assert after['spec'] == expected and after['used_seconds'] == 45
+        assert after['state'] == 'queued' and not after['spec']['retry_safe']
+        assert scheduler.store.job('two')['state'] == 'held'
+        assert scheduler.store.job('two')['spec']['windows'] == [evidence['execution_window']]
+        assert scheduler.campaigns.recover_resource_preemption('one', receipt) == identity
+        now[0] = datetime.fromisoformat('2026-10-13T22:15:00+02:00').timestamp()
+        assert scheduler.campaigns.recover_resource_preemption('one', receipt) == identity
+        assert len(scheduler.store.attempts()) == 1
 
 
 @pytest.mark.parametrize("failure", ["hash", "not_driver", "nonfinite", "active", "complete", "worker_alive", "budget", "no_spare", "contract"])

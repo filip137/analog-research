@@ -169,3 +169,30 @@ def test_queue_prepares_only_authorized_phase_with_isolated_outputs(tmp_path):
     assert any(r['path'].endswith('/exp16-reused') for r in manifest['storage_roots'])
     with pytest.raises(ValueError, match='authorization'):
         pilot.queue([receipt], tmp_path / 'unapproved', Path('/controller'), evidence_root, 'main')
+
+
+def test_frozen_decisions_require_every_assignment_and_preserve_undefined_gaps():
+    review_path = PATH.parents[1] / 'series/002-onchip-recovery/analysis/exp016_review.py'
+    spec = importlib.util.spec_from_file_location('pair_review', review_path)
+    reviewer = importlib.util.module_from_spec(spec); spec.loader.exec_module(reviewer)
+    units = []
+    for tag in pilot.TAGS:
+        for array in pilot.ARRAYS:
+            for domain in reviewer.DOMAINS:
+                for arm, gap in [('active_rewrite_oracle', .3), ('pair_rewrite_oracle', .99),
+                                 ('pair_rewrite_verify', .99), ('pair_rewrite_verify_recovery', 1.0)]:
+                    units.append({'source': tag, 'array_seed': array, 'domain': domain, 'arm': arm,
+                                  'gap_closed': gap, 'X': 1 - .9 * gap, 'exp013_cap4': .5, 'exp013_uncapped': .45})
+    summary = {'phase': 'random3', 'coverage_complete': True, 'starting_conditions': 18,
+               'endpoints': 90, 'units': units, 'rows': []}
+    result = reviewer.decisions(summary)
+    assert all(all(r[k] for k in ('R1', 'R2', 'R3', 'R4')) and r['R6'] == 'adds' for r in result['R1_R4_R6'])
+    assert set(result['R5'].values()) == {'not established'}
+    failed = next(u for u in units if u['source'] == 'std3' and u['array_seed'] == 271004
+                  and u['domain'] == reviewer.DOMAINS[0] and u['arm'] == 'pair_rewrite_verify')
+    failed['gap_closed'] = .88
+    first = reviewer.decisions(summary)['R1_R4_R6'][0]
+    assert first['R1'] is False and first['R2'] is False and first['R3'] is True
+    failed['gap_closed'] = None
+    first = reviewer.decisions(summary)['R1_R4_R6'][0]
+    assert first['R1'] is None and first['R2'] is None and first['R3'] is None

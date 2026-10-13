@@ -586,6 +586,9 @@ def collect(queue_config, evidence):
         if len(completed) == len(expected):
             write_frozen(evidence/'reviews/summary.json',
                          summarize(completed, exp13, phase))
+            if phase == 'random3':
+                command([sys.executable, str(ROOT/'campaigns/opt-cmo-corruption/series/002-onchip-recovery/analysis/exp016_review.py'),
+                         str(evidence)], cwd=ROOT)
     return {'collected': str(folder), 'label': label}
 
 

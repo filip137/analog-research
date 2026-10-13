@@ -50,6 +50,51 @@ below for the current assignment. The full comparison remains deferred.
   session owns operational diagnosis and scientific review; no duplicate
   watcher. Runtime/receipt identities and the deadline go in the handoff below.
 
+### Current random3 execution handoff
+
+- Worker code is frozen at `d49d59614e952fbbad32d99a82db4fffd4e37d7c` on fifi and
+  loulou, at `/home/filip/analog-research/opt-cmo-exp1/hwa-exp16-random3-20261013`.
+  Both use PyTorch 2.11.0+cu128. All nine single-stage dry runs and pinned input
+  hash/provenance checks passed on each host. The workflow suite passed 475
+  tests with one skip; the reduced-phase and controller checks are recorded
+  under `random3/readiness/`.
+- Campaign ID: `opt-cmo-exp16-pair-rewrite-20261013-random3`;
+  manifest SHA-256: `8f72936c57971bfd2e2ac4ac03faebbb405ac37a971c9aaa9c819d058964c384`.
+  `random3/prepared/queue/` holds the exact manifest and nine job definitions.
+  The preflight gate passed. Only `std3-271002-random3` is released; the other
+  eight jobs wait for its successful collection and handoff gate.
+- The first canary ran on fifi and produced valid native progress. Another
+  campaign subsequently occupied a third 5090 during the repository's daytime
+  window. Only the exp-016 canary was cancelled. Its worker and supervisor are
+  confirmed terminal; its reservation was released. Attempt
+  `4e4a25525a7f4218b1d4aa215ed8d5ac`, partial artifacts and **181.362764 charged
+  seconds** are retained. It is not a completed scientific endpoint or a replicate.
+- The generic queue uses a narrower daytime-quota window than this repository.
+  An audited `recover-resource-preemption` receipt therefore narrows **all nine
+  jobs** to **October 13, 22:00–October 14, 07:20 Europe/Paris**. It restarts only
+  the cancelled canary from the same original P0s, with no science, command or
+  budget change. Its receipt is `random3/readiness/resource-preemption-recovery.json`;
+  the former charge remains inside the 6 GPU-hour cap. No other campaign or
+  shared-service policy was changed.
+- The shared `run-watch-queue.service` (controller PID 1384148 at handoff) has
+  observed the canary as `queued`, reason `outside execution window`. The other
+  eight jobs remain `held`. It owns the 5-minute semantic checks, admission,
+  validation and collection. No agent needs to poll while awaiting 22:00.
+- The local collection controller is `random3/controller/`. Its analysis-only
+  follow-up verifies the compact collection hashes, revalidates native exports,
+  applies R0–R6 and writes `random3/analysis/decision.json`, `comparison.csv` and
+  `summary.md` after all nine jobs collect. Compute workers remain at d49d596.
+- Exact native receipt paths are in `prepared/{fifi,loulou}.json`.
+  `reviews/progress.json` tracks completed jobs/endpoints; `reviews/summary.json`
+  exists only after complete phase coverage. Expected duration is roughly
+  1–2 GPU-hours, plus validation/collection, within the unchanged 6 GPU-hour /
+  200 GB caps. The original outer deadline remains October 14, 21:10:57 Paris;
+  the narrower overnight window controls actual admissions and termination.
+- Recovery is bounded to this one proven preemption. Further operational
+  incidents remain visible in the shared service and require diagnosis within
+  the remaining budget; scientific retuning is not authorized. Collected
+  numerical outcomes, including negative results, never trigger a retry.
+
 ## Question and authorization
 
 On October 13 the user approved drafting this comparison. Each weight is a pair
@@ -320,7 +365,7 @@ and launch needs explicit approval.
   ran the user's CIFAR job.
 - **Evidence root:** `results/lifecycles/opt125m-cmo-l6-exp16-pair-rewrite/`.
 
-## Current execution handoff
+## Earlier full-comparison preparation
 
 Ready. Session hwa-43 drafted this note as Explorer, and every Explorer field is
 resolved. On October 13 the user assigned a separate Codifier/Monitor session.

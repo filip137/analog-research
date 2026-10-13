@@ -901,8 +901,11 @@ class CampaignLedger:
     def recover_missing_tmux(self, job_id, raw):
         return self._recover_operational_failure(job_id, raw, "transport_before_start")
 
+    def recover_resource_preemption(self, job_id, raw):
+        return self._recover_operational_failure(job_id, raw, "preempted")
+
     def _recover_operational_failure(self, job_id, raw, failure_class):
-        """One audited restart after a driver crash or repaired missing tmux.
+        """One audited restart after a driver crash, missing tmux or resource preemption.
 
         Keep retry_safe=false: this receipt authorizes only this terminal fault,
         from original inputs, on an already prepared host. A driver crash excludes
@@ -927,7 +930,30 @@ class CampaignLedger:
                 and any(f"[{pid}]: segfault" in line and "libcuda.so" in line for line in evidence.get("kernel_log", [])))
         launcher_failure = (evidence.get("failure_class") == "transport_before_start" and missing_tmux_trace(evidence.get("launcher_log", ""))
                             and evidence.get("tmux_probe", {}).get("passed") is True)
-        if not ((failure_class == "node_failure" and driver_failure) or (failure_class == "transport_before_start" and launcher_failure)):
+        preempted = False
+        window = None
+        if failure_class == "preempted":
+            from zoneinfo import ZoneInfo
+            observed = evidence.get("resource_observation", {})
+            occupied = observed.get("our_5090s", [])
+            local = datetime.fromtimestamp(observed.get("observed_at", 0), ZoneInfo("Europe/Paris"))
+            preempted = (evidence.get("failure_class") == "preempted"
+                         and evidence.get("reason") == "daytime_5090_limit"
+                         and isinstance(occupied, list) and len(set(occupied)) > 2
+                         and 8 <= local.hour < 22)
+            window = evidence.get("execution_window", {})
+            if set(window) != {"start", "end"}:
+                raise ValueError("resource preemption requires an explicit overnight execution window")
+            start, end = (datetime.fromisoformat(window[k]) for k in ("start", "end"))
+            if (start.tzinfo is None or end.tzinfo is None
+                    or not observed.get("observed_at", 0) <= start.timestamp() < end.timestamp()):
+                raise ValueError("resource preemption window must follow its observation and be timezone-aware")
+            a, b = (v.astimezone(ZoneInfo("Europe/Paris")) for v in (start, end))
+            if not (a.hour >= 22 and (b.date() - a.date()).days == 1
+                    and (b.hour < 8 or (b.hour == 8 and b.minute == b.second == b.microsecond == 0))):
+                raise ValueError("resource preemption window must stay between 22:00 and 08:00 Paris")
+        if not ((failure_class == "node_failure" and driver_failure)
+                or (failure_class == "transport_before_start" and launcher_failure) or preempted):
             raise ValueError("evidence does not classify the operational failure and its recovery")
         with self.store.transaction():
             old = self.db.execute("SELECT evidence,at FROM campaign_retries WHERE job_id=?", (job_id,)).fetchone()
@@ -953,8 +979,10 @@ class CampaignLedger:
                         self.store.update_job(job_id, "queued", "same authorized replay; reuse owned receipt directory", self.clock())
                     return digest(receipt)
                 raise ValueError("one operational replay allowance already consumed")
+            if preempted and end.timestamp() <= self.clock():
+                raise ValueError("resource preemption window has expired")
             case, job = self.case(job_id), self.store.job(job_id)
-            if not case or not job or job["state"] != "attention":
+            if not case or not job or job["state"] != ("cancelled" if preempted else "attention"):
                 raise ValueError("driver recovery requires a failed campaign job")
             contract = self.contract(case["campaign_id"])
             if receipt["manifest_sha256"] != contract["sha256"] or receipt["job_spec_sha256"] != digest(job["spec"]):
@@ -963,13 +991,20 @@ class CampaignLedger:
             if not attempts or any(a["state"] in ACTIVE for a in attempts):
                 raise ValueError("active or unknown worker prevents driver recovery")
             attempt = attempts[-1]
-            if attempt["state"] != "failed" or attempt["token"] != receipt["failed_attempt"] or attempt["token"] != evidence.get("failed_attempt") or attempt["target"] != evidence.get("failed_target"):
+            if attempt["state"] != ("cancelled" if preempted else "failed") or attempt["token"] != receipt["failed_attempt"] or attempt["token"] != evidence.get("failed_attempt") or attempt["target"] != evidence.get("failed_target"):
                 raise ValueError("driver recovery does not match the last failed attempt")
+            if preempted and attempt["gpu_uuid"] not in evidence["resource_observation"]["our_5090s"]:
+                raise ValueError("preempted worker was not part of the observed resource conflict")
             observed = json.loads(attempt["receipt"] or "{}")
             terminal = observed.get("campaign_worker_terminal", {})
             workers_terminal = terminal.get("worker_alive") is False and terminal.get("supervisor_alive") is False
             if failure_class == "transport_before_start":
                 workers_terminal = observed.get("campaign_worker_unstarted", {}).get("reason") == "tmux_not_found"
+            if preempted:
+                terminal = evidence.get("worker_terminal", {})
+                workers_terminal = (terminal.get("attempt_id") == attempt["token"]
+                    and terminal.get("worker_alive") is False and terminal.get("supervisor_alive") is False
+                    and terminal.get("receipt", {}).get("state") == "cancelled")
             if observed.get("alive") is not False or observed.get("reservation_held") is not False or not workers_terminal:
                 raise ValueError("all workers and reservations must be confirmed terminal")
             allowed, reason = self.eligible(job)
@@ -985,6 +1020,27 @@ class CampaignLedger:
                 placement["allow_existing_run_dir"] = True
             if not revised["placements"]:
                 raise ValueError("driver recovery needs another existing prepared host")
+            if preempted:
+                # Narrow this campaign's pending admissions only. Preserve job
+                # identities, commands, artifacts, previous charges and all caps.
+                for pending_case in contract["effective_cases"]:
+                    pending = self.store.job(pending_case["id"])
+                    if pending["id"] != job_id and pending["state"] != "held":
+                        raise ValueError("overnight rescheduling requires every other campaign job held")
+                    old_spec = pending["spec"]
+                    if old_spec.get("deadline") and end.timestamp() > datetime.fromisoformat(old_spec["deadline"]).timestamp():
+                        raise ValueError("overnight window cannot extend a job deadline")
+                    if old_spec.get("windows") and not any(
+                        datetime.fromisoformat(w["start"]).timestamp() <= start.timestamp()
+                        and end.timestamp() <= datetime.fromisoformat(w["end"]).timestamp()
+                        for w in old_spec["windows"]):
+                        raise ValueError("overnight window cannot expand an existing execution window")
+                    changed = revised if pending["id"] == job_id else json.loads(canonical(old_spec))
+                    changed["windows"] = [window]
+                    self.db.execute("UPDATE jobs SET spec=? WHERE id=?", (canonical(changed), pending["id"]))
+                    self.store.event(pending["id"], "campaign_resource_window_restricted", {
+                        "receipt_sha256": digest(receipt), "previous_spec_sha256": digest(old_spec),
+                        "spec_sha256": digest(changed), "window": window}, self.clock())
             self.db.execute("INSERT INTO campaign_retries VALUES(?,?,?,?)", (job_id, failure_class, canonical(receipt), self.clock()))
             self.db.execute("UPDATE jobs SET spec=?,mode='run' WHERE id=?", (canonical(revised), job_id))
             self.store.event(job_id, "campaign_operational_recovery", {"receipt": receipt, "failure_class": failure_class,
@@ -1651,6 +1707,8 @@ def main(argv=None):
     recovery.add_argument("case_id"); recovery.add_argument("receipt", type=Path)
     missing_tmux = commands.add_parser("recover-missing-tmux")
     missing_tmux.add_argument("case_id"); missing_tmux.add_argument("receipt", type=Path)
+    preempted = commands.add_parser("recover-resource-preemption")
+    preempted.add_argument("case_id"); preempted.add_argument("receipt", type=Path)
     args = parser.parse_args(argv)
     if args.command == "probe-artifacts":
         print(canonical(artifact_probe(args.root))); return
@@ -1706,6 +1764,8 @@ def main(argv=None):
         print(scheduler.campaigns.recover_driver_crash(args.case_id, json.loads(args.receipt.read_text()))); return
     if args.command == "recover-missing-tmux":
         print(scheduler.campaigns.recover_missing_tmux(args.case_id, json.loads(args.receipt.read_text()))); return
+    if args.command == "recover-resource-preemption":
+        print(scheduler.campaigns.recover_resource_preemption(args.case_id, json.loads(args.receipt.read_text()))); return
     if args.command == "incident":
         print(scheduler.campaigns.incident(args.case_id, args.kind, json.loads(args.evidence.read_text()))); return
     from queue_recovery import Recovery
