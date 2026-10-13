@@ -32,6 +32,7 @@ from experiments.cifar_crossbar.model import tensor_hash
 from workflow import data as data_stage
 from workflow import devices as device_stage
 from workflow import context_views
+from workflow import program_verify
 from workflow.networks import family
 
 
@@ -323,8 +324,13 @@ def evaluations(network, array, cache, lifecycle, device) -> dict:
     return values
 
 
-def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, device) -> dict:
-    """Run one on-chip arm from the array's current (P0) state."""
+def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, device, array_seed=None) -> dict:
+    """Run one on-chip arm from the array's current (P0) state.
+
+    An arm with a ``fault_rewrite`` first applies that one-shot CMO rewrite
+    (``program_verify.fault_rewrite``); learning, its costs and any write-attempt
+    cap then start from the rewritten state.
+    """
 
     onchip, data = lifecycle.onchip, lifecycle.data
     network_family = family(lifecycle.network)
@@ -348,6 +354,13 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
     if adapter:
         groups.append({"params": network.lora.parameters(), "lr": adapter.learning_rate})
     optimizer = torch.optim.Adam(groups) if groups else None
+    initial_hash = tensor_hash(array.read())
+    rewritten = None
+    if arm.fault_rewrite is not None:
+        if not cmo or array_seed is None:
+            raise ValueError("Expected a CMO array and its assignment seed for a fault rewrite.")
+        rewritten = program_verify.fault_rewrite(array, target, lifecycle, arm.fault_rewrite, array_seed)
+        store.append_metric({"stage": "onchip_fault_rewrite", "case": label, "arm": arm.arm_id, **rewritten})
     writer = make_writer(array, lifecycle) if learn and direct else None
     tolerance = (
         array.nominal_step * onchip.tolerance_steps
@@ -359,7 +372,6 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
     baseline_writes = array.write_counts().clone() if cmo else None
     fixed = device_stage.fixed_state(array, technology)
     prefix = network.prefix_hash()
-    initial_hash = tensor_hash(array.read())
     rewrite_count = torch.zeros_like(target, dtype=torch.int64)
     rewrite_reads = 0
     training = cache["recovery_context" if lifecycle.recovery_views else onchip.cohort_key]
@@ -457,6 +469,8 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
             raise RuntimeError("Digital LoRA changed the frozen base model.")
         if adapter and (tensor_hash(array.read()) != initial_hash or array.cost() != baseline):
             raise RuntimeError("Digital LoRA changed the held physical deployment.")
+        if rewritten and not learn and tensor_hash(array.read()) != rewritten["rewritten_apparent_sha256"]:
+            raise RuntimeError("A held arm changed the array after its fault rewrite.")
         cost = {key: value - baseline[key] for key, value in array.cost().items()}
         if om:
             count = writer.count if writer else rewrite_count
@@ -511,6 +525,7 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
              "extra_macs_per_token": sum(p.numel() for p in network.lora.parameters()),
              "base_unchanged": True, "array_unchanged": True}} if adapter else {}),
         "curve": curve,
+        **({"fault_rewrite": rewritten} if rewritten else {}),
         "initial_apparent_sha256": initial_hash,
         "final_apparent_sha256": tensor_hash(array.read()),
         "state": {

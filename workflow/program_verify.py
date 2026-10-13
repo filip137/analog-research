@@ -34,6 +34,7 @@ from experiments.cifar_crossbar.full_epoch_runtime import om_population
 from experiments.cifar_crossbar.model import tensor_hash
 from experiments.cifar_crossbar.open_loop_updates import apply_pulse_counts, nominal_reset_counts
 from experiments.cifar_crossbar.sweep_devices import binding_seed
+from training import reram_cmo as cmo
 from workflow import devices as device_stage
 from workflow.lifecycle import FAILURE_KINDS
 
@@ -192,6 +193,91 @@ def program(array, target, lifecycle) -> dict:
             (target - array.programmed_read()).square().mean().sqrt()
         )
     return report
+
+
+def detect_stuck_devices(reads, target, *, acceptance, noise_scale, threshold_sigma):
+    """Controller-side detection: devices read more than ``threshold_sigma`` programming sigmas from their target.
+
+    A pure function of verify reads (uS, shape (2, size)) and the deployment
+    targets; it never sees a fault map. The active target is the mapped weight,
+    the reference target mid-range.
+    """
+
+    expected = torch.stack((cmo.to_conductance(target), torch.full_like(target, cmo.MID_US)))
+    return (reads - expected).abs() > threshold_sigma * noise_scale * cmo.programming_sigma(expected, acceptance)
+
+
+def pair_rewrite_plan(flags, observed, target, roles):
+    """Conductance targets that cancel flagged devices through their healthy partners.
+
+    A flagged reference is absorbed by its active device, ``a = r_s + 39.6 q``.
+    With ``roles == "pair"``, a flagged active device is also absorbed by its
+    reference, ``r = a_s - 39.6 q``: the stuck device takes the fixed role.
+    Targets are clipped to the conductance range; weights with both devices
+    flagged stay as read. Returns (selected, targets in uS, clipped count).
+    """
+
+    fix_active = flags[cmo.REFERENCE] & ~flags[cmo.ACTIVE]
+    fix_reference = flags[cmo.ACTIVE] & ~flags[cmo.REFERENCE]
+    if roles == "active":
+        fix_reference = torch.zeros_like(fix_reference)
+    wanted = torch.stack((observed[cmo.REFERENCE] + target * cmo.HALF_RANGE_US,
+                          observed[cmo.ACTIVE] - target * cmo.HALF_RANGE_US))
+    bounded = wanted.clamp(cmo.G_MIN_US, cmo.G_MAX_US)
+    selected = torch.stack((fix_active, fix_reference))
+    return selected, torch.where(selected, bounded, observed), int(((wanted != bounded) & selected).sum())
+
+
+@torch.no_grad()
+def fault_rewrite(array, target, lifecycle, rewrite, assignment_seed) -> dict:
+    """One-shot fault-aware rewrite of a held CMO deployment (docs/reram_cmo_device.md).
+
+    The controller decides from verify reads (``verify``) or from the hidden
+    fault map (``oracle``, non-physical), programs the selected partner devices
+    from the declared rewrite stream, and only then is the hidden map read for
+    analysis-side accounting.
+    """
+
+    pv, devices = lifecycle.program_verify, lifecycle.devices
+    before = array.cost()
+    if rewrite.detection == "verify":
+        observed = array.read_devices()
+        flags = detect_stuck_devices(observed, target, acceptance=pv.acceptance_percent,
+                                     noise_scale=devices.noise_scale, threshold_sigma=rewrite.threshold_sigma)
+    else:
+        flags, observed = device_stage.hidden_faults(array)
+    selected, targets, clipped = pair_rewrite_plan(flags, observed, target, rewrite.roles)
+    plan = torch.cat((selected.flatten().to(target.dtype), torch.where(selected, targets, 0.0).flatten()))
+    namespace = lifecycle.network.binding_namespace
+    seeds = {m.name: binding_seed(rewrite.seed, namespace, f"rewrite/{assignment_seed}/{m.name}") for m in array.layout}
+    array.program_devices(targets, selected, seeds)
+    after = array.cost()
+    mask, _ = device_stage.hidden_faults(array)
+    both = mask[cmo.ACTIVE] & mask[cmo.REFERENCE]
+    return {
+        **rewrite.to_dict(),
+        "fault_map": "verify reads" if rewrite.detection == "verify" else "hidden oracle (non-physical)",
+        "controller": {
+            "flagged_active": int(flags[cmo.ACTIVE].sum()),
+            "flagged_reference": int(flags[cmo.REFERENCE].sum()),
+            "flagged_both": int((flags[cmo.ACTIVE] & flags[cmo.REFERENCE]).sum()),
+            "programmed_active": int(selected[cmo.ACTIVE].sum()),
+            "programmed_reference": int(selected[cmo.REFERENCE].sum()),
+            "clipped_targets": clipped,
+            "plan_sha256": tensor_hash(plan),
+        },
+        "stream_seeds": seeds,
+        "cost": {key: after[key] - before[key] for key in after},
+        "out_of_range_devices": array.out_of_range(),
+        "rewritten_apparent_sha256": tensor_hash(array.read()),
+        "analysis": {
+            "stuck_active": int(mask[cmo.ACTIVE].sum()),
+            "stuck_reference": int(mask[cmo.REFERENCE].sum()),
+            "stuck_both": int(both.sum()),
+            "false_positive_devices": int((flags & ~mask).sum()),
+            "false_negative_devices": int((~flags & mask).sum()),
+        },
+    }
 
 
 def characterize_endpoints(populations, lifecycle, device) -> dict:

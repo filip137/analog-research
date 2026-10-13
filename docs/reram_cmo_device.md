@@ -273,6 +273,36 @@ G_a  ← G_a + ΔG + noise_scale · σ_PV(G_a + ΔG) · ξ       (healthy active
   rewritten, so the control matches the learning arms' writes.
 - The `calibration` arms train digital parameters only and never write.
 
+### Fault-aware pair rewrite (`fault_rewrite`)
+
+A weight reads `q = (G_a − G_r) / 39.6 µS`, so one healthy device of a pair can
+cancel its stuck partner. The stuck device takes the fixed role:
+
+```text
+stuck reference r_s, healthy active:   G_a* = clip(r_s + 39.6 · q*, 9, 88.2 µS)
+stuck active a_s, healthy reference:   G_r* = clip(a_s − 39.6 · q*, 9, 88.2 µS)   (roles: pair)
+both stuck:                            unchanged
+programmed partner:                    G* + noise_scale · σ_PV(G*) · ξ
+```
+
+`q*` is the frozen deployment target.
+- **Detection.** `verify` reads each device's held conductance once and flags
+  |read − target| > `threshold_sigma` · σ_PV(target). The target is the mapped
+  value for the active device and 48.6 µS for the reference. Without read noise
+  one read suffices. Stuck values within the threshold of their target stay
+  undetected; those errors are small by construction. `oracle` uses the hidden
+  map and is not a physical method.
+- **Streams.** The partner endpoints come from per-matrix streams declared by
+  `fault_rewrite.seed`, never from the deployment or write stream. A later
+  learning arm therefore sees the same write noise as plain learning from P0.
+- **Isolation.** The verify controller is a pure function of reads and
+  targets. Arrays that read identically receive identical commands whatever
+  their hidden faults. The hidden map is read only after programming, for
+  accounting.
+- **Hardware assumption.** The scheme needs a separately programmable
+  reference device per weight, as here. With one shared reference column per
+  array there is no partner to adjust.
+
 The cost of each epoch is reported per assignment and arm:
 
 - `device_writes` (learning) and `device_programs` (rewrite), counting
@@ -310,7 +340,9 @@ The cost of each epoch is reported per assignment and arm:
 - `training/reram_cmo.py`: the law, the encoding and `CmoMatrix`.
 - `workflow/devices.py`: `CmoArray`, a layer-bound array, and
   `hierarchical_faults`, the die/array fault sampler.
-- `workflow/program_verify.py`: the `gaussian_endpoint` report.
+- `workflow/program_verify.py`: the `gaussian_endpoint` report and the
+  fault-aware pair rewrite (`detect_stuck_devices`, `pair_rewrite_plan`,
+  `fault_rewrite`).
 - `workflow/hwa.py`: the constant-σ HWA weight noise.
 - `workflow/onchip.py`: `IdealizedWriteAdam`.
 - `workflow/lifecycle.py`: `TECHNOLOGIES["cmo"]`, `CMO_ACCEPTANCE_PERCENT`,
@@ -340,3 +372,17 @@ The cost of each epoch is reported per assignment and arm:
 - a complete tiny-OPT lifecycle with a defect-free and a scenario-D case,
   all five arms, exact replay, `collect`, and the storage estimate (at most
   35 bytes per analog weight and trajectory).
+
+`tests/test_workflow_fault_rewrite.py` checks:
+
+- verify reads, partner programming from a separate stream, and the
+  verify-read counter, which is recorded in states only once taken;
+- detection thresholds, the pair and active-only plans, and clipping;
+- exact restoration of every weight with one healthy device under exact
+  programming;
+- that verify decisions depend only on reads and precede any fault-map access;
+- that stuck kinds and rates share fault positions and healthy endpoints;
+- schema round trips and rejections;
+- a tiny-OPT lifecycle with all five exp-016 arms plus plain learning, with
+  exact replay. On a healthy array, learning after a rewrite is bitwise plain
+  learning.

@@ -379,6 +379,42 @@ still drawn, so it advances identically. Lifecycles that declare it reject
 `rewrite` arms, whose programming noise it does not cover. Writer checkpoints
 and thresholded diagnostics record the declared value.
 
+Optional per-arm `fault_rewrite` (CMO only) applies one fault-aware rewrite of
+the held deployment at the start of a `hold` or `learn` arm, without calibration
+or a digital adapter; see the [CMO device contract](reram_cmo_device.md):
+
+```json
+{"id": "pair_rewrite_verify", "weights": "hold", "calibration": false,
+ "fault_rewrite": {"detection": "verify", "roles": "pair", "seed": 241016, "threshold_sigma": 5.0}}
+```
+
+- `detection: verify` reads every device once (two verify reads per weight). It
+  flags a device whose read lies more than `threshold_sigma` programming sigmas
+  from its target and uses that read as the stuck value. `detection: oracle`
+  takes the hidden fault map instead; it is a non-physical bound and declares no
+  threshold.
+- `roles: active` lets a healthy active device absorb a stuck reference;
+  `roles: pair` also lets a healthy reference absorb a stuck active device.
+  Weights with both devices flagged stay as read.
+- Partner devices are reprogrammed once with the deployment endpoint law. The
+  noise is drawn from per-matrix streams bound to `seed` and the assignment, so
+  arms sharing a seed receive the same draw for a device. `seed` must differ
+  from every array identity, deployment endpoint and the on-chip seed.
+- Arms with a rewrite are distinct settings, and each needs the plain
+  `hold` arm with the same calibration flag. A `hold` arm with a rewrite
+  does not train. A `learn` arm learns from the rewritten state. Its costs,
+  checkpoints and any `max_write_attempts_per_device` exclude the rewrite,
+  which is a programming event like deployment.
+- Lifecycles that declare `write_noise_scale` reject fault rewrites.
+- Each row records the receipt under `fault_rewrite`:
+  - controller decisions, flag counts, clipped targets and a plan digest;
+  - the rewrite cost: programs, stuck attempts and verify reads;
+  - out-of-range devices and the rewritten state's hash;
+  - analysis-side counts against the hidden map: stuck devices by role, false
+    positives and negatives. These are read only after programming.
+- Omitting `fault_rewrite` leaves every existing lifecycle digest and
+  checkpoint unchanged.
+
 Optional positive `onchip.development_every_steps` records held-state evaluation
 on the fixed development cohort at that optimizer-step interval. It never
 selects a checkpoint or changes the fixed final endpoint; test cohorts are not

@@ -210,6 +210,21 @@ class CmoArray:
     def read(self):
         return torch.cat([child.read() for child in self.children])
 
+    def read_devices(self):
+        """Controller-visible verify read of every device's held conductance (uS), shape (2, size)."""
+
+        return torch.cat([child.read_devices() for child in self.children], 1)
+
+    def program_devices(self, target_us, selected, seeds):
+        """Reprogram selected devices to conductance targets; ``seeds`` names one stream per matrix."""
+
+        if target_us.shape != (2, self.size) or selected.shape != (2, self.size):
+            raise ValueError("Expected selection flags and conductance targets of shape (2, size).")
+        for spec, child in zip(self.layout, self.children):
+            part = slice(spec.offset, spec.offset + spec.size)
+            generator = torch.Generator(device=self.device).manual_seed(seeds[spec.name])
+            child.program_devices(target_us[:, part], selected[:, part], generator)
+
     def write_counts(self):
         """Programs plus writes per device since construction."""
 
@@ -243,6 +258,17 @@ class CmoArray:
             raise ValueError("Expected the same layer-bound CMO array layout.")
         for child, value in zip(self.children, state["children"]):
             child.load_state_dict(value)
+
+
+def hidden_faults(array):
+    """Analysis-side permanent defects of a CMO array: (mask, stuck conductance in uS), shape (2, size).
+
+    Never a controller input. Only the non-physical oracle rewrite and post-hoc
+    accounting read it.
+    """
+
+    return (torch.cat([child.mask for child in array.children], 1),
+            torch.cat([child.stuck for child in array.children], 1))
 
 
 def fault_group(name: str) -> str:

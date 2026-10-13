@@ -1203,12 +1203,41 @@ class DigitalLora:
         return {"kind": "lora", "rank": self.rank, "alpha": self.alpha, "learning_rate": self.learning_rate}
 
 
+FAULT_REWRITE_DETECTIONS = ("oracle", "verify")
+FAULT_REWRITE_ROLES = ("active", "pair")
+
+
+@dataclass(frozen=True)
+class FaultRewrite:
+    """One-shot CMO fault-aware rewrite at the start of an arm (docs/reram_cmo_device.md).
+
+    ``detection``: ``verify`` flags devices from controller-visible verify reads
+    beyond ``threshold_sigma`` programming sigmas of their targets; ``oracle``
+    uses the hidden fault map (non-physical). ``roles``: ``active`` lets a
+    healthy active device absorb a stuck reference; ``pair`` also lets a healthy
+    reference absorb a stuck active device. ``seed`` names the programming
+    stream, separate from every deployment stream.
+    """
+
+    detection: str
+    roles: str
+    seed: int
+    threshold_sigma: Optional[float] = None
+
+    def to_dict(self) -> dict:
+        value = {"detection": self.detection, "roles": self.roles, "seed": self.seed}
+        if self.threshold_sigma is not None:
+            value["threshold_sigma"] = self.threshold_sigma
+        return value
+
+
 @dataclass(frozen=True)
 class OnchipArm:
     arm_id: str
     weights: str
     calibration: bool
     digital_adapter: Optional[DigitalLora] = None
+    fault_rewrite: Optional[FaultRewrite] = None
 
     @property
     def trains(self) -> bool:
@@ -1218,6 +1247,8 @@ class OnchipArm:
         value = {"id": self.arm_id, "weights": self.weights, "calibration": self.calibration}
         if self.digital_adapter is not None:
             value["digital_adapter"] = self.digital_adapter.to_dict()
+        if self.fault_rewrite is not None:
+            value["fault_rewrite"] = self.fault_rewrite.to_dict()
         return value
 
 
@@ -1281,6 +1312,21 @@ class Onchip:
         return value
 
 
+def _fault_rewrite(raw: Any, path: str) -> FaultRewrite:
+    detection = _choice(raw.get("detection") if isinstance(raw, Mapping) else None, f"{path}.detection",
+                        FAULT_REWRITE_DETECTIONS)
+    # Only measured detection has a threshold; the oracle reads the fault map itself.
+    keys = ("detection", "roles", "seed") + (("threshold_sigma",) if detection == "verify" else ())
+    raw = _object(raw, path, keys)
+    return FaultRewrite(
+        detection=detection,
+        roles=_choice(raw["roles"], f"{path}.roles", FAULT_REWRITE_ROLES),
+        seed=_integer(raw["seed"], f"{path}.seed", minimum=1, maximum=MAX_SEED),
+        threshold_sigma=(_number(raw["threshold_sigma"], f"{path}.threshold_sigma", positive=True)
+                         if detection == "verify" else None),
+    )
+
+
 def _onchip(raw: Any, technology: str) -> Onchip:
     if not isinstance(raw, Mapping):
         raise config_error("onchip", "to be an object", raw)
@@ -1317,8 +1363,19 @@ def _onchip(raw: Any, technology: str) -> Onchip:
     arms = []
     for index, item in enumerate(_list(raw["arms"], "onchip.arms")):
         path = f"onchip.arms[{index}]"
-        keys = ("id", "weights", "calibration") + (("digital_adapter",) if isinstance(item, Mapping) and "digital_adapter" in item else ())
+        keys = ("id", "weights", "calibration") + tuple(
+            name for name in ("digital_adapter", "fault_rewrite") if isinstance(item, Mapping) and name in item
+        )
         item = _object(item, path, keys)
+        rewrite = None
+        if "fault_rewrite" in item:
+            rewrite = _fault_rewrite(item["fault_rewrite"], f"{path}.fault_rewrite")
+            if technology != "cmo":
+                raise config_error(f"{path}.fault_rewrite", "to be declared only for CMO arrays", technology)
+            if item["weights"] not in ("hold", "learn") or "digital_adapter" in item:
+                raise config_error(
+                    path, "to rewrite faults before holding or learning weights, without a digital adapter", item
+                )
         adapter = None
         if "digital_adapter" in item:
             a = _object(item["digital_adapter"], f"{path}.digital_adapter", ("kind", "rank", "alpha", "learning_rate"))
@@ -1336,18 +1393,20 @@ def _onchip(raw: Any, technology: str) -> Onchip:
                 weights=_choice(item["weights"], f"{path}.weights", ("hold", "rewrite", "learn")),
                 calibration=_boolean(item["calibration"], f"{path}.calibration"),
                 digital_adapter=adapter,
+                fault_rewrite=rewrite,
             )
         )
     arms = tuple(arms)
     if len({arm.arm_id for arm in arms}) != len(arms):
         raise config_error("onchip.arms", "to have unique ids", [arm.arm_id for arm in arms])
-    settings = {(arm.weights, arm.calibration, arm.digital_adapter) for arm in arms}
+    settings = {(arm.weights, arm.calibration, arm.digital_adapter, arm.fault_rewrite) for arm in arms}
     if len(settings) != len(arms):
         raise config_error("onchip.arms", "to have unique weight/calibration settings", [a.to_dict() for a in arms])
     for arm in arms:
         # A weight-writing arm is interpretable only beside its matched
         # no-weight-write control with the same digital calibration.
-        if (arm.weights != "hold" or arm.digital_adapter is not None) and ("hold", arm.calibration, None) not in settings:
+        writes = arm.weights != "hold" or arm.digital_adapter is not None or arm.fault_rewrite is not None
+        if writes and ("hold", arm.calibration, None, None) not in settings:
             raise config_error(
                 "onchip.arms",
                 f"to include a hold arm with calibration={arm.calibration} matching {arm.arm_id!r}",
@@ -1377,12 +1436,18 @@ def _onchip(raw: Any, technology: str) -> Onchip:
             )
             if any(arm.weights == "rewrite" for arm in arms):
                 raise config_error("onchip.arms", "to omit rewrite under a thresholded write-attempt cap", raw["arms"])
+            # A one-shot fault rewrite is a programming event before learning,
+            # like deployment, so the write-attempt cap does not count it.
     if "write_noise_scale" in raw:
         # Scales on-chip write noise only. CMO rewrite arms reprogram with
         # physical programming noise, so they would not be matched controls.
         extra["write_noise_scale"] = _number(raw["write_noise_scale"], "onchip.write_noise_scale")
         if any(arm.weights == "rewrite" for arm in arms):
             raise config_error("onchip.arms", "to omit rewrite under a declared write_noise_scale", raw["arms"])
+        # Fault rewrites program with physical noise too; the exact-write oracle
+        # is a separate question, so the two are never mixed in one lifecycle.
+        if any(arm.fault_rewrite is not None for arm in arms):
+            raise config_error("onchip.arms", "to omit fault_rewrite under a declared write_noise_scale", raw["arms"])
     if "development_every_steps" in raw:
         extra["development_every_steps"] = _integer(
             raw["development_every_steps"], "onchip.development_every_steps", minimum=1
@@ -1645,6 +1710,14 @@ def _cross_validate(lifecycle: Lifecycle) -> None:
                 "to use population seeds separate from every array",
                 sorted(kernel & (identities | endpoints)),
             )
+    rewrites = {arm.fault_rewrite.seed for arm in (lifecycle.onchip.arms if lifecycle.onchip else ())
+                if arm.fault_rewrite is not None}
+    if rewrites & (identities | endpoints | {lifecycle.onchip.seed if lifecycle.onchip else None}):
+        raise config_error(
+            "onchip.arms.fault_rewrite.seed",
+            "to be separate from every array identity, deployment endpoint and the on-chip seed",
+            sorted(rewrites & (identities | endpoints | {lifecycle.onchip.seed})),
+        )
     if any(arm.trains for arm in lifecycle.hwa.arms) and not devices.selection_seeds:
         raise config_error(
             "devices.selection_seeds",

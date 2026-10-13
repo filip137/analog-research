@@ -354,6 +354,7 @@ def train_onchip(stage: Stage):
                 store=stage.store,
                 label=case.label,
                 device=device,
+                array_seed=seed,
             )
             state = outcome.pop("state")
             final = onchip.evaluations(network, array, cache, lifecycle, device)
@@ -383,6 +384,7 @@ def train_onchip(stage: Stage):
                     "weights": arm.weights,
                     "calibration": arm.calibration,
                     **({"digital_adapter": outcome["digital_adapter"]} if arm.digital_adapter else {}),
+                    **({"fault_rewrite": outcome["fault_rewrite"]} if arm.fault_rewrite else {}),
                     "identity": deployed["identity"],
                     "programming": deployed["programming"],
                     "p0_sha256": p0_sha256,

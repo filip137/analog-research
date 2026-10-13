@@ -95,6 +95,11 @@ class CmoMatrix:
     devices are never programmed or written, and requests addressed to them
     are counted as ``stuck_write_attempts``. ``writes`` counts programs and
     writes of each active device.
+
+    ``read_devices`` is the controller-visible verify read of every device's
+    held conductance. ``program_devices`` reprograms selected devices of either
+    row to arbitrary conductance targets with the same endpoint law, drawing
+    from a caller-owned stream so that the matrix's own stream is untouched.
     """
 
     def __init__(self, size, seed, acceptance, noise_scale, device, stuck=None):
@@ -112,6 +117,7 @@ class CmoMatrix:
         self.device_programs = 0
         self.device_writes = 0
         self.stuck_write_attempts = 0
+        self.verify_reads = 0
         self.mask = torch.zeros((2, size), dtype=torch.bool, device=device)
         self.stuck = torch.zeros((2, size), device=device)
         if stuck is not None:
@@ -183,6 +189,40 @@ class CmoMatrix:
         self.device_writes += int(written.sum())
         self.stuck_write_attempts += int(requested.sum()) - int(written.sum())
 
+    @torch.no_grad()
+    def program_devices(self, target_us, selected, generator):
+        """Reprogram ``selected`` devices of either row to ``target_us``: one P&V endpoint each.
+
+        ``target_us`` and ``selected`` have shape (2, size). Noise is drawn for
+        every device from ``generator`` (never the matrix's own stream), so a
+        device receives the same draw whichever other devices are selected.
+        Stuck devices keep their conductance and count as stuck attempts.
+        """
+
+        if self.g is None:
+            raise RuntimeError("Expected a programmed CMO matrix before reprogramming devices.")
+        if selected.shape != (2, self.size) or selected.dtype != torch.bool or target_us.shape != (2, self.size):
+            raise ValueError("Expected selection flags and conductance targets of shape (2, size).")
+        requested = torch.where(selected, target_us.to(self.g), self.g)
+        if not bool(torch.isfinite(requested).all()) or bool((requested[selected] < 0).any()):
+            raise ValueError("Expected finite nonnegative conductance targets for the selected devices.")
+        noise = torch.randn(requested.shape, device=requested.device, generator=generator)
+        drawn = requested + self.noise_scale * programming_sigma(requested, self.acceptance) * noise
+        programmed = selected & ~self.mask
+        self.g = torch.where(programmed, drawn, self.g)
+        self.writes += programmed[ACTIVE]
+        self.program_calls += 1
+        self.device_programs += int(programmed.sum())
+        self.stuck_write_attempts += int((selected & self.mask).sum())
+
+    def read_devices(self):
+        """Verify read of every device's held conductance (uS), shape (2, size); two reads per weight."""
+
+        if self.g is None:
+            raise RuntimeError("Expected a programmed CMO matrix before reading it.")
+        self.verify_reads += self.g.numel()
+        return self.g.detach().clone()
+
     def read(self):
         if self.g is None:
             raise RuntimeError("Expected a programmed CMO matrix before reading it.")
@@ -203,17 +243,19 @@ class CmoMatrix:
             "device_programs": self.device_programs,
             "device_writes": self.device_writes,
             "stuck_write_attempts": self.stuck_write_attempts,
-            "verify_reads": 0,
+            "verify_reads": self.verify_reads,
         }
 
     def state_dict(self) -> dict:
+        counters = [self.program_calls, self.device_programs, self.device_writes, self.stuck_write_attempts]
         return {
             "contract": [self.acceptance, self.noise_scale],
             "faults_sha256": self.fault_digest(),
             "g": self.g.detach().cpu().clone(),
             "writes": self.writes.cpu().clone(),
             "rng": self.generator.get_state(),
-            "counters": [self.program_calls, self.device_programs, self.device_writes, self.stuck_write_attempts],
+            # Verify reads are recorded only once taken, so earlier states keep their bytes.
+            "counters": counters + ([self.verify_reads] if self.verify_reads else []),
         }
 
     def load_state_dict(self, state) -> None:
@@ -225,7 +267,11 @@ class CmoMatrix:
         self.g = state["g"].to(device).clone()
         self.writes = state["writes"].to(device).clone()
         self.generator.set_state(state["rng"].cpu())
-        self.program_calls, self.device_programs, self.device_writes, self.stuck_write_attempts = state["counters"]
+        counters = list(state["counters"])
+        if len(counters) not in (4, 5):
+            raise ValueError("Expected four CMO counters, plus verify reads when any were taken.")
+        self.program_calls, self.device_programs, self.device_writes, self.stuck_write_attempts = counters[:4]
+        self.verify_reads = counters[4] if len(counters) == 5 else 0
 
 
 __all__ = [
