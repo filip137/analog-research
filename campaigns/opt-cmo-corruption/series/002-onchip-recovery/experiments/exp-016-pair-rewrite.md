@@ -1,12 +1,21 @@
 ---
 id: "exp-016"
 title: "Fault-aware pair rewrite: the healthy device of each faulty pair absorbs its stuck partner"
-status: "ready"
+status: "partial"
 hypotheses: []
 ---
 # exp-016: fault-aware pair rewrite after deployment
 
-## Active first phase: healthy and random 3% only
+## Completed first phase: healthy and random 3% only
+
+**Reviewed October 13, 2026:** all nine jobs and 90 endpoints completed and
+validated by 22:39:10 Paris. The assigned reduced phase is complete; `partial`
+records that the broader rates/kinds design below remains deferred. The
+[result](../results/exp-016.md) reports the frozen-rule decisions and physical
+costs. Pair-verify rewriting removes 92.5–93.3% of std3's WikiText fault-KL gap
+and beats both exp-013 recovery budgets on every assignment. No exp-016 jobs
+remain running or queued. Charged compute was 0.830 GPU-hours and declared
+storage was approximately 100.91 GB, within the unchanged caps.
 
 The user selected this reduced phase and then assigned **implementation and
 execution**. This supersedes the launch-pending wording and broader coverage
@@ -50,7 +59,11 @@ below for the current assignment. The full comparison remains deferred.
   session owns operational diagnosis and scientific review; no duplicate
   watcher. Runtime/receipt identities and the deadline go in the handoff below.
 
-### Current random3 execution handoff
+### Preserved random3 launch handoff (completed)
+
+The following is the launch record, superseded operationally by the completed
+coverage and review above. The canary collected successfully, opened the handoff
+gate and released all eight remaining jobs; all nine are now complete.
 
 - Worker code is frozen at `d49d59614e952fbbad32d99a82db4fffd4e37d7c` on fifi and
   loulou, at `/home/filip/analog-research/opt-cmo-exp1/hwa-exp16-random3-20261013`.
