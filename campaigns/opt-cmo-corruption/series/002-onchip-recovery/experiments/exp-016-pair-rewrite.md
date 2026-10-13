@@ -279,6 +279,50 @@ and launch needs explicit approval.
 ## Current execution handoff
 
 Ready. Session hwa-43 drafted this note as Explorer, and every Explorer field is
-resolved. Next: the user assigns the Codifier to implement the extensions and
-lifecycles, with a cost probe. Hosts and launch then need explicit approval.
-Nothing has been implemented or launched.
+resolved. On October 13 the user assigned a separate Codifier/Monitor session.
+
+**Codifier, October 13 (phase 1: implemented and probed; nothing launched).**
+
+- **What changed** (`7008d0f`):
+  - an optional per-arm `fault_rewrite` with the contract recorded in the
+    [lifecycle contract](../../../../../docs/crossbar_lifecycle.md) and the
+    [CMO device contract](../../../../../docs/reram_cmo_device.md): per-device
+    verify reads, P&V programming of either device from a declared stream, and
+    the one-shot oracle/verify, active/pair rewrite;
+  - `tests/test_workflow_fault_rewrite.py`, 23 tests. They prove that verify
+    decisions depend only on reads and precede any fault-map access, and that
+    learning after a rewrite on a healthy array is bitwise plain learning;
+  - the full suite: 2,648 passed, 13 skipped.
+- **Lifecycles:** `opt125m-cmo-l6-exp16-pair-rewrite-<std3|cdt3|std9>-<random|kinds>.json`,
+  derived from the exp-013 cap-4 lifecycles. Only `onchip.arms` and, for
+  `kinds`, `defects.cases` change. The rewrite seed is 241016, shared by every
+  rewrite arm. Helper: `launch/exp16_pair_rewrite.py`.
+- **Fact 1, healthy realizations.** The code binds each matrix's endpoint
+  stream to the assignment and matrix only, and `program` draws noise for every
+  device. A test confirms that `gmin`, `gmax`, `open` and `random` share fault
+  positions and healthy endpoints on one device type. CUDA RNG partitioning can
+  differ across GPU models, so kinds deployments must run on an RTX 5090, like
+  the exp-013 P0s (trex). `check-realization` verifies identity on the
+  deployment host.
+- **Fact 2, held reproduction.** For std3/271002 at 3% (probe on nom-cool-2,
+  exp-013's own host for this group), the `none` arm reproduces exp-013's P0
+  hash and prediction hashes on all three cohorts. KL differs by at most
+  7.7×10⁻⁹ relative. Collection checks this for every random P0.
+- **Probe** (not evidence): `std3-random-probe`, one case, every arm, RTX 3090.
+  - Time: 42.6 s per held arm including rewrite, evaluation and replay; 191 s
+    for the learning arm.
+  - Peak reserved memory: 17.0 GiB.
+  - Saved state: 0.68 GB per held arm, 1.13 GB for the learning arm.
+- **Projection:**
+  - random slices: about 2,300 s on a 3090 or 1,000 s on a 5090 each, and
+    about 23 GB each;
+  - kinds slices: about 650 s or 300 s, and about 8 GB each;
+  - three deploy campaigns on a 5090;
+  - in all, about 3.7 GPU-hours if the random slices run on 5090s, or 6.9 if
+    they run on 3090s;
+  - about 300 GB of storage.
+- **Escalated before launch:**
+  1. Projected storage of about 300 GB exceeds the confirmed 200 GB cap.
+  2. The 6 GPU-hour cap holds only if most random slices run on RTX 5090s.
+
+Launch needs explicit approval of hosts and of the storage decision.
