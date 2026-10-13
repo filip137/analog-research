@@ -19,13 +19,18 @@ Standard 3% Gaussian HWA preserves healthy performance; 9% Gaussian HWA is a
 strong moderate-corruption control; explicit 3%-fault training adds a material
 gain over 9% Gaussian in both domains at 5% actual faults. Training with 5%
 temporary faults supplies no material improvement over 3% in this tested regime.
-These one-seed, late-selected results establish baselines for the later matched
-on-chip learning, rewriting and digital-calibration comparison.
+The completed recovery extension covers three of these sources, all 0–5% fault
+rates and three independent arrays. At every tested nonzero rate, recovery
+improves held-out teacher KL; four attempts per device preserve nearly all of
+the corresponding uncapped gain. Healthy-chip benefit depends on the source and
+cap. Matched rewriting and digital calibration remain needed before claiming
+physical viability. These results retain one-training-seed, model-based limits.
 
 - [Ledger](ledger.md)
 - [Series 001: HWA source robustness](series/001-hwa-robustness/README.md), [Experiment 1](series/001-hwa-robustness/experiments/exp-001-hwa-source-robustness.md)
-- [Latest result](series/001-hwa-robustness/results/exp-007.md), [Four-arm comparison](series/001-hwa-robustness/experiments/exp-007-corruption-rate-sweep.md)
-- [Dense 50M-token on-chip pilot](series/002-onchip-recovery/experiments/exp-008-overnight-recovery.md): standard 3% Gaussian HWA, 3% actual faults, LR 5e-3; running on loulou after validated readiness checks.
+- [HWA result](series/001-hwa-robustness/results/exp-007.md), [Four-arm comparison](series/001-hwa-robustness/experiments/exp-007-corruption-rate-sweep.md)
+- [Recovery across regimes: final result](series/002-onchip-recovery/results/exp-013.md), [Frozen comparison](series/002-onchip-recovery/experiments/exp-013-recovery-regimes.md)
+- [Dense 50M-token on-chip pilot](series/002-onchip-recovery/experiments/exp-008-overnight-recovery.md)
 - [Lifecycle definitions](lifecycles/README.md)
 - [Lifecycle contract](../../docs/crossbar_lifecycle.md), [CMO device contract](../../docs/reram_cmo_device.md)
 

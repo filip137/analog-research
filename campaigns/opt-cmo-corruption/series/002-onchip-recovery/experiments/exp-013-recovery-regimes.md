@@ -1,7 +1,7 @@
 ---
 id: "exp-013"
 title: "Recovery across three HWA recipes, six fault rates and three assignments"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-013: recovery across HWA and corruption regimes
@@ -110,6 +110,25 @@ finite metrics, exact held-state replay, fault persistence, full coverage and ca
 accounting. Final plots show recovery versus corruption and writes by source.
 
 ## Current execution handoff
+
+**Reviewed October 13: complete.** All 27 recovery jobs and 162 endpoints passed
+native validation and local collection; the final worker finished October 12 at
+22:22 Europe/Paris and collection completed by 22:24. The [final result](../results/exp-013.md)
+records the scoped scientific review, all-rate comparisons, write costs and
+limitations. All 297 compact artifact hashes passed the final audit. Execution
+used 7.616 GPU-hours including preparation; the main monitor observes 353.7 GB
+against the overall 600 GB allowance. There were no execution retries or
+excluded endpoints. All exp-013 GPU reservations have ended. No further jobs or
+scientific choices are dispatched by this comparison.
+
+The preparation storage monitor raised incident 17 after its job completed:
+its 120 GB sublimit covered the whole loulou checkout, including later recovery
+outputs. The result reconciles this overlapping scope and the read-only diagnosis;
+the incident and original manifest remain preserved. Native results are valid.
+The service's generic `awaiting_scientific_review` label denotes terminal jobs;
+this note and the result record the completed scientific review.
+
+The following snapshots are retained as execution history.
 
 **October 12, 20:24 Europe/Paris:** eight jobs / 48 endpoints have completed
 collection and validation; three jobs are running and 16 queued. All initial

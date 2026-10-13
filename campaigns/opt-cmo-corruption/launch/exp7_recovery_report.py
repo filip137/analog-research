@@ -45,11 +45,15 @@ def render(summary, output: Path):
                 'deployment_kl': effect['deployment']['teacher_kl'],
                 'recovered_kl': effect['onchip']['teacher_kl'],
                 'kl_reduction': effect['kl_reduction'],
+                'deployment_ppl': effect['deployment']['perplexity'],
+                'recovered_ppl': effect['onchip']['perplexity'],
+                'ppl_reduction': effect['deployment']['perplexity'] - effect['onchip']['perplexity'],
                 'retained_gain': row['retained_gain'][split],
                 'gain_over_best_hwa_only': row['vs_best_hwa_only'][split]['kl_reduction'],
                 **write_statistics(row['cost']),
             })
-    fields = ('deployment_kl', 'recovered_kl', 'kl_reduction', 'retained_gain',
+    fields = ('deployment_kl', 'recovered_kl', 'kl_reduction',
+              'deployment_ppl', 'recovered_ppl', 'ppl_reduction', 'retained_gain',
               'gain_over_best_hwa_only', 'attempts_per_active_cell', 'writes_per_active_cell')
     for tag in TAGS:
         for split in SPLITS:
@@ -60,6 +64,7 @@ def render(summary, output: Path):
                         raise ValueError('Expected three distinct assignments in each comparison')
                     aggregate = {'source': tag, 'domain': split, 'cap': cap, 'rate_ppm': rate,
                                  'improved_assignments': sum(r['kl_reduction'] > 0 for r in group),
+                                 'ppl_improved_assignments': sum(r['ppl_reduction'] > 0 for r in group),
                                  'assignments': [r['array_seed'] for r in group]}
                     for field in fields:
                         values = [r[field] for r in group if r[field] is not None]
@@ -71,36 +76,49 @@ def render(summary, output: Path):
         writer = csv.DictWriter(stream, fieldnames=list(flat[0])); writer.writeheader(); writer.writerows(flat)
     (output/'grouped.json').write_text(json.dumps(aggregates, indent=2, allow_nan=False)+'\n')
     colors = dict(zip(CAPS, ('tab:blue', 'tab:orange', 'tab:green')))
-    fig, axes = plt.subplots(3, 3, figsize=(13, 10), constrained_layout=True)
-    costs, cost_axes = plt.subplots(3, 3, figsize=(13, 10), constrained_layout=True)
-    for i, split in enumerate(SPLITS):
-        for j, tag in enumerate(TAGS):
-            ax, cost_ax = axes[i, j], cost_axes[i, j]
-            selected = [g for g in aggregates if g['source'] == tag and g['domain'] == split]
-            baseline = [g for g in selected if g['cap'] == 'uncapped']
-            ax.plot([g['rate_ppm']/10000 for g in baseline], [g['deployment_kl']['mean'] for g in baseline],
-                    'k--', label='HWA deployment')
-            for cap in CAPS:
-                group = [g for g in selected if g['cap'] == cap]
-                x = [g['rate_ppm']/10000 for g in group]
-                ax.plot(x, [g['recovered_kl']['mean'] for g in group], marker='o', color=colors[cap], label=cap)
-                ax.fill_between(x, [g['recovered_kl']['min'] for g in group],
-                                [g['recovered_kl']['max'] for g in group], color=colors[cap], alpha=.12)
-                for row in flat:
-                    if (row['source'], row['domain'], row['cap']) == (tag, split, cap):
-                        ax.scatter(row['rate_ppm']/10000, row['recovered_kl'], color=colors[cap], s=8, alpha=.5)
-            for rate in sorted({g['rate_ppm'] for g in selected}):
-                group = [next(g for g in selected if g['rate_ppm'] == rate and g['cap'] == cap) for cap in CAPS]
-                cost_ax.plot([g['attempts_per_active_cell']['mean'] for g in group],
-                             [g['kl_reduction']['mean'] for g in group], 'o-', label=f'{rate/10000:g}% faults')
-            ax.set(title=f'{tag} / {split}', xlabel='Actual corruption (%)', ylabel='Teacher KL (lower is better)')
-            cost_ax.set(title=f'{tag} / {split}', xlabel='Mean issued attempts per active cell', ylabel='KL reduction from own deployment')
-            cost_ax.axhline(0, color='black', linewidth=.6)
-            ax.grid(alpha=.2); cost_ax.grid(alpha=.2)
-    axes[0, 0].legend(fontsize=8); cost_axes[0, 0].legend(fontsize=8)
-    fig.suptitle('Frozen recovery recipe: means, ranges and all three assignments')
-    costs.suptitle('Recovery versus idealized write attempts: cap 2, cap 4, uncapped')
-    for figure, name in ((fig, 'recovery-versus-corruption'), (costs, 'recovery-versus-writes')):
-        for extension in ('png', 'pdf'): figure.savefig(output/f'{name}.{extension}', dpi=160)
-        plt.close(figure)
+    source_names = {'std3': 'Standard 3% Gaussian HWA', 'cdt3': 'Corruption-aware 3% HWA',
+                    'std9': 'Standard 9% Gaussian HWA'}
+    split_names = {'development': 'Development', 'transfer_generated': 'Generated test',
+                   'transfer_wikitext': 'WikiText test'}
+    for metric, label, suffix in (('kl', 'Teacher KL', ''), ('ppl', 'Perplexity', '-ppl')):
+        # PPL is the recorded exp(cross-entropy), averaged across arrays, never exp(KL).
+        deployed, recovered, reduction = f'deployment_{metric}', f'recovered_{metric}', f'{metric}_reduction'
+        fig, axes = plt.subplots(3, 3, figsize=(15, 10), constrained_layout=True,
+                                 sharey='row' if metric == 'ppl' else False)
+        costs, cost_axes = plt.subplots(3, 3, figsize=(15, 10), constrained_layout=True,
+                                       sharey='row' if metric == 'ppl' else False)
+        for i, split in enumerate(SPLITS):
+            for j, tag in enumerate(TAGS):
+                ax, cost_ax = axes[i, j], cost_axes[i, j]
+                selected = [g for g in aggregates if g['source'] == tag and g['domain'] == split]
+                baseline = [g for g in selected if g['cap'] == 'uncapped']
+                x = [g['rate_ppm']/10000 for g in baseline]
+                ax.plot(x, [g[deployed]['mean'] for g in baseline], 'k--', label='HWA deployment')
+                ax.fill_between(x, [g[deployed]['min'] for g in baseline],
+                                [g[deployed]['max'] for g in baseline], color='black', alpha=.08)
+                for cap in CAPS:
+                    group = [g for g in selected if g['cap'] == cap]
+                    x = [g['rate_ppm']/10000 for g in group]
+                    ax.plot(x, [g[recovered]['mean'] for g in group], marker='o', color=colors[cap], label=cap)
+                    ax.fill_between(x, [g[recovered]['min'] for g in group],
+                                    [g[recovered]['max'] for g in group], color=colors[cap], alpha=.12)
+                    for row in flat:
+                        if (row['source'], row['domain'], row['cap']) == (tag, split, cap):
+                            ax.scatter(row['rate_ppm']/10000, row[recovered], color=colors[cap], s=8, alpha=.5)
+                for rate in sorted({g['rate_ppm'] for g in selected}):
+                    group = [next(g for g in selected if g['rate_ppm'] == rate and g['cap'] == cap) for cap in CAPS]
+                    cost_ax.plot([g['attempts_per_active_cell']['mean'] for g in group],
+                                 [g[reduction]['mean'] for g in group], 'o-', label=f'{rate/10000:g}% faults')
+                title = f'{source_names[tag]}\n{split_names[split]}'
+                ax.set(title=title, xlabel='Actual corruption (%)', ylabel=f'{label} (lower is better)')
+                cost_ax.set(title=title, xlabel='Mean issued attempts per active cell',
+                            ylabel=f'{label} reduction from own deployment')
+                cost_ax.axhline(0, color='black', linewidth=.6)
+                ax.grid(alpha=.2); cost_ax.grid(alpha=.2)
+        axes[0, 0].legend(fontsize=8); cost_axes[0, 0].legend(fontsize=8)
+        fig.suptitle(f'{label}: arithmetic means, ranges and all three arrays; caps count attempts/device')
+        costs.suptitle(f'{label} reduction versus idealized write attempts: cap 2, cap 4, uncapped; means of three arrays')
+        for figure, name in ((fig, 'recovery-versus-corruption'), (costs, 'recovery-versus-writes')):
+            for extension in ('png', 'pdf'): figure.savefig(output/f'{name}{suffix}.{extension}', dpi=160)
+            plt.close(figure)
     return {'endpoints': len(summary['rows']), 'domain_rows': len(flat), 'groups': len(aggregates)}

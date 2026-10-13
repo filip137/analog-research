@@ -4,7 +4,7 @@
 
 Sources: campaign experiment metadata and reviewer-written result notes. No raw evidence or live job state is inferred.
 
-Counts: complete=12, running=2.
+Counts: complete=14.
 
 ## Experiments
 
@@ -22,8 +22,8 @@ Counts: complete=12, running=2.
 | [exp-010 — Development-triggered LR follow-up for dense recovery and LoRA](series/002-onchip-recovery/experiments/exp-010-lr-followup.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-010.md): All five dense LR screens validate but worsen KL; best LR 3e-3 is 17.9% worse on development, so no full fit qualifies; LoRA needs no retry |
 | [exp-011 — Noise-referenced write thresholds with optional signed accumulation](series/002-onchip-recovery/experiments/exp-011-thresholded-writes.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-011.md): Complete: accumulated 2-sigma writes halve KL on the selected array; the 50M pass gives little benefit over 2.1M tokens despite 26.5 times as many writes |
 | [exp-012 — Recovery retained under hard per-device write-attempt caps](series/002-onchip-recovery/experiments/exp-012-write-caps.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-012.md): Complete five-cap curve: four attempts retain 99.46% of uncapped short-run development recovery, two retain 94.08%; one array at 3% faults |
-| [exp-013 — Recovery across three HWA recipes, six fault rates and three assignments](series/002-onchip-recovery/experiments/exp-013-recovery-regimes.md) | running | None declared | [validated-local](series/002-onchip-recovery/results/exp-013.md): Partial: 48/162 endpoints validated; first assignment shows recovery gains at 1–5% faults and degradation on healthy standard-HWA chips |
-| [exp-014 — Recovery context length after frozen HWA at matched tokens and updates](series/002-onchip-recovery/experiments/exp-014-context-length.md) | running | None declared | [validated-local](series/002-onchip-recovery/results/exp-014.md): Partial: 10/15 screens validated; context 256 meets both capped selection rules on one assignment |
+| [exp-013 — Recovery across three HWA recipes, six fault rates and three assignments](series/002-onchip-recovery/experiments/exp-013-recovery-regimes.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-013.md): Complete: recovery improves every 1–5% fault regime across three arrays; cap 4 preserves nearly all uncapped gain, with regime-dependent healthy-chip outcomes |
+| [exp-014 — Recovery context length after frozen HWA at matched tokens and updates](series/002-onchip-recovery/experiments/exp-014-context-length.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-014.md): Complete: context 256 retains at least 95% of context-1024 recovery gain on all three confirmation arrays under every write budget |
 
 ## Hypothesis evidence
 
