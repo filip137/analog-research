@@ -1,7 +1,7 @@
 ---
 id: "exp-014"
 title: "Recovery context length after frozen HWA at matched tokens and updates"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-014: context length for recovery after HWA
@@ -317,100 +317,67 @@ locally. This does not substitute for native runtime tests, full input validatio
 on execution hosts, memory probes or independent-array scientific evidence.
 
 
-## Current execution handoff
+## Final execution handoff
 
-October 12, 22:12 Paris: ten of 15 screen jobs are complete and validated,
-covering every context under caps two and four. Five uncapped screens remain
-queued for loulou, which is finishing the earlier exp-013 study. Trex has
-completed all ten of its prepared placements. All 45 confirmation candidates
-remain held; automatic selection waits for the complete 15-fit screen. The
-[partial result](../results/exp-014.md) records the within-assignment finding
-and remaining confirmation requirement. `recovery_views` binds matched parent windows, common loss masks
-and fixed evaluation contexts to cache provenance without changing source/P0
-identity. `onchip.case_labels` selects the 3% case from existing multi-case P0
-bundles for confirmation. Effective batches accumulate gradients in 2,048-input-
-token microbatches, with one Adam/physical-writer update per 8,192 input tokens.
-No change to learning rates, threshold, data budget or physical law.
+Reviewed October 13, 2026. All **15 screen fits and 18 selected confirmation
+fits** completed native validation and local collection. Context 256 was
+selected independently for cap two, cap four and uncapped recovery. It passed
+all three confirmation assignments at both evaluation contexts under every
+budget. The [final result](../results/exp-014.md) owns measurements,
+interpretation, limitations and exportable figures. No further runs are queued.
 
-All 63 strict lifecycle definitions parse. The workflow suite passed 344 tests
-with one existing optional AIHWKit skip; the new tiny native lifecycle reuses an
-old P0 and validates held-control equality, token/update accounting, cap semantics
-and exact replay at both evaluation contexts. Additional development-selection
-checks are run before snapshotting. The four original P0 input contracts are
-pinned in `launch/exp014_context_sources.json`; the helper is
-`launch/exp014_context.py`. Neither running exp-013 workers nor its controller
-is modified.
+The screen finished October 12 at 22:47:39 Paris and final confirmation collection
+finished October 13 at **00:29:58**, before the original **02:54:37 Paris** cutoff.
+Charged compute was **2.030 GPU-hours** including readiness; monitored experiment
+roots occupied approximately **71.30 GB**. Both are within the original five-hour
+and 120 GB caps. The 27 unselected held candidates had no attempts and were closed
+at final review. All scientific trajectories succeeded. The cancelled original
+readiness registration had no attempt; its corrected replacement succeeded.
 
-Initial targets are trex and loulou, only when idle. Trex currently has about
-43 GB free disk; limit it to ten capped screens plus readiness artifacts. The
-five uncapped screens and confirmation candidates have loulou placements.
-Readiness reserves at most 0.5 GPU-hours, screens at most 1.5, confirmation at
-most 3, summing to the original five-hour cap. All phases share one absolute
-six-hour deadline from first readiness admission; no phase resets it. Probe
-measurements must support these bounds before main admission.
+Exact execution/evidence locations are retained under
+`results/lifecycles/opt125m-cmo-l6-exp014-context/`:
 
-The conservative fixed deadline is **October 13, 02:54:37 Paris**, six hours
-from the first eligibility time, so scheduler delays consume that window.
-The first readiness registration was cancelled before any attempt because its
-storage roots included hosts without prepared execution/collection paths. Its
-replacement is `opt125m-cmo-l6-exp014-context-readiness-v2`; no GPU time or
-scientific trajectory was spent by the cancelled registration. The replacement
-accounts trex and the local controller and keeps the same worker computation.
-Main jobs have priority 90, below existing exp-013 jobs at priority 100.
-
-The screen accounts both hosts and local evidence. Confirmation executes only
-on loulou, so its storage cap is 80 GB for loulou plus local evidence. Before
-release, collection measures trex's completed storage and requires at most
-35 GB; another 5 GB is reserved for staging archives and prior worker receipts.
-These reservations preserve the original aggregate 120 GB cap. A regression
-check requires every monitored remote root to have a prepared placement.
-
-The [readiness result](../results/exp-014.md) records measured resource use and
-local validation. GPU/runtime code was frozen at
-`defd54b45e79a69055b9e8c7af0457d2ebdb3686` for readiness. Main workers and the
-CPU collector use `d9885dc65b7f67a8664742198f85cdbf466334c0`; the intervening
-change repairs phase storage accounting and its test, without changing training.
-Both hosts use PyTorch 2.11.0+cu128, CUDA 12.8 and Transformers 5.8.0.
-
-The sole monitoring owner is the existing `run-watch-queue.service`, running
-`campaigns.execution_service`, host PID 1384148 at handoff. Its campaign checks
-run every 300 seconds; the queue observes workers between those checks. The
-service was verified through host systemd, queue receipts and native artifacts;
-no second scheduler or exp-013 service/configuration change was made.
-
-Execution handles and evidence:
-
-- Local root: `results/lifecycles/opt125m-cmo-l6-exp014-context/`. Exact host
-  placements are `hosts/{trex,loulou}.json`; the clean CPU collector is `controller/`.
-- Registered campaign IDs are `opt-cmo-exp014-context-20261012-screen` and
-  `opt-cmo-exp014-context-20261012-confirm`. Exact held job contracts and
-  manifests are in `prepared/{screen,confirm}/`; admission proof is
-  `readiness/screen-preflight.json`.
-- Both remote workers are `/home/filip/analog-research/opt-cmo-exp1/hwa-exp014-context-20261012`.
-  Native runs are beneath `results/lifecycles/<case>/runs/<case>/`; each contains
-  its resolved campaign, aggregate status and native stage bundle.
-- Worker receipt/log roots are
+- `hosts/{trex,loulou}.json` and `prepared/{screen,confirm}/` bind placements,
+  manifests, jobs, inputs, gates and budgets; `readiness/` preserves original
+  resource probes, the registration correction and interim checks.
+- `collected/<case>/<attempt>/` holds validated native exports and receipts;
+  `reviews/` holds all 33 reports, selection and coverage. `analysis/decision.json`
+  records final receipt verification and the scientific rule; CSVs and plots
+  preserve per-array metrics and costs. `analysis/unselected-candidates.json`
+  records the 27 prospectively excluded, never-run candidates.
+- Both remote workers remain at
+  `/home/filip/analog-research/opt-cmo-exp1/hwa-exp014-context-20261012`.
+  Full native runs/checkpoints are beneath `results/lifecycles/<case>/runs/<case>/`.
+  Main receipt/log roots are
   `/home/filip/analog-research/opt-cmo-exp1/worker-receipts/d9885dc65b7f67a8664742198f85cdbf466334c0/<case>/<attempt>/`.
-  First case: `opt125m-cmo-l6-exp014-context-screen-l64-cap2`; attempt
-  `a803e369c1aa485496dcde68ad7a6f40`, with native status running and its first
-  `onchip_cohort` metric observed at 21:13 Paris.
-- Completion executes the frozen `exp014_context.py collect` through the
-  native recovery collector. It validates compact evidence locally into
-  `collected/`, writes per-fit `reviews/`, applies development-only selection,
-  and releases only selected confirmation cases. Final states remain remote.
 
-Last queue/service observation was approximately 22:11 Paris; the next
-scheduled campaign check is approximately 22:16 Paris. Each main
-worker has a 660-second hard timeout and 720-second reservation; native
-evaluation precedes learning, so early progress is the held-P0 cohort before
-batch/development metrics. Expected full-fit runtime is below six minutes.
-Readiness plus ten screens charged 2,454.21 GPU-seconds (0.682 GPU-hours).
-Readiness alone charged 281.64 seconds; main limits remain 5,400 screen seconds
-and 10,800 confirmation seconds, with no reset of the absolute deadline.
+GPU/runtime code was frozen at `defd54b45e79a69055b9e8c7af0457d2ebdb3686`
+for readiness. Main workers and collector used
+`d9885dc65b7f67a8664742198f85cdbf466334c0`; the intervening change corrected
+phase storage accounting and its test without changing training. Both hosts used
+PyTorch 2.11.0+cu128, CUDA 12.8 and Transformers 5.8.0. The four original
+teacher/device/P0 identities were byte-verified on loulou, with copied Stage A
+inputs also checked on trex. All 63 lifecycle definitions and native placement
+dry runs passed. Scientific training code and the source checkpoints remain frozen.
 
-Operational anomalies are recorded by the service and diagnosed by its bounded
-read-only investigator. They return to the Codifier in this experiment thread;
-automatic mutable retries are disabled. Preserve failed evidence, verify
-unchanged source/P0/corruption and the remaining original allowance before any
-classified retry. Scientific changes and budget extensions remain outside this
-handoff. Review is pending; readiness does not answer which context is sufficient.
+The existing `run-watch-queue.service` was the sole scheduling/monitoring owner.
+It ran bounded native tmux workers, validated and collected each result, applied
+the frozen development rule, and released exactly 18 confirmations. Main jobs
+had priority 90 behind exp-013. No competing scheduler, shared service/config
+change, or scientific retry was introduced. No exp-014 case remains active;
+the shared service continues to own other experiments.
+
+The original readiness registration was cancelled before launch because storage
+roots lacked prepared execution/collection paths. The replacement retained the
+same computation and absolute deadline. Readiness reserved 0.5 GPU-hours,
+screens 1.5 and confirmation 3. Confirmation checked completed trex storage
+(27.60 GB, below 35 GB) before reserving at most 80 GB for loulou and local
+evidence, leaving 5 GB for staging/older receipts within the total allowance.
+The historical registration incident remains preserved; it is not an unresolved
+scientific execution failure.
+
+The analysis command is
+`python campaigns/opt-cmo-corruption/series/002-onchip-recovery/analysis/exp014_review.py`.
+It rechecks compact native evidence and applies the unchanged decision rule;
+it does not launch jobs. Final review is complete. Any further contexts, HWA
+recipes, cohorts, fault regimes or repetitions require a new scientific plan.
