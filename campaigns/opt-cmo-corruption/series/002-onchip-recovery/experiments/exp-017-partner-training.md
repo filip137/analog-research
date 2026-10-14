@@ -1,7 +1,7 @@
 ---
 id: "exp-017"
 title: "On-chip learning through the verified partner after fault-aware rewriting"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-017: train through the verified partner
@@ -166,3 +166,21 @@ fifi is excluded from that job. Completed arrays are not rerun. Before this
 restart, total charged execution plus the earlier GPU diagnostic is 1,105.251
 seconds (0.307 GPU-hours) of the original two-hour allowance. The deadline,
 inputs, code, recipe and final three-array decision rule remain unchanged.
+
+### Complete and reviewed, October 14
+
+Array 271003 completed on loulou in retry attempt
+`aae28af34dda4d45b9969d0ad4388b1f`. All three jobs are collected and validated:
+six starting conditions, 24 endpoints, 12 learning trajectories. The frozen
+controller's `exp17_partner_training.py review --evidence <evidence-root>` passed
+at the final review, rechecking collection hashes, native exports, prior controls,
+exact replay, costs and all eight predeclared comparisons. The
+[result note](../results/exp-017.md) records the full three-array conclusion;
+it supersedes the earlier partial summary.
+
+Total queue charge is 1,502.481636 seconds including both failed attempts;
+with the 1.277132-second diagnostic this is **0.418 GPU-hours** of two.
+Declared storage roots occupy **28.25 GB** of 80 GB at the final observation.
+No experiment jobs remain active or queued. The unchanged recipe did not improve
+WikiText teacher KL after rewriting on any of the three faulty arrays; no tuning
+or further compute was launched in response to that result.
