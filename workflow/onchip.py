@@ -15,8 +15,8 @@ state. Update laws: PCM endpoint reprogramming of a digital master
 accumulated digital target verified with up to ``pulses_per_update`` pulses);
 OM open-loop pulse Adam (stochastic one-pulse rounding, no verify reads);
 CMO idealized-write Adam (one noisy write per active device and step on the
-held state, no master, no verify and no retry; reference devices are never
-written). ``max_pulses_per_cell`` caps OM
+held state, no master, no verify and no retry; thresholded learning can explicitly
+route writes through the verified partner). ``max_pulses_per_cell`` caps OM
 on-chip writes per cell; ``null`` is uncapped.
 """
 
@@ -208,7 +208,8 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
     contract = "crossbar_lifecycle.cmo_thresholded_write_adam.v1"
 
     def __init__(self, array, *, learning_rate, threshold_sigma, accumulate_updates,
-                 acceptance_percent, noise_scale, max_write_attempts_per_device=None, write_noise_scale=None):
+                 acceptance_percent, noise_scale, max_write_attempts_per_device=None, write_noise_scale=None,
+                 write_roles=None):
         super().__init__(array, learning_rate=learning_rate, write_noise_scale=write_noise_scale)
         from training.reram_cmo import HALF_RANGE_US, MID_US, programming_sigma
 
@@ -219,6 +220,11 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
         self.accumulate_updates = bool(accumulate_updates)
         self.pending = torch.zeros_like(self.first) if self.accumulate_updates else None
         self.max_write_attempts_per_device = max_write_attempts_per_device
+        self.write_roles = None if write_roles is None else write_roles.detach().clone()
+        if self.write_roles is not None and (
+                self.write_roles.shape != self.first.shape or self.write_roles.dtype != torch.int8
+                or bool(((self.write_roles < -1) | (self.write_roles > 1)).any())):
+            raise ValueError("Expected one int8 active/reference/blocked role per logical weight.")
         # Controller-owned issued-command history, never the plant's successful
         # write counters: failed/stuck attempts consume the same allowance.
         self.attempt_counts = (None if max_write_attempts_per_device is None
@@ -229,9 +235,11 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
         command = _adam_command(self, gradient)
         if self.learning_rate == 0:
             return
-        eligible = None
+        eligible = None if self.write_roles is None else self.write_roles >= 0
         if self.attempt_counts is not None:
-            eligible = self.attempt_counts < self.max_write_attempts_per_device
+            within_cap = self.attempt_counts < self.max_write_attempts_per_device
+            eligible = within_cap if eligible is None else eligible & within_cap
+        if eligible is not None:
             command = torch.where(eligible, command, 0.0)
         if self.pending is not None:
             self.pending.add_(command)
@@ -248,6 +256,13 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
         if self.pending is not None:
             self.pending.sub_(issued)
 
+    def _write(self, command):
+        if self.write_roles is None:
+            super()._write(command)
+        else:
+            self.array.write(command, roles=self.write_roles,
+                             noise_factor=1.0 if self.write_noise_scale is None else self.write_noise_scale)
+
     def diagnostics(self):
         values = {
             "threshold_reference": "nominal_midrange",
@@ -260,6 +275,12 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
         }
         if self.write_noise_scale is not None:
             values["write_noise_scale"] = self.write_noise_scale
+        if self.write_roles is not None:
+            values.update(write_roles="verified_partner", write_role_map_sha256=tensor_hash(self.write_roles),
+                          active_training_devices=int((self.write_roles == 0).sum()),
+                          reference_training_devices=int((self.write_roles == 1).sum()),
+                          blocked_training_pairs=int((self.write_roles < 0).sum()),
+                          write_role_map_bytes=self.write_roles.numel() * self.write_roles.element_size())
         if self.attempt_counts is not None:
             values.update(
                 max_write_attempts_per_device=self.max_write_attempts_per_device,
@@ -273,10 +294,12 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
         return {**super().state_dict(), **self.diagnostics(),
                 "pending": None if self.pending is None else self.pending.detach().cpu().clone(),
                 **({"attempt_counts": self.attempt_counts.detach().cpu().clone()}
-                   if self.attempt_counts is not None else {})}
+                   if self.attempt_counts is not None else {}),
+                **({"write_role_map": self.write_roles.detach().cpu().clone()}
+                   if self.write_roles is not None else {})}
 
 
-def make_writer(array, lifecycle):
+def make_writer(array, lifecycle, *, write_roles=None):
     """The declared OM or CMO update law for a weight-learning arm."""
 
     onchip = lifecycle.onchip
@@ -303,6 +326,7 @@ def make_writer(array, lifecycle):
             noise_scale=lifecycle.devices.noise_scale,
             max_write_attempts_per_device=onchip.max_write_attempts_per_device,
             write_noise_scale=onchip.write_noise_scale,
+            write_roles=write_roles,
         )
     raise ValueError(f"Expected an OM or CMO writer update law. Provided value: {onchip.update_law!r}.")
 
@@ -356,12 +380,15 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
     optimizer = torch.optim.Adam(groups) if groups else None
     initial_hash = tensor_hash(array.read())
     rewritten = None
+    controller = {} if arm.write_roles is not None else None
     if arm.fault_rewrite is not None:
         if not cmo or array_seed is None:
             raise ValueError("Expected a CMO array and its assignment seed for a fault rewrite.")
-        rewritten = program_verify.fault_rewrite(array, target, lifecycle, arm.fault_rewrite, array_seed)
+        rewritten = program_verify.fault_rewrite(array, target, lifecycle, arm.fault_rewrite, array_seed,
+                                                controller_state=controller)
         store.append_metric({"stage": "onchip_fault_rewrite", "case": label, "arm": arm.arm_id, **rewritten})
-    writer = make_writer(array, lifecycle) if learn and direct else None
+    roles = None if controller is None else controller["write_roles"]
+    writer = make_writer(array, lifecycle, write_roles=roles) if learn and direct else None
     tolerance = (
         array.nominal_step * onchip.tolerance_steps
         if om and onchip.update_law == "om_closed_loop_pulse_adam"
@@ -369,7 +396,7 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
     )
     cap = onchip.max_pulses_per_cell if om else None
     baseline = array.cost()
-    baseline_writes = array.write_counts().clone() if cmo else None
+    baseline_writes = array.write_counts(roles).clone() if cmo else None
     fixed = device_stage.fixed_state(array, technology)
     prefix = network.prefix_hash()
     rewrite_count = torch.zeros_like(target, dtype=torch.int64)
@@ -481,12 +508,17 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                 probability_clipped=writer.probability_clipped if writer else 0,
             )
         if cmo:
-            writes = array.write_counts() - baseline_writes
+            writes = array.write_counts(roles) - baseline_writes
             cost.update(
                 touched_devices=int((writes > 0).sum()),
                 max_onchip_device_writes=int(writes.max()),
                 out_of_range_devices=array.out_of_range(),
             )
+            if roles is not None:
+                cost.update(active_device_writes=int(writes[roles == 0].sum()),
+                            reference_device_writes=int(writes[roles == 1].sum()),
+                            active_touched_devices=int(((writes > 0) & (roles == 0)).sum()),
+                            reference_touched_devices=int(((writes > 0) & (roles == 1)).sum()))
             if isinstance(writer, ThresholdedWriteAdam) and writer.attempt_counts is not None:
                 attempts = writer.attempt_counts
                 if (bool((attempts > writer.max_write_attempts_per_device).any())
@@ -498,6 +530,9 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                     max_onchip_device_write_attempts=int(attempts.max()),
                     capped_devices=int((attempts >= writer.max_write_attempts_per_device).sum()),
                 )
+                if roles is not None:
+                    cost.update(active_write_attempts=int(attempts[roles == 0].sum()),
+                                reference_write_attempts=int(attempts[roles == 1].sum()))
         row = {
             "epoch": epoch,
             "train_loss_mean": loss_sum / len(order),
@@ -520,6 +555,8 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
         "arm": arm.arm_id,
         "weights": arm.weights,
         "calibration": arm.calibration,
+        **({"write_roles": arm.write_roles, "write_routing": writer.diagnostics()}
+           if arm.write_roles is not None else {}),
         **({"digital_adapter": {**adapter.to_dict(),
              "parameters": sum(p.numel() for p in network.lora.parameters()),
              "extra_macs_per_token": sum(p.numel() for p in network.lora.parameters()),

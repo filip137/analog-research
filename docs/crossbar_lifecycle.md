@@ -420,6 +420,27 @@ on the fixed development cohort at that optimizer-step interval. It never
 selects a checkpoint or changes the fixed final endpoint; test cohorts are not
 evaluated at this extra cadence. Omitting it preserves existing configs.
 
+Optional per-arm `write_roles: "verified_partner"` extends thresholded CMO
+learning after a `fault_rewrite` with `detection: verify`, `roles: pair`.
+Omission preserves the legacy active-only law and serialized configuration.
+The original verify scan supplies a frozen int8 role per weight: 0 writes the
+active if unflagged, 1 writes its reference if only the active is flagged, and
+-1 blocks a pair with both flagged. The map never reads hidden fault identities
+or triggers a second scan. A logical command delta-q writes +39.6 delta-q to
+an active or -39.6 delta-q to a reference, with the unchanged unclamped noisy
+incremental law. One draw per weight preserves the active-only noise stream.
+Unselected partners remain unchanged; missed faults consume attempts without
+changing state. Both-flagged pairs accumulate no pending commands or attempts.
+
+The cap starts after rewriting and belongs to the one selected physical device
+per weight. Physical writes, attempts and touched counts report active/reference
+contributions. Checkpoints retain the role map, its digest, optimizer history,
+reference-write counters and RNG state. Older checkpoints retain their active
+counters and load unchanged. Reference counters count incremental writes only;
+P&V program costs stay in their separate receipt. Routing-map bytes are reported
+as controller storage, not learned parameters. Native final-state replay remains
+mandatory; interrupted-stage resume is still unsupported.
+
 ## Stages, artifacts and reuse
 
 ### Recovery context views (OPT)

@@ -4,7 +4,7 @@
 
 Sources: campaign experiment metadata and reviewer-written result notes. No raw evidence or live job state is inferred.
 
-Counts: complete=14, partial=1, running=1.
+Counts: complete=14, partial=1, ready=1, running=1.
 
 ## Experiments
 
@@ -26,6 +26,7 @@ Counts: complete=14, partial=1, running=1.
 | [exp-014 — Recovery context length after frozen HWA at matched tokens and updates](series/002-onchip-recovery/experiments/exp-014-context-length.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-014.md): Complete: context 256 retains at least 95% of context-1024 recovery gain on all three confirmation arrays under every write budget |
 | [exp-015 — Noise-free write oracle: how much of the recovery limit is write noise](series/002-onchip-recovery/experiments/exp-015-noise-free-writes.md) | running | None declared | No result recorded. |
 | [exp-016 — Fault-aware pair rewrite: the healthy device of each faulty pair absorbs its stuck partner](series/002-onchip-recovery/experiments/exp-016-pair-rewrite.md) | partial | None declared | [validated-local](series/002-onchip-recovery/results/exp-016.md): Healthy/random-3% phase complete: verify-based partner rewriting closes 92.5–93.3% of std3 WikiText fault KL across three arrays and beats exp-013 recovery |
+| [exp-017 — On-chip learning through the verified partner after fault-aware rewriting](series/002-onchip-recovery/experiments/exp-017-partner-training.md) | ready | None declared | No result recorded. |
 
 ## Hypothesis evidence
 

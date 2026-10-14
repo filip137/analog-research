@@ -1238,6 +1238,7 @@ class OnchipArm:
     calibration: bool
     digital_adapter: Optional[DigitalLora] = None
     fault_rewrite: Optional[FaultRewrite] = None
+    write_roles: Optional[str] = None
 
     @property
     def trains(self) -> bool:
@@ -1249,6 +1250,8 @@ class OnchipArm:
             value["digital_adapter"] = self.digital_adapter.to_dict()
         if self.fault_rewrite is not None:
             value["fault_rewrite"] = self.fault_rewrite.to_dict()
+        if self.write_roles is not None:
+            value["write_roles"] = self.write_roles
         return value
 
 
@@ -1364,7 +1367,7 @@ def _onchip(raw: Any, technology: str) -> Onchip:
     for index, item in enumerate(_list(raw["arms"], "onchip.arms")):
         path = f"onchip.arms[{index}]"
         keys = ("id", "weights", "calibration") + tuple(
-            name for name in ("digital_adapter", "fault_rewrite") if isinstance(item, Mapping) and name in item
+            name for name in ("digital_adapter", "fault_rewrite", "write_roles") if isinstance(item, Mapping) and name in item
         )
         item = _object(item, path, keys)
         rewrite = None
@@ -1376,6 +1379,12 @@ def _onchip(raw: Any, technology: str) -> Onchip:
                 raise config_error(
                     path, "to rewrite faults before holding or learning weights, without a digital adapter", item
                 )
+        write_roles = None
+        if "write_roles" in item:
+            write_roles = _choice(item["write_roles"], f"{path}.write_roles", ("verified_partner",))
+            if (technology != "cmo" or law != "cmo_thresholded_write_adam" or item["weights"] != "learn"
+                    or rewrite is None or rewrite.detection != "verify" or rewrite.roles != "pair"):
+                raise config_error(path, "to use verified_partner only for thresholded CMO learning after a verify pair rewrite", item)
         adapter = None
         if "digital_adapter" in item:
             a = _object(item["digital_adapter"], f"{path}.digital_adapter", ("kind", "rank", "alpha", "learning_rate"))
@@ -1394,19 +1403,20 @@ def _onchip(raw: Any, technology: str) -> Onchip:
                 calibration=_boolean(item["calibration"], f"{path}.calibration"),
                 digital_adapter=adapter,
                 fault_rewrite=rewrite,
+                write_roles=write_roles,
             )
         )
     arms = tuple(arms)
     if len({arm.arm_id for arm in arms}) != len(arms):
         raise config_error("onchip.arms", "to have unique ids", [arm.arm_id for arm in arms])
-    settings = {(arm.weights, arm.calibration, arm.digital_adapter, arm.fault_rewrite) for arm in arms}
+    settings = {(arm.weights, arm.calibration, arm.digital_adapter, arm.fault_rewrite, arm.write_roles) for arm in arms}
     if len(settings) != len(arms):
         raise config_error("onchip.arms", "to have unique weight/calibration settings", [a.to_dict() for a in arms])
     for arm in arms:
         # A weight-writing arm is interpretable only beside its matched
         # no-weight-write control with the same digital calibration.
         writes = arm.weights != "hold" or arm.digital_adapter is not None or arm.fault_rewrite is not None
-        if writes and ("hold", arm.calibration, None, None) not in settings:
+        if writes and ("hold", arm.calibration, None, None, None) not in settings:
             raise config_error(
                 "onchip.arms",
                 f"to include a hold arm with calibration={arm.calibration} matching {arm.arm_id!r}",

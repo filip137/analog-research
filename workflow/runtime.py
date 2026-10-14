@@ -385,6 +385,8 @@ def train_onchip(stage: Stage):
                     "calibration": arm.calibration,
                     **({"digital_adapter": outcome["digital_adapter"]} if arm.digital_adapter else {}),
                     **({"fault_rewrite": outcome["fault_rewrite"]} if arm.fault_rewrite else {}),
+                    **({"write_roles": outcome["write_roles"], "write_routing": outcome["write_routing"]}
+                       if arm.write_roles else {}),
                     "identity": deployed["identity"],
                     "programming": deployed["programming"],
                     "p0_sha256": p0_sha256,
