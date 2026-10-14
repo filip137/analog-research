@@ -146,3 +146,23 @@ controls; NVIDIA reports 17,912 MiB allocated to this process. The shared queue
 has acknowledged the live worker, with arrays 271003/271004 still held. This is
 progress evidence, not canary completion. The saved observation is
 `readiness/recovery-handoff-observation.json`.
+
+### Two arrays collected; remaining driver retry, October 14
+
+Arrays 271002 and 271004 completed on loulou and passed native collection,
+exact replay, physical accounting and exp-016 control reproduction: 16 of the
+24 endpoints are validated. The canary gate released both later arrays as
+specified. Preliminary measurements belong to the [result note](../results/exp-017.md).
+
+Array 271003's initial attempt `88c9f13657ad496cbde812595d825b3f` failed on
+fifi at 12:13 Paris, again with return code -11 and a kernel fault inside
+`libcuda.so.610.57.04` (PID 1962365). Its worker and reservation are terminal;
+141.263882 seconds remain charged. The public driver-recovery command accepted
+`readiness/271003-driver-recovery.json`, backed by
+`readiness/271003-driver-failure.json`; receipt SHA-256 is
+`f640e10d5372b6f824f24f3eb2c8e3722275848e8d0db0a64dd5f094ae8475e7`.
+The same array is queued for its one unchanged restart on prepared loulou;
+fifi is excluded from that job. Completed arrays are not rerun. Before this
+restart, total charged execution plus the earlier GPU diagnostic is 1,105.251
+seconds (0.307 GPU-hours) of the original two-hour allowance. The deadline,
+inputs, code, recipe and final three-array decision rule remain unchanged.
