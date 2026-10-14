@@ -11,7 +11,8 @@ table and silently selects the 0.2 % fit; its 2 % fit needs
 Each weight is a pair of physical devices read as q = (G_a - G_r) / 39.6 uS:
 an active device programmed to MID_US + 39.6 q and a reference device
 programmed to MID_US. Both carry their own programming error, and either may
-be stuck. On-chip writes reach the active device only. Conductances are held:
+be stuck. On-chip writes default to active devices; an explicit verified role
+map can select the reference instead, with the opposite logical-update sign. Conductances are held:
 reads return the same state until a program or write changes it. Stuck
 devices hold their stuck conductance through every program and write. There
 is no read noise, drift or quantization in this model. Off-chip HWA does not
@@ -167,7 +168,7 @@ class CmoMatrix:
         self.stuck_write_attempts += failed
 
     @torch.no_grad()
-    def write(self, delta, noise_factor=1.0):
+    def write(self, delta, noise_factor=1.0, roles=None):
         """G_a <- G_a + dG + f sigma(G_a + dG) xi on every active device with a nonzero update.
 
         ``noise_factor`` f scales write noise only; 1 is the physical law and 0 an
@@ -180,6 +181,27 @@ class CmoMatrix:
             raise ValueError("Expected one finite normalized update per weight.")
         if isinstance(noise_factor, bool) or not math.isfinite(noise_factor) or noise_factor < 0:
             raise ValueError(f"Expected a finite nonnegative write-noise factor. Provided value: {noise_factor!r}.")
+        if roles is not None:
+            if (roles.shape != (self.size,) or roles.dtype != torch.int8
+                    or bool(((roles < -1) | (roles > REFERENCE)).any())):
+                raise ValueError("Expected int8 write roles: -1 blocked, 0 active, 1 reference.")
+            reference = roles == REFERENCE
+            requested = (delta != 0) & (roles >= 0)
+            failed = torch.where(reference, self.mask[REFERENCE], self.mask[ACTIVE])
+            written = requested & ~failed
+            held = torch.where(reference, self.g[REFERENCE], self.g[ACTIVE])
+            change = torch.where(reference, -delta, delta) * HALF_RANGE_US
+            # One draw per logical weight, just as in the legacy active-only law.
+            drawn = self._draw(held + change, noise_factor)
+            self.g = torch.stack((torch.where(written & ~reference, drawn, self.g[ACTIVE]),
+                                  torch.where(written & reference, drawn, self.g[REFERENCE])))
+            self.writes += written & ~reference
+            if not hasattr(self, "reference_writes"):
+                self.reference_writes = torch.zeros_like(self.writes)
+            self.reference_writes += written & reference
+            self.device_writes += int(written.sum())
+            self.stuck_write_attempts += int(requested.sum()) - int(written.sum())
+            return
         requested = delta != 0
         written = requested & ~self.mask[ACTIVE]
         active = torch.where(written, self._draw(self.g[ACTIVE] + delta * HALF_RANGE_US, noise_factor),
@@ -253,6 +275,8 @@ class CmoMatrix:
             "faults_sha256": self.fault_digest(),
             "g": self.g.detach().cpu().clone(),
             "writes": self.writes.cpu().clone(),
+            **({"reference_writes": self.reference_writes.cpu().clone()}
+               if hasattr(self, "reference_writes") else {}),
             "rng": self.generator.get_state(),
             # Verify reads are recorded only once taken, so earlier states keep their bytes.
             "counters": counters + ([self.verify_reads] if self.verify_reads else []),
@@ -266,6 +290,10 @@ class CmoMatrix:
         device = self.writes.device
         self.g = state["g"].to(device).clone()
         self.writes = state["writes"].to(device).clone()
+        if "reference_writes" in state:
+            self.reference_writes = state["reference_writes"].to(device).clone()
+        elif hasattr(self, "reference_writes"):
+            del self.reference_writes
         self.generator.set_state(state["rng"].cpu())
         counters = list(state["counters"])
         if len(counters) not in (4, 5):

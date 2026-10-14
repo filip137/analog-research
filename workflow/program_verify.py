@@ -228,8 +228,16 @@ def pair_rewrite_plan(flags, observed, target, roles):
     return selected, torch.where(selected, bounded, observed), int(((wanted != bounded) & selected).sum())
 
 
+def verified_write_roles(flags):
+    """Frozen controller routing: active unless flagged, reference if available, else blocked."""
+    if flags.ndim != 2 or flags.shape[0] != 2 or flags.dtype != torch.bool:
+        raise ValueError("Expected Boolean active/reference detection flags.")
+    return torch.where(~flags[cmo.ACTIVE], 0,
+                       torch.where(~flags[cmo.REFERENCE], 1, -1)).to(torch.int8)
+
+
 @torch.no_grad()
-def fault_rewrite(array, target, lifecycle, rewrite, assignment_seed) -> dict:
+def fault_rewrite(array, target, lifecycle, rewrite, assignment_seed, *, controller_state=None) -> dict:
     """One-shot fault-aware rewrite of a held CMO deployment (docs/reram_cmo_device.md).
 
     The controller decides from verify reads (``verify``) or from the hidden
@@ -246,6 +254,11 @@ def fault_rewrite(array, target, lifecycle, rewrite, assignment_seed) -> dict:
                                      noise_scale=devices.noise_scale, threshold_sigma=rewrite.threshold_sigma)
     else:
         flags, observed = device_stage.hidden_faults(array)
+    if controller_state is not None:
+        if rewrite.detection != "verify" or rewrite.roles != "pair":
+            raise ValueError("Training roles require a verify-based pair rewrite.")
+        # Preserve the controller's original scan, before any rewrite or hidden-map analysis.
+        controller_state["write_roles"] = verified_write_roles(flags)
     selected, targets, clipped = pair_rewrite_plan(flags, observed, target, rewrite.roles)
     plan = torch.cat((selected.flatten().to(target.dtype), torch.where(selected, targets, 0.0).flatten()))
     namespace = lifecycle.network.binding_namespace

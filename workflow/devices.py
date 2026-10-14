@@ -203,9 +203,10 @@ class CmoArray:
         for child, piece in zip(self.children, self._slices(target)):
             child.program(piece, reference)
 
-    def write(self, delta, noise_factor=1.0):
-        for child, piece in zip(self.children, self._slices(delta)):
-            child.write(piece, noise_factor)
+    def write(self, delta, noise_factor=1.0, roles=None):
+        role_slices = [None] * len(self.children) if roles is None else self._slices(roles)
+        for child, piece, role in zip(self.children, self._slices(delta), role_slices):
+            child.write(piece, noise_factor, roles=role)
 
     def read(self):
         return torch.cat([child.read() for child in self.children])
@@ -225,10 +226,19 @@ class CmoArray:
             generator = torch.Generator(device=self.device).manual_seed(seeds[spec.name])
             child.program_devices(target_us[:, part], selected[:, part], generator)
 
-    def write_counts(self):
-        """Programs plus writes per device since construction."""
+    def write_counts(self, roles=None):
+        """Active counters by default; selected-device counters for a frozen role map.
 
-        return torch.cat([child.writes for child in self.children])
+        Reference counters cover incremental writes only. Callers subtract a
+        baseline after P&V, keeping programming costs in the rewrite receipt.
+        """
+
+        active = torch.cat([child.writes for child in self.children])
+        if roles is None:
+            return active
+        reference = torch.cat([getattr(child, "reference_writes", torch.zeros_like(child.writes))
+                               for child in self.children])
+        return torch.where(roles < 0, 0, torch.where(roles == 1, reference, active))
 
     def out_of_range(self) -> int:
         return sum(child.out_of_range() for child in self.children)
