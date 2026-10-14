@@ -138,3 +138,11 @@ No scientific setting, deadline or resource allowance changed. Failed fifi
 artifacts remain intact. The shared queue remains the only admission and monitoring
 owner; the canary's successful collection is still required before release of
 arrays 271003/271004.
+
+At 12:01 Paris the restarted canary is running on loulou, attempt
+`4f793a3a903f45579ce24cd554448162`, native PID 1942639. Fresh metrics contain
+the nominal original-active arm's first training batch after its hold/rewrite
+controls; NVIDIA reports 17,912 MiB allocated to this process. The shared queue
+has acknowledged the live worker, with arrays 271003/271004 still held. This is
+progress evidence, not canary completion. The saved observation is
+`readiness/recovery-handoff-observation.json`.
