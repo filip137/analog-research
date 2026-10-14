@@ -4,7 +4,7 @@
 
 Sources: campaign experiment metadata and reviewer-written result notes. No raw evidence or live job state is inferred.
 
-Counts: complete=14, partial=1, planned=1.
+Counts: complete=14, partial=1, running=1.
 
 ## Experiments
 
@@ -24,7 +24,7 @@ Counts: complete=14, partial=1, planned=1.
 | [exp-012 — Recovery retained under hard per-device write-attempt caps](series/002-onchip-recovery/experiments/exp-012-write-caps.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-012.md): Complete five-cap curve: four attempts retain 99.46% of uncapped short-run development recovery, two retain 94.08%; one array at 3% faults |
 | [exp-013 — Recovery across three HWA recipes, six fault rates and three assignments](series/002-onchip-recovery/experiments/exp-013-recovery-regimes.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-013.md): Complete: recovery improves every 1–5% fault regime across three arrays; cap 4 preserves nearly all uncapped gain, with regime-dependent healthy-chip outcomes |
 | [exp-014 — Recovery context length after frozen HWA at matched tokens and updates](series/002-onchip-recovery/experiments/exp-014-context-length.md) | complete | None declared | [validated-local](series/002-onchip-recovery/results/exp-014.md): Complete: context 256 retains at least 95% of context-1024 recovery gain on all three confirmation arrays under every write budget |
-| [exp-015 — Noise-free write oracle: how much of the recovery limit is write noise](series/002-onchip-recovery/experiments/exp-015-noise-free-writes.md) | planned | None declared | No result recorded. |
+| [exp-015 — Noise-free write oracle: how much of the recovery limit is write noise](series/002-onchip-recovery/experiments/exp-015-noise-free-writes.md) | running | None declared | No result recorded. |
 | [exp-016 — Fault-aware pair rewrite: the healthy device of each faulty pair absorbs its stuck partner](series/002-onchip-recovery/experiments/exp-016-pair-rewrite.md) | partial | None declared | [validated-local](series/002-onchip-recovery/results/exp-016.md): Healthy/random-3% phase complete: verify-based partner rewriting closes 92.5–93.3% of std3 WikiText fault KL across three arrays and beats exp-013 recovery |
 
 ## Hypothesis evidence

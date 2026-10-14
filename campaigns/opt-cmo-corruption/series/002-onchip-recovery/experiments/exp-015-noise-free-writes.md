@@ -1,7 +1,7 @@
 ---
 id: "exp-015"
 title: "Noise-free write oracle: how much of the recovery limit is write noise"
-status: "planned"
+status: "running"
 hypotheses: []
 ---
 # exp-015: noise-free write oracle for on-chip recovery
@@ -229,3 +229,72 @@ Proposed placement:
 
 Remaining jobs are released only after all three canaries validate and the
 anchor is exact.
+
+**Queued October 13 at 19:07 Paris time.**
+
+Preparation:
+- Frozen worker and controller checkouts are at `fb8ec1d` on all three hosts:
+  `/home/filip/analog-research/opt-cmo-exp1/hwa-exp15-noise-free-20261013`,
+  cloned from the bundle `launch/exp15-source-fb8ec1d.bundle` (`eadf8782…`).
+  The local checkout is also the controller.
+- riri's P0 inputs were staged from nom-cool-1 to `opt-cmo-exp1/exp15-reused`:
+  24 GB in 36 minutes, re-verified by the input contract.
+- Host receipts: local (anchor), nom-cool-1 (17 jobs) and riri (17 jobs). All
+  dry runs pass. They are in `prepared/{local,nom-cool-1,riri}.json` under the
+  evidence root.
+
+Queue state:
+- Campaign `opt-cmo-exp15-noise-free-20261013`, manifest digest `ea0cddcc…`,
+  registered with the run-watch execution service; 19 jobs prepared held.
+- The preflight gate passed (`readiness/preflight.json`). Canaries released:
+  the anchor (nom-cool-2), `std3-271002-dense` (riri) and
+  `cdt3-271002-thresholded` (nom-cool-1).
+- The execution-window deadline is 2026-10-14 16:27 UTC.
+- No automatic recovery escalation is configured; this session monitors.
+
+**Canaries and handoff, about 19:55.**
+- All three canaries were validated and collected: the anchor (1,395 s), the
+  dense canary (567 s) and the thresholded canary (1,491 s).
+- The anchor reproduces exp-013 exactly in all 12 rows: held-state, state and
+  prediction hashes and KL. Arm A may therefore be reused.
+- The handoff gate passed (`readiness/handoff.json`, `anchor_exact: true`), and
+  the remaining 16 jobs were released.
+
+**Operational amendment, 20:46.**
+- At 20:27 another user (kellian) occupied riri. Our admission was correctly
+  rejected as `memory_changed`.
+- The user approved adding loulou (an idle RTX 5090 that already holds the
+  exp-013 P0 inputs).
+- loulou runs the launch-only commit `82d1c23` on top of `fb8ec1d`. It changes
+  only the helper's host list: loulou is never a canary and has an RTX 5090
+  label. The training code is identical.
+- loulou's preparation passed for 16 jobs (`prepared/loulou.json`).
+- Amendment `exp15-add-loulou-20261013` (`b01dd4b6…`,
+  `readiness/amendment-add-loulou.json`) added loulou placements to the 12
+  queued, never-attempted jobs. `cdt3-271004-dense` keeps only riri and
+  nom-cool-1, because it already has a rejected riri attempt.
+- Science, budget and gates are unchanged.
+
+**Execution complete, October 13 at about 22:20; review pending.**
+- **Coverage:** all 19 jobs passed native validation and collection: the
+  anchor plus 108 new exact-write endpoints across 54 starting conditions.
+  `reviews/summary.json` and `reviews/decomposition.csv` were written by the
+  completion hook.
+- **Hosts:** riri ran 6 jobs (it became available again from about 21:14),
+  loulou ran 6, nom-cool-1 ran 6, and nom-cool-2 ran the anchor.
+- **Retries and incidents:** there were no execution retries and no campaign
+  incidents. One admission on riri was rejected before execution
+  (`memory_changed`, another user's job); that job then ran on nom-cool-1.
+- **Budget:** 4.86 of 8 GPU-hours charged; 189.7 GB of the 250 GB storage cap
+  observed across the campaign's storage roots; well inside the 24-hour window.
+  All exp-015 GPU use has ended.
+- **Review:** session hwa-43 owns `results/exp-015.md`, the verdict against
+  the frozen rule and the move to `complete`.
+
+Commands:
+- status: `python -m campaigns.execution_service status`, run from the
+  controller;
+- per-job reviews: `reviews/<label>.json`, with progress in
+  `reviews/progress.json`;
+- the final `reviews/summary.json` and `reviews/decomposition.csv` are written
+  by the completion hook.

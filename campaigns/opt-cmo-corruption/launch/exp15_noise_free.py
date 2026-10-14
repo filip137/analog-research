@@ -32,8 +32,12 @@ HELD_OUT = ('transfer_generated', 'transfer_wikitext')
 # The anchor reruns the unchanged exp-013 lifecycle on its original host.
 ANCHOR = 'anchor-std3-271002-uncapped'
 HOSTS = ('riri', 'nom-cool-1', 'local')
+# Added by a user-approved operational amendment after riri became occupied;
+# never a canary host and never part of the original queue manifest.
+AMENDMENT_HOSTS = ('loulou',)
+RTX5090_HOSTS = ('riri', 'loulou')
 CANARIES = {ANCHOR: 'local', 'std3-271002-dense': 'riri', 'cdt3-271002-thresholded': 'nom-cool-1'}
-EXPECTED_SECONDS = {'riri': 900, 'nom-cool-1': 2100, 'local': 2100}
+EXPECTED_SECONDS = {'riri': 900, 'nom-cool-1': 2100, 'local': 2100, 'loulou': 900}
 PEAK_MIB, HEADROOM_MIB = 20500, 2048
 # Recorded from the user's explicit launch approval; queue() refuses without it.
 AUTHORIZATION = ('User approved exp-015 on 2026-10-13: write-noise-only exact-write oracle, arms B '
@@ -86,7 +90,7 @@ def generate():
 
 def eligible(label, host):
     parts(label)
-    if host not in HOSTS:
+    if host not in HOSTS + AMENDMENT_HOSTS:
         raise ValueError('Unassigned host')
     if label in CANARIES:
         return host == CANARIES[label]
@@ -159,7 +163,7 @@ def prepare_host(host, base, reused):
         files = [cfg, manifest, worker, inputs_path, Path(stage['config']), CATALOG]
         cases.append({'id':jid,'label':label,'lifecycle_sha256':lc.digest(),'dry_run_passed':True,
             'expected_seconds':EXPECTED_SECONDS[host],'budget_seconds':4200,
-            'placement':{'workdir':str(ROOT),'run_dir':str(receipt),'gpu_models':['5090' if host == 'riri' else '3090'],
+            'placement':{'workdir':str(ROOT),'run_dir':str(receipt),'gpu_models':['5090' if host in RTX5090_HOSTS else '3090'],
                 'argv':[sys.executable,'-m','campaigns.tmux_worker','bridge','--spec',str(worker)],
                 'validate_argv':[sys.executable,'-m','campaigns.recovery_collect','validate',str(native),'--inputs',str(inputs_path)],
                 'campaign_python':sys.executable,'campaign_worker_spec':str(worker),'campaign_result_root':str(native),
