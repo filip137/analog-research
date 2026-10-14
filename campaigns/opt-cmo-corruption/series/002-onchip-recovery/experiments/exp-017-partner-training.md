@@ -112,4 +112,29 @@ noise or drift. Programming/write events are not measured pulse counts.
 - Job IDs: `opt125m-cmo-l6-exp17-partner-training-std3-{271002,271003,271004}`. `reviews/progress.json` tracks collected endpoints. `prepared/{fifi,loulou}.json` names worker receipts, native roots, input hashes and exact commands.
 - No automatic compute retry is enabled. Operational failures require diagnosis within the remaining allowance; collection is separately retryable without rerunning successful compute. Numerical results never trigger retuning or replacement.
 
-- Live handoff: array 271002 is running on fifi, attempt `c414c1fadabd4c2889b98ab3f2997f17`. Native metrics confirm the nominal rewrite and learning progress; arrays 271003/271004 remain held. The queue completed an admission cycle and owns continued checks. Evidence: `readiness/handoff-observation.json`.
+- Initial handoff: array 271002 started on fifi, attempt `c414c1fadabd4c2889b98ab3f2997f17`; see the incident below for its terminal state. Arrays 271003/271004 remain held behind the canary gate. Evidence: `readiness/handoff-observation.json`.
+
+### Canary driver failure and unchanged restart, October 14
+
+The first canary failed at 11:33 Paris with native return code -11. The kernel
+records PID 1950362 faulting inside `libcuda.so.610.57.04`. Three nominal control
+endpoints were written; the new partner arm reached step 256 but did not finish
+endpoint evaluation or export. These are partial artifacts, not a completed
+canary or a scientific result. The queue correctly withheld the two later arrays.
+
+The failed worker, supervisor and GPU reservation are confirmed terminal. Its
+174.318738 seconds remain charged. A guarded, full-size GPU accounting diagnostic
+passed in another 1.277132 seconds; this extra diagnostic time also counts against
+the original two-hour allowance. Passing the diagnostic does not establish that
+the driver fault is fixed.
+
+Pinned evidence is `readiness/canary-driver-failure.json`; the public
+`campaigns.execution_service recover-driver-crash` command accepted
+`readiness/canary-driver-recovery.json` (receipt SHA-256
+`a031026c23bd8105d1052231b68483a65a6eadce28b3aff27c2b60e5e1aa0f3d`).
+The one authorized restart uses original inputs and the unchanged frozen source,
+excluding fifi for this canary and retaining its already prepared loulou placement.
+No scientific setting, deadline or resource allowance changed. Failed fifi
+artifacts remain intact. The shared queue remains the only admission and monitoring
+owner; the canary's successful collection is still required before release of
+arrays 271003/271004.
