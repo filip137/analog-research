@@ -37,6 +37,7 @@ remain unresolved; these results retain one-training-seed, model-based limits.
 - [Dense 50M-token on-chip pilot](series/002-onchip-recovery/experiments/exp-008-overnight-recovery.md)
 - [Lifecycle definitions](lifecycles/README.md)
 - [Lifecycle contract](../../docs/crossbar_lifecycle.md), [CMO device contract](../../docs/reram_cmo_device.md)
+- [Active comparison: training through the verified partner](series/002-onchip-recovery/experiments/exp-017-partner-training.md)
 
 Raw runs live under `results/lifecycles/<lifecycle_id>/`, which is not versioned.
 The pinned corpus lives under `data/corpora/`.

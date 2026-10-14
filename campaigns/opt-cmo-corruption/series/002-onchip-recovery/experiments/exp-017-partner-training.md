@@ -1,7 +1,7 @@
 ---
 id: "exp-017"
 title: "On-chip learning through the verified partner after fault-aware rewriting"
-status: "ready"
+status: "running"
 hypotheses: []
 ---
 # exp-017: train through the verified partner
@@ -101,3 +101,13 @@ Exact source revision, placements, manifest, deadline and monitoring observation
 will be recorded before release. Model-based assumptions remain programmable per-weight
 references, synthetic permanent faults, fitted endpoint programming, no read
 noise or drift. Programming/write events are not measured pulse counts.
+
+### Registered execution, October 14
+
+- Worker and collection-controller source: `d12d779f04522b41a2b13efaeebb5abd1bb5b746`; shared-worktree implementation commit: `2a65d1c`. The isolated source excludes concurrent retention changes.
+- Workers on fifi/loulou: `/home/filip/analog-research/opt-cmo-exp1/hwa-exp17-partner-training-20261014`. Both hosts passed all three native dry runs and full frozen-input validation. Inputs reuse the exp-016 staging; no new input copy was made.
+- Campaign `opt-cmo-exp17-partner-training-20261014`, manifest SHA-256 `7fbe1a9c70d399716b3e8b3be12556f5b5b94d62f6354295599031cb8c181a10`. Three exact job specs and placements are under `prepared/queue/`; preflight passed. Only array 271002 is initially released; 271003/271004 require its successful collection gate.
+- Deadline: `2026-10-15T11:27:20.145986+02:00`. Explicit safe admission windows are pinned in `readiness/execution-window.json`; all charges remain inside 2 GPU-hours / 80 GB.
+- Shared `run-watch-queue.service`, PID 1384148 at registration, owns admission, five-minute semantic checks, native validation and controller collection. The local pinned controller is `<evidence>/controller/`; automatic final review writes `reviews/summary.json` and `reviews/summary.md` after all three jobs collect. There is no duplicate watcher.
+- Job IDs: `opt125m-cmo-l6-exp17-partner-training-std3-{271002,271003,271004}`. `reviews/progress.json` tracks collected endpoints. `prepared/{fifi,loulou}.json` names worker receipts, native roots, input hashes and exact commands.
+- No automatic compute retry is enabled. Operational failures require diagnosis within the remaining allowance; collection is separately retryable without rerunning successful compute. Numerical results never trigger retuning or replacement.
