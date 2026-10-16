@@ -1,7 +1,7 @@
 ---
 id: "exp-021"
 title: "On-chip learning-rate and schedule development screen"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-021: on-chip learning-rate and schedule screen
@@ -133,4 +133,29 @@ records include `lr_factor`. Tests are in
 
 ## Current execution and monitoring handoff
 
-Owner: this session (coordinator). Filled at launch.
+**Complete (October 16, 16:14–17:10).** All 12 jobs completed and passed inspection; no retries. Result: [exp-021](../results/exp-021.md). Nothing is queued.
+
+Owner: the launching session, which was also the Monitor; no delegation.
+
+- **Source:** branch `codex/exp021-onchip-lr-screen` at `7b3c95c`, cloned clean on
+  Jean Zay at `$JZ/hwa-7b3c95c`, where
+  `JZ=/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1`.
+- **Inputs:** under `$JZ/exp21/inputs/`, SHA-256 verified after the copy:
+  - `std3/cache.pt` `b7438a37…`;
+  - `std3/devices.pt` `7bc1bd14…`;
+  - `std3-271002/portable.pt` `3e35ce9b…`.
+
+  The teacher and corpora are the existing `$JZ/inputs/` copies, with matching
+  pinned digests.
+- **Plans:** `$JZ/hwa-7b3c95c/results/lifecycles/<id>/plan`. The only stage run is
+  `onchip__standard_hwa_model__271002`, with `--input` overrides for the three
+  frozen inputs (`$JZ/exp21/submit.sh LABEL…`).
+- **Runs:** `$JZ/hwa-7b3c95c/results/lifecycles/<id>/runs/`. Logs:
+  `$JZ/logs/exp21-<label>-<jobid>.out`.
+- **Jobs (submitted October 16):** 1181879–1181888 for the first ten
+  configurations. `noisy-const-3em4` and `exact-const-3em4` are submitted
+  automatically as dev-queue slots free.
+- **Inspect and collect:**
+  `python -m ebl runs inspect <run> --verify-artifacts --require-complete` on
+  Jean Zay, then copy back `metrics.jsonl`/`result.json` and run
+  `launch/exp21_lr_screen.py report`.
