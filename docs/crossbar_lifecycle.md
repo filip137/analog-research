@@ -379,6 +379,13 @@ still drawn, so it advances identically. Lifecycles that declare it reject
 `rewrite` arms, whose programming noise it does not cover. Writer checkpoints
 and thresholded diagnostics record the declared value.
 
+Optional `onchip.lr_schedule` (CMO laws only) takes the `hwa.lr_schedule` kinds
+and fields. On-chip update u (one-based) uses `learning_rate × factor(u)`, and
+`total_steps` must equal the full on-chip budget (epochs × updates per epoch).
+Omitted, the rate is constant and every existing digest and trajectory is
+unchanged. Adam moments are unaffected; the factor scales only the issued
+command. Development records include `lr_factor`.
+
 Optional per-arm `fault_rewrite` (CMO only) applies one fault-aware rewrite of
 the held deployment at the start of a `hold` or `learn` arm, without calibration
 or a digital adapter; see the [CMO device contract](reram_cmo_device.md):

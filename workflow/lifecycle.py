@@ -970,8 +970,7 @@ class HwaLrSchedule:
         return value
 
 
-def _hwa_lr_schedule(raw: Any) -> HwaLrSchedule:
-    path = "hwa.lr_schedule"
+def _hwa_lr_schedule(raw: Any, path: str = "hwa.lr_schedule") -> HwaLrSchedule:
     if not isinstance(raw, Mapping):
         raise config_error(path, "to be an object", raw)
     kind = _choice(raw.get("kind"), f"{path}.kind",
@@ -1278,6 +1277,8 @@ class Onchip:
     case_labels: Optional[tuple[str, ...]] = None
     microbatch_size: Optional[int] = None
     write_noise_scale: Optional[float] = None
+    # Multiplies ``learning_rate`` per one-based update of CMO weight learning; absent means constant.
+    lr_schedule: Optional[HwaLrSchedule] = None
 
     @property
     def cohort_key(self) -> str:
@@ -1311,6 +1312,8 @@ class Onchip:
             value["microbatch_size"] = self.microbatch_size
         if self.write_noise_scale is not None:
             value["write_noise_scale"] = self.write_noise_scale
+        if self.lr_schedule is not None:
+            value["lr_schedule"] = self.lr_schedule.to_dict()
         value["arms"] = [arm.to_dict() for arm in self.arms]
         return value
 
@@ -1362,6 +1365,8 @@ def _onchip(raw: Any, technology: str) -> Onchip:
         keys += ("microbatch_size",)
     if "write_noise_scale" in raw and law.startswith("cmo_"):
         keys += ("write_noise_scale",)
+    if "lr_schedule" in raw and law.startswith("cmo_"):
+        keys += ("lr_schedule",)
     raw = _object(raw, "onchip", keys)
     arms = []
     for index, item in enumerate(_list(raw["arms"], "onchip.arms")):
@@ -1458,6 +1463,8 @@ def _onchip(raw: Any, technology: str) -> Onchip:
         # is a separate question, so the two are never mixed in one lifecycle.
         if any(arm.fault_rewrite is not None for arm in arms):
             raise config_error("onchip.arms", "to omit fault_rewrite under a declared write_noise_scale", raw["arms"])
+    if "lr_schedule" in raw:
+        extra["lr_schedule"] = _hwa_lr_schedule(raw["lr_schedule"], "onchip.lr_schedule")
     if "development_every_steps" in raw:
         extra["development_every_steps"] = _integer(
             raw["development_every_steps"], "onchip.development_every_steps", minimum=1
@@ -1622,6 +1629,18 @@ def _cross_validate(lifecycle: Lifecycle) -> None:
         labels = lifecycle.onchip.case_labels
         if not labels or not set(labels) <= {c.label for c in lifecycle.defects.cases}:
             raise config_error("onchip.case_labels", "to select declared defect cases", labels)
+    schedule = lifecycle.onchip.lr_schedule if lifecycle.onchip else None
+    if schedule is not None:
+        onchip = lifecycle.onchip
+        if lifecycle.recovery_views is not None:
+            raise config_error("onchip.lr_schedule", "to be absent under recovery_views", schedule.to_dict())
+        steps = onchip.epochs * -(-data.cohort_size(onchip.cohort_key) // onchip.batch_size)
+        if schedule.total_steps != steps:
+            raise config_error(
+                "onchip.lr_schedule.total_steps",
+                f"to match the full on-chip budget ({steps} updates, including any data.max_examples cap)",
+                schedule.total_steps,
+            )
     views = lifecycle.recovery_views
     if views is not None:
         if family != OPT_FAMILY or lifecycle.onchip is None or lifecycle.onchip.cohort_key != "training":

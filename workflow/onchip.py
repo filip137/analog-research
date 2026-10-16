@@ -42,8 +42,11 @@ def _adam_command(writer, gradient):
     writer.step_index += 1
     writer.first.mul_(0.9).add_(gradient, alpha=0.1)
     writer.second.mul_(0.999).addcmul_(gradient, gradient, value=0.001)
+    # A declared ``onchip.lr_schedule`` sets ``lr_factor`` before each update; constant laws never do.
+    factor = getattr(writer, "lr_factor", None)
+    rate = writer.learning_rate if factor is None else writer.learning_rate * factor
     return (
-        -writer.learning_rate
+        -rate
         * (writer.first / (1 - 0.9**writer.step_index))
         / ((writer.second / (1 - 0.999**writer.step_index)).sqrt() + 1e-8)
     )
@@ -445,6 +448,8 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
             if optimizer:
                 optimizer.step()
             if writer:
+                if onchip.lr_schedule is not None:
+                    writer.lr_factor = onchip.lr_schedule.factor(global_step + 1)
                 writer.step(q.grad)
             elif learn:
                 with torch.no_grad():
@@ -483,6 +488,8 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                 store.append_metric({"stage": "onchip_development", "case": label, "arm": arm.arm_id,
                                      "epoch": epoch, "global_step": global_step,
                                      "development": development, "cost": cost_now,
+                                     **({"lr_factor": writer.lr_factor}
+                                        if writer is not None and onchip.lr_schedule is not None else {}),
                                      **({name: network_family.evaluate(network, cache[name], device, q=array.read())
                                          for name in context_views.extra_evaluation_names(lifecycle)
                                          if name.endswith("_development")}),
