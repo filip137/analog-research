@@ -1459,10 +1459,8 @@ def _onchip(raw: Any, technology: str) -> Onchip:
         extra["write_noise_scale"] = _number(raw["write_noise_scale"], "onchip.write_noise_scale")
         if any(arm.weights == "rewrite" for arm in arms):
             raise config_error("onchip.arms", "to omit rewrite under a declared write_noise_scale", raw["arms"])
-        # Fault rewrites program with physical noise too; the exact-write oracle
-        # is a separate question, so the two are never mixed in one lifecycle.
-        if any(arm.fault_rewrite is not None for arm in arms):
-            raise config_error("onchip.arms", "to omit fault_rewrite under a declared write_noise_scale", raw["arms"])
+        # A one-shot fault rewrite is a P&V programming event, like deployment: it keeps
+        # its physical endpoint noise from its own streams; the factor covers learning writes.
     if "lr_schedule" in raw:
         extra["lr_schedule"] = _hwa_lr_schedule(raw["lr_schedule"], "onchip.lr_schedule")
     if "development_every_steps" in raw:

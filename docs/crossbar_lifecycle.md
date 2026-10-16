@@ -376,7 +376,9 @@ noise; it is not a physical method. It leaves deployment programming noise,
 `devices.noise_scale`, the nominal threshold reference, stuck devices, the held
 state's device contract and all cost counters unchanged; the noise stream is
 still drawn, so it advances identically. Lifecycles that declare it reject
-`rewrite` arms, whose programming noise it does not cover. Writer checkpoints
+`rewrite` arms, whose programming noise it does not cover. They admit
+`fault_rewrite` arms: that one-shot rewrite is a P&V programming event and keeps
+its physical endpoint noise, so exact learning starts from the physical rewrite. Writer checkpoints
 and thresholded diagnostics record the declared value.
 
 Optional `onchip.lr_schedule` (CMO laws only) takes the `hwa.lr_schedule` kinds
@@ -412,7 +414,7 @@ or a digital adapter; see the [CMO device contract](reram_cmo_device.md):
   does not train. A `learn` arm learns from the rewritten state. Its costs,
   checkpoints and any `max_write_attempts_per_device` exclude the rewrite,
   which is a programming event like deployment.
-- Lifecycles that declare `write_noise_scale` reject fault rewrites.
+- Under `write_noise_scale` the rewrite stays physical; only learning writes are scaled.
 - Each row records the receipt under `fault_rewrite`:
   - controller decisions, flag counts, clipped targets and a plan digest;
   - the rewrite cost: programs, stuck attempts and verify reads;

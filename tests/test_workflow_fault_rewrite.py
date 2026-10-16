@@ -258,15 +258,10 @@ def test_schema_rejects_invalid_fault_rewrites(arm, message):
         parse_lifecycle(doc)
 
 
-def test_fault_rewrites_need_a_plain_hold_arm_cmo_and_no_write_noise_oracle():
+def test_fault_rewrites_need_a_plain_hold_arm_and_cmo():
     doc = template()
     doc["onchip"]["arms"] = [{"id": "fixed", "weights": "hold", "calibration": False, "fault_rewrite": ORACLE_PAIR}]
     with pytest.raises(ConfigError, match="hold arm"):
-        parse_lifecycle(doc)
-    doc = template()
-    doc["onchip"]["arms"] = arms({"id": "fixed", "weights": "hold", "calibration": False, "fault_rewrite": ORACLE_PAIR})
-    doc["onchip"]["write_noise_scale"] = 0
-    with pytest.raises(ConfigError, match="fault_rewrite"):
         parse_lifecycle(doc)
     om = json.loads((ROOT / "examples/lifecycles/opt125m-om-mlp4-template.json").read_text())
     om["onchip"]["arms"] = arms({"id": "fixed", "weights": "hold", "calibration": False, "fault_rewrite": ORACLE_PAIR})
@@ -325,3 +320,27 @@ def test_fault_rewrite_arms_run_replay_and_leave_learning_unchanged_on_healthy_a
     assert pair["controller"]["programmed_active"] == active["controller"]["programmed_active"] > 0
     state = load(run / "checkpoints/onchip" / faulted / "pair_rewrite_verify.pt")
     assert state["array"]["kind"] == "layered_cmo"
+
+
+def test_exact_write_learning_starts_from_the_same_physical_rewrite(cmo_inputs, tmp_path):
+    weights, digest = cmo_inputs
+    common = {
+        "data.corpus": {"name": "synthetic", "sha256": digest},
+        "data.sequence_length": 9, "data.max_examples": 8,
+        "defects.cases": [case_doc("gmin", 50000)], "hwa.arms": [{"id": "digital", "method": "none"}],
+        "onchip.batch_size": 4, "onchip.epochs": 1, "onchip.learning_rate": .01,
+        "onchip.arms": arms(
+            {"id": "pair_rewrite_verify", "weights": "hold", "calibration": False, "fault_rewrite": VERIFY_PAIR},
+            {"id": "pair_rewrite_verify_recovery", "weights": "learn", "calibration": False, "fault_rewrite": VERIFY_PAIR}),
+    }
+    physical = small(**common, **{"onchip.update_law": "cmo_thresholded_write_adam", "onchip.threshold_sigma": 1.,
+                                   "onchip.accumulate_updates": True})
+    exact = small(**common, **{"onchip.update_law": "cmo_idealized_write_adam", "onchip.write_noise_scale": 0.})
+    rows = {}
+    for name, lc in (("physical", physical), ("exact", exact)):
+        run, _ = run_lifecycle(lc, weights, tmp_path / name)["onchip__digital__271001"]
+        rows[name] = {r["onchip_arm"]: r for r in json.loads((run / "measurements.json").read_text())}
+    for arm in ("pair_rewrite_verify", "pair_rewrite_verify_recovery"):
+        assert rows["exact"][arm]["fault_rewrite"] == rows["physical"][arm]["fault_rewrite"]
+    assert rows["exact"]["pair_rewrite_verify"]["final"] == rows["physical"]["pair_rewrite_verify"]["final"]
+    assert rows["exact"]["pair_rewrite_verify"]["fault_rewrite"]["cost"]["device_programs"] > 0
