@@ -1,7 +1,7 @@
 ---
 id: "exp-022"
 title: "Noiseless versus noisy on-chip learning after intelligent P&V, per meeting case"
-status: "running"
+status: "complete"
 hypotheses: []
 ---
 # exp-022: noiseless and noisy learning after intelligent P&V
@@ -93,4 +93,37 @@ and never pooled.
 
 ## Current execution and monitoring handoff
 
-Owner: the launching session, which is also the Monitor. Filled at launch.
+**Complete (October 16).** All 14 cases passed under both laws after one retry of the eight gmin/gmax jobs (incident 1). Result: [exp-022](../results/exp-022.md). Nothing is queued.
+
+Owner: the launching session, which was also the Monitor.
+
+- **Source:** `c9269c7`, cloned clean at `$JZ/hwa-c9269c7`, where
+  `JZ=/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1`.
+- **Inputs, SHA-256 verified on Jean Zay:**
+  - `$JZ/exp22/inputs/deployment-kinds-271002.pt` (`db378a16…`, copied from
+    fifi);
+  - the exp-021 copies of `cache.pt`, `devices.pt` and the exp-013 P0.
+
+  Provenance was verified locally against all ten lifecycles before staging.
+- **Jobs (submitted October 16):** 1183485–1183497, one per lifecycle, with
+  stage `onchip__standard_hwa_model__271002` (`$JZ/exp22/submit.sh`).
+- **Runs and logs:** runs under `$JZ/hwa-c9269c7/results/lifecycles/<id>/runs/`,
+  logs at `$JZ/logs/exp22-<label>-<jobid>.out`.
+
+### Incident 1: raw deployment not portable to V100 (October 16)
+
+- **What failed:** the eight gmin/gmax jobs (1183485–1183495), at load time,
+  before any training: `RuntimeError: The rebuilt CMO deployment differs from
+  the saved one.`
+- **Cause:** the exp-016 phase-3 deployment `db378a16…` is a raw native bundle.
+  Its held state is rebuilt from seeds and checked bitwise. The V100/PyTorch 2.5
+  rebuild does not match the RTX 5090/PyTorch 2.11 original. The two random-3%
+  jobs use the exp-013 P0, which was already in portable form, and are unaffected.
+- **Fix:** convert the deployment to portable form with
+  `python -m workflow.portable_deployment` on an idle RTX 5090 (the original
+  architecture). This makes no new device writes and checks the replay. Then
+  resubmit the same eight lifecycles with that portable state as
+  `device_state`. This is the one allowed retry for an understood operational
+  failure.
+- **Preserved:** the failed attempts and logs stay under
+  `$JZ/hwa-c9269c7/results/lifecycles/<id>/runs/` and `$JZ/logs/`.
