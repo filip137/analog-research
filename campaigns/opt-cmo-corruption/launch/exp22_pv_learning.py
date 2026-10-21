@@ -32,7 +32,11 @@ GROUPS = {
     # Amendment (21 October): the other random rates already in the exp-013 P0, for the DRN comparison figure.
     'random-lo': ('random3', ['random_10000ppm', 'random_20000ppm']),
     'random-hi': ('random3', ['random_40000ppm', 'random_50000ppm']),
+    # Amendment (21 October): random 6% is not in the exp-013 P0; this group deploys it in its own deploy stage.
+    'random6': ('random3', ['nominal', 'random_60000ppm']),
 }
+DEFECT_CASES = {'random6': [{'array_concentration': None, 'die_concentration': None, 'kind': kind, 'rate_ppm': rate}
+                            for kind, rate in (('none', 0), ('random', 60000))]}
 VERIFY = {'detection': 'verify', 'roles': 'pair', 'seed': 241016, 'threshold_sigma': 5.0}
 ARMS = [{'id': 'none', 'weights': 'hold', 'calibration': False},
         {'id': 'pair_rewrite_verify', 'weights': 'hold', 'calibration': False, 'fault_rewrite': VERIFY},
@@ -50,6 +54,8 @@ def lifecycle(label):
     base, cases = GROUPS[group]
     doc = json.loads(BASES[base].read_text())
     doc['lifecycle_id'] = f'{PREFIX}-{label}'
+    if group in DEFECT_CASES:
+        doc['defects']['cases'] = DEFECT_CASES[group]
     doc['question'] = {
         'text': 'After intelligent P&V, how much do noiseless and noisy on-chip learning add per fault kind and rate?',
         'decision': 'Descriptive per-case comparison for the October 22 meeting; fixed recipes chosen beforehand '

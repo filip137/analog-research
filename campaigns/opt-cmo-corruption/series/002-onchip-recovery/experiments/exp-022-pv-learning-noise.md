@@ -161,3 +161,38 @@ worktree.
 for each case; each case's `none` arm must reproduce the exp-013 P0 deployment
 WikiText PPL for that rate (51.615, 53.300, 59.967, 65.859); native inspection
 and replay as above.
+
+### Amendment execution handoff (21 October)
+
+- **Source:** commit `37093b5`, cloned clean at `$JZ/hwa-37093b5` from
+  `$JZ/stage/hwa-c9269c7.bundle` plus `$JZ/stage/hwa-37093b5-inc.bundle`.
+  Plans made there with the original `workflow plan` arguments; each planned
+  `onchip__standard_hwa_model__271002` stage differs from the random-3% stage only in
+  `lifecycle_id` and `case_labels`.
+- **Input:** `$JZ/exp21/inputs/std3-271002/portable.pt`, SHA-256 `3e35ce9b…` verified.
+- **Jobs (submitted 12:03 Paris):** 1378092 `noisy-random-lo`, 1378093 `noisy-random-hi`,
+  1378094 `exact-random-lo`, 1378095 `exact-random-hi`, via `$JZ/exp22/submit-random.sh`
+  (`--test-only` dry run accepted first). Logs `$JZ/logs/exp22-<label>-<jobid>.out`.
+- **Inspection/copy-back:** `$JZ/exp22/inspect-random.sh LABEL...` into `$JZ/exp22/evidence/<label>/`,
+  then to the meeting worktree's `results/lifecycles/opt125m-cmo-l6-exp22-pv-learning/<label>/`.
+- **Monitor:** the launching session (local poll until the four jobs leave the queue).
+
+## Amendment: random 6% (21 October 2026)
+
+**Authorization.** The user asked for intelligent P&V at random 6% as well, run
+locally rather than on Jean Zay. Both local RTX 3090s are unavailable (nom-cool-2
+cannot initialize CUDA, `cuInit` error 3; nom-cool-1 is unreachable), so the run uses
+the idle RTX 5090 **trex**, the host that made the exp-1g/exp-013 std3 deployment,
+within the standing 5090 rule (one GPU, daytime).
+
+**Design.** Random 6% is not in the exp-013 P0, so the `random6` lifecycles carry
+their own defect cases (`none`, `random` 60,000 ppm) and the noisy lifecycle runs
+`deploy__standard_hwa_model__271002` before its on-chip stage. The exact lifecycle
+reuses that same deployment as `device_state`. Deploy inputs are the exp-1g originals
+on trex: feature cache `b7438a37…`, device bundle `7bc1bd14…`, std3 source `86522e23…`.
+On-chip cases are `nominal` and `random_60000ppm`; arms, verify seed, both learning
+recipes, budgets and evaluation are unchanged. Validity: the `nominal` hold must be
+compared with the exp-013 P0 nominal (WikiText 49.586); a difference means the new
+deployment is not bit-identical to the P0 and is reported, not repaired. Random-6%
+placement and programming draws are new; this is a new deployment, not a P0 case.
+Budget: one 5090, under 2 GPU-hours.
