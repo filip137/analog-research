@@ -29,6 +29,9 @@ GROUPS = {
     'gmax-lo': ('kinds', ['gmax_10000ppm', 'gmax_20000ppm', 'gmax_30000ppm']),
     'gmax-hi': ('kinds', ['gmax_40000ppm', 'gmax_50000ppm', 'gmax_60000ppm']),
     'random3': ('random3', ['nominal', 'random_30000ppm']),
+    # Amendment (21 October): the other random rates already in the exp-013 P0, for the DRN comparison figure.
+    'random-lo': ('random3', ['random_10000ppm', 'random_20000ppm']),
+    'random-hi': ('random3', ['random_40000ppm', 'random_50000ppm']),
 }
 VERIFY = {'detection': 'verify', 'roles': 'pair', 'seed': 241016, 'threshold_sigma': 5.0}
 ARMS = [{'id': 'none', 'weights': 'hold', 'calibration': False},

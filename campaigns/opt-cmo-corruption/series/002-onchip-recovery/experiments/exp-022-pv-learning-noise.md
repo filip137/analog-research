@@ -127,3 +127,37 @@ Owner: the launching session, which was also the Monitor.
   failure.
 - **Preserved:** the failed attempts and logs stay under
   `$JZ/hwa-c9269c7/results/lifecycles/<id>/runs/` and `$JZ/logs/`.
+
+## Amendment: random 1, 2, 4 and 5% (21 October 2026)
+
+**Authorization.** On 21 October the user asked to run intelligent P&V and both
+learning laws for the remaining random fault rates, so the crossbar has a random-fault
+curve to set beside the DRN meeting figure
+(`lora/results/opt125m-cmo-drn-single-write-v1/figures/drn_wikitext_ppl.png`).
+The user chose 1–5% only; random 6% was never deployed on the crossbar and needs a
+new deployment, so it is not part of this amendment.
+
+**Cases.** Random 1, 2, 4 and 5% on array 271002, std3 source, from the same
+exp-013 P0 (`3e35ce9b…`, portable copy `$JZ/exp21/inputs/std3-271002/portable.pt`)
+that the random-3% group used. The P0 already holds these four cases; no new
+deployment or programming draw is made.
+
+**Unchanged.** Arms (`none`, `pair_rewrite_verify`, `pair_rewrite_verify_recovery`),
+verify seed 241016 and 5σ detector, both learning recipes, 256 updates, seeds,
+cohorts and evaluation are exactly those above. The four new lifecycles
+(`noisy-random-lo`, `noisy-random-hi`, `exact-random-lo`, `exact-random-hi`) differ
+from the random-3% lifecycles only in `lifecycle_id` and `onchip.case_labels`
+(`random_10000ppm`/`random_20000ppm` and `random_40000ppm`/`random_50000ppm`).
+Regenerating with the extended launch script reproduces the ten original
+lifecycles byte for byte.
+
+**Budget.** Four V100 dev-queue jobs, 1 h 30 wall each; expected about 15 min
+each (the random-3% jobs took 811–814 s). Cap 6 V100-hours including one retry per
+understood operational failure; 20 GB on Lustre. Copy-back as above, into
+`results/lifecycles/opt125m-cmo-l6-exp22-pv-learning/<label>/` of the meeting
+worktree.
+
+**Validity checks.** Hold arms and rewrite receipts identical between the two laws
+for each case; each case's `none` arm must reproduce the exp-013 P0 deployment
+WikiText PPL for that rate (51.615, 53.300, 59.967, 65.859); native inspection
+and replay as above.
