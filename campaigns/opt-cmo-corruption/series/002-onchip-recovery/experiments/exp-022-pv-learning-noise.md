@@ -196,3 +196,13 @@ compared with the exp-013 P0 nominal (WikiText 49.586); a difference means the n
 deployment is not bit-identical to the P0 and is reported, not repaired. Random-6%
 placement and programming draws are new; this is a new deployment, not a P0 case.
 Budget: one 5090, under 2 GPU-hours.
+
+**Revision (21 October, user):** program-and-verify only at 6%, no training. The
+trex run of `noisy-random6` completed its deploy stage
+(`deploy__standard_hwa_model__271002`, run `20261021T123048.462584Z-ba1c4222-d2b90fc7`,
+`checkpoints/deployment.pt` SHA-256 `78d077d31526fd3d…`, mapping `65ad7629…` as in the P0).
+Its on-chip stage then failed with CUDA out-of-memory after another user's jobs
+(24 GB) started on trex; that partial bundle is preserved and not used. Per the
+standing rule trex is not reused while occupied. The new `pv-random6` lifecycle has
+only the `none` and `pair_rewrite_verify` arms; its on-chip stage runs on idle 5090
+**fifi** with the trex deployment as `device_state` and the exp-1g cache/device inputs.

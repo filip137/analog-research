@@ -49,6 +49,10 @@ def labels():
     return [f'{law}-{group}' for law in ('noisy', 'exact') for group in GROUPS]
 
 
+# Amendment (21 October): program-and-verify only at random 6%, without learning arms.
+PV_ONLY = ['pv-random6']
+
+
 def lifecycle(label):
     law, group = label.split('-', 1)
     base, cases = GROUPS[group]
@@ -62,7 +66,7 @@ def lifecycle(label):
                     '(noisy: exp-016; noiseless: exp-021 oracle). No automatic follow-up. ' + NOTE,
         'evidence_class': 'exploratory_model_based', 'primary_metric': 'teacher_kl'}
     onchip = doc['onchip']
-    onchip['arms'] = ARMS
+    onchip['arms'] = ARMS[:2] if law == 'pv' else ARMS
     onchip['case_labels'] = cases
     if law == 'exact':
         for key in ('threshold_sigma', 'accumulate_updates', 'max_write_attempts_per_device'):
@@ -72,7 +76,7 @@ def lifecycle(label):
 
 
 def generate():
-    for label in labels():
+    for label in labels() + PV_ONLY:
         lc = lifecycle(label)
         path = LIFECYCLES/f'{lc.lifecycle_id}.json'
         write_frozen(path, lc.to_dict())
