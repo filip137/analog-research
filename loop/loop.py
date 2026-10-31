@@ -42,7 +42,9 @@ PR_FOOTER = '🤖 Generated with [Claude Code](https://claude.com/claude-code)'
 # ---------------------------------------------------------------- plumbing
 
 # A locked GNOME keyring makes gh wait forever for an unlock prompt over SSH.
-ENV = {k: v for k, v in os.environ.items() if k != 'DBUS_SESSION_BUS_ADDRESS'}
+# Unsetting the address is not enough: D-Bus clients fall back to
+# $XDG_RUNTIME_DIR/bus, so point them at a socket that does not exist.
+ENV = {**os.environ, 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/nonexistent'}
 
 
 def sh(*argv, cwd=ROOT, input=None):
