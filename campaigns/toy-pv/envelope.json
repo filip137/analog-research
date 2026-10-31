@@ -1,0 +1,16 @@
+{
+  "description": "What the loop may launch in this campaign without new code. The device model in runner.py is fixed and is not a variable.",
+  "runner": "runner.py",
+  "max_seconds": 120,
+  "max_experiments": 4,
+  "params": {
+    "n_devices": {"type": "int", "min": 1000, "max": 200000},
+    "seeds": {"type": "int", "min": 2, "max": 5},
+    "arms": {"type": "list", "min_len": 2, "max_len": 8, "items": {
+      "name": {"type": "str"},
+      "max_retries": {"type": "int", "min": 0, "max": 3},
+      "tol": {"type": "float", "min": 0.002, "max": 0.1},
+      "precomp_t_ref_s": {"type": "float", "min": 1, "max": 36000, "nullable": true}
+    }}
+  }
+}
