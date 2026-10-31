@@ -41,8 +41,12 @@ PR_FOOTER = '🤖 Generated with [Claude Code](https://claude.com/claude-code)'
 
 # ---------------------------------------------------------------- plumbing
 
+# A locked GNOME keyring makes gh wait forever for an unlock prompt over SSH.
+ENV = {k: v for k, v in os.environ.items() if k != 'DBUS_SESSION_BUS_ADDRESS'}
+
+
 def sh(*argv, cwd=ROOT, input=None):
-    p = subprocess.run([str(a) for a in argv], cwd=cwd, input=input, text=True, capture_output=True)
+    p = subprocess.run([str(a) for a in argv], cwd=cwd, input=input, text=True, capture_output=True, env=ENV)
     if p.returncode:
         raise RuntimeError(f'{" ".join(map(str, argv[:3]))} failed: {p.stderr.strip()[-2000:]}')
     return p.stdout.strip()
