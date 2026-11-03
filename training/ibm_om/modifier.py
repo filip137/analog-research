@@ -34,9 +34,7 @@ from training.ibm_om.constants import (
 from training.ibm_om.coordinates import RAW_ACTIVE_V1, coordinate_for
 from training.ibm_om.mappings import (
     MAPPINGS,
-    map_ibm_reram_array_targets,
     run_mapping,
-    validate_ibm_reram_target_mapping_preflight,
 )
 from training.ibm_om.mappings.base import MappingResult
 from training.ibm_om.population import IbmReramArrayPopulation
@@ -277,31 +275,8 @@ class IbmReramHwaParameterModifier:
     def preflight_target_mapping(self) -> tuple[torch.Tensor, dict[str, Any]]:
         """Return authoritative mapped targets and a read-only mapping report."""
 
-        global_targets, _layout = self._global_targets()
-        population = self._population_on(global_targets.device)
-        mapped, report = map_ibm_reram_array_targets(
-            global_targets,
-            population,
-            target_mapping=self._config.target_mapping,
-            dual_rail_layout_by_parameter=(
-                self._config.dual_rail_layout_by_parameter
-            ),
-            common_window_margin_fraction=(
-                self._config.common_window_margin_fraction
-            ),
-            reset_commissioning=self._reset_commissioning,
-            reset_relative_mode=self._config.reset_relative_mode,
-            reset_relative_contrast_step=(
-                self._config.reset_relative_contrast_step
-            ),
-            raw_active_mode=self._config.raw_active_mode,
-            raw_active_unsupported_quad_policy=(
-                self._config.raw_active_unsupported_quad_policy
-            ),
-            device_coordinate=self._config.device_coordinate,
-        )
-        validate_ibm_reram_target_mapping_preflight(report)
-        return mapped.detach().clone(), report
+        _global_targets, _layout, mapping = self._targets()
+        return mapping.targets.detach().clone(), mapping.report
 
     def _targets(
         self,

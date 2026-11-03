@@ -13,10 +13,10 @@ from model.resistive.builders import ParameterBinding
 from training.ibm_om.mappings.base import (
     MappingArguments,
     MappingInputs,
+    MappingResult,
     empty_group_fallback,
 )
 from training.ibm_om.population import IbmReramArrayPopulation, _tensor_summary
-from training.ibm_om.programming.base import OutOfSupportContract
 from training.ibm_om.topology import (
     _canonical_differential_pair_layout,
     _validate_differential_pair_bindings,
@@ -53,7 +53,7 @@ def validate_arguments(arguments: MappingArguments) -> MappingArguments:
     return replace(arguments, differential_pairs=differential_pairs)
 
 
-def map_targets(inputs: MappingInputs) -> tuple[torch.Tensor, dict[str, Any]]:
+def map_targets(inputs: MappingInputs) -> MappingResult:
     global_targets = inputs.global_targets
     population = inputs.population
     margin = inputs.margin
@@ -317,7 +317,21 @@ def map_targets(inputs: MappingInputs) -> tuple[torch.Tensor, dict[str, Any]]:
             "mapped_target_support": support_counts(mapped),
         }
     )
-    return mapped, report
+    out_of_support = empty_group_fallback(
+        report,
+        "pair",
+        fallback_policy="pulse_resolved_noncorrupt_out_of_bound_empty_pair_only",
+        execution_detail="compact_endpoint_with_exact_empty_pair_fallback",
+        endpoint_generation_policy=(
+            "compact_covered_exact_out_of_bound_empty_pair_fallback"
+        ),
+    )
+    return MappingResult(
+        targets=mapped,
+        report=report,
+        program_mask=None,
+        out_of_support=out_of_support,
+    )
 
 
 
@@ -382,23 +396,6 @@ def check_preflight(
             f"{maximum_empty_pairs} empty differential-pair common windows. "
             f"Provided value: {empty}."
         )
-
-
-def programming_contract(
-    arguments: MappingArguments,
-    report: dict[str, Any],
-) -> tuple[torch.Tensor | None, OutOfSupportContract]:
-    """Empty differential-pair windows are the only budgeted failures."""
-
-    return None, empty_group_fallback(
-        report,
-        "pair",
-        fallback_policy="pulse_resolved_noncorrupt_out_of_bound_empty_pair_only",
-        execution_detail="compact_endpoint_with_exact_empty_pair_fallback",
-        endpoint_generation_policy=(
-            "compact_covered_exact_out_of_bound_empty_pair_fallback"
-        ),
-    )
 
 
 def validate_bindings(bindings: Sequence[ParameterBinding]) -> Any:

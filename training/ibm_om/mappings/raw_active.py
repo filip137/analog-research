@@ -22,6 +22,7 @@ from training.ibm_om.coordinates import RAW_ACTIVE
 from training.ibm_om.mappings.base import (
     MappingArguments,
     MappingInputs,
+    MappingResult,
     _round_half_away_from_zero,
     reject_out_of_support,
     validate_quad_layout,
@@ -32,11 +33,29 @@ from training.ibm_om.population import (
     _tensor_sha256,
     _tensor_summary,
 )
-from training.ibm_om.programming.base import OutOfSupportContract
 from training.ibm_om.topology import _normalize_dual_rail_layouts, _quad_axes
 
 
 NAME = "raw_active_p90_quad"
+
+
+def _quad_support(
+    group_lower: torch.Tensor,
+    group_upper: torch.Tensor,
+    group_corrupt: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Return common bounds, capacity, passivity and frozen-D90 eligibility."""
+
+    common_lower = group_lower.amax(dim=0)
+    common_upper = group_upper.amin(dim=0)
+    capacity = common_upper - common_lower
+    passive_compatible = (group_lower >= 0.0).all(dim=0)
+    eligible = (
+        (capacity >= IBM_OM_RAW_ACTIVE_D90)
+        & passive_compatible
+        & ~group_corrupt
+    )
+    return common_lower, common_upper, capacity, passive_compatible, eligible
 
 
 def _raw_active_structural_cell_mask(
@@ -87,14 +106,11 @@ def _raw_active_structural_cell_mask(
         group_upper = torch.stack(
             tuple(parameter_upper[index] for index in indices)
         )
-        capacity = group_upper.amin(dim=0) - group_lower.amax(dim=0)
         group_corrupt = torch.stack(
             tuple(parameter_corrupt[index] for index in indices)
         ).any(dim=0)
-        eligible = (
-            (capacity >= IBM_OM_RAW_ACTIVE_D90)
-            & (group_lower >= 0.0).all(dim=0)
-            & ~group_corrupt
+        _lower, _upper, _capacity, _passive, eligible = _quad_support(
+            group_lower, group_upper, group_corrupt
         )
         for index in indices:
             parameter_eligible[index] = eligible
@@ -140,7 +156,7 @@ def validate_arguments(arguments: MappingArguments) -> MappingArguments:
     return arguments
 
 
-def map_targets(inputs: MappingInputs) -> tuple[torch.Tensor, dict[str, Any]]:
+def map_targets(inputs: MappingInputs) -> MappingResult:
     global_targets = inputs.global_targets
     population = inputs.population
     layouts = inputs.layouts
@@ -219,15 +235,13 @@ def map_targets(inputs: MappingInputs) -> tuple[torch.Tensor, dict[str, Any]]:
         group_corrupt = torch.stack(
             tuple(cell_corrupt[index] for index in cell_indices)
         ).any(dim=0)
-        common_lower = group_lower.amax(dim=0)
-        common_upper = group_upper.amin(dim=0)
-        capacity = common_upper - common_lower
-        passive_compatible = (group_lower >= 0.0).all(dim=0)
-        eligible = (
-            (capacity >= IBM_OM_RAW_ACTIVE_D90)
-            & passive_compatible
-            & ~group_corrupt
-        )
+        (
+            common_lower,
+            common_upper,
+            capacity,
+            passive_compatible,
+            eligible,
+        ) = _quad_support(group_lower, group_upper, group_corrupt)
         baseline_low = common_lower + IBM_OM_RAW_ACTIVE_D90 / 2.0
         baseline_high = common_upper - IBM_OM_RAW_ACTIVE_D90 / 2.0
         # The midpoint is also well-defined for an unsupported quad.  It
@@ -445,7 +459,20 @@ def map_targets(inputs: MappingInputs) -> tuple[torch.Tensor, dict[str, Any]]:
             ),
         }
     )
-    return mapped, report
+    # Historically programming eligibility uses float32 device bounds,
+    # while reports follow the target dtype. Reuse the mask in float32;
+    # preserve the old boundary decisions for other target precisions.
+    program_mask = expanded_eligible
+    if global_targets.dtype != torch.float32:
+        program_mask, _lower, _upper = _raw_active_structural_cell_mask(
+            population, layouts or (), device=device
+        )
+    return MappingResult(
+        targets=mapped,
+        report=report,
+        program_mask=program_mask,
+        out_of_support=reject_out_of_support(),
+    )
 
 
 
@@ -516,20 +543,6 @@ def check_preflight(
             "inside its exact per-cell support."
         )
     return
-
-
-def programming_contract(
-    arguments: MappingArguments,
-    report: dict[str, Any],
-) -> tuple[torch.Tensor | None, OutOfSupportContract]:
-    """Only structurally eligible quads may be programmed."""
-
-    structural, _lower, _upper = _raw_active_structural_cell_mask(
-        arguments.population,
-        arguments.layouts or (),
-        device=arguments.global_targets.device,
-    )
-    return structural, reject_out_of_support()
 
 
 def validate_bindings(bindings: Sequence[ParameterBinding]) -> Any:

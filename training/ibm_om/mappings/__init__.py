@@ -147,7 +147,7 @@ def map_ibm_reram_array_targets(
     while the repaired arm naturally uses its sampled donor bounds.
     """
 
-    arguments = _validated_arguments(
+    result = run_mapping(
         global_targets,
         population,
         target_mapping=target_mapping,
@@ -159,10 +159,9 @@ def map_ibm_reram_array_targets(
         raw_active_mode=raw_active_mode,
         raw_active_unsupported_quad_policy=raw_active_unsupported_quad_policy,
         device_coordinate=device_coordinate,
+        check_preflight=False,
     )
-    return MAPPINGS[arguments.target_mapping].map_targets(
-        prepare_inputs(arguments)
-    )
+    return result.targets, result.report
 
 
 def validate_ibm_reram_target_mapping_preflight(
@@ -203,8 +202,13 @@ def run_mapping(
     raw_active_mode: str | None = None,
     raw_active_unsupported_quad_policy: str | None = None,
     device_coordinate: str | None = None,
+    check_preflight: bool = True,
 ) -> MappingResult:
-    """Map, preflight and hand programming its request contract."""
+    """Build one mapping result, enforcing preflight for execution by default.
+
+    The historical public mapper opts out so callers can inspect an
+    unsupported mapping's report before explicitly validating preflight.
+    """
 
     arguments = _validated_arguments(
         global_targets,
@@ -220,15 +224,7 @@ def run_mapping(
         device_coordinate=device_coordinate,
     )
     strategy = MAPPINGS[arguments.target_mapping]
-    targets, report = strategy.map_targets(prepare_inputs(arguments))
-    validate_ibm_reram_target_mapping_preflight(report)
-    program_mask, out_of_support = strategy.programming_contract(
-        arguments,
-        report,
-    )
-    return MappingResult(
-        targets=targets,
-        report=report,
-        program_mask=program_mask,
-        out_of_support=out_of_support,
-    )
+    result = strategy.map_targets(prepare_inputs(arguments))
+    if check_preflight:
+        validate_ibm_reram_target_mapping_preflight(result.report)
+    return result

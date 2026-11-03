@@ -21,6 +21,15 @@ import keeps working.
 nothing per-mapping: for mapping-specific setup it calls
 `MAPPINGS[target_mapping].validate_bindings` and `.validate_population`.
 
+Each mapper returns one `MappingResult`, including its programming mask and
+support policy. `run_mapping` shares argument validation and dispatch between
+execution and the historical tuple-returning mapping API; only the latter
+opts out of preflight validation so callers can first inspect the report.
+Modifier preflight and execution use the same target-assembly path.
+Raw-active float32 mapping reuses its eligibility mask directly. Other target
+dtypes retain the historical float32 programming-mask calculation, since
+report eligibility at target precision can differ at the D90 boundary.
+
 The mapping is not undone on readback: the DRN sees the programmed (mapped)
 conductances, and the straight-through gradient is applied to the clean
 master weights.

@@ -5,16 +5,14 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-import torch
-
 from model.resistive.builders import ParameterBinding
 from training.ibm_om.mappings.base import (
     MappingArguments,
     MappingInputs,
+    MappingResult,
     reject_out_of_support,
 )
 from training.ibm_om.population import IbmReramArrayPopulation
-from training.ibm_om.programming.base import OutOfSupportContract
 
 
 NAME = "literal_global"
@@ -32,7 +30,7 @@ def validate_arguments(arguments: MappingArguments) -> MappingArguments:
     return arguments
 
 
-def map_targets(inputs: MappingInputs) -> tuple[torch.Tensor, dict[str, Any]]:
+def map_targets(inputs: MappingInputs) -> MappingResult:
     global_targets = inputs.global_targets
     support_counts = inputs.support_counts
     report = inputs.report
@@ -64,7 +62,13 @@ def map_targets(inputs: MappingInputs) -> tuple[torch.Tensor, dict[str, Any]]:
             "mapped_target_support": support_counts(mapped),
         }
     )
-    return mapped, report
+    out_of_support = reject_out_of_support()
+    return MappingResult(
+        targets=mapped,
+        report=report,
+        program_mask=None,
+        out_of_support=out_of_support,
+    )
 
 
 
@@ -75,15 +79,6 @@ def check_preflight(
     maximum_empty_pairs: int,
 ) -> None:
     """Literal mapping has no preflight contract."""
-
-
-def programming_contract(
-    arguments: MappingArguments,
-    report: dict[str, Any],
-) -> tuple[torch.Tensor | None, OutOfSupportContract]:
-    """Literal targets are programmed as-is; compact sampling fails closed."""
-
-    return None, reject_out_of_support()
 
 
 def validate_bindings(bindings: Sequence[ParameterBinding]) -> Any:

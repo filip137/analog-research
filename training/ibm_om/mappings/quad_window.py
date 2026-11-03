@@ -12,12 +12,12 @@ from model.resistive.builders import ParameterBinding
 from training.ibm_om.mappings.base import (
     MappingArguments,
     MappingInputs,
+    MappingResult,
     empty_group_fallback,
     validate_quad_layout,
     validate_quad_population,
 )
 from training.ibm_om.population import IbmReramArrayPopulation, _tensor_summary
-from training.ibm_om.programming.base import OutOfSupportContract
 from training.ibm_om.topology import _quad_axes
 
 
@@ -41,7 +41,7 @@ def validate_arguments(arguments: MappingArguments) -> MappingArguments:
     return arguments
 
 
-def map_targets(inputs: MappingInputs) -> tuple[torch.Tensor, dict[str, Any]]:
+def map_targets(inputs: MappingInputs) -> MappingResult:
     global_targets = inputs.global_targets
     population = inputs.population
     layouts = inputs.layouts
@@ -252,7 +252,21 @@ def map_targets(inputs: MappingInputs) -> tuple[torch.Tensor, dict[str, Any]]:
             "mapped_target_support": support_counts(mapped),
         }
     )
-    return mapped, report
+    out_of_support = empty_group_fallback(
+        report,
+        "quad",
+        fallback_policy="pulse_resolved_noncorrupt_out_of_bound_empty_quad_only",
+        execution_detail="compact_endpoint_with_exact_empty_quad_fallback",
+        endpoint_generation_policy=(
+            "compact_covered_exact_out_of_bound_empty_quad_fallback"
+        ),
+    )
+    return MappingResult(
+        targets=mapped,
+        report=report,
+        program_mask=None,
+        out_of_support=out_of_support,
+    )
 
 
 
@@ -294,23 +308,6 @@ def check_preflight(
             f"value: {empty}."
         )
     return
-
-
-def programming_contract(
-    arguments: MappingArguments,
-    report: dict[str, Any],
-) -> tuple[torch.Tensor | None, OutOfSupportContract]:
-    """Empty quad windows are the only budgeted out-of-support cells."""
-
-    return None, empty_group_fallback(
-        report,
-        "quad",
-        fallback_policy="pulse_resolved_noncorrupt_out_of_bound_empty_quad_only",
-        execution_detail="compact_endpoint_with_exact_empty_quad_fallback",
-        endpoint_generation_policy=(
-            "compact_covered_exact_out_of_bound_empty_quad_fallback"
-        ),
-    )
 
 
 def validate_bindings(bindings: Sequence[ParameterBinding]) -> Any:

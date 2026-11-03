@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from hashlib import sha256
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from training.ibm_reram_hwa import (
     validate_ibm_reram_target_mapping_preflight,
 )
 from training.ibm_om.spec import EXPLICIT_LAYER_FIELDS
+from training.ibm_om.mappings import raw_active, run_mapping
 from training.ibm_reram_program_verify import (
     ControllerSettings,
     PopulationStepEstimator,
@@ -1210,6 +1212,138 @@ def test_reset_relative_quantized_modifier_commissions_maps_and_restores(
     assert deployment["reset_commissioning"] is not None
 
 
+@pytest.mark.parametrize("dtype", (torch.float32, torch.float64))
+@pytest.mark.parametrize("layout", ("halves", "paired"))
+@pytest.mark.parametrize("mode", ("continuous", "quantized_7_level"))
+@pytest.mark.parametrize(
+    "scenario",
+    ("supported", "corrupt", "nonpassive", "too_narrow", "threshold", "threshold_above"),
+)
+def test_raw_mapping_result_preserves_mask_and_preflight_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    dtype: torch.dtype,
+    layout: str,
+    mode: str,
+    scenario: str,
+) -> None:
+    population = _raw_active_population(
+        lower_g=torch.full((4, 4), -0.1 if scenario == "nonpassive" else 0.4),
+        upper_g=torch.full((4, 4), 0.75),
+    )
+    expected_mask = torch.ones((4, 4), dtype=torch.bool)
+    if scenario == "corrupt":
+        population.max_bound[1] = population.min_bound[1]
+        population.dwmin_up[1] = 0.0
+        population.dwmin_down[1] = 0.0
+        corrupt = torch.zeros(16, dtype=torch.bool)
+        corrupt[1] = True
+        population = replace(
+            population,
+            corruption_policy="published",
+            corrupt=corrupt,
+            published_corrupt=corrupt.clone(),
+        )
+        rows = (0, 2)
+        columns = (1, 3) if layout == "halves" else (0, 1)
+        for row in rows:
+            for column in columns:
+                expected_mask[row, column] = False
+    elif scenario == "nonpassive":
+        expected_mask.zero_()
+    elif scenario in {"too_narrow", "threshold", "threshold_above"}:
+        # At the immediately lower stored bound, float32 capacity is >= D90
+        # but float64 capacity is < D90. Also probe above and safely below
+        # the threshold to cover both decisions without rounding ambiguity.
+        upper = torch.nextafter(
+            torch.tensor(IBM_OM_RAW_ACTIVE_SCALE * IBM_OM_RAW_ACTIVE_D90),
+            torch.tensor(float("inf" if scenario == "threshold_above" else "-inf")),
+        )
+        if scenario == "too_narrow":
+            upper = torch.tensor(IBM_OM_RAW_ACTIVE_SCALE * IBM_OM_RAW_ACTIVE_D90 - 1e-4)
+            expected_mask.zero_()
+        population = replace(
+            population,
+            min_bound=torch.zeros(16),
+            max_bound=upper.expand(16).clone(),
+        )
+
+    targets = torch.full((16,), 0.5, dtype=dtype)
+    arguments = {
+        "target_mapping": "raw_active_p90_quad",
+        "dual_rail_layout_by_parameter": {population.binding_keys[0]: layout},
+        "common_window_margin_fraction": 0.0,
+        "raw_active_mode": mode,
+        "raw_active_unsupported_quad_policy": "structural_failure",
+    }
+    original_mask = raw_active._raw_active_structural_cell_mask
+    standalone_mask, _lower, _upper = original_mask(
+        population, arguments["dual_rail_layout_by_parameter"], device=targets.device,
+    )
+    assert torch.equal(standalone_mask, expected_mask.reshape(-1))
+    mask_calls = []
+
+    def compatibility_mask(*args, **kwargs):
+        if dtype == torch.float32:
+            pytest.fail("Float32 mapping must reuse its existing eligibility mask.")
+        mask_calls.append(1)
+        return original_mask(*args, **kwargs)
+
+    monkeypatch.setattr(
+        raw_active, "_raw_active_structural_cell_mask", compatibility_mask,
+    )
+    result = run_mapping(targets, population, **arguments, check_preflight=False)
+    assert len(mask_calls) == (0 if dtype == torch.float32 else 1)
+    assert torch.equal(result.program_mask, expected_mask.reshape(-1))
+    assert result.program_mask.dtype == torch.bool
+    assert result.out_of_support.mode == "reject"
+    expected_eligible = int(expected_mask.sum()) // 4
+    if scenario == "threshold" and dtype == torch.float64:
+        expected_eligible = 0
+    assert result.report["p90_eligible_quad_count"] == expected_eligible
+
+    mapped, report = map_ibm_reram_array_targets(targets, population, **arguments)
+    assert torch.equal(mapped, result.targets)
+    assert report == result.report
+    if scenario == "corrupt":
+        # Preserve the existing preflight rejection of this published
+        # population's report: support counts exclude corrupt cells.
+        with pytest.raises(ValueError) as explicit:
+            validate_ibm_reram_target_mapping_preflight(report)
+        with pytest.raises(ValueError) as checked:
+            run_mapping(targets, population, **arguments)
+        assert str(checked.value) == str(explicit.value)
+    else:
+        # Raw-active structural failures are allowed and retained in reports.
+        checked = run_mapping(targets, population, **arguments)
+        assert torch.equal(checked.targets, mapped)
+        assert checked.report == report
+
+
+def test_public_mapper_retains_report_when_execution_preflight_rejects() -> None:
+    binding = _binding((2, 42))
+    lower = torch.full((2, 42), 0.2)
+    upper = torch.full((2, 42), 0.8)
+    lower[0, :21] = 0.9
+    upper[0, :21] = 1.0
+    population = _population_from_x_bounds(binding, lower, upper)
+    targets = torch.full((population.size,), 0.5)
+    arguments = {
+        "target_mapping": "dual_rail_quad_common_window",
+        "dual_rail_layout_by_parameter": {binding.key: "halves"},
+        "common_window_margin_fraction": 0.25,
+    }
+    mapped, report = map_ibm_reram_array_targets(targets, population, **arguments)
+    assert report["common_window_empty_quad_count"] == 21
+    with pytest.raises(ValueError, match="no more than 20") as explicit:
+        validate_ibm_reram_target_mapping_preflight(report)
+    with pytest.raises(ValueError) as checked:
+        run_mapping(targets, population, **arguments)
+    assert str(checked.value) == str(explicit.value)
+    unchecked = run_mapping(targets, population, **arguments, check_preflight=False)
+    assert torch.equal(unchecked.targets, mapped)
+    assert unchecked.report == report
+
+
 def test_raw_active_modifier_programs_each_cell_after_boundary_conditioning(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1435,10 +1569,34 @@ def test_modifier_preflight_and_compact_context_share_quad_mapping(
         conductance_max=1.0,
     )
 
+    clean = binding.state.clone()
+    generators = [
+        modifier._generator(stream, binding.state.device)
+        for stream in ("train", "evaluation")
+    ]
+    rng_states = [generator.get_state().clone() for generator in generators]
+    global_rng_state = torch.get_rng_state().clone()
+    original_targets = modifier._targets
+    mapping_results = []
+
+    def capture_targets():
+        values = original_targets()
+        mapping_results.append(values[2])
+        return values
+
+    monkeypatch.setattr(modifier, "_targets", capture_targets)
     preflight_targets, preflight = modifier.preflight_target_mapping()
     torch.testing.assert_close(preflight_targets, torch.full((4,), 0.5))
     assert preflight["common_window_empty_quad_count"] == 1
-    clean = binding.state.clone()
+    assert torch.equal(binding.state, clean)
+    assert modifier.programming_report is None
+    assert modifier.last_deployment_bundle is None
+    assert torch.equal(torch.get_rng_state(), global_rng_state)
+    for generator, state in zip(generators, rng_states):
+        assert torch.equal(generator.get_state(), state)
+    assert not preflight_targets.requires_grad
+    preflight_targets.zero_()
+    torch.testing.assert_close(mapping_results[0].targets, torch.full((4,), 0.5))
     with modifier.training_context():
         pass
     assert torch.equal(binding.state, clean)
@@ -1446,6 +1604,7 @@ def test_modifier_preflight_and_compact_context_share_quad_mapping(
     assert report is not None
     assert report["target_mapping"] == "dual_rail_quad_common_window"
     assert report["target_mapping_report"] == preflight
+    assert torch.equal(mapping_results[0].targets, mapping_results[1].targets)
 
 
 def test_compact_quad_mapping_uses_exact_fallback_for_unsupported_empty_window_cells(

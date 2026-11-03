@@ -1,0 +1,12 @@
+{
+  "source_commit": "b0c1f06eaf3da3c7a8f7e91299bb31ccccde5121",
+  "purpose": "CPU numerical goldens generated from pinned source; model-based CMO control",
+  "thresholded_writer": {
+    "source_commit": "b0c1f06",
+    "source_path": "workflow/onchip.py",
+    "source_sha256": "a87a9989f2f0118dd7a5d692c57ccd52b669ce3187f7502a0380323f839f59c0",
+    "fixture_sha256": "e04ea5c6c20c2edc2f8fe2988c6cbdf2c273cb00e37c809c9508517270c17f0e",
+    "gradient_seed": 71,
+    "steps": 64
+  }
+}

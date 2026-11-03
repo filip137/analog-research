@@ -1,0 +1,16 @@
+{
+  "cases": [
+    "smoke/cpu",
+    "smoke/cuda",
+    "smoke/raw_active",
+    "unit/helpers",
+    "unit/logical_cpu_noiseless_write",
+    "unit/logical_cpu_noisy",
+    "unit/logical_cuda_noisy",
+    "unit/raw_cpu",
+    "unit/raw_cuda"
+  ],
+  "commit": "d56f072c106f294ffa54b2b86dd1c88b5d2ede80",
+  "python": "3.12.12",
+  "torch": "2.5.1+cu121"
+}

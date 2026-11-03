@@ -15,6 +15,7 @@ from training.ibm_om.constants import _RESET_RELATIVE_MODES
 from training.ibm_om.mappings.base import (
     MappingArguments,
     MappingInputs,
+    MappingResult,
     _round_half_away_from_zero,
     validate_quad_layout,
     validate_quad_population,
@@ -78,7 +79,7 @@ def validate_arguments(arguments: MappingArguments) -> MappingArguments:
     )
 
 
-def map_targets(inputs: MappingInputs) -> tuple[torch.Tensor, dict[str, Any]]:
+def map_targets(inputs: MappingInputs) -> MappingResult:
     global_targets = inputs.global_targets
     population = inputs.population
     layouts = inputs.layouts
@@ -318,7 +319,46 @@ def map_targets(inputs: MappingInputs) -> tuple[torch.Tensor, dict[str, Any]]:
             ),
         }
     )
-    return mapped, report
+    expected_support = report.get("mapped_target_support")
+    missing_audit_message = None
+    expected_below = None
+    expected_above = None
+    if not isinstance(expected_support, Mapping):
+        missing_audit_message = (
+            "Expected RESET-relative compact execution to receive "
+            "its authoritative hidden-support audit."
+        )
+    else:
+        expected_below = expected_support.get("below_lower_bound")
+        expected_above = expected_support.get("above_upper_bound")
+    out_of_support = OutOfSupportContract(
+        mode="pulse_fallback",
+        expected_below=expected_below,
+        expected_above=expected_above,
+        expected_nonempty_below=None,
+        expected_nonempty_above=None,
+        require_nonempty_zero=False,
+        missing_audit_message=missing_audit_message,
+        mismatch_message=(
+            "Expected RESET-relative exact-fallback cells to equal "
+            "the audit-only out-of-bound target set."
+        ),
+        fallback_policy=(
+            "pulse_resolved_noncorrupt_out_of_bound_shared_reset_relative_only"
+        ),
+        execution_detail=(
+            "compact_endpoint_with_exact_reset_relative_support_fallback"
+        ),
+        endpoint_generation_policy=(
+            "compact_covered_exact_out_of_bound_reset_relative_fallback"
+        ),
+    )
+    return MappingResult(
+        targets=mapped,
+        report=report,
+        program_mask=None,
+        out_of_support=out_of_support,
+    )
 
 
 
@@ -392,48 +432,6 @@ def check_preflight(
             f"{report.get('mapped_target_outside_0_1')!r}."
         )
     return
-
-
-def programming_contract(
-    arguments: MappingArguments,
-    report: dict[str, Any],
-) -> tuple[torch.Tensor | None, OutOfSupportContract]:
-    """The audit-only out-of-support set is programmed pulse-resolved."""
-
-    expected_support = report.get("mapped_target_support")
-    missing_audit_message = None
-    expected_below = None
-    expected_above = None
-    if not isinstance(expected_support, Mapping):
-        missing_audit_message = (
-            "Expected RESET-relative compact execution to receive "
-            "its authoritative hidden-support audit."
-        )
-    else:
-        expected_below = expected_support.get("below_lower_bound")
-        expected_above = expected_support.get("above_upper_bound")
-    return None, OutOfSupportContract(
-        mode="pulse_fallback",
-        expected_below=expected_below,
-        expected_above=expected_above,
-        expected_nonempty_below=None,
-        expected_nonempty_above=None,
-        require_nonempty_zero=False,
-        missing_audit_message=missing_audit_message,
-        mismatch_message=(
-            "Expected RESET-relative exact-fallback cells to equal "
-            "the audit-only out-of-bound target set."
-        ),
-        fallback_policy=(
-            "pulse_resolved_noncorrupt_out_of_bound_shared_reset_relative_only"
-        ),
-        execution_detail=(
-            "compact_endpoint_with_exact_reset_relative_support_fallback"
-        ),
-        endpoint_generation_policy=(
-            "compact_covered_exact_out_of_bound_reset_relative_fallback"
-        ),
-    )
 
 
 def validate_bindings(bindings: Sequence[ParameterBinding]) -> Any:
