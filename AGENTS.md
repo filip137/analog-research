@@ -3,7 +3,8 @@
 ## Scope and research question
 
 These instructions apply to `main` (named `codex/revised-hwa-training` until
-3 November 2026). This worktree studies hardware-aware training, deployment
+3 November 2026). On the `exp/drift-regimes` branch they also include the
+branch section below, which fixes this worktree's assignment to drift. This worktree studies hardware-aware training, deployment
 and on-chip adaptation of crossbar arrays under three effects: **corrupted
 devices, write noise and drift**, individually and in declared combinations.
 
@@ -25,6 +26,71 @@ choices. Shared crossbar/DRN study records live in
 [`../on-chip-learning/`](../on-chip-learning/README.md); crossbar code and native
 runs stay in this tree. Consult the assigned campaign for its current question
 and direction.
+
+## This branch: drift experiments (`exp/drift-regimes`)
+
+This branch and its worktree, `/home/filip/analog-research/worktrees/hwa-drift-regimes`,
+were created on 3 November 2026 from `main` at `f7655a6`. They hold the
+crossbar side of the **drift-regimes** campaign, and their only assignment is
+drift.
+
+> Under PCM-like and ReRAM-like drift, which on-chip adaptation method keeps a
+> deployed OPT-125M closest to its FP32 teacher over its first 24 hours, at
+> what cost?
+
+**Records.** The campaign records are the source of truth:
+`/home/filip/analog-research/on-chip-learning/campaigns/drift-regimes/`.
+- Read its `README.md`, `drift-family.md` and the exp-001 and exp-002 notes
+  before any work. They hold the device law, the knobs, the arms and the
+  decision rules.
+- Where they and this section differ, the campaign records win. Fix this
+  section to match them.
+- The DRN side of the campaign runs in `drn/`. Crossbar and DRN results are
+  reported separately and never pooled.
+
+**Settings the user fixed on 3 November 2026:**
+- **Network:** OPT-125M.
+- **Endpoint:** teacher KL averaged over the first 24 h. 30 d and 1 yr are
+  labelled extrapolations.
+- **Methods:** each method runs on its own. Nothing is stacked on calibration or
+  on another method.
+- **Device model (ReRAM anchor).** It is the standard CMO + power-law model
+  recorded in [the archive](docs/archive/cmo-drift-model-20261103.md), with two
+  changes. Programming is clamped into 9–88.2 µS, so that the HWA-trained models
+  stay valid; drift is then clipped at 5–150 µS. There is no read noise.
+
+  ```text
+  G_p  = clamp(CMO endpoint draw for the target, 9, 88.2)          # fresh at every write
+  G(τ) = clip(G_p + m·u^α + s·u^β·Y(τ), 5, 150),   u = τ / 1 h
+  Corr(Y(τ1), Y(τ2)) = (τ1/τ2)^κ,   κ = ln ρ* / ln(5 min / 25 h)
+  m = −2 µS, s = 3 µS, α = 0.23, β = 0.11, ρ* = 0.335, f = 0      # anchor R0
+  ```
+
+  - Reads are exact. Controllers still see only reads, never Y, κ or other
+    hidden draws, except in labelled oracle arms.
+  - Report the fraction of devices at the 5 µS and 150 µS bounds at every age.
+- **Regime knobs:** ρ*, the D2D share f, the CMO spread scale c_p and the
+  amplitude spread σ_a, plus three PCM-like points. The levels are in
+  `drift-family.md`, and exp-001 freezes them.
+- **Writes:** every write is a device reset (RESET+SET), as in R1.
+  - A reset draws a fresh CMO endpoint, restarts τ and draws a fresh C2C drift
+    path.
+  - Each reset is verified by program-and-verify at the optimal acceptance
+    threshold κ*_N for the regime, from `pv_optimal.best_kappa` in the
+    campaign's `series/001-family-and-instrument/code/pv-threshold/`.
+  - **The P&V attempt cap N is an experimental variable.** N = 1 is a single
+    unverified reset. The levels are set in the campaign notes.
+  - Count every reset attempt and every verify read.
+
+**Implementation status.** Nothing is implemented yet.
+- `training/power_law_drift.py` and `training/writable_drift.py` support only
+  κ = 0, exact endpoints and a 9–88.2 µS drift clip.
+- exp-001 adds the family as a new module, mirrored verbatim in `drn/`. It keeps
+  the κ = 0 mode bit-exact for replays and leaves `writable_drift.py` unchanged.
+- No run starts until exp-001's compatibility checks pass.
+
+**Before merging into `main`:** move this section into the campaign's experiment
+notes, or delete it. `main` keeps no experiment's settings.
 
 The initial target is OPT-125M. Completed MNIST, dense CIFAR-10 and ResNet-32
 CIFAR-10/100 work is reference evidence and the validated reference implementation
@@ -117,6 +183,10 @@ verify reads at the level supported by the model; endpoint commands are not
 measured pulse, energy or latency costs.
 
 ## Drift
+
+On this branch, the drift law is the one under
+[This branch](#this-branch-drift-experiments-expdrift-regimes) and in the
+campaign's `drift-family.md`.
 
 The experiment branch declares the drift law, conductance window, coefficients,
 time units and grid, temporal correlations, affected devices and behavior after
