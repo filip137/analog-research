@@ -9,13 +9,17 @@ import time
 import torch
 from torch.nn import functional as F
 
-from experiments.artifacts import RunStore, atomic_write_json, sha256_file
-from experiments.cifar_crossbar.data import cache_features, get_dataset, split_indices
-from experiments.cifar_crossbar.devices import clone_cpu
+from ebl.runtime.store import RunStore
+from core.artifacts import atomic_write_json, sha256_file
+from networks.cifar_data import cache_features, get_dataset, split_indices
+from core.tensor_io import clone_cpu
 from experiments.cifar_crossbar.fault_config import FaultSpec
-from experiments.cifar_crossbar.model import CrossbarSuffix, tensor_hash
-from experiments.cifar_crossbar.pcm_faults import GaussianEndpointArray, PermanentFaults
-from experiments.cifar_crossbar.runtime import evaluate, load, save, source_model
+from networks.cifar_model import CrossbarSuffix
+from core.tensor_identity import tensor_hash
+from hardware.devices.pcm import GaussianEndpointArray, PermanentFaults
+from networks.cifar_metrics import evaluate
+from core.tensor_io_native import load, save
+from experiments.cifar_crossbar.runtime import source_model
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -291,7 +295,7 @@ def run_train(request):
         if spec.stage == "cache":
             cache = build_cache(teacher, student, spec, device)
             clean = evaluate(student, cache["test"], device)
-            from experiments.cifar_crossbar.prepare import SOURCES
+            from networks.cifar_sources import SOURCES
 
             if (
                 clean["examples"] != 10000

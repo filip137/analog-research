@@ -6,34 +6,10 @@ from dataclasses import replace
 import pytest
 import torch
 
-from training.ibm_om_standard_crossbar import (
-    CROSSBAR_TRAJECTORY_RNG_BACKEND,
-    CROSSBAR_TRAJECTORY_REPRODUCIBILITY_SCOPE,
-    CROSSBAR_TRAJECTORY_SEED_DERIVATION,
-    CROSSBAR_TRAJECTORY_STATISTICAL_CONTRACT,
-    IbmOmEffectiveCrossbarPlant,
-    PulseAdam,
-    PulseSGD,
-    aihwkit_analog_linear_default_logical_weights,
-    apply_population_bound_policy,
-    build_crossbar_layout,
-    build_deterministic_effective_codebook,
-    crossbar_state_bundle,
-    crossbar_trajectory_seeds,
-    effective_state_to_logical_weights,
-    flatten_logical_crossbar_matrices,
-    local_star_crossbar_step,
-    map_logical_weights,
-    project_to_nearest_effective_code,
-    project_to_nearest_effective_code_device,
-    restore_crossbar_state_bundle,
-    standard_crossbar_logits,
-    standard_crossbar_forward_states,
-    tensor_sha256,
-    _counter_keyed_hash_pair,
-    _counter_keyed_standard_normal,
-)
-from training.ibm_reram_hwa import (
+from hardware.om_crossbar import CROSSBAR_TRAJECTORY_RNG_BACKEND, CROSSBAR_TRAJECTORY_REPRODUCIBILITY_SCOPE, CROSSBAR_TRAJECTORY_SEED_DERIVATION, CROSSBAR_TRAJECTORY_STATISTICAL_CONTRACT, IbmOmEffectiveCrossbarPlant, aihwkit_analog_linear_default_logical_weights, apply_population_bound_policy, build_crossbar_layout, build_deterministic_effective_codebook, crossbar_state_bundle, crossbar_trajectory_seeds, effective_state_to_logical_weights, flatten_logical_crossbar_matrices, map_logical_weights, project_to_nearest_effective_code, project_to_nearest_effective_code_device, restore_crossbar_state_bundle, standard_crossbar_logits, standard_crossbar_forward_states, tensor_sha256, _counter_keyed_hash_pair, _counter_keyed_standard_normal
+from methods.optimizers.om import PulseAdam, PulseSGD
+from methods.optimizers.local_star import local_star_crossbar_step
+from hardware.populations import (
     IbmReramArrayPopulation,
     om_array_population_fingerprint,
 )

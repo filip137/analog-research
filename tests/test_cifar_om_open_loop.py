@@ -1,7 +1,7 @@
 """Feedback isolation, unlimited pulse counts, and exact open-loop replay."""
 import torch
 import pytest
-from experiments.cifar_crossbar.open_loop_updates import UncappedOpenLoopAdam, nominal_reset_counts, apply_pulse_counts
+from methods.optimizers.open_loop import UncappedOpenLoopAdam, nominal_reset_counts, apply_pulse_counts
 
 
 class CountingPort:
@@ -74,7 +74,7 @@ def test_zero_learning_rate_never_reads_or_writes():
 
 
 def test_legacy_open_loop_pulses_are_identical_before_the_old_cap():
-    from experiments.cifar_crossbar.devices import PulseWriter
+    from methods.optimizers.pulse import PulseWriter
     class LegacyPort(CountingPort):
         def read(self): return self.state.clone()
     port, legacy_port = CountingPort(20), LegacyPort(20)
@@ -119,7 +119,7 @@ def test_uncapped_contract_and_full_sweep_coverage():
 
 def test_compressed_checkpoints_preserve_exact_tensors_and_rng(tmp_path):
     from experiments.cifar_crossbar.om_open_loop_runtime import save_compressed
-    from experiments.cifar_crossbar.runtime import load
+    from core.tensor_io_native import load
     port = CountingPort()
     writer = UncappedOpenLoopAdam(port, port.state, learning_rate=.014, seed=10)
     writer.step(torch.tensor([1., -2., .1]))

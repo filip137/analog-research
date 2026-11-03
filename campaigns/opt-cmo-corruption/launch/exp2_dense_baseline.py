@@ -17,10 +17,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from exp1e_prepare_host import command, checked_input, sha256, DEFAULT_BASE
 from exp1f_cdt_lr import checked_collection, service, transition
 from slice_campaign import write_frozen
-from experiments.artifacts import atomic_write_json
-from workflow.lifecycle import parse_lifecycle, provenance, verify_provenance
-from workflow.networks.opt_mlp import PINNED
-from workflow.runtime import validate_source_fit
+from core.artifacts import atomic_write_json
+from ebl.schema.lifecycle import parse_lifecycle, provenance, verify_provenance
+from networks.opt import PINNED
+from ebl.schema.source_fit import validate_source_fit
 
 PHASE = "opt-cmo-exp2-dense-baseline-20261011"
 PREFIX = "opt125m-cmo-l6-exp2-dense"
@@ -91,7 +91,7 @@ def execution_manifest(plan, label):
             stage["depends_on"] = [dep for dep in stage["depends_on"] if dep != "hwa__" + ARM]
         selected.append(stage)
     raw["stages"] = selected
-    from campaigns.schema import CampaignSpec
+    from ebl.execution.schema import CampaignSpec
     CampaignSpec.parse(raw, base_dir=plan.parent)
     return raw
 
@@ -121,7 +121,7 @@ def prepare_host(base):
         if parse_lifecycle(json.loads(config.read_text())).digest() != lc.digest():
             raise ValueError("Frozen lifecycle changed")
         root = ROOT / "results/lifecycles" / lc.lifecycle_id
-        command([python, "-m", "workflow", "plan", str(config), "--teacher-weights", str(teacher), "--output", str(root / "plan"),
+        command([python, "-m", "ebl", "lifecycle", "plan", str(config), "--teacher-weights", str(teacher), "--output", str(root / "plan"),
                  "--device", "cuda:0", "--cpu-threads", "1", "--python", python], cwd=ROOT, env=dict(os.environ, **env))
         manifest = execution_manifest(root / "plan/campaign.json", label)
         manifest_path = root / "campaign.json"
@@ -141,8 +141,8 @@ def prepare_host(base):
         cases.append({"id": lc.lifecycle_id, "label": label, "lifecycle_sha256": lc.digest(), "dry_run_passed": True,
             "budget_seconds": budget, "expected_seconds": expected, "stage_ids": [s["id"] for s in manifest["stages"]],
             "placement": {"workdir": str(ROOT), "run_dir": str(state_root), "gpu_models": ["5090"],
-                "argv": [python, "-m", "campaigns.tmux_worker", "bridge", "--spec", str(worker)],
-                "validate_argv": [python, "-m", "campaigns.lifecycle_collect", "validate", str(native_root),
+                "argv": [python, "-m", "ebl.execution.tmux_worker", "bridge", "--spec", str(worker)],
+                "validate_argv": [python, "-m", "ebl.execution.lifecycle_collect", "validate", str(native_root),
                                   "--recovery", "--recovery-assignment", str(ARRAY)],
                 "campaign_python": python, "campaign_worker_spec": str(worker), "campaign_result_root": str(native_root),
                 "prepared_files": [{"path": str(p), "sha256": sha256(p)} for p in files]}})
@@ -185,14 +185,14 @@ def queue(receipt, output, controller, evidence):
         "budgets": {"gpu_hours": 4, "storage_bytes": 20000000000, "window_seconds": 27000}, "cases": cases,
         "storage_roots": [{"target": "loulou", "path": prepared["source"]},
                           {"target": "loulou", "path": str(Path(prepared["base"]) / "worker-receipts" / prepared["source_revision"])}]}
-    from campaigns.execution_service import validate_manifest
+    from ebl.execution.service import validate_manifest
     validate_manifest(manifest)
     write_frozen(output / "campaign.json", manifest)
     return {"manifest": str(output / "campaign.json"), "jobs": jobs, "submitted": False}
 
 
 def gate(queue_config, evidence, name, payload):
-    from campaigns.execution_service import digest
+    from ebl.execution.service import digest
     manifest = json.loads((evidence / "prepared/queue/campaign.json").read_text())
     path = evidence / "readiness" / (name + ".json")
     write_frozen(path, {"manifest_sha256": digest(manifest), "passed": True, **payload})
@@ -246,7 +246,7 @@ def review(folder, evidence):
 
 
 def collect(queue_config, evidence):
-    from campaigns.lifecycle_collect import collect as native_collect
+    from ebl.execution.lifecycle_collect import collect as native_collect
     job = os.environ["RUN_WATCH_JOB_ID"]
     label = next((label for label in LABELS if lifecycle(label).lifecycle_id == job), None)
     if label is None:

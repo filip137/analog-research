@@ -52,7 +52,7 @@ def main():
     for label in labels:
         root = RESULTS / label
         plan = root / "plan"
-        command = [py, "-m", "workflow", "plan", CONFIGS / f"opt125m-drift-compensation-{label}.json",
+        command = [py, "-m", "ebl", "lifecycle", "plan", CONFIGS / f"opt125m-drift-compensation-{label}.json",
                    "--teacher-weights", inputs["teacher"]["path"], "--output", plan,
                    "--device", "cuda:0", "--cpu-threads", "1", "--python", py]
         src = inputs["sources"][label]
@@ -77,7 +77,7 @@ def main():
         run([py, "-m", "ebl", "runs", "inspect", *run_dirs, "--verify-artifacts", "--require-complete"],
             deadline=deadline, env=env)
         runs.append(root / "runs")
-    run([py, "-m", "workflow", "collect", *runs, "--output", RESULTS / f"collected-{args.phase}"],
+    run([py, "-m", "ebl", "lifecycle", "collect", *runs, "--output", RESULTS / f"collected-{args.phase}"],
         deadline=deadline, env=env)
     rows = json.loads((RESULTS / f"collected-{args.phase}" / "compensation.json").read_text())
     expected = 126 if args.phase == "probe" else 378

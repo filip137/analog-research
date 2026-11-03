@@ -15,7 +15,7 @@ from pathlib import Path
 import shlex
 import sys
 
-from experiments.artifacts import content_hash, sha256_file
+from core.artifacts import content_hash, sha256_file
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INVENTORY = Path("results/cifar-migration-20261004/artifact-inventory.jsonl.gz")
@@ -64,7 +64,7 @@ class ArtifactIndex:
 
 
 def recipe(run, output_dir, *, index, python=sys.executable, sampler=None):
-    from experiments.definitions import resolve_experiment_config
+    from ebl.registry import resolve_experiment_config
 
     run, output_dir = Path(run).resolve(), Path(output_dir).resolve()
     if not run.is_relative_to(index.root):

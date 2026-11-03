@@ -7,20 +7,20 @@ import math
 import pytest
 import torch
 
-from training.ibm_om_standard_crossbar import (
+from hardware.om_crossbar import (
     IbmOmEffectiveCrossbarPlant,
     build_crossbar_layout,
     effective_state_to_logical_weights,
     flatten_logical_crossbar_matrices,
 )
-from training.ibm_om_tiki_taka import (
+from methods.optimizers.tiki_taka import (
     IbmOmDirectPulseSgd,
     IbmOmTikiTakaV1,
     build_tiki_taka_fast_zero_target,
     manual_label_ce_backprop,
     stochastic_compressed_pulse_counts,
 )
-from training.ibm_reram_hwa import IbmReramArrayPopulation
+from hardware.populations import IbmReramArrayPopulation
 
 
 def _population(layout, *, noise: float = 0.0) -> IbmReramArrayPopulation:

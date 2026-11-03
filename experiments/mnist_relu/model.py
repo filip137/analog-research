@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from training.parameters import ParameterBinding, ParameterCatalog
+from core.parameters import ParameterBinding, ParameterCatalog
 
 
 class TeacherWeight:

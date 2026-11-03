@@ -6,15 +6,13 @@ import pytest
 import torch
 from torch.nn import functional as F
 from experiments.cifar_crossbar.config import default_config, parse_config
-from experiments.cifar_crossbar.data import split_indices
-from experiments.cifar_crossbar.devices import (
-    EndpointKernel,
-    PulseWriter,
-    make_plant,
-    prepare_population,
-)
-from experiments.cifar_crossbar.model import CifarResNet32, CrossbarSuffix
+from networks.cifar_data import split_indices
+from hardware.plants import EndpointKernel, make_plant, prepare_population
+from methods.optimizers.pulse import PulseWriter
+from networks.cifar_model import CifarResNet32, CrossbarSuffix
 from experiments.cifar_crossbar.pcm_reference import PcmInferenceNoise
+from core.tensor_io_native import save as native_save
+from core.tensor_io_native import load as native_load
 
 
 def raw_population(kind="om", size=12):
@@ -203,7 +201,7 @@ def test_pcm_refresh_cannot_exceed_physical_write_cap():
 
 
 def test_programming_counts_all_observed_cells():
-    from experiments.cifar_crossbar.devices import program
+    from methods.programming.pulse import program
 
     plant = make_plant(prepare_population(raw_population()), 3, "cpu")
     result = program(
@@ -236,7 +234,7 @@ def test_inference_noise_is_a_separate_reproducible_track():
 
 
 def test_teacher_kl_direction_and_per_image_average():
-    from experiments.cifar_crossbar.runtime import evaluate
+    from networks.cifar_metrics import evaluate
 
     class LogitStudent:
         read_generator = torch.Generator().manual_seed(19)
@@ -417,7 +415,7 @@ def test_native_cli_source_receipt_and_result_bundle(tmp_path, monkeypatch):
     import json
     from ebl.cli import main
     from experiments.cifar_crossbar import runtime
-    from experiments.artifacts import sha256_file
+    from core.artifacts import sha256_file
 
     source = tmp_path / "source.py"
     source.write_text("verified source\n")
@@ -525,7 +523,7 @@ def test_hwa_continuation_restores_optimizer_rng_and_inherited_best(
         )
     )
     kernel = tmp_path / "kernel.pt"
-    runtime.save(
+    native_save(
         kernel,
         {
             "device_settings": runtime.scientific_device(spec),
@@ -550,10 +548,10 @@ def test_hwa_continuation_restores_optimizer_rng_and_inherited_best(
         result = runtime.fit_hwa(
             request, spec, teacher, student, context, cache, store, "cpu"
         )
-        return result, runtime.load(store.run_dir / "checkpoints/weights.pt")
+        return result, native_load(store.run_dir / "checkpoints/weights.pt")
 
     expected, weights = run("continuous")
-    original_save = runtime.save
+    original_save = native_save
 
     def interrupt(path, value):
         original_save(path, value)

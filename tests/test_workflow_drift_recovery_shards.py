@@ -5,14 +5,14 @@ from pathlib import Path
 import pytest
 import torch
 
-from experiments.artifacts import sha256_file
-from training.drift_recovery import run
-from training.drift_recovery_config import DriftRecovery
-from training.drift_recovery_shards import screens, trajectories, select_learning_rate
+from core.artifacts import sha256_file
+from ebl.runtime.shared_recovery import run
+from methods.maintenance.config import DriftRecovery
+from ebl.execution.recovery_shards import screens, trajectories, select_learning_rate
 from test_workflow_drift_recovery import settings
 from test_workflow_opt import tiny_teacher, tokens
-from workflow.drift_recovery import CrossbarAdapter
-from workflow.networks.opt_mlp import OptMlpSuffix
+from networks.opt_drift import CrossbarAdapter
+from networks.opt import OptMlpSuffix
 from workflow_helpers import Store
 
 

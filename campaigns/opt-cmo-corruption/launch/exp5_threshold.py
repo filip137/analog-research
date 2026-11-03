@@ -16,7 +16,7 @@ from exp1e_prepare_host import command, sha256, DEFAULT_BASE
 from exp1f_cdt_lr import service, transition
 from exp3_lora import input_contract, thresholds, ARM, ARRAY
 from slice_campaign import write_frozen
-from workflow.lifecycle import parse_lifecycle
+from ebl.schema.lifecycle import parse_lifecycle
 
 PREFIX = 'opt125m-cmo-l6-exp5-threshold'
 PHASE = 'opt-cmo-exp5-threshold-20261012'
@@ -98,8 +98,8 @@ def prepare_host(host, base, reused, *, prepared_lifecycles=None, screen_budget=
         cases.append({'id':lc.lifecycle_id,'label':label,'lifecycle_sha256':lc.digest(),'dry_run_passed':True,
             'budget_seconds':budget,'expected_seconds':expected,'placement':{
                 'workdir':str(ROOT),'run_dir':str(receipt_root),'gpu_models':['5090'],
-                'argv':[python,'-m','campaigns.tmux_worker','bridge','--spec',str(worker)],
-                'validate_argv':[python,'-m','campaigns.recovery_collect','validate',str(native_root),'--inputs',str(inputs_path)],
+                'argv':[python,'-m','ebl.execution.tmux_worker','bridge','--spec',str(worker)],
+                'validate_argv':[python,'-m','ebl.execution.recovery_collect','validate',str(native_root),'--inputs',str(inputs_path)],
                 'campaign_python':python,'campaign_worker_spec':str(worker),'campaign_result_root':str(native_root),
                 'recovery_inputs':str(inputs_path),'recovery_input_contract':inputs,
                 'prepared_files':[{'path':str(p),'sha256':sha256(p)} for p in files]+list(inputs['artifacts'].values())}})
@@ -138,7 +138,7 @@ def queue(receipts,output,controller,evidence):
             [{'target':h,'path':str(Path(p['base'])/'worker-receipts'/p['source_revision'])} for h,p in hosts.items()] +
             [{'target':'trex','path':str(Path(hosts['trex']['base'])/'inputs/exp5-reused')},
              {'target':'local','path':str(evidence)}]}
-    from campaigns.execution_service import validate_manifest
+    from ebl.execution.service import validate_manifest
     validate_manifest(manifest); write_frozen(output/'campaign.json',manifest)
     return {'manifest':str(output/'campaign.json'),'jobs':jobs}
 
@@ -162,8 +162,8 @@ def select(reports):
 
 
 def collect(queue_config,evidence):
-    from campaigns.recovery_collect import collect as native_collect
-    from campaigns.execution_service import digest
+    from ebl.execution.recovery_collect import collect as native_collect
+    from ebl.execution.service import digest
     label = os.environ['RUN_WATCH_JOB_ID'].removeprefix(PREFIX+'-')
     if label not in labels():
         raise ValueError('Unexpected threshold completion job')

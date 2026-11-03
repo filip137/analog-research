@@ -11,16 +11,16 @@ from typing import Any
 
 import torch
 
-from experiments.artifacts import atomic_write_json, sha256_file
-import training.ibm_reram_hwa as population_module
-from training.ibm_reram_hwa import (
+from core.artifacts import atomic_write_json, sha256_file
+import hardware.populations as population_module
+from hardware.populations import (
     _ARRAY_SAMPLING_RECEIPT_SCHEMA,
     _ARRAY_SAMPLING_RECEIPT_SCHEMA_VERSION,
     _REQUIRED_AIHWKIT_VERSION,
     _sample_om_array_population_layout,
     save_om_array_population,
 )
-from training.ibm_reram_program_verify import (
+from hardware.devices.om import (
     OM_PRESET,
     PUBLISHED_CORRUPT_PROBABILITY,
     PUBLISHED_CORRUPT_RANGE,

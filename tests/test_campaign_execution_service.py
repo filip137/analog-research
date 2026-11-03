@@ -9,7 +9,7 @@ import sqlite3
 
 import pytest
 
-from campaigns.execution_service import (
+from ebl.execution.service import (
     CampaignLedger, artifact_probe, digest, investigator_command, load_queue,
     prepare_job, scheduler_type, storage_probe, validate_manifest,
     service_dropin,
@@ -693,7 +693,7 @@ def phase_monitor(setup, monkeypatch):
             return json.loads(json.dumps(evidence["artifacts"]))
         assert "renew" in argv
         return {}
-    monkeypatch.setattr("campaigns.execution_service.remote_command", remote)
+    monkeypatch.setattr("ebl.execution.service.remote_command", remote)
     return scheduler, now, evidence
 
 
@@ -815,13 +815,13 @@ def test_storage_observation_of_remote_jobs_and_local_collection(setup, tmp_path
     calls = []
     def remote(cfg, target, argv, *, cwd):
         calls.append(target)
-        assert argv == ["python3", "-m", "campaigns.execution_service", "probe-storage",
+        assert argv == ["python3", "-m", "ebl.execution.service", "probe-storage",
                         next(root["path"] for root in roots if root["target"] == target)]
         assert cwd == (controller if target == "local" else str(tmp_path))
         if target == "local" and failure == "probe_error":
             raise OSError("storage unavailable")
         return {"storage_bytes": 20 if target == "local" else 10}
-    monkeypatch.setattr("campaigns.execution_service.remote_command", remote)
+    monkeypatch.setattr("ebl.execution.service.remote_command", remote)
     scheduler.probe_campaigns(now[0])
     incident = scheduler.store.db.execute("SELECT * FROM campaign_incidents WHERE kind='storage_observation_failed'").fetchone()
     if failure is None:
@@ -876,7 +876,7 @@ def test_service_dropin_replaces_one_service_and_supervises_heartbeat(tmp_path):
     assert "Type=notify" in unit
     assert "KillMode=process" in unit
     assert "ExecStart=\nExecStart=" in unit
-    assert "campaigns.execution_service" in unit
+    assert "ebl.execution.service" in unit
     assert f"WorkingDirectory={tmp_path}\n" in unit
     assert 'WorkingDirectory="' not in unit
 
@@ -911,7 +911,7 @@ def test_campaign_clock_probe_failure_never_issues_launch(setup, monkeypatch):
     transport = CampaignTransport(base, scheduler.cfg, scheduler.campaigns)
     def fail(*args, **kwargs):
         raise TimeoutError("clock probe unavailable")
-    monkeypatch.setattr("campaigns.execution_service.remote_command", fail)
+    monkeypatch.setattr("ebl.execution.service.remote_command", fail)
     result = transport.call("lab", {"action": "launch", "token": "token", "spec": {"job_id": "one", "launch_before": 1045}})
     assert not result["accepted"]
     assert base.calls == []
@@ -1391,7 +1391,7 @@ def prepared_recovery_placement(setup, tmp_path):
     scheduler.store.db.execute('UPDATE jobs SET spec=? WHERE id=?',(json.dumps(value['spec']),'one'))
     sha = scheduler.campaigns.register(manifest())
     staged = json.loads(json.dumps(placement)); staged['workdir']=str(tmp_path/'new-host')
-    staged['argv']=['python','-m','campaigns.tmux_worker','bridge','--spec',str(tmp_path/'new-host/worker.json')]
+    staged['argv']=['python','-m','ebl.execution.tmux_worker','bridge','--spec',str(tmp_path/'new-host/worker.json')]
     staged['run_dir']=str(tmp_path/'new-host/receipts')
     staged['recovery_input_contract']['artifacts']['device_state']['path']=str(tmp_path/'new-host/p0.pt')
     proof=tmp_path/'new-prepared.json'

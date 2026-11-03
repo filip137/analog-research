@@ -1,7 +1,7 @@
 """Development-selected OM closed-loop learning rates, with no total pulse cap."""
 from dataclasses import asdict, dataclass, fields
 import math
-from experiments.schema import RunMode
+from core.contracts import RunMode
 
 EXPERIMENT_ID = 'cifar_om_closed_loop_lr.v1'
 LRS = (.0001, .0003, .001)

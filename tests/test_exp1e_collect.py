@@ -11,9 +11,9 @@ import time
 
 import pytest
 
-from experiments.artifacts import sha256_file
+from core.artifacts import sha256_file
 from test_workflow_cmo import cmo_inputs, small, model_arm
-from workflow.lifecycle import stage_selections
+from ebl.schema.lifecycle import stage_selections
 from workflow_helpers import run_stage
 
 ROOT = Path(__file__).resolve().parents[1]

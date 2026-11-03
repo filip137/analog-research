@@ -14,9 +14,9 @@ from typing import Any, Mapping, Sequence
 
 import torch
 
-from experiments.artifacts import content_hash, sha256_file
-from training.checkpoint import atomic_torch_save
-from training.ibm_om_standard_crossbar import (
+from core.artifacts import content_hash, sha256_file
+from methods.checkpoint import atomic_torch_save
+from hardware.om_crossbar import (
     CROSSBAR_TRAJECTORY_SEED_DERIVATION,
     CrossbarTileSpec,
     IbmOmCrossbarStateBundle,
@@ -24,7 +24,7 @@ from training.ibm_om_standard_crossbar import (
     crossbar_trajectory_seeds,
     tensor_sha256,
 )
-from training.ibm_reram_hwa import (
+from hardware.populations import (
     IbmReramArrayPopulation,
     om_array_population_fingerprint,
 )

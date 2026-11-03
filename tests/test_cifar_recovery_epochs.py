@@ -10,9 +10,10 @@ import torch
 from experiments.cifar_crossbar.epoch_config import EpochSpec, default_config, parse_config
 from experiments.cifar_crossbar.epoch_runtime import lr_factor, restore_compact, select_policies, trajectory
 from experiments.cifar_crossbar.fault_runtime import adapt, cache_context
-from experiments.cifar_crossbar.model import CifarResNet32, CrossbarSuffix
-from experiments.cifar_crossbar.pcm_faults import GaussianEndpointArray, PermanentFaults
-from experiments.cifar_crossbar.runtime import evaluate, load, save
+from networks.cifar_model import CifarResNet32, CrossbarSuffix
+from hardware.devices.pcm import GaussianEndpointArray, PermanentFaults
+from networks.cifar_metrics import evaluate
+from core.tensor_io_native import load, save
 
 
 @pytest.fixture(autouse=True)

@@ -6,24 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from campaigns.schema import CampaignSpec
-from experiments.definitions import load_experiment_config, parse_experiment_config
-from experiments.schema import ConfigError
-from workflow.networks import cifar_resnet32
-from workflow.__main__ import main as workflow_main
-from workflow.lifecycle import (
-    ARTIFACT_SECTIONS,
-    EXPERIMENT_ID,
-    StageSelection,
-    load_lifecycle,
-    parse_execution,
-    parse_lifecycle,
-    parse_stage_config,
-    provenance,
-    stage_inputs,
-    stage_selections,
-    verify_provenance,
-)
+from ebl.execution.schema import CampaignSpec
+from ebl.registry import load_experiment_config, parse_experiment_config
+from core.contracts import ConfigError
+import networks.cifar as cifar_resnet32
+from ebl.lifecycle.cli import main as workflow_main
+from ebl.schema.lifecycle import ARTIFACT_SECTIONS, EXPERIMENT_ID, StageSelection, load_lifecycle, parse_lifecycle, parse_stage_config, provenance, stage_inputs, stage_selections, verify_provenance
+from core.execution import parse_execution
 
 ROOT = Path(__file__).resolve().parents[1]
 LIFECYCLES = sorted(ROOT.glob("campaigns/**/lifecycles/*.json"))
@@ -187,7 +176,7 @@ def test_stage_config_is_a_registered_experiment():
 def test_plan_writes_runner_manifest_and_registered_stage_configs(tmp_path, monkeypatch):
     teacher = tmp_path / "teacher.pt"
     teacher.write_bytes(b"synthetic teacher")
-    from experiments.artifacts import sha256_file
+    from core.artifacts import sha256_file
 
     monkeypatch.setitem(cifar_resnet32.SOURCES, "cifar10", ("teacher.pt", sha256_file(teacher), 93.53))
     output = tmp_path / "plan"

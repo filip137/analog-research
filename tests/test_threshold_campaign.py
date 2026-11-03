@@ -38,7 +38,7 @@ def test_full_gate_uses_final_dev_then_physical_cost_and_ignores_test():
 
 
 def test_all_candidates_preserve_upstream_and_final_selection_protocol():
-    from workflow.lifecycle import parse_lifecycle
+    from ebl.schema.lifecycle import parse_lifecycle
     import json
     base = parse_lifecycle(json.loads((PATH.parents[1]/"lifecycles/opt125m-cmo-l6-exp2-dense-50m.json").read_text()))
     for label in pilot.labels():

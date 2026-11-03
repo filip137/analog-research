@@ -5,7 +5,8 @@ import pytest
 import torch
 from experiments.mnist_analog_relu.staged_config import parse_staged_crossbar_config
 from experiments.mnist_analog_relu.staged_runtime import _adam_selection_rank
-from training.ibm_om_standard_crossbar import PulseAdam, build_crossbar_layout
+from methods.optimizers.om import PulseAdam
+from hardware.om_crossbar import build_crossbar_layout
 
 ROOT=Path(__file__).resolve().parents[1]
 

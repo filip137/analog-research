@@ -5,18 +5,8 @@ from dataclasses import replace
 import pytest
 import torch
 
-from training.ibm_reram_program_verify import (
-    ControllerSettings,
-    HFO2_PRESET,
-    IbmReramPlant,
-    IbmReramPopulation,
-    OM_PRESET,
-    PopulationStepEstimator,
-    make_buffered_normal_draws,
-    partition_device_identities,
-    run_program_verify,
-    sample_ibm_reram_population,
-)
+from methods.programming.om import ControllerSettings, PopulationStepEstimator, run_program_verify
+from hardware.devices.om import HFO2_PRESET, IbmReramPlant, IbmReramPopulation, OM_PRESET, make_buffered_normal_draws, partition_device_identities, sample_ibm_reram_population
 
 
 class _DeterministicPort:

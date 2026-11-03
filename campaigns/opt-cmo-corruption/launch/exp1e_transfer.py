@@ -14,8 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from exp1e_development import NOTE
 from exp1e_prepare_host import command, checked_input, sha256, DEFAULT_BASE
 from slice_campaign import write_frozen
-from workflow.lifecycle import parse_lifecycle, provenance, verify_provenance
-from workflow.networks.opt_mlp import PINNED
+from ebl.schema.lifecycle import parse_lifecycle, provenance, verify_provenance
+from networks.opt import PINNED
 
 PHASE = "opt-cmo-exp1e-digital-transfer-20261011"
 PREFIX = "opt125m-cmo-l6-exp1e-digital-transfer"
@@ -64,7 +64,7 @@ def deployment_manifest(plan_path, source_path):
             raise ValueError("Only preparation and deployment are authorized")
         stages.append(stage)
     raw["stages"] = stages
-    from campaigns.schema import CampaignSpec
+    from ebl.execution.schema import CampaignSpec
     CampaignSpec.parse(raw, base_dir=plan_path.parent)
     return raw
 
@@ -87,7 +87,7 @@ def prepare_host(host, base):
     result = json.loads(Path(source["result"]).read_text())
     source_lc = parse_lifecycle(json.loads(Path(source["result"]).with_name("config.resolved.json").read_text())["lifecycle"])
     verify_provenance(provenance(source_lc, "hwa_source", hwa_arm=ARM), lc, "hwa_source", hwa_arm=ARM)
-    from workflow.runtime import validate_source_fit
+    from ebl.schema.source_fit import validate_source_fit
     validate_source_fit(lc, lc.hwa.arm(ARM), result["metrics"]["fit"])
     config = ROOT / "campaigns/opt-cmo-corruption/lifecycles" / (lc.lifecycle_id + ".json")
     if parse_lifecycle(json.loads(config.read_text())).digest() != lc.digest():
@@ -95,7 +95,7 @@ def prepare_host(host, base):
     case_root = ROOT / "results/lifecycles" / lc.lifecycle_id
     plan = case_root / "plan"
     env = dict(os.environ, EBL_CORPUS_ROOT=str(corpus_root), EBL_CAMPAIGN_STREAM="1", PYTHONUNBUFFERED="1")
-    command([python, "-m", "workflow", "plan", str(config), "--teacher-weights", str(teacher),
+    command([python, "-m", "ebl", "lifecycle", "plan", str(config), "--teacher-weights", str(teacher),
         "--output", str(plan), "--device", "cuda:0", "--cpu-threads", "1", "--python", python], cwd=ROOT, env=env)
     manifest = deployment_manifest(plan / "campaign.json", Path(source["path"]))
     manifest_path = case_root / "campaign-deployment.json"
@@ -116,8 +116,8 @@ def prepare_host(host, base):
         "inputs": inputs, "id": lc.lifecycle_id, "lifecycle_sha256": lc.digest(), "source_checkpoint": source,
         "dry_run_passed": True, "stage_ids": [s["id"] for s in manifest["stages"]],
         "placement": {"workdir": str(ROOT), "run_dir": str(worker_root),
-            "argv": [python, "-m", "campaigns.tmux_worker", "bridge", "--spec", str(worker_path)],
-            "validate_argv": [python, "-m", "campaigns.lifecycle_collect", "validate", str(native_root), "--deployment-only"],
+            "argv": [python, "-m", "ebl.execution.tmux_worker", "bridge", "--spec", str(worker_path)],
+            "validate_argv": [python, "-m", "ebl.execution.lifecycle_collect", "validate", str(native_root), "--deployment-only"],
             "campaign_python": python, "campaign_worker_spec": str(worker_path), "campaign_result_root": str(native_root),
             "gpu_models": ["5090"], "prepared_files": [{"path": str(p), "sha256": sha256(p)} for p in files]}}
 
@@ -153,7 +153,7 @@ def queue(receipts, output, controller):
         "budgets": {"gpu_hours": 1, "storage_bytes": 10000000000, "window_seconds": 10800}, "cases": cases,
         "storage_roots": [{"target": host, "path": h["source"]} for host, h in hosts.items()] +
             [{"target": host, "path": str(Path(h["base"]) / "worker-receipts" / h["source_revision"])} for host, h in hosts.items()]}
-    from campaigns.execution_service import validate_manifest
+    from ebl.execution.service import validate_manifest
     validate_manifest(manifest)
     write_frozen(output / "campaign.json", manifest)
     return {"manifest": str(output / "campaign.json"), "jobs": jobs, "submitted": False}
@@ -211,7 +211,7 @@ def review(output):
                     "mean_paired_relative_reduction": reduction, "material_rule_passed": wins >= 4 and reduction >= .1})
     report = {"coverage_complete": complete, "deployment_rows": len(rows), "expected_rows": 60,
         "comparisons": comparisons, "scientific_gate": "awaiting_scientific_review", "sources_reselected": False, "training_executed": False}
-    from experiments.artifacts import atomic_write_json
+    from core.artifacts import atomic_write_json
     atomic_write_json(output / "review.json", report)
     return report
 
@@ -228,7 +228,7 @@ def main():
     elif args.command == "prepare-host": result = prepare_host(args.host, args.base)
     elif args.command == "queue": result = queue(args.receipts, args.output, args.controller)
     else:
-        from campaigns.lifecycle_collect import collect
+        from ebl.execution.lifecycle_collect import collect
         result = collect(args.queue_config, args.output, deployment_only=True)
         result["review"] = review(args.output)
     print(json.dumps(result, indent=2))

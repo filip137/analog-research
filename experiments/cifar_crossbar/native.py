@@ -5,7 +5,7 @@ import argparse
 import json
 from pathlib import Path
 import torch
-from experiments.cifar_crossbar.model import state_hash
+from core.tensor_identity import state_hash
 
 
 def sample(kind, size, seed, policy, variation):
@@ -16,7 +16,7 @@ def sample(kind, size, seed, policy, variation):
         ReRamArrayOMPresetDevice,
     )
     from aihwkit.simulator.tiles import AnalogTile
-    from training.ibm_reram_program_verify import (
+    from hardware.devices.om import (
         OM_PRESET,
         PUBLISHED_CORRUPT_PROBABILITY,
     )

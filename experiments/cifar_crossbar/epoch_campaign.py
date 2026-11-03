@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from experiments.artifacts import atomic_write_json, sha256_file
+from core.artifacts import atomic_write_json, sha256_file
 from experiments.cifar_crossbar.epoch_config import EXPERIMENT_ID, default_config
 
 

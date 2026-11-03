@@ -24,9 +24,13 @@ include = [
   "experiments.reram_program_verify",
   "labs",
   "labs.tools",
-  "training",
-  "workflow",
-  "workflow.networks",
+  "core",
+  "hardware",
+  "hardware.*",
+  "methods",
+  "methods.*",
+  "networks",
+  "ebl.*",
 ]
 exclude = [
   "labs.MNIST_network_data*",

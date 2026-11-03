@@ -24,13 +24,13 @@ from typing import (
     Tuple,
 )
 
-from experiments.definitions import (
+from ebl.registry import (
     get_definition,
     list_definitions,
     load_experiment_config,
     resolve_experiment_config,
 )
-from experiments.schema import (
+from core.contracts import (
     ConfigError,
     ExperimentDefinition,
     RunMode,
@@ -38,7 +38,7 @@ from experiments.schema import (
 )
 
 if TYPE_CHECKING:
-    from campaigns.schema import CampaignSpec
+    from ebl.execution.schema import CampaignSpec
 
 
 class CliUsageError(ValueError):
@@ -127,6 +127,9 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         metavar="COMMAND",
     )
+
+    from ebl.lifecycle.cli import build_parser as lifecycle_parser
+    lifecycle_parser(commands.add_parser("lifecycle", help="validate, plan, collect and prepare lifecycle inputs"))
 
     describe = commands.add_parser(
         "describe",
@@ -574,9 +577,9 @@ def _default_train_handler(request: TrainRequest) -> Optional[int]:
         from experiments.cifar10_crossbar.runtime import run_train
         return run_train(request)
     if request.definition.experiment_id == "crossbar_lifecycle.v1":
-        from workflow.runtime import run_train
+        from ebl.runtime.lifecycle import run_train
     elif request.definition.experiment_id == "opt_task_teacher.v1":
-        from workflow.teacher_lora import run_train
+        from ebl.runtime.teacher_lora import run_train
     elif request.definition.experiment_id == "cifar_om_closed_loop_lr.v1":
         from experiments.cifar_crossbar.closed_loop_lr_runtime import run_train
     elif request.definition.experiment_id == "cifar_om_open_loop.v1":
@@ -644,7 +647,7 @@ def _default_command_handlers() -> CommandHandlers:
 def _default_campaign_handler(request: CampaignRunRequest) -> int:
     """Lazily execute a campaign without connecting numerical handlers."""
 
-    from campaigns.runner import run_campaign
+    from ebl.execution.runner import run_campaign
 
     try:
         records = run_campaign(
@@ -754,7 +757,7 @@ def _dispatch(
         args.command_name == "campaign"
         and args.campaign_command == "run"
     ):
-        from campaigns.schema import load_campaign_manifest
+        from ebl.execution.schema import load_campaign_manifest
 
         try:
             spec = load_campaign_manifest(args.manifest)
@@ -863,6 +866,14 @@ def main(
     parser = build_parser()
     try:
         parsed = parser.parse_args(raw_argv)
+        if parsed.command_name == "lifecycle":
+            from contextlib import redirect_stdout, redirect_stderr
+            with redirect_stdout(output), redirect_stderr(errors):
+                try:
+                    return parsed.handler(parsed)
+                except (ConfigError, ValueError) as error:
+                    errors.write(f"error: {error}\n")
+                    return 2
         return _dispatch(
             parsed,
             handlers=(

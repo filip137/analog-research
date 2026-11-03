@@ -14,18 +14,21 @@ import re
 import pytest
 import torch
 
-from experiments.cifar_crossbar.model import tensor_hash
-from experiments.cifar_crossbar.runtime import load
-from experiments.schema import ConfigError
-from training import reram_cmo
-from training.reram_cmo import CmoMatrix
-from workflow import deployment, hwa, program_verify
-from workflow import devices as device_stage
-from workflow.__main__ import STATE_BYTES_PER_WEIGHT
-from workflow.__main__ import main as workflow_main
-from workflow.__main__ import summary
-from workflow.lifecycle import CMO_ACCEPTANCE_PERCENT, DefectCase, parse_lifecycle, provenance, stage_selections, verify_provenance
-from workflow.networks.opt_mlp import MatrixSpec, StudentInput
+from core.tensor_identity import tensor_hash
+from core.tensor_io_native import load
+from core.contracts import ConfigError
+import hardware.devices.cmo as reram_cmo
+from hardware.devices.cmo import CmoMatrix
+import methods.deployment as deployment
+import methods.hwa as hwa
+import methods.programming.lifecycle as program_verify
+import hardware.arrays as device_stage
+from ebl.lifecycle.cli import STATE_BYTES_PER_WEIGHT
+from ebl.lifecycle.cli import main as workflow_main
+from ebl.lifecycle.cli import summary
+from hardware.config import CMO_ACCEPTANCE_PERCENT, DefectCase
+from ebl.schema.lifecycle import parse_lifecycle, provenance, stage_selections, verify_provenance
+from networks.opt import MatrixSpec, StudentInput
 from test_workflow_opt import changed, tiny_teacher, write_corpus
 from workflow_helpers import lifecycle_document, run_lifecycle
 

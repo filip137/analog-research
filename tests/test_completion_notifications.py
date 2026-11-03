@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from campaigns.completion_notifications import CompletionNotifier, validate_settings
+from ebl.execution.completion_notifications import CompletionNotifier, validate_settings
 
 
 THREAD = "01a139d5-3f18-7ef1-9e6e-5c611900c843"

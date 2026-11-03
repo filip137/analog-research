@@ -1,5 +1,5 @@
 """Strict, CPU-only config parsing for the staged CIFAR-10 comparison."""
-from experiments.schema import RunMode, config_error, freeze_json
+from core.contracts import RunMode, config_error, freeze_json
 
 EXPERIMENT_ID = "cifar10_ibm_om_crossbar.v1"
 

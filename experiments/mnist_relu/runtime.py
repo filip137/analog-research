@@ -8,7 +8,8 @@ from typing import Any, Iterable, TYPE_CHECKING
 import torch
 import torch.nn.functional as F
 
-from experiments.artifacts import RunStore, sha256_file
+from ebl.runtime.store import RunStore
+from core.artifacts import sha256_file
 from experiments.mnist_relu.config import (
     V2_EXPERIMENT_ID,
     TeacherTrainSpec,
@@ -16,8 +17,8 @@ from experiments.mnist_relu.config import (
 )
 from experiments.mnist_relu.model import BiasFreeReluTeacher
 from experiments.mnist_shared import build_mnist_loaders, limited
-from experiments.schema import to_plain_data
-from training.checkpoint import (
+from core.contracts import to_plain_data
+from methods.checkpoint import (
     encode_named_weights,
     load_epoch_boundary_checkpoint,
     load_named_weights,

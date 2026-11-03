@@ -4,7 +4,7 @@ import json
 import math
 from pathlib import Path
 from statistics import mean
-from experiments.artifacts import atomic_write_json, sha256_file
+from core.artifacts import atomic_write_json, sha256_file
 from experiments.cifar_crossbar.closed_loop_lr_config import LRS, SOURCES, CASES, DEV_SEEDS, FINAL_SEEDS
 from experiments.cifar_crossbar.hwa_fault_runtime import case_name
 

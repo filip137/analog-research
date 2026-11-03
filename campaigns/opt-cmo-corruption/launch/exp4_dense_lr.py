@@ -16,7 +16,7 @@ from exp1e_prepare_host import command, sha256, DEFAULT_BASE
 from exp1f_cdt_lr import service, transition
 from exp3_lora import input_contract, thresholds, ARM, ARRAY, DEADLINE
 from slice_campaign import write_frozen
-from workflow.lifecycle import parse_lifecycle
+from ebl.schema.lifecycle import parse_lifecycle
 
 PREFIX = 'opt125m-cmo-l6-exp4-dense-lr'
 PHASE = 'opt-cmo-exp4-dense-lr-20261012'
@@ -90,8 +90,8 @@ def prepare_host(base, reused):
         cases.append({'id':lc.lifecycle_id,'label':label,'lifecycle_sha256':lc.digest(),'dry_run_passed':True,
             'budget_seconds':budget,'expected_seconds':expected,'placement':{
                 'workdir':str(ROOT),'run_dir':str(receipt_root),'gpu_models':['5090'],
-                'argv':[python,'-m','campaigns.tmux_worker','bridge','--spec',str(worker)],
-                'validate_argv':[python,'-m','campaigns.recovery_collect','validate',str(native_root),'--inputs',str(inputs_path)],
+                'argv':[python,'-m','ebl.execution.tmux_worker','bridge','--spec',str(worker)],
+                'validate_argv':[python,'-m','ebl.execution.recovery_collect','validate',str(native_root),'--inputs',str(inputs_path)],
                 'campaign_python':python,'campaign_worker_spec':str(worker),'campaign_result_root':str(native_root),
                 'recovery_inputs':str(inputs_path),'recovery_input_contract':inputs,
                 'prepared_files':[{'path':str(p),'sha256':sha256(p)} for p in files]+list(inputs['artifacts'].values())}})
@@ -126,7 +126,7 @@ def queue(receipt,output,controller,evidence):
         'budgets':{'gpu_hours':2,'storage_bytes':20000000000,'window_seconds':18000},'cases':cases,
         'storage_roots':[{'target':'loulou','path':prepared['source']},
             {'target':'loulou','path':str(Path(prepared['base'])/'worker-receipts'/prepared['source_revision'])}]}
-    from campaigns.execution_service import validate_manifest
+    from ebl.execution.service import validate_manifest
     validate_manifest(manifest); write_frozen(output/'campaign.json',manifest)
     return {'manifest':str(output/'campaign.json'),'jobs':jobs}
 
@@ -149,8 +149,8 @@ def select(reports):
 
 
 def collect(queue_config,evidence):
-    from campaigns.recovery_collect import collect as native_collect
-    from campaigns.execution_service import digest
+    from ebl.execution.recovery_collect import collect as native_collect
+    from ebl.execution.service import digest
     label = os.environ['RUN_WATCH_JOB_ID'].removeprefix(PREFIX+'-')
     if label not in labels():
         raise ValueError('Unexpected completion job')

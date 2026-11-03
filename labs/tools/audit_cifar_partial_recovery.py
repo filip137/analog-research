@@ -18,7 +18,7 @@ from torch import nn
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from experiments.cifar_crossbar.model import CifarResNet32, CrossbarSuffix
+from networks.cifar_model import CifarResNet32, CrossbarSuffix
 
 
 def audit(classes: int, depth: int):
@@ -123,7 +123,7 @@ def main():
         "Parameter counts do not measure activation memory, latency, energy or accuracy.",
         "The 4-convolution last-two-block arm equals full recovery by construction.",
     ]
-    sources = [ROOT / "experiments/cifar_crossbar/model.py", Path(__file__).resolve()]
+    sources = [ROOT / "networks/cifar_model.py", Path(__file__).resolve()]
     manifest = dict(
         kind="static_architecture_audit", rows=len(rows), matrix_rows=len(layout),
         source_sha256={str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()

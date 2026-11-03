@@ -16,7 +16,7 @@ from exp1e_prepare_host import DEFAULT_BASE, sha256
 from exp3_lora import thresholds
 from exp5_threshold import prepare_host as prepare_recovery
 from slice_campaign import write_frozen
-from workflow.lifecycle import parse_lifecycle
+from ebl.schema.lifecycle import parse_lifecycle
 
 PREFIX = 'opt125m-cmo-l6-exp6-writecap'
 PHASE = 'opt-cmo-exp6-writecap-20261012'
@@ -100,7 +100,7 @@ def queue(receipts, output, controller, evidence):
              for h, p in hosts.items()] +
             [{'target': h, 'path': str(Path(p['base'])/'exp6-source.bundle')} for h, p in hosts.items()] +
             [{'target': 'local', 'path': str(evidence)}]}
-    from campaigns.execution_service import validate_manifest
+    from ebl.execution.service import validate_manifest
     validate_manifest(manifest); write_frozen(output/'campaign.json', manifest)
     return {'manifest': str(output/'campaign.json'), 'jobs': jobs}
 
@@ -138,7 +138,7 @@ def checked_report(label, rows, records, collection, reference):
 
 
 def collect(queue_config, evidence):
-    from campaigns.recovery_collect import collect as native_collect
+    from ebl.execution.recovery_collect import collect as native_collect
     label = os.environ['RUN_WATCH_JOB_ID'].removeprefix(PREFIX+'-')
     if label not in labels():
         raise ValueError('Unexpected write-cap completion job')

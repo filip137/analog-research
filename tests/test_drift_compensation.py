@@ -3,7 +3,8 @@
 import pytest
 import torch
 
-from training.drift_compensation import METHODS, Compensation, fit_readouts, apply_moments
+from methods.calibration.compensation import METHODS, fit_readouts, apply_moments
+from hardware.readout import Compensation
 
 
 @pytest.mark.parametrize("method", METHODS)

@@ -88,7 +88,7 @@ class PcmInferenceNoise:
 
 
 def evaluate_reference(spec, student, cache, device, calibration_cache=None):
-    from experiments.cifar_crossbar.runtime import evaluate
+    from networks.cifar_metrics import evaluate
 
     clean = evaluate(student, cache, device)
     model = PcmInferenceNoise(

@@ -14,9 +14,9 @@ from ebl.cli import (
     _default_train_handler,
     main,
 )
-from experiments.definitions import get_definition
+from ebl.registry import get_definition
 
-from experiments.schema import RunMode
+from core.contracts import RunMode
 
 
 ROOT = Path(__file__).resolve().parents[1]

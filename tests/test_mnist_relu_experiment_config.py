@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 import torch
 
-from experiments.definitions import parse_experiment_config
+from ebl.registry import parse_experiment_config
 from experiments.mnist_relu.model import BiasFreeReluTeacher
-from experiments.schema import ConfigError, RunMode
+from core.contracts import ConfigError, RunMode
 
 
 ROOT = Path(__file__).resolve().parents[1]

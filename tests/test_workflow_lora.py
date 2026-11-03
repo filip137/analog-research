@@ -3,10 +3,11 @@ import json
 import pytest
 import torch
 
-from experiments.cifar_crossbar.runtime import load
-from experiments.schema import ConfigError
-from workflow.lifecycle import DigitalLora, parse_lifecycle
-from workflow.networks.opt_mlp import OptMlpSuffix
+from core.tensor_io_native import load
+from core.contracts import ConfigError
+from methods.config import DigitalLora
+from ebl.schema.lifecycle import parse_lifecycle
+from networks.opt import OptMlpSuffix
 from test_workflow_cmo import cmo_inputs, small, case_doc
 from test_workflow_opt import tiny_teacher, tokens
 from workflow_helpers import run_lifecycle
@@ -63,7 +64,7 @@ def test_lora_native_roundtrip_preserves_all_base_parameters_and_device_state(cm
     })
     assert parse_lifecycle(lc.to_dict()) == lc
     results = run_lifecycle(lc, weights, tmp_path / "runs")
-    from workflow.portable_deployment import materialize, validate
+    from ebl.runtime.portable_deployment import materialize, validate
     portable = tmp_path / "portable.pt"
     deployed, deploy_result = results["deploy__digital__271001"]
     device_run, device_result = results["devices"]
@@ -88,10 +89,10 @@ def test_lora_native_roundtrip_preserves_all_base_parameters_and_device_state(cm
         assert row["sequence_presentations"] == lc.onchip.epochs * 8
     # Build a recovery-only campaign around the native trajectory with all
     # upstream inputs pinned explicitly, then exercise transport validation.
-    from campaigns.recovery_collect import export, checked
-    from campaigns.runner import _campaign_contract_record
-    from campaigns.schema import CampaignSpec
-    from experiments.artifacts import sha256_file
+    from ebl.execution.recovery_collect import export, checked
+    from ebl.execution.runner import _campaign_contract_record
+    from ebl.execution.schema import CampaignSpec
+    from core.artifacts import sha256_file
     import copy
     import sys
     root = tmp_path / "runs"

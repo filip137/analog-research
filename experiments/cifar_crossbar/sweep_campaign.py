@@ -2,7 +2,7 @@
 import argparse, json, os, subprocess, time
 from dataclasses import asdict
 from pathlib import Path
-from experiments.artifacts import atomic_write_json, sha256_file
+from core.artifacts import atomic_write_json, sha256_file
 from experiments.cifar_crossbar.sweep_config import default_config, EXPERIMENT_ID, LRS, STRENGTHS
 
 

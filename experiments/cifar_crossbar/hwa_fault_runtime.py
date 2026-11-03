@@ -1,34 +1,29 @@
-"""Generic HWA/CDT fitting, development selection, and fixed-array recovery.
-
-All numerical stages enter through EBL. Existing campaign orchestration and
-the tested permanent-array recovery adapter are reused.
-"""
-
+"""experiments.cifar_crossbar.hwa_fault_runtime — extracted native implementation; formats and numerical order preserved."""
+from __future__ import annotations
 from dataclasses import asdict, replace
 import json
 import math
 import os
 from pathlib import Path
 import time
-
 import torch
 from torch.nn import functional as F
-
-from experiments.artifacts import RunStore, atomic_write_json, sha256_file
-from experiments.cifar_crossbar.data import (
-    NORMALIZATION,
-    cache_features,
-    cohort_receipt,
-    get_dataset,
-    split_indices,
-)
-from experiments.cifar_crossbar.devices import clone_cpu
+from ebl.runtime.store import RunStore
+from core.artifacts import atomic_write_json, sha256_file
+from networks.cifar_data import cache_features, get_dataset, split_indices
+from core.cohorts import cohort_receipt
+from core.tensor_io import clone_cpu
 from experiments.cifar_crossbar.fault_runtime import adapt, cache_context, limited_cache
 from experiments.cifar_crossbar.hwa_fault_config import ComparisonSpec
-from experiments.cifar_crossbar.model import CrossbarSuffix, state_hash
-from experiments.cifar_crossbar.pcm_faults import GaussianEndpointArray, PermanentFaults
-from experiments.cifar_crossbar.prepare import SOURCES
-from experiments.cifar_crossbar.runtime import evaluate, load, save, source_model
+from networks.cifar_model import CrossbarSuffix
+from hardware.devices.pcm import GaussianEndpointArray, PermanentFaults
+from networks.cifar_sources import SOURCES
+from networks.cifar_metrics import evaluate
+from core.tensor_io_native import load, save
+from experiments.cifar_crossbar.runtime import source_model
+from methods.hwa_sampling import sampled_weights
+from networks.cifar_augmentation import augment_images
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -44,60 +39,6 @@ def cases(spec, kind=None):
 
 def case_name(kind, ppm):
     return "nominal" if not ppm else f"{kind}_{ppm}ppm"
-
-
-def sampled_weights(q, generator, noise_scale=1.0, kind="open", rate=0.0):
-    """Resample the physical-bank population every minibatch; preserve master.
-
-    Uses the paper's CDT principle with our physical-device probability
-    convention consistently in training and deployment. The temporary mask
-    never becomes a deployment fault map. Straight-through gradient follows
-    the temporary effective weight, as in the existing HWA implementation.
-    """
-    with torch.no_grad():
-        target = torch.stack((q.detach().clamp_min(0), (-q.detach()).clamp_min(0))) * 25
-        r = target / 25
-        sigma = 0.26348 + 1.965 * r - 1.1731 * r.square()
-        g = (
-            target
-            + noise_scale
-            * sigma
-            * torch.randn(target.shape, generator=generator, device=q.device)
-        ).clamp_min(0)
-        mask = torch.rand(target.shape, generator=generator, device=q.device) < rate
-        fixed = torch.rand(target.shape, generator=generator, device=q.device) * 25
-        if kind == "open":
-            fixed.zero_()
-        elif kind == "gmax":
-            fixed.fill_(25)
-        elif kind != "random":
-            raise ValueError("Expected open/gmax/random training corruption.")
-        g = torch.where(mask, fixed, g)
-        apparent = (g[0] - g[1]) / 25
-    return q + (apparent - q).detach(), mask
-
-
-def augment_images(raw, dataset, generator):
-    """Vectorized random crop/flip before normalization, fresh each epoch."""
-    x = raw.float() / 255
-    padded = F.pad(x, (4, 4, 4, 4))
-    n, channels = raw.shape[:2]
-    offsets = torch.randint(9, (n, 2), generator=generator, device=raw.device)
-    a = torch.arange(32, device=raw.device)
-    ys = offsets[:, 0, None, None] + a[None, :, None]
-    xs = offsets[:, 1, None, None] + a[None, None, :]
-    x = padded[
-        torch.arange(n, device=raw.device)[:, None, None, None],
-        torch.arange(channels, device=raw.device)[None, :, None, None],
-        ys[:, None, :, :],
-        xs[:, None, :, :],
-    ]
-    flip = torch.rand(n, generator=generator, device=raw.device) < 0.5
-    x = torch.where(flip[:, None, None, None], x.flip(-1), x)
-    mean, sd = NORMALIZATION[dataset]
-    return (x - x.new_tensor(mean)[None, :, None, None]) / x.new_tensor(sd)[
-        None, :, None, None
-    ]
 
 
 def prepare_cache(teacher, student, spec, device):

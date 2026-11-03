@@ -1,7 +1,7 @@
 """Versioned open-loop OM comparison, independent of the capped V2 sweep."""
 from dataclasses import dataclass, asdict, fields
 import math
-from experiments.schema import RunMode
+from core.contracts import RunMode
 from experiments.cifar_crossbar.sweep_config import KINDS, RATES
 
 EXPERIMENT_ID = "cifar_om_open_loop.v1"

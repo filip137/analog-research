@@ -1,5 +1,4 @@
-"""Native, artifact-backed stages for CIFAR suffix experiments."""
-
+"""experiments.cifar_crossbar.runtime — extracted native implementation; formats and numerical order preserved."""
 from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
@@ -9,30 +8,25 @@ import subprocess
 import time
 import torch
 from torch.nn import functional as F
-from experiments.artifacts import RunStore, atomic_write_json, sha256_file
+from ebl.runtime.store import RunStore
+from core.artifacts import atomic_write_json, sha256_file
 from experiments.cifar_crossbar.config import Spec
-from experiments.cifar_crossbar.data import (
-    get_dataset,
-    split_indices,
-    cache_features,
-    cohort_receipt,
-)
-from experiments.cifar_crossbar.devices import (
-    EndpointKernel,
-    PulseWriter,
-    clone_cpu,
-    make_plant,
-    prepare_population,
-    program,
-)
-from experiments.cifar_crossbar.model import (
-    CifarResNet32,
-    CrossbarSuffix,
-    tensor_hash,
-)
-from experiments.cifar_crossbar.prepare import SOURCES
+from networks.cifar_data import get_dataset, split_indices, cache_features
+from core.cohorts import cohort_receipt
+from hardware.plants import EndpointKernel, make_plant, prepare_population
+from methods.optimizers.pulse import PulseWriter
+from core.tensor_io import clone_cpu
+from methods.programming.pulse import program
+from networks.cifar_model import CifarResNet32, CrossbarSuffix
+from core.tensor_identity import tensor_hash
+from networks.cifar_sources import SOURCES
+from core.tensor_io_native import load, save
+from networks.cifar_metrics import evaluate
+
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
 DEVICE_FIELDS = (
     "backend",
     "policy",
@@ -47,24 +41,6 @@ DEVICE_FIELDS = (
 
 def scientific_device(spec):
     return {k: getattr(spec, k) for k in DEVICE_FIELDS}
-
-
-def save(path, value):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    torch.save(clone_cpu(value), temporary)
-    temporary.replace(path)
-
-
-def load(path):
-    import gzip
-    import io
-    with open(path, "rb") as handle:
-        compressed = handle.read(2) == b"\x1f\x8b"
-    if compressed:
-        with gzip.open(path, "rb") as handle:
-            return torch.load(io.BytesIO(handle.read()), map_location="cpu", weights_only=True)
-    return torch.load(path, map_location="cpu", weights_only=True)
 
 
 def source_model(path, spec, device):
@@ -114,41 +90,6 @@ def native_population(spec, size, seed, output):
         fault_kind=spec.fault_kind,
         fault_seed=seed + 171,
     )
-
-
-@torch.no_grad()
-def evaluate(student, cache, device, *, q=None, batch_size=256, read_seed=50001):
-    old_rng = student.read_generator.get_state()
-    student.read_generator.manual_seed(read_seed)
-    student.eval()
-    total = correct = agreement = 0
-    kl = ce = 0.0
-    predictions = []
-    try:
-        for begin in range(0, len(cache["labels"]), batch_size):
-            x = cache["features"][begin : begin + batch_size].to(device)
-            t = cache["teacher_logits"][begin : begin + batch_size].to(device)
-            y = cache["labels"][begin : begin + batch_size].to(device)
-            out = student.forward_features(x, q)
-            if not bool(torch.isfinite(out).all()):
-                raise FloatingPointError("Nonfinite network scores.")
-            p = out.argmax(1)
-            predictions.append(p.cpu())
-            correct += int((p == y).sum())
-            agreement += int((p == t.argmax(1)).sum())
-            total += len(y)
-            kl += float(F.kl_div(out.log_softmax(1), t.softmax(1), reduction="sum"))
-            ce += float(F.cross_entropy(out, y, reduction="sum"))
-    finally:
-        student.read_generator.set_state(old_rng)
-    return {
-        "examples": total,
-        "accuracy_percent": 100 * correct / total,
-        "teacher_agreement_percent": 100 * agreement / total,
-        "teacher_kl": kl / total,
-        "cross_entropy": ce / total,
-        "prediction_sha256": tensor_hash(torch.cat(predictions)),
-    }
 
 
 def build_cache(teacher, student, spec, device, *, training=False):

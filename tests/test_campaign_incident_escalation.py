@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from campaigns.incident_escalation import IncidentEscalator, repair_command, validate_settings
+from ebl.execution.incident_escalation import IncidentEscalator, repair_command, validate_settings
 
 
 @pytest.fixture
@@ -334,7 +334,7 @@ def test_failure_after_report_cannot_claim_success(harness):
 @pytest.mark.parametrize("hang", [False, True])
 def test_real_supervisor_publishes_exit_and_timeout_receipts(tmp_path, hang):
     """Exercise actual detached subprocess supervision without invoking Codex."""
-    from campaigns import incident_escalation_worker
+    import ebl.execution.incident_escalation_worker as incident_escalation_worker
     script = "import time; time.sleep(30)" if hang else "print('completed bounded owner')"
     request = {"folder": str(tmp_path), "project_dir": str(tmp_path), "timeout_seconds": 0.2,
                "argv": [sys.executable, "-c", script]}

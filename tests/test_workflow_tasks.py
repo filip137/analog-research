@@ -13,17 +13,23 @@ import pytest
 import torch
 
 from ebl.cli import TrainRequest
-from experiments.artifacts import sha256_file
-from experiments.cifar_crossbar.runtime import load, save
-from experiments.definitions import get_definition
-from experiments.schema import ConfigError
-from workflow import deployment, tasks, teacher_lora
-from workflow.__main__ import main as workflow_main
-from workflow.lifecycle import parse_lifecycle, provenance
-from workflow.networks import opt_mlp
+from core.artifacts import sha256_file
+from core.tensor_io_native import load, save
+from ebl.registry import get_definition
+from core.contracts import ConfigError
+import methods.deployment as deployment
+import networks.tasks as tasks
+import methods.teacher_lora as teacher_lora
+from ebl.lifecycle.cli import main as workflow_main
+from ebl.schema.lifecycle import parse_lifecycle, provenance
+import networks.opt as opt_mlp
 from test_workflow_cmo import case_doc, cmo_inputs, small, template  # noqa: F401  (fixture)
 from test_workflow_opt import TINY, tiny_teacher
 from workflow_helpers import run_lifecycle
+from methods.teacher_config import TARGETS as teacher_TARGETS
+from methods.teacher_config import SCORES as teacher_SCORES
+from methods.teacher_config import parse_config as teacher_parse_config
+from ebl.runtime.teacher_lora import run_train as teacher_run_train
 
 VERIFY_PAIR = {"detection": "verify", "roles": "pair", "seed": 241016, "threshold_sigma": 5.0}
 
@@ -171,7 +177,7 @@ def teacher_config(sha, **training):
         "model": "facebook/opt-125m",
         "task": {"name": "piqa", "choices": {"name": "tinytask", "sha256": sha}, "decision": "acc_norm",
                  "development_examples": 4},
-        "lora": {"rank": 2, "alpha": 4.0, "targets": list(teacher_lora.TARGETS)},
+        "lora": {"rank": 2, "alpha": 4.0, "targets": list(teacher_TARGETS)},
         "training": {"learning_rate": 0.01, "weight_decay": 0.0, "warmup_fraction": 0.1, "epochs": 2,
                      "batch_examples": 4, "micro_examples": 2, "max_grad_norm": 1.0, "score": "sum", "seed": 61,
                      "development_every_steps": 3, "max_examples": 0, **training},
@@ -181,7 +187,7 @@ def teacher_config(sha, **training):
 
 def test_lora_merge_round_trips_through_the_hugging_face_layout(tmp_path):
     base = tiny_teacher()
-    config = teacher_lora.parse_config(teacher_config("0" * 64))
+    config = teacher_parse_config(teacher_config("0" * 64))
     model = copy.deepcopy(base)
     parameters = teacher_lora.add_lora(model, config)
     with torch.no_grad():
@@ -197,8 +203,8 @@ def test_lora_merge_round_trips_through_the_hugging_face_layout(tmp_path):
     assert all(torch.equal(reloaded.state_dict()[k], v) for k, v in merged.state_dict().items())
     with torch.no_grad():
         assert torch.equal(reloaded(ids), merged(ids))
-    adapted = [k for k in base.state_dict() if k.endswith(tuple(f"{n}.weight" for n in teacher_lora.TARGETS))]
-    assert len(adapted) == TINY.decoder_layers * len(teacher_lora.TARGETS)
+    adapted = [k for k in base.state_dict() if k.endswith(tuple(f"{n}.weight" for n in teacher_TARGETS))]
+    assert len(adapted) == TINY.decoder_layers * len(teacher_TARGETS)
     assert all(torch.equal(base.state_dict()[k], merged.state_dict()[k]) for k in base.state_dict() if k not in adapted)
     assert sum(p.numel() for p in parameters) == sum(2 * (m.shape[0] + m.shape[1])
                                                      for k, m in base.state_dict().items() if k in adapted)
@@ -206,20 +212,20 @@ def test_lora_merge_round_trips_through_the_hugging_face_layout(tmp_path):
 
 def test_teacher_config_is_strict():
     with pytest.raises(ConfigError, match="micro_examples"):
-        teacher_lora.parse_config(teacher_config("0" * 64, micro_examples=3))
+        teacher_parse_config(teacher_config("0" * 64, micro_examples=3))
     doc = teacher_config("0" * 64)
     doc["lora"]["targets"] = ["q_proj", "q_proj"]
     with pytest.raises(ConfigError, match="lora.targets"):
-        teacher_lora.parse_config(doc)
+        teacher_parse_config(doc)
     with pytest.raises(ConfigError, match="sha256"):
-        teacher_lora.parse_config(teacher_config("XYZ"))
+        teacher_parse_config(teacher_config("XYZ"))
 
 
-@pytest.mark.parametrize("kind", teacher_lora.SCORES)
+@pytest.mark.parametrize("kind", teacher_SCORES)
 def test_teacher_objectives_are_finite_and_differentiable(tmp_path, kind):
     document, _ = tiny_task(tmp_path)
     model = copy.deepcopy(tiny_teacher())
-    parameters = teacher_lora.add_lora(model, teacher_lora.parse_config(teacher_config("0" * 64, score=kind)))
+    parameters = teacher_lora.add_lora(model, teacher_parse_config(teacher_config("0" * 64, score=kind)))
     choices = task_split(document, "train", 8)["choices"]
     loss = teacher_lora.objective(model, choices, torch.arange(4), choices["labels"], 2, kind, "cpu")
     loss.backward()
@@ -244,7 +250,7 @@ def test_teacher_fine_tuning_selects_on_development_and_exports_a_pinned_teacher
     request = TrainRequest(definition=definition, spec=spec, config_path=Path("teacher.json"),
                            output_dir=tmp_path / "runs", weights=None, resume=None, command=("pytest",),
                            device_data=tmp_path / "tasks/tinytask.pt", teacher_weights=weights)
-    assert teacher_lora.run_train(request) == 0
+    assert teacher_run_train(request) == 0
     [run] = sorted((tmp_path / "runs").iterdir())
     result = json.loads((run / "result.json").read_text())
     assert result["status"] == "complete"

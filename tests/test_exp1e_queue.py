@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from campaigns.execution_service import load_queue, validate_manifest
+from ebl.execution.service import load_queue, validate_manifest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "campaigns/opt-cmo-corruption/launch/exp1e_queue.py"
 SPEC = importlib.util.spec_from_file_location("exp1e_queue", SCRIPT)
@@ -38,7 +38,7 @@ def receipts(tmp_path):
                           "manifest": manifest, "manifest_sha256": digest, "worker_spec_sha256": digest,
                           "campaign_worker_spec": spec, "campaign_result_root": root + "/runs/slice-id",
                           "queue_run_dir": base + "/worker-receipts/" + revision + "/" + name,
-                          "argv": ["/home/filip/miniconda3/envs/py312/bin/python", "-m", "campaigns.tmux_worker",
+                          "argv": ["/home/filip/miniconda3/envs/py312/bin/python", "-m", "ebl.execution.tmux_worker",
                                    "bridge", "--spec", spec],
                           "prepared_files": [{"path": config, "sha256": config_hash},
                                              {"path": manifest, "sha256": digest}, {"path": spec, "sha256": digest}],

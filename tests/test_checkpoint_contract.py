@@ -6,12 +6,12 @@ import numpy as np
 import pytest
 import torch
 
-from training.parameters import (
+from core.parameters import (
     ParameterBinding,
     ParameterCatalog,
 )
-import training.checkpoint as checkpoint_module
-from training.checkpoint import (
+import methods.checkpoint as checkpoint_module
+from methods.checkpoint import (
     CheckpointError,
     EPOCH_BOUNDARY_SCHEMA,
     EPOCH_BOUNDARY_SCHEMA_VERSION,

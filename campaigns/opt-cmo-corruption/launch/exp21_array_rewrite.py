@@ -16,8 +16,8 @@ def lifecycle():
 
 
 def collect(queue_config, evidence):
-    from campaigns.lifecycle_collect import collect as native_collect
-    from experiments.artifacts import atomic_write_json
+    from ebl.execution.lifecycle_collect import collect as native_collect
+    from core.artifacts import atomic_write_json
     result = native_collect(queue_config, evidence / "collected", recovery=True, recovery_assignments=shared.ARRAYS)
     folder = Path(result["collected"])
     lc = lifecycle()

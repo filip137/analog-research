@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from training import inference_retention as retention
+import hardware.drift.inference as retention
 
 
 def stream(seed=723):

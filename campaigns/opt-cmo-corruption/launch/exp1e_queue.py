@@ -98,7 +98,7 @@ def prepare(receipts, output):
         "cases": campaign_cases}
     # Preparation is immutable and performs no submissions. Validate everything
     # before writing so a bad later host cannot leave a partly generated queue.
-    from campaigns.execution_service import validate_manifest
+    from ebl.execution.service import validate_manifest
     validate_manifest(manifest)
     for path, job in files:
         write_frozen(path, job)

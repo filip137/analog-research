@@ -10,11 +10,11 @@ import torch
 
 from experiments.mnist_analog_relu import crossbar_common as runtime
 from experiments.mnist_relu.model import BiasFreeReluTeacher
-from training.ibm_om_standard_crossbar import build_crossbar_layout
-from training.ibm_reram_endpoint_model import (
+from hardware.om_crossbar import build_crossbar_layout
+from hardware.devices.endpoints import (
     build_ibm_reram_accepted_endpoint_model,
 )
-from training.ibm_reram_hwa import IbmReramArrayPopulation
+from hardware.populations import IbmReramArrayPopulation
 
 
 def test_staged_settings_execute_a_real_hwa_minibatch():

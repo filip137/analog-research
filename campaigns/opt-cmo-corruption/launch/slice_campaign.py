@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from campaigns.schema import CampaignSpec
+from ebl.execution.schema import CampaignSpec
 
 
 def build_slice(manifest: Path, selected: list[str]) -> tuple[dict, dict]:

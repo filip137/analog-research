@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path[:0] = [str(ROOT), str(Path(__file__).resolve().parent)]
 from exp1e_prepare_host import command, checked_input, sha256, DEFAULT_BASE
 from slice_campaign import write_frozen
-from workflow.lifecycle import parse_lifecycle, provenance, verify_provenance
+from ebl.schema.lifecycle import parse_lifecycle, provenance, verify_provenance
 
 PREFIX = "opt125m-cmo-l6-exp21-fault-placement"
 NOTE = "campaigns/pilots/20261016-fault-placement.md"
@@ -75,7 +75,7 @@ def prepare(host, base, scenario, *, config=None, timeout_seconds=4800):
     verify_provenance(provenance(old, "hwa_source", hwa_arm=ARM), lc, "hwa_source", hwa_arm=ARM)
     env = dict(EBL_CORPUS_ROOT=str(base / "inputs/corpora"), EBL_CAMPAIGN_STREAM="1",
                PYTHONUNBUFFERED="1", OMP_NUM_THREADS="1", EBL_SOURCE_RECEIPT=str(ROOT / "source-receipt.json"))
-    command([sys.executable, "-m", "workflow", "plan", str(cfg), "--teacher-weights", str(teacher),
+    command([sys.executable, "-m", "ebl", "lifecycle", "plan", str(cfg), "--teacher-weights", str(teacher),
         "--hwa-source", f"{ARM}={source}", "--output", str(root / "plan"), "--device", "cuda:0",
         "--cpu-threads", "1", "--python", sys.executable], cwd=ROOT, env=dict(os.environ, **env))
     manifest = json.loads((root / "plan/campaign.json").read_text())
@@ -95,7 +95,7 @@ def prepare(host, base, scenario, *, config=None, timeout_seconds=4800):
     write_frozen(worker, dict(case_id=lc.lifecycle_id, state_root=str(receipt), cwd=str(ROOT),
         timeout_seconds=timeout_seconds, lease_seconds=900, env=env,
         argv=[sys.executable, str(Path(__file__).resolve()), "execute", "--manifest", str(path), "--output", str(root / "runs")]))
-    validation = [sys.executable, "-m", "campaigns.lifecycle_collect", "validate", str(root / "runs" / lc.lifecycle_id), "--recovery"]
+    validation = [sys.executable, "-m", "ebl.execution.lifecycle_collect", "validate", str(root / "runs" / lc.lifecycle_id), "--recovery"]
     for array in ARRAYS:
         validation += ["--recovery-assignment", str(array)]
     files = [cfg, path, worker, ROOT / "source-receipt.json"] + [Path(s["config"]) for s in manifest["stages"]]
@@ -104,7 +104,7 @@ def prepare(host, base, scenario, *, config=None, timeout_seconds=4800):
         deployment_rows=len(lc.defects.cases) * len(lc.devices.assignment_seeds),
         recovery_endpoints=len(lc.defects.cases) * len(ARRAYS) * len(lc.onchip.arms),
         placement=dict(workdir=str(ROOT), run_dir=str(receipt), gpu_models=["5090"],
-            argv=[sys.executable, "-m", "campaigns.tmux_worker", "bridge", "--spec", str(worker)],
+            argv=[sys.executable, "-m", "ebl.execution.tmux_worker", "bridge", "--spec", str(worker)],
             validate_argv=validation, campaign_python=sys.executable, campaign_worker_spec=str(worker),
             campaign_result_root=str(root / "runs" / lc.lifecycle_id),
             prepared_files=[dict(path=str(p), sha256=sha256(p)) for p in files] + inputs))
@@ -182,7 +182,7 @@ def summarize(rows):
 
 
 def collect(queue_config, evidence):
-    from campaigns.lifecycle_collect import collect as native_collect
+    from ebl.execution.lifecycle_collect import collect as native_collect
     result = native_collect(queue_config, evidence / "collected", recovery=True, recovery_assignments=ARRAYS)
     folder = Path(result["collected"])
     mechanisms = []
@@ -224,8 +224,8 @@ def collect(queue_config, evidence):
                         raise ValueError("Uniform anchor metrics changed from exp-016")
         write_frozen(evidence / "reviews/uniform-anchor.json", dict(passed=True, endpoints=len(reference["rows"])))
     write_frozen(evidence / "reviews" / (os.environ["RUN_WATCH_JOB_ID"] + "-mechanisms.json"), mechanisms)
-    from campaigns.lifecycle_collect import collection_lock
-    from experiments.artifacts import atomic_write_json
+    from ebl.execution.lifecycle_collect import collection_lock
+    from core.artifacts import atomic_write_json
     with collection_lock(evidence / "reviews"):
         rows = json.loads((evidence / "collected/rows.json").read_text())
         completed = {r["lifecycle_id"] for r in rows}

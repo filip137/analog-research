@@ -16,9 +16,9 @@ import subprocess
 import sys
 import time
 
-from experiments.artifacts import atomic_write_json, sha256_file
+from core.artifacts import atomic_write_json, sha256_file
 from experiments.cifar_crossbar.config import EXPERIMENT_ID, default_config
-from experiments.cifar_crossbar.prepare import SOURCES
+from networks.cifar_sources import SOURCES
 
 METHODS = ("none", "calibration", "rewrite", "open_loop", "closed_loop")
 HWA_SEEDS = (41, 43, 47)

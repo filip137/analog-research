@@ -17,8 +17,8 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from experiments.artifacts import atomic_write_json, sha256_file
-from workflow.lifecycle import parse_lifecycle
+from core.artifacts import atomic_write_json, sha256_file
+from ebl.schema.lifecycle import parse_lifecycle
 
 LIFECYCLES = ROOT / "campaigns/opt-cmo-corruption/lifecycles"
 BASE = LIFECYCLES / "opt125m-cmo-l6-exp1e-lrdev.json"

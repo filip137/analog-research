@@ -7,8 +7,8 @@ import torch
 
 from experiments.cifar10_crossbar.config import parse_config
 from experiments.cifar10_crossbar.hardware import validation_rank
-from training.ibm_om_standard_crossbar import build_crossbar_layout, map_logical_weights, standard_crossbar_logits
-from training.closed_loop_crossbar_adam import ClosedLoopAdam
+from hardware.om_crossbar import build_crossbar_layout, map_logical_weights, standard_crossbar_logits
+from methods.optimizers.closed_loop_adam import ClosedLoopAdam
 
 ROOT = Path(__file__).resolve().parents[1]
 

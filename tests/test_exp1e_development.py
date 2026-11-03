@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 import torch
 
-from experiments.artifacts import sha256_file
-from workflow.lifecycle import parse_lifecycle, provenance
+from core.artifacts import sha256_file
+from ebl.schema.lifecycle import parse_lifecycle, provenance
 
 
 ROOT = Path(__file__).resolve().parents[1]

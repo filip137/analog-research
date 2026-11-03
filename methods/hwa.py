@@ -1,0 +1,521 @@
+"""(ii) Hardware-aware training of one source arm.
+
+``method: none`` deploys the digital teacher unchanged. ``method: hwa`` trains
+a digital FP32 master (normalized suffix weights plus the calibration
+parameters) on sampled apparent hardware views -- an off-chip update, not a
+persistent-device trajectory:
+
+- noise awareness: ``noise_strength`` scales the declared noise model --
+  analytic Gaussian PCM programming noise, OM residual tables of the
+  lifecycle's own P&V law, or (CMO) Gaussian weight noise of ``hwa.noise_std``
+  relative to the matrix full scale or to each output channel's current
+  abs-max (the Analog Foundation Models convention) -- drawn fresh every
+  minibatch with a straight-through gradient; 0 trains on the clean digital
+  weights;
+- corruption awareness: optional temporary Bernoulli failure masks at a rate
+  drawn per minibatch from ``corruption.rates_ppm`` (for CMO, on the active
+  and the reference device of every pair, after the weight noise). They never
+  become a deployed fault map.
+
+``scope: model`` (OPT only) also trains every digital parameter of the
+student's own copy of the network -- embeddings, attention, LayerNorms and the
+tied head -- with Adam at the arm's ``digital_learning_rate`` under the same
+schedule, as both reference papers fine-tune the whole model. Only the analog
+weights see noise and corruption; the frozen teacher stays the KL target.
+
+An epoch is one pass over the HWA cohort unless ``hwa.sequences_per_epoch``
+streams it: each epoch then takes the next sequences of seeded passes over a
+large cohort (``stream_order``), keeping the selection cadence per step budget.
+An optional ``hwa.lr_schedule`` scales every optimizer group before each update
+and requires an exact, fixed update budget, including for diagnostic smokes.
+
+Checkpoints are selected by mean development teacher KL over the arm's
+``selection_cases`` on independent selection arrays programmed with the
+lifecycle's P&V. Final arrays and test data are never used.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import time
+
+import torch
+
+from core.tensor_io import clone_cpu
+from methods.hwa_sampling import sampled_weights
+from core.tensor_identity import state_hash
+from methods.hwa_sampling_om import MixedOmSampler
+import hardware.devices.cmo as reram_cmo
+import methods.programming.lifecycle as program_verify
+from hardware.config import ADDITIVE_GAUSSIAN
+from networks import family
+
+
+def selection_score(network, cache, lifecycle, populations, cases, device) -> dict:
+    """Mean development metrics of the current master after real P&V."""
+
+    rows = []
+    target = network.q.detach()
+    network_family = family(lifecycle.network)
+    for case in cases:
+        values = []
+        for seed in lifecycle.devices.selection_seeds:
+            array = program_verify.fresh(lifecycle, network.layout, seed, case, populations, device)
+            program_verify.program(array, target, lifecycle)
+            values.append(network_family.evaluate(network, cache, device, q=array.read()))
+        rows.append(
+            {
+                "case": case.label,
+                **{
+                    metric: sum(v[metric] for v in values) / len(values)
+                    for metric in network_family.SUMMARY_METRICS
+                },
+            }
+        )
+    return {"teacher_kl": sum(r["teacher_kl"] for r in rows) / len(rows), "cases": rows}
+
+
+STREAM_SEED_OFFSET = 1_000_000
+
+
+def stream_order(examples: int, per_epoch: int, epoch: int, seed: int, device) -> torch.Tensor:
+    """Epoch ``epoch``'s slice of an endless stream of seeded passes over a cohort.
+
+    Pass k is a permutation of the cohort seeded by ``seed + STREAM_SEED_OFFSET + k``;
+    epoch e (from 1) takes stream positions [(e-1)·per_epoch, e·per_epoch). Every
+    sequence appears once per pass, and a pass boundary may fall inside an epoch.
+    """
+
+    begin, end = (epoch - 1) * per_epoch, epoch * per_epoch
+    parts = []
+    for k in range(begin // examples, (end - 1) // examples + 1):
+        generator = torch.Generator(device=device).manual_seed(seed + STREAM_SEED_OFFSET + k)
+        order = torch.randperm(examples, generator=generator, device=device)
+        parts.append(order[max(begin - k * examples, 0) : min(end - k * examples, examples)])
+    return torch.cat(parts)
+
+
+def channel_abs_max(q, layout):
+    """Each weight's output-channel abs-max: rows of every [out, in] analog matrix."""
+
+    parts = []
+    for spec in layout:
+        matrix = q[spec.offset : spec.offset + spec.size].reshape(spec.shape[0], -1)
+        parts.append(matrix.abs().amax(1, keepdim=True).expand_as(matrix).reshape(-1))
+    return torch.cat(parts)
+
+
+def endpoint_sampler(lifecycle, arm, device_bundle, device, layout=None):
+    """Per-minibatch apparent-weight sampler of the declared noise model."""
+
+    seed = lifecycle.hwa.seed + 10000
+    if lifecycle.hwa.noise_model == "pcm_gaussian_endpoint":
+        generator = torch.Generator(device=device).manual_seed(seed)
+
+        def sample(q, kind, rate):
+            return sampled_weights(q, generator, arm.noise_strength, kind, rate)[0]
+
+        return sample
+    if lifecycle.hwa.noise_model == ADDITIVE_GAUSSIAN:
+        generator = torch.Generator(device=device).manual_seed(seed)
+        sigma = lifecycle.hwa.noise_std * arm.noise_strength
+        per_channel = lifecycle.hwa.noise_scaling == "output_channel_abs_max"
+        if per_channel and layout is None:
+            raise ValueError("Expected the analog layout for output-channel noise scaling.")
+
+        def sample(q, kind, rate):
+            with torch.no_grad():
+                value = q.detach()
+                scale = channel_abs_max(value, layout) if per_channel else 1.0
+                noisy = value + sigma * scale * torch.randn(q.shape, generator=generator, device=q.device)
+                if rate:
+                    noisy = reram_cmo.corrupt_weights(noisy, generator, kind, rate)
+            return q + (noisy - q).detach()
+
+        return sample
+    kernels = device_bundle["kernels"]
+    if not kernels["adequate"]:
+        raise ValueError("Expected an adequate characterized OM endpoint kernel.")
+    sampler = MixedOmSampler(kernels["tables"]["fit"], seed, device)
+
+    def sample(q, kind, rate):
+        return sampler.perturb(q, kind, rate, arm.noise_strength)
+
+    return sample
+
+
+def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, store, device) -> dict:
+    """Return the selected source state and its fit record for one HWA arm."""
+
+    pristine = clone_cpu(network.state_dict())
+    if not arm.trains:
+        return {"model": pristine, "fit": {"kind": "digital_teacher", "method": "none", "status": "complete"}}
+    hwa, data = lifecycle.hwa, lifecycle.data
+    network_family = family(lifecycle.network)
+    populations = device_bundle.get("populations")
+    network.enable_calibration(True)
+    network.q.requires_grad_(True)
+    # Each group keeps its base rate; the shared schedule scales both.
+    groups = [(hwa.learning_rate, [network.q] + network.calibration_parameters())]
+    if arm.scope == "model":
+        network.enable_digital(True)
+        groups.append((arm.digital_learning_rate, network.digital_parameters()))
+    optimizer = torch.optim.Adam([{"params": params, "lr": lr, "base_lr": lr} for lr, params in groups])
+    sample = endpoint_sampler(lifecycle, arm, device_bundle, device, layout=network.layout)
+    rate_generator = torch.Generator().manual_seed(hwa.seed + 20000)
+    rates = arm.corruption.rates_ppm if arm.corruption else ()
+    histogram = {str(rate): 0 for rate in rates}
+    inputs = network_family.hwa_inputs(cache, device)
+    examples = network_family.hwa_examples(inputs)
+    streamed = hwa.sequences_per_epoch is not None
+    per_epoch = min(hwa.sequences_per_epoch, examples) if streamed else examples
+    schedule, global_step = hwa.lr_schedule, 0
+    if schedule is not None:
+        expected_examples = data.cohort_size("hwa")
+        expected_steps = hwa.epochs * ((per_epoch + hwa.batch_size - 1) // hwa.batch_size)
+        if examples != expected_examples or expected_steps != schedule.total_steps:
+            raise ValueError(
+                f"HWA cache/budget mismatch: loaded {examples} examples and {expected_steps} updates; "
+                f"declared {expected_examples} examples and {schedule.total_steps} updates. "
+                "A diagnostic smoke must declare its own exact schedule."
+            )
+        for group in optimizer.param_groups:
+            group["lr"] = group["base_lr"] * schedule.factor(0)
+        store.append_metric({
+            "stage": "hwa_schedule", "arm": arm.arm_id, "global_step": 0,
+            "lr_schedule": schedule.to_dict(),
+            "learning_rates": [group["lr"] for group in optimizer.param_groups],
+        })
+    prefix = network.prefix_hash()
+    best, history, rejected = None, [], None
+    limit, epoch, started = hwa.epochs, 0, time.monotonic()
+    while epoch <= limit:
+        if epoch:
+            if schedule is None:
+                for group in optimizer.param_groups:
+                    group["lr"] = group["base_lr"] * hwa.lr_factor(epoch)
+            data_rng = torch.Generator(device=device).manual_seed(data.data_seed + epoch)
+            if streamed:
+                order = stream_order(examples, per_epoch, epoch, data.data_seed, device)
+            else:
+                order = torch.randperm(examples, generator=data_rng, device=device)
+            network.train()
+            for batch, begin in enumerate(range(0, per_epoch, hwa.batch_size)):
+                index = order[begin : begin + hwa.batch_size]
+                features, teacher_logits, labels = network_family.hwa_batch(
+                    inputs, index, data_rng, network, teacher, lifecycle
+                )
+                kind, rate = "open", 0.0
+                if arm.corruption:
+                    ppm = rates[int(torch.randint(len(rates), (), generator=rate_generator))]
+                    histogram[str(ppm)] += 1
+                    kind, rate = arm.corruption.kind, ppm / 1e6
+                q = sample(network.q, kind, rate)
+                optimizer.zero_grad(set_to_none=True)
+                logits = network.forward_features(features, q)
+                loss = network_family.objective(logits, teacher_logits, labels, hwa.objective)
+                if not bool(torch.isfinite(loss)):
+                    rejected = {"epoch": epoch, "batch": batch, "reason": "nonfinite HWA objective"}
+                    break
+                loss.backward()
+                if schedule is not None:
+                    for group in optimizer.param_groups:
+                        group["lr"] = group["base_lr"] * schedule.factor(global_step + 1)
+                optimizer.step()
+                global_step += 1
+                with torch.no_grad():
+                    network.q.clamp_(-1, 1)
+                if batch % 100 == 0 or (schedule is not None and global_step in schedule.boundary_steps()):
+                    progress = {} if schedule is None else {
+                        "global_step": global_step,
+                        "learning_rates": [group["lr"] for group in optimizer.param_groups],
+                    }
+                    store.append_metric(
+                        {"stage": "hwa", "arm": arm.arm_id, "epoch": epoch, "batch": batch,
+                         "loss": float(loss.detach()), **progress}
+                    )
+            if rejected:
+                break
+            if any(not bool(torch.isfinite(p).all()) for p in network.parameters()):
+                rejected = {"epoch": epoch, "reason": "nonfinite parameters"}
+                break
+        if epoch == 0 or epoch % hwa.selection_every == 0 or epoch == limit:
+            score = selection_score(network, cache["development"], lifecycle, populations, arm.selection_cases, device)
+            if not math.isfinite(score["teacher_kl"]):
+                rejected = {"epoch": epoch, "reason": "nonfinite selection score"}
+                break
+            item = {"epoch": epoch, "elapsed_seconds": time.monotonic() - started, **score}
+            if schedule is not None:
+                item.update(global_step=global_step, learning_rates=[group["lr"] for group in optimizer.param_groups])
+            history.append(item)
+            store.append_metric({"stage": "hwa_selection", "arm": arm.arm_id, **item})
+            print(json.dumps({"arm": arm.arm_id, "epoch": epoch, "teacher_kl": score["teacher_kl"]}), flush=True)
+            if best is None or score["teacher_kl"] < best["score"]:
+                best = {"epoch": epoch, "score": score["teacher_kl"], "model": clone_cpu(network.state_dict())}
+        if (
+            epoch == hwa.epochs
+            and limit == hwa.epochs
+            and hwa.extension_epochs
+            and best is not None
+            and best["epoch"] >= 0.8 * limit
+        ):
+            limit += hwa.extension_epochs
+            store.append_metric({"stage": "hwa", "arm": arm.arm_id, "extended_to_epoch": limit})
+        epoch += 1
+    if schedule is not None and not rejected and global_step != schedule.total_steps:
+        raise RuntimeError(f"HWA completed {global_step} updates; expected exactly {schedule.total_steps}.")
+    if arm.scope == "model":
+        network.enable_digital(False)
+    if network.prefix_hash() != prefix:
+        raise RuntimeError("HWA changed the frozen digital prefix.")
+    if best is None:
+        raise FloatingPointError(f"HWA arm {arm.arm_id!r} produced no finite selection checkpoint.")
+    fit = {
+        "kind": "hwa",
+        "method": arm.method,
+        "noise_strength": arm.noise_strength,
+        "corruption": None if arm.corruption is None else arm.corruption.to_dict(),
+        "status": "rejected_nonfinite" if rejected else "complete",
+        "rejection": rejected,
+        "selected_epoch": best["epoch"],
+        "development_kl": best["score"],
+        "epochs_run": min(epoch - 1, limit),
+        "maximum_epochs": limit,
+        "convergence_review_required": bool(rejected) or best["epoch"] >= 0.8 * limit,
+        "rate_histogram": histogram,
+        "history": history,
+        "selection": "minimum mean development teacher KL over selection cases and selection arrays",
+    }
+    if schedule is not None:
+        fit["lr_schedule"] = {
+            **schedule.to_dict(),
+            "step_convention": "one-based; learning rates applied before optimizer.step",
+            "steps_run": global_step,
+            "base_learning_rates": [group["base_lr"] for group in optimizer.param_groups],
+            "final_learning_rates": [group["lr"] for group in optimizer.param_groups],
+        }
+    if arm.scope == "model":
+        digital = {k: v for k, v in best["model"].items() if k.startswith("digital.")}
+        initial_digital = {k: v for k, v in pristine.items() if k.startswith("digital.")}
+        # A zero Adam step can canonicalize -0.0 to +0.0. Preserve byte hashes
+        # for provenance, but test unchanged numerical parameters separately.
+        unchanged = all(torch.equal(value, initial_digital[key]) for key, value in digital.items())
+        if arm.digital_learning_rate == 0 and (not unchanged or any(
+            not torch.equal(value.detach().cpu(), pristine[key])
+            for key, value in network.state_dict().items() if key.startswith("digital.")
+        )):
+            raise RuntimeError("Zero-LR HWA changed the digital weights.")
+        fit["scope"] = {
+            "scope": "model",
+            "digital_learning_rate": arm.digital_learning_rate,
+            "digital_parameters": sum(v.numel() for v in digital.values()),
+            "digital_sha256": state_hash(digital),
+            "initial_digital_sha256": state_hash(initial_digital),
+            "digital_unchanged": unchanged,
+            "digital_bitwise_unchanged": state_hash(digital) == state_hash(initial_digital),
+        }
+    if streamed:
+        fit["stream"] = {
+            "sequences_per_epoch": per_epoch,
+            "cohort_sequences": examples,
+            "passes": fit["epochs_run"] * per_epoch / examples,
+        }
+    return {"model": best["model"], "fit": fit}
+
+
+# --- analog LoRA adapters on a frozen HWA base (method: lora) -------------------------------
+
+LORA_MICRO_EXAMPLES = 8
+
+
+def load_base(network, source_model: dict) -> None:
+    """Copy a whole-model HWA source into an adapter network; the adapters keep their state."""
+
+    state = {key: value.detach().clone() for key, value in network.state_dict().items()}
+    count = network.base_matrices
+    base_size = sum(spec.size for spec in network.layout[:count])
+    base_rows = network.channel_offsets[count]
+    if set(source_model) != set(state):
+        raise ValueError("Expected a base source with exactly the adapter network's parameters.")
+    for key, value in source_model.items():
+        value = value.to(state[key].device)
+        if key == "q" and value.numel() == base_size:
+            state[key][:base_size] = value
+        elif key == "scales" and value.numel() == count:
+            state[key][:count] = value
+        elif key == "channel_scales" and value.numel() == base_rows:
+            state[key][:base_rows] = value
+        elif value.shape == state[key].shape:
+            state[key] = value.clone()
+        else:
+            raise ValueError(f"Expected base source tensor {key!r} to match the base network.")
+    network.load_state_dict(state)
+
+
+def lora_lr_factor(step: int, warmup: int, total: int) -> float:
+    """Linear warm-up then cosine decay to zero; one-based update numbers."""
+
+    if warmup and step <= warmup:
+        return step / warmup
+    return 0.5 * (1 + math.cos(math.pi * (step - warmup) / max(total - warmup, 1)))
+
+
+def train_lora(*, lifecycle, arm, network, base, base_receipt, cache, device_bundle, store, device) -> dict:
+    """Train analog LoRA adapters on a frozen HWA base under the declared weight noise.
+
+    Only the adapter masters (logical units) train. Each step maps them to normalized targets
+    with their current output-channel abs-max as the digital scale, adds the CMO HWA noise to
+    every analog weight (base and adapters, straight-through) and minimizes the task's
+    multiple-choice cross entropy over per-token mean continuation log-likelihoods. Checkpoints
+    are selected by the mean development decision accuracy over the arm's selection cases on
+    the selection arrays after real P&V of base and adapters. Test data are never used.
+    """
+
+    from torch import nn
+    import networks.tasks as tasks
+
+    hwa, task = lifecycle.hwa, lifecycle.task
+    if network.scaling != "per_output_channel_absmax" or not network.adapters:
+        raise ValueError("Expected analog adapters with per-output-channel scaling.")
+    network_family = family(lifecycle.network)
+    populations = device_bundle.get("populations")
+    load_base(network, base["model"])
+    initial = clone_cpu(network.state_dict())
+    count = network.base_matrices
+    base_size = sum(spec.size for spec in network.layout[:count])
+    first_row = network.channel_offsets[count]
+    network.enable_calibration(False)
+    network.enable_digital(False)
+    network.q.requires_grad_(False)
+    generator = torch.Generator().manual_seed(hwa.seed)
+    masters = []
+    for k in range(count):
+        a, b = (network.layout[i] for i in network.adapters[k])
+        inputs = a.shape[1]
+        init = torch.empty(a.shape).uniform_(-inputs ** -0.5, inputs ** -0.5, generator=generator)
+        masters += [nn.Parameter(init.to(device)), nn.Parameter(torch.zeros(b.shape, device=device))]
+
+    def targets(update_scales=True):
+        values, scales = [], []
+        for master in masters:
+            scale = master.detach().abs().amax(1).clamp_min(1e-12)
+            values.append((master / scale[:, None]).flatten())
+            scales.append(scale)
+        if update_scales:
+            with torch.no_grad():
+                network.channel_scales[first_row:] = torch.cat(scales)
+        return torch.cat([network.q.detach()[:base_size], torch.cat(values)])
+
+    choices = cache["task_train"]["choices"]
+    k, labels = choices["k"], choices["labels"]
+    examples = len(labels)
+    metric = "accuracy_norm_percent" if task.decision == "acc_norm" else "accuracy_percent"
+    sample = endpoint_sampler(lifecycle, arm, device_bundle, device, layout=network.layout)
+    optimizer = torch.optim.Adam(masters, lr=arm.learning_rate)
+    steps_per_epoch = math.ceil(examples / hwa.batch_size)
+    total = hwa.epochs * steps_per_epoch
+    warmup = round(arm.warmup_fraction * total)
+    prefix = network.prefix_hash()
+    best, history, rejected, step, started = None, [], None, 0, time.monotonic()
+
+    def select(epoch):
+        nonlocal best
+        with torch.no_grad():
+            network.q.copy_(targets())
+        target = network.q.detach()
+        rows = []
+        for case in arm.selection_cases:
+            values = []
+            for seed in lifecycle.devices.selection_seeds:
+                array = program_verify.fresh(lifecycle, network.layout, seed, case, populations, device)
+                program_verify.program(array, target, lifecycle)
+                values.append(network_family.evaluate(network, cache["task_development"], device, q=array.read()))
+            rows.append({"case": case.label, **{m: sum(v[m] for v in values) / len(values)
+                                                 for m in (metric, "choice_kl", "teacher_kl")}})
+        score = sum(row[metric] for row in rows) / len(rows)
+        clean = network_family.evaluate(network, cache["task_development"], device)
+        item = {"epoch": epoch, "global_step": step, "score": score, "cases": rows,
+                "clean_development": {m: clean[m] for m in (metric, "choice_kl")},
+                "elapsed_seconds": time.monotonic() - started}
+        history.append(item)
+        store.append_metric({"stage": "lora_selection", "arm": arm.arm_id, **item})
+        print(json.dumps({"arm": arm.arm_id, "epoch": epoch, metric: score}), flush=True)
+        if best is None or score > best["score"]:
+            best = {"epoch": epoch, "score": score, "model": clone_cpu(network.state_dict())}
+
+    select(0)
+    for epoch in range(1, hwa.epochs + 1):
+        order = torch.randperm(examples, generator=torch.Generator().manual_seed(lifecycle.data.data_seed + epoch))
+        network.train()
+        for batch, begin in enumerate(range(0, examples, hwa.batch_size)):
+            index = order[begin:begin + hwa.batch_size]
+            for group in optimizer.param_groups:
+                group["lr"] = arm.learning_rate * lora_lr_factor(step + 1, warmup, total)
+            optimizer.zero_grad(set_to_none=True)
+            value = 0.0
+            for offset in range(0, len(index), LORA_MICRO_EXAMPLES):
+                micro = index[offset:offset + LORA_MICRO_EXAMPLES]
+                q = sample(targets(), "open", 0.0)
+                rows = (micro[:, None] * k + torch.arange(k)[None, :]).flatten()
+                padded = tasks.padded(choices, rows)
+                tokens = padded["tokens"].to(device)
+                logits = network.forward_features(network.features(tokens), q)
+                mask = tasks.scored_mask(padded, device)
+                sums = tasks.row_sums(tasks.continuation_log_probs(logits, tokens, mask)[1], mask)
+                sums = sums / (padded["lengths"] - padded["context_lengths"]).to(device)
+                loss = tasks.choice_loss(sums, labels[micro].to(device), k) * (len(micro) / len(index))
+                if not bool(torch.isfinite(loss)):
+                    rejected = {"epoch": epoch, "batch": batch, "reason": "nonfinite LoRA objective"}
+                    break
+                loss.backward()
+                value += float(loss.detach())
+            if rejected:
+                break
+            optimizer.step()
+            step += 1
+            if batch % 100 == 0:
+                store.append_metric({"stage": "lora", "arm": arm.arm_id, "epoch": epoch, "batch": batch,
+                                     "global_step": step, "loss": value,
+                                     "learning_rate": optimizer.param_groups[0]["lr"]})
+        if rejected:
+            break
+        if epoch % hwa.selection_every == 0 or epoch == hwa.epochs:
+            select(epoch)
+    if network.prefix_hash() != prefix:
+        raise RuntimeError("LoRA training changed the frozen digital prefix.")
+    final = network.state_dict()
+    unchanged = all(torch.equal(final[key].cpu(), value) for key, value in initial.items()
+                    if key not in ("q", "channel_scales")) and torch.equal(
+        final["q"][:base_size].cpu(), initial["q"][:base_size]) and torch.equal(
+        final["channel_scales"][:first_row].cpu(), initial["channel_scales"][:first_row])
+    if not unchanged:
+        raise RuntimeError("LoRA training changed the frozen base.")
+    if best is None:
+        raise FloatingPointError(f"LoRA arm {arm.arm_id!r} produced no selection checkpoint.")
+    adapter_weights = sum(m.numel() for m in masters)
+    fit = {
+        "kind": "lora",
+        "method": arm.method,
+        "noise_strength": arm.noise_strength,
+        "status": "rejected_nonfinite" if rejected else "complete",
+        "rejection": rejected,
+        "selected_epoch": best["epoch"],
+        "development_score": best["score"],
+        "selection_metric": metric,
+        "selection": f"maximum mean development {metric} over selection cases and selection arrays after P&V "
+                     "(ties: earlier); test data never used",
+        "epochs_run": hwa.epochs if not rejected else epoch,
+        "maximum_epochs": hwa.epochs,
+        "convergence_review_required": bool(rejected) or best["epoch"] >= 0.8 * hwa.epochs,
+        "history": history,
+        "base_source": base_receipt,
+        "base_unchanged": True,
+        "adapters": {"rank": lifecycle.network.analog_lora.rank, "alpha": lifecycle.network.analog_lora.alpha,
+                     "matrices": 2 * count, "weights": adapter_weights, "learning_rate": arm.learning_rate,
+                     "warmup_fraction": arm.warmup_fraction, "warmup_steps": warmup, "steps": step,
+                     "planned_steps": total, "micro_examples": LORA_MICRO_EXAMPLES,
+                     "schedule": "linear warm-up then cosine decay to zero",
+                     "objective": lifecycle.hwa.objective, "training_examples": examples},
+    }
+    return {"model": best["model"], "fit": fit}

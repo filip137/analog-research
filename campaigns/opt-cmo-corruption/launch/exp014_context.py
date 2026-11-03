@@ -14,8 +14,8 @@ from exp1e_prepare_host import command, checked_input, sha256, DEFAULT_BASE
 from exp1f_cdt_lr import service, transition
 from exp3_lora import thresholds
 from slice_campaign import write_frozen
-from experiments.artifacts import atomic_write_json
-from workflow.lifecycle import parse_lifecycle, verify_provenance
+from core.artifacts import atomic_write_json
+from ebl.schema.lifecycle import parse_lifecycle, verify_provenance
 
 PREFIX = 'opt125m-cmo-l6-exp014-context'
 PHASE = 'opt-cmo-exp014-context-20261012'
@@ -124,7 +124,7 @@ def make_cache(lc,base,key):
 
 
 def inputs_for(lc,array,cache,base):
-    from experiments.cifar_crossbar.runtime import load
+    from core.tensor_io_native import load
     ref=json.loads(CATALOG.read_text())[str(array)]
     paths={k:Path(v['path']) for k,v in ref['artifacts'].items()}
     # Inputs copied to this isolated worker are immutable byte-identical files.
@@ -163,7 +163,7 @@ def readiness(base):
     lc=canary();cache=make_cache(lc,base,'canary')
     inputs=inputs_for(lc,271001,cache,base);root,raw=recovery_plan(lc,271001,inputs,base)
     [run]=execute(root,raw,base)
-    command([sys.executable,'-m','campaigns.recovery_collect','validate',str(root/'runs'/raw['campaign_id']),
+    command([sys.executable,'-m','ebl.execution.recovery_collect','validate',str(root/'runs'/raw['campaign_id']),
              '--inputs',str(root/'inputs.json')],cwd=ROOT)
     rows=json.loads((run/'measurements.json').read_text());learn=next(r for r in rows if r['weights']=='learn')
     metrics=[json.loads(line) for line in (run/'metrics.jsonl').read_text().splitlines()]
@@ -203,8 +203,8 @@ def prepare_host(host,base):
                   '--output-dir',str(root/'runs'),'--resume','--fail-fast']})
         native=root/'runs'/raw['campaign_id']; files=[manifest,worker,root/'inputs.json',Path(raw['stages'][0]['config']),CATALOG]
         placement={'workdir':str(ROOT),'run_dir':str(receipt),'gpu_models':['5090'],
-          'argv':[sys.executable,'-m','campaigns.tmux_worker','bridge','--spec',str(worker)],
-          'validate_argv':[sys.executable,'-m','campaigns.recovery_collect','validate',str(native),'--inputs',str(root/'inputs.json')],
+          'argv':[sys.executable,'-m','ebl.execution.tmux_worker','bridge','--spec',str(worker)],
+          'validate_argv':[sys.executable,'-m','ebl.execution.recovery_collect','validate',str(native),'--inputs',str(root/'inputs.json')],
           'campaign_python':sys.executable,'campaign_worker_spec':str(worker),'campaign_result_root':str(native),
           'recovery_inputs':str(root/'inputs.json'),'recovery_input_contract':inputs,
           'prepared_files':[{'path':str(p),'sha256':sha256(p)} for p in files]+list(inputs['artifacts'].values())}
@@ -228,7 +228,7 @@ def selection(reports):
 
 
 def queue(receipts,evidence,controller):
-    from campaigns.execution_service import validate_manifest
+    from ebl.execution.service import validate_manifest
     hosts={d['host']:d for p in receipts for d in [json.loads(p.read_text())]}
     if set(hosts)!={'trex','loulou'} or len({d['source_revision'] for d in hosts.values()})!=1:
         raise ValueError('Two isolated hosts at one source revision are required')
@@ -286,8 +286,8 @@ def checked_report(label,rows,collection):
 
 
 def collect(queue_config,evidence):
-    from campaigns.recovery_collect import collect as native_collect
-    from campaigns.execution_service import digest
+    from ebl.execution.recovery_collect import collect as native_collect
+    from ebl.execution.service import digest
     label=os.environ['RUN_WATCH_JOB_ID'].removeprefix(PREFIX+'-')
     result=native_collect(queue_config,evidence/'collected');folder=Path(result['collected'])
     report=checked_report(label,json.loads((folder/'measurements.json').read_text()),folder/'collection.json')
@@ -297,11 +297,11 @@ def collect(queue_config,evidence):
         if all(p.exists() for p in screens):
             storage_receipt=evidence/'reviews/trex-final-storage.json'
             if not storage_receipt.exists():
-                from campaigns.execution_service import remote_command
+                from ebl.execution.service import remote_command
                 host=json.loads((evidence/'hosts/trex.json').read_text())
                 placement=host['cases'][0]['placement']
                 measured=remote_command(json.loads(queue_config.read_text()),'trex',
-                    [placement['campaign_python'],'-m','campaigns.execution_service','probe-storage',
+                    [placement['campaign_python'],'-m','ebl.execution.service','probe-storage',
                      host['source'],str(DEFAULT_BASE/'worker-receipts'/host['source_revision'])],cwd=host['source'])
                 if measured['storage_bytes']>35000000000:
                     raise ValueError('Completed trex storage exceeds confirmation reservation')

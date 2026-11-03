@@ -10,14 +10,14 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 import torch
 import torch.nn.functional as F
-from experiments.artifacts import atomic_write_json, content_hash, sha256_file
+from core.artifacts import atomic_write_json, content_hash, sha256_file
 from experiments.mnist_relu.model import BiasFreeReluTeacher
 from experiments.mnist_shared import limited
-from experiments.schema import to_plain_data
-from training.parameters import ParameterBinding
-from training.parameters import DenseWeight
-from training.checkpoint import atomic_torch_save
-from training.ibm_om_standard_crossbar import (
+from core.contracts import to_plain_data
+from core.parameters import ParameterBinding
+from core.parameters import DenseWeight
+from methods.checkpoint import atomic_torch_save
+from hardware.om_crossbar import (
     CROSSBAR_TRAJECTORY_SEED_DERIVATION,
     CrossbarTileSpec,
     IbmOmEffectiveCrossbarPlant,
@@ -29,21 +29,12 @@ from training.ibm_om_standard_crossbar import (
     tensor_sha256,
     validate_population_layout,
 )
-from training.ibm_reram_endpoint_model import IbmReramAcceptedEndpointModel
-from training.ibm_reram_hwa import (
-    IbmReramArrayPopulation,
-    sample_om_array_population_external,
-    save_om_array_population,
-)
-from training.ibm_reram_program_verify import (
-    ControllerSettings,
-    OM_PRESET,
-    PUBLISHED_CORRUPT_PROBABILITY,
-    PUBLISHED_CORRUPT_RANGE,
-    derive_seed,
-    run_program_verify,
-)
-from training.star_targets import build_calibration_binding
+from hardware.devices.endpoints import IbmReramAcceptedEndpointModel
+from hardware.populations import IbmReramArrayPopulation, save_om_array_population
+from ebl.runtime.sampling import sample_om_array_population_external
+from methods.programming.om import ControllerSettings, run_program_verify
+from hardware.devices.om import OM_PRESET, PUBLISHED_CORRUPT_PROBABILITY, PUBLISHED_CORRUPT_RANGE, derive_seed
+from core.star_targets import build_calibration_binding
 
 
 def _sampling_bindings(layout: Iterable[CrossbarTileSpec]) -> tuple[ParameterBinding, ...]:

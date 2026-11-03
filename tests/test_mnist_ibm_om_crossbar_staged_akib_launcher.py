@@ -9,8 +9,8 @@ from types import SimpleNamespace
 import pytest
 
 from experiments.mnist_analog_relu import staged_akib_launcher as launcher
-from experiments.artifacts import sha256_file
-from experiments.artifacts import content_hash
+from core.artifacts import sha256_file
+from core.artifacts import content_hash
 from experiments.mnist_analog_relu.generate_staged_campaign import (
     DEVELOPMENT_PLAN_ID,
     PRODUCTION_PLAN_ID,

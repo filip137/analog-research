@@ -44,8 +44,8 @@ from experiments.mnist_analog_relu.staged_runtime import (
     _validate_resume,
     _validate_selection_receipt,
 )
-from training.ibm_om_standard_crossbar import tensor_sha256
-from training.checkpoint import encode_named_weights, save_encoded_named_weights
+from hardware.om_crossbar import tensor_sha256
+from methods.checkpoint import encode_named_weights, save_encoded_named_weights
 from experiments.mnist_relu.model import BiasFreeReluTeacher
 
 

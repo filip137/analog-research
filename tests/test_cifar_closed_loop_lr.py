@@ -1,7 +1,7 @@
 import copy
 import torch
 import pytest
-from experiments.cifar_crossbar.devices import PulseWriter
+from methods.optimizers.pulse import PulseWriter
 from experiments.cifar_crossbar.closed_loop_lr_updates import UncappedClosedLoopAdam
 from experiments.cifar_crossbar.closed_loop_lr_config import default_config, parse_config
 from experiments.cifar_crossbar.closed_loop_lr_runtime import selected_rates

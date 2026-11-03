@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from training.ibm_reram_endpoint_model import (
+from hardware.devices.endpoints import (
     build_ibm_reram_accepted_endpoint_model,
     sample_ibm_reram_endpoints,
 )

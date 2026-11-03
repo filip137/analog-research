@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, fields
 import math
 from collections.abc import Mapping
-from experiments.schema import RunMode, config_error
+from core.contracts import RunMode, config_error
 
 EXPERIMENT_ID = "cifar_resnet_suffix_recovery.v1"
 

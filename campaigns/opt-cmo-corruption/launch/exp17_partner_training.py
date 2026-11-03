@@ -14,7 +14,7 @@ from exp16_pair_rewrite import (reused_contract, single_stage, VERIFY, SPLITS,
                                 lifecycle as previous_lifecycle)
 from exp1e_prepare_host import command, sha256, DEFAULT_BASE
 from slice_campaign import write_frozen
-from workflow.lifecycle import parse_lifecycle
+from ebl.schema.lifecycle import parse_lifecycle
 
 PREFIX = 'opt125m-cmo-l6-exp17-partner-training'
 NOTE = 'campaigns/opt-cmo-corruption/series/002-onchip-recovery/experiments/exp-017-partner-training.md'
@@ -75,8 +75,8 @@ def prepare_host(host, base, reused):
                      '--output-dir', str(root/'runs'), '--resume', '--fail-fast']})
         cases.append({'id': jid, 'array_seed': array, 'lifecycle_sha256': lc.digest(), 'dry_run_passed': True,
             'placement': {'workdir': str(ROOT), 'run_dir': str(receipt), 'gpu_models': ['5090'],
-                'argv': [sys.executable, '-m', 'campaigns.tmux_worker', 'bridge', '--spec', str(worker)],
-                'validate_argv': [sys.executable, '-m', 'campaigns.recovery_collect', 'validate', str(native),
+                'argv': [sys.executable, '-m', 'ebl.execution.tmux_worker', 'bridge', '--spec', str(worker)],
+                'validate_argv': [sys.executable, '-m', 'ebl.execution.recovery_collect', 'validate', str(native),
                                   '--inputs', str(root/'inputs.json')],
                 'campaign_python': sys.executable, 'campaign_worker_spec': str(worker),
                 'campaign_result_root': str(native), 'recovery_inputs': str(root/'inputs.json'),
@@ -87,7 +87,7 @@ def prepare_host(host, base, reused):
 
 
 def queue(receipts, evidence, controller):
-    from campaigns.execution_service import validate_manifest
+    from ebl.execution.service import validate_manifest
     from exp3_lora import thresholds
     hosts = {h['host']: h for p in receipts for h in [json.loads(p.read_text())]}
     if len({h['source_revision'] for h in hosts.values()}) != 1 or len({h['source'] for h in hosts.values()}) != 1:
@@ -160,7 +160,7 @@ def checked_report(array, rows, previous):
 
 
 def review(evidence):
-    from campaigns.recovery_collect import checked
+    from ebl.execution.recovery_collect import checked
     previous = json.loads((evidence/'reference/exp016-summary.json').read_text())
     reports = []
     for array in ARRAYS:
@@ -207,10 +207,10 @@ def review(evidence):
 
 
 def collect(queue_config, evidence):
-    from campaigns.recovery_collect import collect as native_collect
-    from experiments.artifacts import atomic_write_json
+    from ebl.execution.recovery_collect import collect as native_collect
+    from core.artifacts import atomic_write_json
     from exp1f_cdt_lr import service, transition
-    from campaigns.execution_service import digest
+    from ebl.execution.service import digest
     array = int(os.environ['RUN_WATCH_JOB_ID'].split('-')[-1])
     if array not in ARRAYS: raise ValueError('Unexpected array')
     result = native_collect(queue_config, evidence/'collected'); folder = Path(result['collected'])

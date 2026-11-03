@@ -28,7 +28,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import torch
 
-from experiments.artifacts import atomic_write_json, content_hash, sha256_file
+from core.artifacts import atomic_write_json, content_hash, sha256_file
 from experiments.mnist_analog_relu.generate_staged_campaign import (
     ADAM_GRID,
     CONFIG_ROOT,
@@ -54,9 +54,9 @@ from experiments.mnist_analog_relu.staged_config import (
     parse_staged_crossbar_config,
 )
 from experiments.study_workflow import load_study_plan, load_study_record
-from training.ibm_reram_hwa import load_om_array_population
-from training.ibm_reram_program_verify import OM_PRESET
-from training.ibm_om_standard_crossbar import tensor_sha256
+from hardware.populations import load_om_array_population
+from hardware.devices.om import OM_PRESET
+from hardware.om_crossbar import tensor_sha256
 
 
 ROOT = Path(__file__).resolve().parents[2]

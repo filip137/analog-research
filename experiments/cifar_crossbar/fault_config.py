@@ -2,7 +2,7 @@
 
 from dataclasses import asdict, dataclass, fields
 import math
-from experiments.schema import RunMode
+from core.contracts import RunMode
 
 EXPERIMENT_ID = "cifar_pcm_fault_recovery.v1"
 METHODS = ("none", "calibration", "rewrite", "onchip_weights", "onchip_calibration")

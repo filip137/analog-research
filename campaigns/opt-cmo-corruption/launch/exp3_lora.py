@@ -15,9 +15,9 @@ sys.path.insert(0,str(ROOT)); sys.path.insert(0,str(Path(__file__).resolve().par
 from exp1e_prepare_host import command, checked_input, sha256, DEFAULT_BASE
 from exp1f_cdt_lr import service, transition
 from slice_campaign import write_frozen
-from workflow.lifecycle import parse_lifecycle, verify_provenance
-from workflow.networks.opt_mlp import PINNED
-from experiments.artifacts import atomic_write_json
+from ebl.schema.lifecycle import parse_lifecycle, verify_provenance
+from networks.opt import PINNED
+from core.artifacts import atomic_write_json
 
 PHASE='opt-cmo-exp3-lora-20261012'
 PREFIX='opt125m-cmo-l6-exp3-lora'
@@ -69,7 +69,7 @@ def input_contract(base, reused):
         raise ValueError('Wrong physical deployment conversion')
     expected['device_state']=portable['sha256']
     artifacts={role:checked_input(path,expected[role]) for role,path in paths.items()}
-    from experiments.cifar_crossbar.runtime import load
+    from core.tensor_io_native import load
     p0=load(paths['device_state'])
     if p0['materialized_from_sha256']!=portable['parent_sha256'] or p0['source_sha256']!='86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028':
         raise ValueError('Wrong frozen source or P0 parent')
@@ -112,8 +112,8 @@ def prepare_host(host,base,reused):
         files=[cfg,manifest,worker,Path(stage['config']),inputs_path]
         cases.append({'id':lc.lifecycle_id,'label':label,'lifecycle_sha256':lc.digest(),'dry_run_passed':True,
             'budget_seconds':budget,'expected_seconds':expected,'placement':{'workdir':str(ROOT),'run_dir':str(receipt_root),
-            'gpu_models':['5090' if host in ('loulou','fifi') else '3090'],'argv':[python,'-m','campaigns.tmux_worker','bridge','--spec',str(worker)],
-            'validate_argv':[python,'-m','campaigns.recovery_collect','validate',str(native_root),'--inputs',str(inputs_path)],
+            'gpu_models':['5090' if host in ('loulou','fifi') else '3090'],'argv':[python,'-m','ebl.execution.tmux_worker','bridge','--spec',str(worker)],
+            'validate_argv':[python,'-m','ebl.execution.recovery_collect','validate',str(native_root),'--inputs',str(inputs_path)],
             'campaign_python':python,'campaign_worker_spec':str(worker),'campaign_result_root':str(native_root),
             'recovery_inputs':str(inputs_path),'recovery_input_contract':inputs,
             'prepared_files':[{'path':str(p),'sha256':sha256(p)} for p in files]+list(inputs['artifacts'].values())}})
@@ -151,13 +151,13 @@ def queue(receipts,output,controller,evidence):
         'budgets':{'gpu_hours':7.9,'storage_bytes':38000000000,'window_seconds':24000},'cases':cases,
         'storage_roots':[{'target':h,'path':data['source']} for h,data in hosts.items()] +
             [{'target':h,'path':str(Path(data['base'])/'worker-receipts'/data['source_revision'])} for h,data in hosts.items()]}
-    from campaigns.execution_service import validate_manifest
+    from ebl.execution.service import validate_manifest
     validate_manifest(manifest);write_frozen(output/'campaign.json',manifest)
     return {'jobs':jobs,'manifest':str(output/'campaign.json')}
 
 
 def gate(queue_config,evidence,name,payload):
-    from campaigns.execution_service import digest
+    from ebl.execution.service import digest
     manifest=json.loads((evidence/'prepared/queue/campaign.json').read_text())
     path=evidence/'readiness'/(name+'.json')
     write_frozen(path,{'manifest_sha256':digest(manifest),'passed':True,**payload})
@@ -196,7 +196,7 @@ def lr_followup(queue_config, evidence, report, label):
     if not policy_path.exists():
         return {'enabled':False}
     policy = json.loads(policy_path.read_text())
-    from campaigns.execution_service import digest
+    from ebl.execution.service import digest
     manifest = json.loads((evidence/'prepared/queue/campaign.json').read_text())
     if (policy.get('version') != 1 or policy.get('manifest_sha256') != digest(manifest)
             or policy.get('user_authorization') != 'if the loss worsens tune the lr'
@@ -229,7 +229,7 @@ def reconcile_followups(queue_config,evidence):
 
 
 def collect(queue_config,evidence):
-    from campaigns.recovery_collect import collect as native_collect
+    from ebl.execution.recovery_collect import collect as native_collect
     label=os.environ['RUN_WATCH_JOB_ID'].removeprefix(PREFIX+'-')
     if label not in labels(): raise ValueError('Unexpected completion job')
     started=time.monotonic(); result=native_collect(queue_config,evidence/'collected'); elapsed=time.monotonic()-started

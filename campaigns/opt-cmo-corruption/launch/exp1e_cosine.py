@@ -18,8 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from exp1e_development import duration_lifecycle, NOTE
 from exp1e_prepare_host import command, checked_input, sha256, DEFAULT_BASE
 from slice_campaign import build_slice, write_frozen
-from workflow.lifecycle import parse_lifecycle, stage_selections
-from workflow.networks.opt_mlp import PINNED
+from ebl.schema.lifecycle import parse_lifecycle, stage_selections
+from networks.opt import PINNED
 
 ID = "opt125m-cmo-l6-exp1e"
 PHASE = "opt-cmo-exp1e-cosine-20261010"
@@ -96,7 +96,7 @@ def prepare_host(base):
         if parse_lifecycle(json.loads(config.read_text())).digest() != lc.digest():
             raise ValueError("Frozen lifecycle differs from the declared design")
         plan = ROOT / "results/lifecycles" / lc.lifecycle_id / "plan"
-        command([python, "-m", "workflow", "plan", str(config), "--teacher-weights", str(teacher),
+        command([python, "-m", "ebl", "lifecycle", "plan", str(config), "--teacher-weights", str(teacher),
                  "--output", str(plan), "--device", "cuda:0", "--cpu-threads", "1", "--python", python], cwd=ROOT, env=env)
         for arm in lc.hwa.arms:
             smoke = scope is not None
@@ -125,8 +125,8 @@ def prepare_host(base):
             cases.append({"id": case_id, "arm": arm.arm_id, "scope": arm.scope, "smoke": smoke,
                 "expected_seconds": expected, "budget_seconds": budget, "lifecycle_sha256": lc.digest(),
                 "placement": {"workdir": str(ROOT), "run_dir": str(worker_root),
-                    "argv": [python, "-m", "campaigns.tmux_worker", "bridge", "--spec", str(worker_path)],
-                    "validate_argv": [python, "-m", "campaigns.lifecycle_collect", "validate", str(native_root)],
+                    "argv": [python, "-m", "ebl.execution.tmux_worker", "bridge", "--spec", str(worker_path)],
+                    "validate_argv": [python, "-m", "ebl.execution.lifecycle_collect", "validate", str(native_root)],
                     "campaign_python": python, "campaign_worker_spec": str(worker_path),
                     "campaign_result_root": str(native_root), "gpu_models": ["5090"],
                     "prepared_files": [{"path": str(p), "sha256": sha256(p)} for p in
@@ -180,14 +180,14 @@ def queue(receipts, output):
         "storage_roots": [{"target": host, "path": info["source"]} for host, info in hosts.items()] +
             [{"target": host, "path": str(Path(info["base"]) / "worker-receipts" / info["source_revision"])} for host, info in hosts.items()],
         "cases": cases}
-    from campaigns.execution_service import validate_manifest
+    from ebl.execution.service import validate_manifest
     validate_manifest(manifest)
     write_frozen(output / "campaign.json", manifest)
     return {"manifest": str(output / "campaign.json"), "jobs": jobs, "submitted": False}
 
 
 def collect(queue_config, output):
-    from campaigns.lifecycle_collect import collect as native_collect
+    from ebl.execution.lifecycle_collect import collect as native_collect
     result = native_collect(queue_config, output)
     rows = json.loads((output / "deployments.json").read_text())
     if len(rows) == 210:

@@ -10,9 +10,9 @@ import torch
 import torch.nn.functional as F
 from torchvision.datasets import CIFAR10
 
-from experiments.artifacts import atomic_write_json, sha256_file
+from core.artifacts import atomic_write_json, sha256_file
 from experiments.mnist_relu.model import BiasFreeReluTeacher
-from training.checkpoint import atomic_torch_save
+from methods.checkpoint import atomic_torch_save
 
 ROOT = Path(__file__).resolve().parents[2]
 

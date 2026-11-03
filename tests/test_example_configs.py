@@ -1,7 +1,8 @@
 from pathlib import Path
 import json
 import pytest
-from experiments import get_definition, resolve_experiment_config, to_plain_data
+from ebl.registry import get_definition, resolve_experiment_config
+from core.contracts import to_plain_data
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIGS = [p for p in sorted((ROOT / "examples").rglob("*.json"))

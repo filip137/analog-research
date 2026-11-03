@@ -4,11 +4,14 @@ from types import SimpleNamespace
 import pytest
 import torch
 from experiments.cifar_crossbar.sweep_config import SweepSpec, default_config, parse_config, SOURCES, cases
-from experiments.cifar_crossbar.sweep_devices import (binding_seed, make_array, combined_om, MixedOmSampler,
-    CompactCheckpoints, expand_checkpoint)
-from experiments.cifar_crossbar.model import CifarResNet32, CrossbarSuffix
-from experiments.cifar_crossbar.devices import clone_cpu
-from experiments.cifar_crossbar.runtime import save, load, evaluate
+from core.seeds import binding_seed
+from experiments.cifar_crossbar.sweep_devices import make_array, CompactCheckpoints, expand_checkpoint
+from hardware.population_binding import combined_om
+from methods.hwa_sampling_om import MixedOmSampler
+from networks.cifar_model import CifarResNet32, CrossbarSuffix
+from core.tensor_io import clone_cpu
+from core.tensor_io_native import save, load
+from networks.cifar_metrics import evaluate
 from experiments.cifar_crossbar.full_epoch_runtime import trajectory, restore_endpoint
 
 @pytest.fixture(autouse=True)

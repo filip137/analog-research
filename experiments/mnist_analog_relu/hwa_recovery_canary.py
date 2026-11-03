@@ -23,7 +23,7 @@ import time
 from typing import Any, Callable, Mapping, Sequence
 from uuid import uuid4
 
-from experiments.artifacts import atomic_write_json, sha256_file
+from core.artifacts import atomic_write_json, sha256_file
 from experiments.mnist_analog_relu.generate_hwa_recovery_canary import (
     ASSIGNMENT_SEED,
     CHECKPOINT_POLICY,
@@ -39,7 +39,7 @@ from experiments.mnist_analog_relu.generate_hwa_recovery_canary import (
 from experiments.mnist_analog_relu.staged_artifacts import load_device_state
 from experiments.mnist_analog_relu.staged_config import parse_staged_crossbar_config
 from experiments.study_workflow import register_federated_runs
-from training.ibm_om_standard_crossbar import tensor_sha256
+from hardware.om_crossbar import tensor_sha256
 
 
 ROOT = Path(__file__).resolve().parents[2]

@@ -11,15 +11,17 @@ import json
 import pytest
 import torch
 
-from experiments.artifacts import sha256_file
-from experiments.cifar_crossbar.runtime import load
-from experiments.schema import ConfigError
-from workflow import devices as device_stage
-from workflow import runtime
-from workflow.__main__ import main as workflow_main
-from workflow.lifecycle import BASE_SOURCE, AnalogLora, DefectCase, parse_lifecycle, stage_inputs, stage_selections
-from workflow.networks import opt_mlp
-from campaigns.runner import _validate_run_result
+from core.artifacts import sha256_file
+from core.tensor_io_native import load
+from core.contracts import ConfigError
+import hardware.arrays as device_stage
+import ebl.runtime.lifecycle as runtime
+from ebl.lifecycle.cli import main as workflow_main
+from ebl.schema.lifecycle import BASE_SOURCE, parse_lifecycle, stage_inputs, stage_selections
+from networks.config import AnalogLora
+from hardware.config import DefectCase
+import networks.opt as opt_mlp
+from ebl.execution.runner import _validate_run_result
 from test_workflow_cmo import NAMESPACE, case_doc, cmo_inputs, small  # noqa: F401  (fixture)
 from test_workflow_opt import tiny_teacher, tokens
 from test_workflow_tasks import tiny_task
@@ -186,8 +188,8 @@ def test_lora_lifecycle_trains_adapters_on_the_frozen_base_and_deploys_targeted_
     assert identities["random_50000ppm"]["failed_devices"] == (identities["random_50000ppm_base"]["failed_devices"]
                                                                + identities["random_50000ppm_adapter"]["failed_devices"])
     assert all(row["replay_exact"] and "task_test" in row["final"] for row in rows.values())
-    from workflow.lifecycle import Execution
-    from workflow.plan import build_plan
+    from core.execution import Execution
+    from ebl.lifecycle.plan import build_plan
     monkeypatch.setattr(opt_mlp, "pinned_digest", lambda network: sha256_file(weights))
     plan = dict(lc=lc, teacher_weights=weights, execution=Execution("cpu", 1, False), python=weights)
     with pytest.raises(ValueError, match="pinned LoRA base"):

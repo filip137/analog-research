@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from workflow.lifecycle import parse_lifecycle, provenance, verify_provenance
+from ebl.schema.lifecycle import parse_lifecycle, provenance, verify_provenance
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("exp1g_four_arm", ROOT / "campaigns/opt-cmo-corruption/launch/exp1g_four_arm.py")

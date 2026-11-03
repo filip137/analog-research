@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from experiments.definitions import parse_experiment_config
+from ebl.registry import parse_experiment_config
 from experiments.mnist_relu.model import BiasFreeReluTeacher
 from experiments.mnist_relu.runtime import (
     _device,
@@ -15,7 +15,7 @@ from experiments.mnist_relu.runtime import (
     _teacher_acceptance_gate,
     _validate_request,
 )
-from experiments.schema import ConfigError, RunMode
+from core.contracts import ConfigError, RunMode
 
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -11,11 +11,12 @@ from pathlib import Path
 import pytest
 import torch
 
-from workflow import data as data_stage
-from workflow import deployment, runtime
-from workflow import devices as device_stage
-from workflow.__main__ import main as workflow_main
-from workflow.lifecycle import StageSelection, parse_lifecycle
+import networks.data as data_stage
+import methods.deployment as deployment
+import ebl.runtime.lifecycle as runtime
+import hardware.arrays as device_stage
+from ebl.lifecycle.cli import main as workflow_main
+from ebl.schema.lifecycle import StageSelection, parse_lifecycle
 from workflow_helpers import (
     lifecycle_document,
     network_for,

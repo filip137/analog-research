@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from experiments.artifacts import content_hash, sha256_file
+from core.artifacts import content_hash, sha256_file
 from experiments.cifar_crossbar.config import default_config
 from experiments.cifar_crossbar.reproduce import ArtifactIndex, recipe
 

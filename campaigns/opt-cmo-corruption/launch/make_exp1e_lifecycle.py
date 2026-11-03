@@ -7,7 +7,7 @@ Arms (exp-005): pretrained; the reused analog-scope sources standard_hwa and cdt
 (opt125m-cmo-l6-exp1c-decay) and standard_hwa_9pct (opt125m-cmo-l6-exp1c-decay-9pct); and the
 whole-model standard_hwa_model_<tag> (exactly the Stage 1e-a arm, so its source is reused),
 standard_hwa_9pct_model_<tag> and cdt_random_3pct_model_<tag>. Every other section is the
-Stage 1e-a lifecycle's, so all reused sources pass provenance. Run `python -m workflow check` after.
+Stage 1e-a lifecycle's, so all reused sources pass provenance. Run `python -m ebl lifecycle check` after.
 """
 
 import copy

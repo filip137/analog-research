@@ -14,7 +14,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[5]
 sys.path[:0] = [str(ROOT), str(ROOT / 'campaigns/opt-cmo-corruption/launch')]
 import exp16_pair_rewrite as experiment
-from campaigns.recovery_collect import checked
+from ebl.execution.recovery_collect import checked
 
 DOMAINS = ('transfer_generated', 'transfer_wikitext')
 

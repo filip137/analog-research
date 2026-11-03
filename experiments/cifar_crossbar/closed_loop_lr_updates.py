@@ -1,6 +1,6 @@
 """Historical accumulated-target OM Adam with only the total cap removed."""
 import torch
-from experiments.cifar_crossbar.devices import PulseWriter
+from methods.optimizers.pulse import PulseWriter
 
 
 class UncappedClosedLoopAdam(PulseWriter):

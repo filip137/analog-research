@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path[:0] = [str(ROOT), str(Path(__file__).resolve().parent)]
 from exp16_pair_rewrite import HOLD_ARMS, RECOVERY_ARM, lifecycle as exp16_lifecycle
 from slice_campaign import write_frozen
-from workflow.lifecycle import parse_lifecycle
+from ebl.schema.lifecycle import parse_lifecycle
 
 LIFECYCLE_ID = 'opt125m-cmo-l6-fp32-direct-onchip'
 NOTE = 'campaigns/pilots/20261019-fp32-direct-onchip.md'

@@ -5,21 +5,16 @@ from pathlib import Path
 
 import torch
 
-from campaigns.runner import _validate_run_result
+from ebl.execution.runner import _validate_run_result
 from ebl.cli import TrainRequest
-from experiments.cifar_crossbar.model import CifarResNet32, CrossbarSuffix
-from experiments.cifar_crossbar.sweep_devices import binding_seed
-from experiments.definitions import get_definition
-from workflow import program_verify, runtime
-from workflow.lifecycle import (
-    EXPERIMENT_ID,
-    DefectCase,
-    Execution,
-    StageConfig,
-    parse_lifecycle,
-    stage_inputs,
-    stage_selections,
-)
+from networks.cifar_model import CifarResNet32, CrossbarSuffix
+from core.seeds import binding_seed
+from ebl.registry import get_definition
+import methods.programming.lifecycle as program_verify
+import ebl.runtime.lifecycle as runtime
+from ebl.schema.lifecycle import EXPERIMENT_ID, StageConfig, parse_lifecycle, stage_inputs, stage_selections
+from core.execution import Execution
+from hardware.config import DefectCase
 
 LIFECYCLES = Path(__file__).resolve().parents[1] / "campaigns/cifar-crossbar-hwa-recovery/lifecycles"
 GMAX = DefectCase("gmax", 50000)

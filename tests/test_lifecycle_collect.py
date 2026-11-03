@@ -8,13 +8,14 @@ import sys
 
 import pytest
 
-from campaigns import lifecycle_collect as collector
-from campaigns.runner import _campaign_contract_record
-from campaigns.schema import CampaignSpec
-from experiments.artifacts import sha256_file
+import ebl.execution.lifecycle_collect as collector
+from ebl.execution.runner import _campaign_contract_record
+from ebl.execution.schema import CampaignSpec
+from core.artifacts import sha256_file
 from test_workflow_cmo import cmo_inputs, model_arm, small
-from workflow.lifecycle import stage_selections, stage_inputs, StageConfig, Execution, parse_lifecycle
-from workflow.runtime import validate_source_fit
+from ebl.schema.lifecycle import stage_selections, stage_inputs, StageConfig, parse_lifecycle
+from core.execution import Execution
+from ebl.schema.source_fit import validate_source_fit
 from workflow_helpers import run_stage
 
 ROOT = Path(__file__).resolve().parents[1]

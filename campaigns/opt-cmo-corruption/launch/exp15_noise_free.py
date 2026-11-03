@@ -18,8 +18,8 @@ from exp1f_cdt_lr import service, transition
 from exp3_lora import thresholds
 from exp7_recovery_regimes import ARRAYS, CATALOG, TAGS, lifecycle as exp13_lifecycle
 from slice_campaign import write_frozen
-from experiments.artifacts import atomic_write_json
-from workflow.lifecycle import parse_lifecycle, verify_provenance
+from core.artifacts import atomic_write_json
+from ebl.schema.lifecycle import parse_lifecycle, verify_provenance
 
 PREFIX = 'opt125m-cmo-l6-exp15-noise-free'
 PHASE = 'opt-cmo-exp15-noise-free-20261013'
@@ -99,7 +99,7 @@ def eligible(label, host):
 
 
 def input_contract(base, reused, label):
-    from experiments.cifar_crossbar.runtime import load
+    from core.tensor_io_native import load
     tag, array, _ = parts(label); group = f'{tag}-{array}'
     ref = json.loads(CATALOG.read_text())[group]; lc = lifecycle(label)
     receipt = json.loads((reused/group/'portable.json').read_text())
@@ -164,8 +164,8 @@ def prepare_host(host, base, reused):
         cases.append({'id':jid,'label':label,'lifecycle_sha256':lc.digest(),'dry_run_passed':True,
             'expected_seconds':EXPECTED_SECONDS[host],'budget_seconds':4200,
             'placement':{'workdir':str(ROOT),'run_dir':str(receipt),'gpu_models':['5090' if host in RTX5090_HOSTS else '3090'],
-                'argv':[sys.executable,'-m','campaigns.tmux_worker','bridge','--spec',str(worker)],
-                'validate_argv':[sys.executable,'-m','campaigns.recovery_collect','validate',str(native),'--inputs',str(inputs_path)],
+                'argv':[sys.executable,'-m','ebl.execution.tmux_worker','bridge','--spec',str(worker)],
+                'validate_argv':[sys.executable,'-m','ebl.execution.recovery_collect','validate',str(native),'--inputs',str(inputs_path)],
                 'campaign_python':sys.executable,'campaign_worker_spec':str(worker),'campaign_result_root':str(native),
                 'recovery_inputs':str(inputs_path),'recovery_input_contract':inputs,
                 'prepared_files':[{'path':str(p),'sha256':sha256(p)} for p in files]+list(inputs['artifacts'].values())}})
@@ -187,7 +187,7 @@ def campaign_manifest(worker, evidence, revision):
            'storage_roots':[{'target':h,'path':str(worker)} for h in HOSTS] +
              [{'target':h,'path':str(DEFAULT_BASE/'worker-receipts'/revision)} for h in HOSTS] +
              [{'target':'local','path':str(evidence)}]}
-    from campaigns.execution_service import validate_manifest
+    from ebl.execution.service import validate_manifest
     validate_manifest(doc)
     return doc
 
@@ -340,7 +340,7 @@ def write_units(units, path):
 
 
 def gate(queue_config, evidence, name, payload):
-    from campaigns.execution_service import digest
+    from ebl.execution.service import digest
     manifest = json.loads((evidence/'prepared/queue/campaign.json').read_text())
     path = evidence/'readiness'/(name+'.json')
     write_frozen(path, {'manifest_sha256':digest(manifest),'passed':True,**payload})
@@ -348,7 +348,7 @@ def gate(queue_config, evidence, name, payload):
 
 
 def collect(queue_config, evidence):
-    from campaigns.recovery_collect import collect as native_collect
+    from ebl.execution.recovery_collect import collect as native_collect
     global EXP13
     EXP13 = evidence.parent/'opt125m-cmo-l6-exp7-recovery-regimes'
     label = os.environ['RUN_WATCH_JOB_ID'].removeprefix(PREFIX+'-'); parts(label)

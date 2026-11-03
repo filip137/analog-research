@@ -2,7 +2,7 @@
 
 usage: python exp1_decision.py <deployments.json> [<deployments.json> ...]
 
-The input is the `deployments.json` written by `python -m workflow collect` for
+The input is the `deployments.json` written by `python -m ebl lifecycle collect` for
 each Experiment 1 lifecycle (stdlib only). Rule, as frozen in exp-001:
 
 - Unit: one assignment x one stuck-device rate; never pooled across rates or sizes.

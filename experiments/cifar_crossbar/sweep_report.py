@@ -2,7 +2,7 @@
 import argparse,csv,json,statistics,math
 from collections import defaultdict
 from pathlib import Path
-from experiments.artifacts import atomic_write_json,sha256_file
+from core.artifacts import atomic_write_json,sha256_file
 from experiments.cifar_crossbar.sweep_config import SweepSpec,SOURCES,cases
 from experiments.cifar_crossbar.hwa_fault_runtime import case_name
 from experiments.cifar_crossbar.fault_config import METHODS

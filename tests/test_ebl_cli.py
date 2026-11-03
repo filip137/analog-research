@@ -388,7 +388,7 @@ def test_campaign_uses_lazy_default_runner(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    import campaigns.runner
+    import ebl.execution.runner
 
     manifest = _write_campaign_manifest(tmp_path)
     seen = []
@@ -397,7 +397,7 @@ def test_campaign_uses_lazy_default_runner(
         seen.append((spec, options))
         return {"base_train": {"status": "dry_run"}}
 
-    monkeypatch.setattr(campaigns.runner, "run_campaign", run_campaign)
+    monkeypatch.setattr(ebl.execution.runner, "run_campaign", run_campaign)
     result = main(
         [
             "campaign",

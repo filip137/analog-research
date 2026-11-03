@@ -5,12 +5,12 @@ import json
 import pytest
 import torch
 
-from experiments.cifar_crossbar.runtime import load
-from experiments.schema import ConfigError
-from training.reram_cmo import CmoMatrix, HALF_RANGE_US
-from workflow import program_verify
-from workflow.lifecycle import parse_lifecycle
-from workflow.onchip import ThresholdedWriteAdam
+from core.tensor_io_native import load
+from core.contracts import ConfigError
+from hardware.devices.cmo import CmoMatrix, HALF_RANGE_US
+import methods.programming.lifecycle as program_verify
+from ebl.schema.lifecycle import parse_lifecycle
+from methods.onchip import ThresholdedWriteAdam
 from test_workflow_cmo import cmo_inputs, case_doc, small, template
 from test_workflow_fault_rewrite import arms, VERIFY_PAIR
 from workflow_helpers import run_lifecycle

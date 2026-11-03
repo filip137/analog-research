@@ -9,7 +9,7 @@ from pathlib import Path
 from statistics import fmean, pstdev
 from typing import Any, Iterable, Mapping
 
-from experiments.artifacts import atomic_write_json
+from core.artifacts import atomic_write_json
 from experiments.mnist_analog_relu.staged_config import (
     ADAM_LEARNING_RATE_GRID,
     ADAM_PULSE_CAP_GRID,

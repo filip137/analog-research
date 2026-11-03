@@ -10,13 +10,14 @@ from pathlib import Path
 import pytest
 import torch
 
-from experiments.cifar_crossbar.runtime import load
-from experiments.schema import ConfigError
-from training import reram_cmo as cmo
-from training.reram_cmo import ACTIVE, REFERENCE, CmoMatrix
-from workflow import deployment, program_verify
-from workflow import devices as device_stage
-from workflow.lifecycle import parse_lifecycle
+from core.tensor_io_native import load
+from core.contracts import ConfigError
+import hardware.devices.cmo as cmo
+from hardware.devices.cmo import ACTIVE, REFERENCE, CmoMatrix
+import methods.deployment as deployment
+import methods.programming.lifecycle as program_verify
+import hardware.arrays as device_stage
+from ebl.schema.lifecycle import parse_lifecycle
 from test_workflow_cmo import case_doc, cmo_inputs, mlp_layout, scenario, small, template, NAMESPACE
 from test_workflow_opt import tiny_teacher
 from workflow_helpers import run_lifecycle

@@ -22,10 +22,10 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from exp1e_prepare_host import command, checked_input, sha256, DEFAULT_BASE
 from slice_campaign import build_slice, write_frozen
-from experiments.artifacts import atomic_write_json
-from workflow.lifecycle import parse_lifecycle, provenance, verify_provenance
-from workflow.networks.opt_mlp import PINNED
-from workflow.runtime import validate_source_fit
+from core.artifacts import atomic_write_json
+from ebl.schema.lifecycle import parse_lifecycle, provenance, verify_provenance
+from networks.opt import PINNED
+from ebl.schema.source_fit import validate_source_fit
 
 PHASE = "opt-cmo-exp1f-cdt-lr-20261011"
 PREFIX = "opt125m-cmo-l6-exp1f-cdt"
@@ -88,7 +88,7 @@ def deployment_manifest(plan_path, source_path):
             stage["depends_on"] = [d for d in stage["depends_on"] if d != "hwa__" + ARM]
         kept.append(stage)
     raw["stages"] = kept
-    from campaigns.schema import CampaignSpec
+    from ebl.execution.schema import CampaignSpec
     CampaignSpec.parse(raw, base_dir=plan_path.parent)
     return raw
 
@@ -113,7 +113,7 @@ def prepare_host(host, base):
             raise ValueError("Frozen lifecycle changed")
         case_root = ROOT / "results/lifecycles" / lc.lifecycle_id
         plan = case_root / "plan"
-        command([python, "-m", "workflow", "plan", str(config), "--teacher-weights", str(teacher), "--output", str(plan),
+        command([python, "-m", "ebl", "lifecycle", "plan", str(config), "--teacher-weights", str(teacher), "--output", str(plan),
                  "--device", "cuda:0", "--cpu-threads", "1", "--python", python], cwd=ROOT, env=dict(os.environ, **env))
         manifest_path = case_root / ("campaign-deployment.json" if mode == "transfer" else "campaign-training.json")
         if mode == "transfer":
@@ -145,8 +145,8 @@ def prepare_host(host, base):
         prepared = [config, worker_path, dry_manifest] + [Path(s["config"]) for s in manifest["stages"]]
         cases.append({"id": lc.lifecycle_id, "label": label, "mode": mode, "lifecycle_sha256": lc.digest(), "dry_run_passed": True,
             "budget_seconds": budget, "expected_seconds": expected, "placement": {"workdir": str(ROOT), "run_dir": str(worker_root),
-            "argv": [python, "-m", "campaigns.tmux_worker", "bridge", "--spec", str(worker_path)],
-            "validate_argv": [python, "-m", "campaigns.lifecycle_collect", "validate", str(native_root),
+            "argv": [python, "-m", "ebl.execution.tmux_worker", "bridge", "--spec", str(worker_path)],
+            "validate_argv": [python, "-m", "ebl.execution.lifecycle_collect", "validate", str(native_root),
                               "--deployment-only" if mode == "transfer" else "--source-only"],
             "campaign_python": python, "campaign_worker_spec": str(worker_path), "campaign_result_root": str(native_root),
             "gpu_models": ["5090"], "prepared_files": [{"path": str(p), "sha256": sha256(p)} for p in prepared]}})
@@ -210,7 +210,7 @@ def queue(receipts, output, controller, evidence):
         "budgets": {"gpu_hours": 6, "storage_bytes": 16000000000, "window_seconds": 21600}, "cases": cases,
         "storage_roots": [{"target": host, "path": h["source"]} for host, h in hosts.items()] +
             [{"target": host, "path": str(Path(h["base"]) / "worker-receipts" / h["source_revision"])} for host, h in hosts.items()]}
-    from campaigns.execution_service import validate_manifest
+    from ebl.execution.service import validate_manifest
     validate_manifest(manifest)
     write_frozen(output / "campaign.json", manifest)
     return {"manifest": str(output / "campaign.json"), "jobs": jobs, "submitted": False}
@@ -288,7 +288,7 @@ def selection(evidence):
 
 
 def service(queue_config, *args):
-    return command([sys.executable, "-m", "campaigns.execution_service", "--queue-config", str(queue_config), *map(str, args)], cwd=ROOT)
+    return command([sys.executable, "-m", "ebl.execution.service", "--queue-config", str(queue_config), *map(str, args)], cwd=ROOT)
 
 
 def control(queue_config, action, job):
@@ -296,7 +296,7 @@ def control(queue_config, action, job):
 
 
 def gate(queue_config, evidence, name, payload):
-    from campaigns.execution_service import digest
+    from ebl.execution.service import digest
     manifest = json.loads((evidence / "prepared/queue/campaign.json").read_text())
     doc = {"manifest_sha256": digest(manifest), "passed": True, **payload}
     path = evidence / "readiness" / (name + ".json")
@@ -420,7 +420,7 @@ def transfer_review(evidence, chosen):
 
 
 def collect(queue_config, evidence):
-    from campaigns.lifecycle_collect import collect as native_collect
+    from ebl.execution.lifecycle_collect import collect as native_collect
     job = os.environ["RUN_WATCH_JOB_ID"]
     transfer = job in {lifecycle(l, "transfer").lifecycle_id for l in RATES}
     if job not in {lifecycle(l, m).lifecycle_id for l, m in definitions()}:

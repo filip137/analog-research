@@ -23,8 +23,8 @@ from transformers import OPTConfig, OPTForCausalLM
 
 ROOT = Path(__file__).resolve().parents[5]
 sys.path.insert(0, str(ROOT))
-from training.reram_cmo import G_MAX_US, G_MIN_US, HALF_RANGE_US, MID_US, STUCK_US
-from workflow.networks.opt_mlp import PINNED
+from hardware.devices.cmo import G_MAX_US, G_MIN_US, HALF_RANGE_US, MID_US, STUCK_US
+from networks.opt import PINNED
 
 RANKS = (4, 16, 64, 256)
 LAYERS = range(6, 12)

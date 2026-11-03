@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import statistics
 
-from experiments.artifacts import atomic_write_json, sha256_file
+from core.artifacts import atomic_write_json, sha256_file
 
 METHODS = ("none", "calibration", "rewrite", "onchip_weights", "onchip_calibration")
 CASES = ("nominal", "open_10000ppm", "gmax_10000ppm", "random_10000ppm")

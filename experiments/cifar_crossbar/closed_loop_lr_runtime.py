@@ -6,16 +6,21 @@ import os
 import time
 import torch
 from torch.nn import functional as F
-from experiments.artifacts import RunStore, atomic_write_json, sha256_file
+from ebl.runtime.store import RunStore
+from core.artifacts import atomic_write_json, sha256_file
 from experiments.cifar_crossbar.closed_loop_lr_config import ClosedLoopLRSpec, LRS, DEV_SEEDS
 from experiments.cifar_crossbar.closed_loop_lr_updates import UncappedClosedLoopAdam
-from experiments.cifar_crossbar.runtime import load, source_model, evaluate
-from experiments.cifar_crossbar.model import CrossbarSuffix, tensor_hash
-from experiments.cifar_crossbar.devices import make_plant
+from core.tensor_io_native import load
+from experiments.cifar_crossbar.runtime import source_model
+from networks.cifar_metrics import evaluate
+from networks.cifar_model import CrossbarSuffix
+from core.tensor_identity import tensor_hash
+from hardware.plants import make_plant
 from experiments.cifar_crossbar.fault_runtime import cache_context, limited_cache
 from experiments.cifar_crossbar.full_epoch_runtime import array_identity, verify_fixed, restore_endpoint
 from experiments.cifar_crossbar.sweep_runtime import configure_runtime
-from experiments.cifar_crossbar.sweep_devices import make_array, combined_om, CompactCheckpoints, expand_checkpoint
+from experiments.cifar_crossbar.sweep_devices import make_array, CompactCheckpoints, expand_checkpoint
+from hardware.population_binding import combined_om
 from experiments.cifar_crossbar.hwa_fault_runtime import case_name
 from experiments.cifar_crossbar.om_open_loop_runtime import save_compressed, verify_inherited_metrics
 

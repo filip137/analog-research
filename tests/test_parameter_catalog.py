@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 import torch
-from training.parameters import DenseWeight, ParameterBinding, ParameterCatalog
+from core.parameters import DenseWeight, ParameterBinding, ParameterCatalog
 
 
 def test_explicit_catalog_supports_extension_groups_and_frozen_parameters():

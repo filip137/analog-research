@@ -10,7 +10,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-from experiments.artifacts import atomic_write_json, sha256_file
+from core.artifacts import atomic_write_json, sha256_file
 from campaigns.cifar10_crossbar import STUDY, TEACHER, TEACHER_SHA256, read
 
 METHODS = ('direct', 'hwa', 'open_loop', 'closed_loop_pv')

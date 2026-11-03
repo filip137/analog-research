@@ -7,7 +7,7 @@ from experiments.cifar_crossbar.fault_config import (
     FaultSpec,
     parse_config as parse_fault,
 )
-from experiments.schema import RunMode
+from core.contracts import RunMode
 
 EXPERIMENT_ID = "cifar_pcm_hwa_comparison.v1"
 

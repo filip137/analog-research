@@ -7,13 +7,14 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from experiments.artifacts import sha256_file
-from experiments.schema import ConfigError
-from training.drift_compensation import METHODS
-from workflow.__main__ import main, summary
-from workflow.lifecycle import parse_lifecycle, StageSelection, Execution
-from workflow.plan import build_plan
-from workflow.networks import family
+from core.artifacts import sha256_file
+from core.contracts import ConfigError
+from methods.calibration.compensation import METHODS
+from ebl.lifecycle.cli import main, summary
+from ebl.schema.lifecycle import parse_lifecycle, StageSelection
+from core.execution import Execution
+from ebl.lifecycle.plan import build_plan
+from networks import family
 from workflow_helpers import run_lifecycle, run_stage
 from test_workflow_cmo import cmo_inputs
 from test_workflow_retention import lifecycle
@@ -21,8 +22,8 @@ from test_workflow_retention import lifecycle
 
 def test_shared_teacher_evaluation_exactly_matches_individual_methods():
     from test_workflow_opt import tiny_teacher
-    from workflow.networks import opt_mlp
-    from workflow.compensation import fit
+    import networks.opt as opt_mlp
+    from ebl.runtime.compensation import fit
     from types import SimpleNamespace
     network = opt_mlp.OptMlpSuffix(tiny_teacher(), 2, tile_size=8, scope="model")
     tokens = torch.randint(0, 64, (5, 9))

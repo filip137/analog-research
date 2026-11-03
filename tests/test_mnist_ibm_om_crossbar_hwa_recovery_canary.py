@@ -8,7 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from experiments.artifacts import RunStore, sha256_file
+from ebl.runtime.store import RunStore
+from core.artifacts import sha256_file
 from experiments.mnist_analog_relu.generate_hwa_recovery_canary import (
     CHECKPOINT_POLICY,
     FRESH_DRAW_SEEDS,

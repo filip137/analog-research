@@ -7,7 +7,7 @@ import math
 from types import MappingProxyType
 from typing import Any, Mapping
 
-from experiments.schema import RunMode, config_error
+from core.contracts import RunMode, config_error
 
 
 EXPERIMENT_ID = "ibm_reram_program_verify.v1"

@@ -15,11 +15,11 @@ import time
 
 import torch
 
-from workflow.networks.opt_mlp import OptConfig, OptDecoder, OptMlpSuffix
-from workflow.onchip import IdealizedWriteAdam
-from training.reram_cmo import CmoMatrix
-from training.writable_drift import WritableDrift
-from training.drift_law import DriftLaw
+from networks.opt import OptConfig, OptDecoder, OptMlpSuffix
+from methods.onchip import IdealizedWriteAdam
+from hardware.devices.cmo import CmoMatrix
+from hardware.drift.writable import WritableDrift
+from hardware.drift.config import DriftLaw
 
 
 def digest(value):

@@ -7,9 +7,10 @@ from pathlib import Path
 import pytest
 import torch
 
-from experiments.schema import ConfigError
-from workflow import deployment, hwa
-from workflow.lifecycle import parse_lifecycle
+from core.contracts import ConfigError
+import methods.deployment as deployment
+import methods.hwa as hwa
+from ebl.schema.lifecycle import parse_lifecycle
 from test_workflow_opt import tiny_teacher, tokens
 from workflow_helpers import Store
 

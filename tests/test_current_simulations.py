@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from experiments.artifacts import RunStore
+from ebl.runtime.store import RunStore
 from experiments.current_simulations import (
     ACTIVE_BEGIN,
     ACTIVE_END,

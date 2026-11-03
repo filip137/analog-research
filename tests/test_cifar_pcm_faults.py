@@ -13,8 +13,8 @@ from experiments.cifar_crossbar.fault_config import (
     default_config,
     parse_config,
 )
-from experiments.cifar_crossbar.model import CifarResNet32, CrossbarSuffix
-from experiments.cifar_crossbar.pcm_faults import GaussianEndpointArray, PermanentFaults
+from networks.cifar_model import CifarResNet32, CrossbarSuffix
+from hardware.devices.pcm import GaussianEndpointArray, PermanentFaults
 from experiments.cifar_crossbar.pcm_reference import PcmInferenceNoise
 
 
@@ -140,7 +140,7 @@ def test_native_fault_screen_restores_all_controls_and_writes_valid_bundle(
 ):
     from ebl.cli import main
     from experiments.cifar_crossbar import fault_runtime as runtime
-    from experiments.cifar_crossbar.runtime import save
+    from core.tensor_io_native import save
     from experiments.study_workflow import prepare_study, summarize_study
 
     monkeypatch.setenv("EBL_DEFER_CURRENT_SIMULATIONS", "1")

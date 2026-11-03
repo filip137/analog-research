@@ -1,61 +1,33 @@
-"""Native full-cohort PCM endpoint and IBM OM pulse recovery comparison."""
-
+"""experiments.cifar_crossbar.full_epoch_runtime — extracted native implementation; formats and numerical order preserved."""
+from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 import json
 import os
 import time
-
 import torch
 from torch.nn import functional as F
-
-from experiments.artifacts import RunStore, atomic_write_json, sha256_file
-from experiments.cifar_crossbar.data import cache_features, get_dataset, split_indices
-from experiments.cifar_crossbar.devices import (
-    EndpointKernel, PulseWriter, clone_cpu, make_plant, population_fingerprint,
-    prepare_population, program,
-)
-from experiments.cifar_crossbar.fault_runtime import cache_context, limited_cache
+from ebl.runtime.store import RunStore
+from core.artifacts import atomic_write_json, sha256_file
+from networks.cifar_data import cache_features, get_dataset, split_indices
+from hardware.plants import EndpointKernel, make_plant, prepare_population
+from methods.optimizers.pulse import PulseWriter
+from core.tensor_io import clone_cpu
+from methods.programming.pulse import program
+from experiments.cifar_crossbar.fault_runtime import cache_context
 from experiments.cifar_crossbar.full_epoch_config import FullEpochSpec
-from experiments.cifar_crossbar.hwa_fault_runtime import case_name, cases, augment_images
-from experiments.cifar_crossbar.model import CrossbarSuffix, state_hash, tensor_hash
-from experiments.cifar_crossbar.pcm_faults import GaussianEndpointArray, PermanentFaults
-from experiments.cifar_crossbar.runtime import evaluate, load, save, source_model
+from experiments.cifar_crossbar.hwa_fault_runtime import case_name, cases
+from networks.cifar_augmentation import augment_images
+from networks.cifar_model import CrossbarSuffix
+from core.tensor_identity import state_hash, tensor_hash
+from hardware.devices.pcm import GaussianEndpointArray, PermanentFaults
+from networks.cifar_metrics import evaluate
+from core.tensor_io_native import load, save
+from experiments.cifar_crossbar.runtime import source_model
+from hardware.faults import om_population
+
 
 ROOT = Path(__file__).resolve().parents[2]
-
-
-def om_population(raw, kind, rate, seed):
-    """Repair baseline is sampled before this independent Bernoulli fault mask.
-
-    Low/high/random refer to each active cell's own native bound interval;
-    the sampled intrinsic reference is retained. Not physical PCM G=0/25 uS.
-    """
-    if raw["kind"] != "om" or raw["policy"] != "repaired" or raw["aihwkit_version"] != "1.1.0":
-        raise ValueError("Expected literal repaired AIHWKit 1.1.0 OM identities.")
-    p = prepare_population(raw)
-    h = p["hidden"]
-    if h["corrupt"].any():
-        raise ValueError("Expected a counterfactual repaired OM baseline.")
-    rng = torch.Generator().manual_seed(seed)
-    mask = torch.rand(h["max_bound"].shape, generator=rng) < rate
-    fraction = torch.rand(mask.shape, generator=rng)
-    if kind == "open":
-        fraction.zero_()
-    elif kind == "gmax":
-        fraction.fill_(1)
-    elif kind != "random":
-        raise ValueError("Unknown failure kind.")
-    stuck = h["min_bound"] + fraction * (h["max_bound"] - h["min_bound"])
-    for key in ("min_bound", "max_bound"):
-        h[key][mask] = stuck[mask]
-    for key in ("dwmin_up", "dwmin_down"):
-        h[key][mask] = 0
-    h["corrupt"] |= mask
-    h["injected_faults"] = mask
-    p.update(fault_kind=kind, fault_rate=rate, fault_seed=seed)
-    p["fingerprint"] = population_fingerprint(p)
-    return p
 
 
 def make_array(target, spec, kind, ppm, populations=None):

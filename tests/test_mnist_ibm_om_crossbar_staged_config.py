@@ -21,7 +21,7 @@ from experiments.mnist_analog_relu.staged_config import (
     parse_staged_crossbar_config,
     resolve_staged_crossbar_spec,
 )
-from experiments.schema import ConfigError, RunMode
+from core.contracts import ConfigError, RunMode
 
 
 def _common_payload() -> dict:

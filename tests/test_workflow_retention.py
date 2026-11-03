@@ -6,14 +6,14 @@ from pathlib import Path
 import pytest
 import torch
 
-from experiments.cifar_crossbar.runtime import load
-from experiments.schema import ConfigError
-from training import reram_cmo as cmo
-from workflow import retention
-from workflow.__main__ import main as workflow_main, summary
-from workflow.lifecycle import parse_lifecycle, provenance, verify_provenance, stage_selections
-from workflow.plan import build_plan
-from workflow.lifecycle import Execution
+from core.tensor_io_native import load
+from core.contracts import ConfigError
+import hardware.devices.cmo as cmo
+import ebl.runtime.retention as retention
+from ebl.lifecycle.cli import main as workflow_main, summary
+from ebl.schema.lifecycle import parse_lifecycle, provenance, verify_provenance, stage_selections
+from ebl.lifecycle.plan import build_plan
+from core.execution import Execution
 from test_workflow_cmo import cmo_inputs, small, case_doc
 from workflow_helpers import run_lifecycle
 
@@ -117,8 +117,8 @@ def test_native_retention_runs_and_collects_all_ages(cmo_inputs, tmp_path):
     # Native plan source substitution must remove HWA without weakening its downstream gate.
     source_dir, source_result = results["hwa__digital"]
     source = source_dir / next(a["path"] for a in source_result["artifacts"] if a["kind"] == "hwa_source")
-    from workflow.networks import family
-    from experiments.artifacts import sha256_file
+    from networks import family
+    from core.artifacts import sha256_file
     from unittest.mock import patch
     with patch.object(family(lc.network), "pinned_digest", return_value=sha256_file(weights)):
         plan = build_plan(lc, teacher_weights=weights, execution=Execution("cpu", 1, False),
@@ -150,7 +150,7 @@ def test_wan_noise_scales_are_optional_and_only_scale_aged_wan_snapshots():
 
 
 def test_native_wan_noise_scales_replay_nominal_and_collect(cmo_inputs, tmp_path):
-    from workflow.lifecycle import StageSelection, parse_lifecycle as parse
+    from ebl.schema.lifecycle import StageSelection, parse_lifecycle as parse
     from workflow_helpers import run_stage
     weights, digest = cmo_inputs
     common = {"data.corpus": {"name": "synthetic", "sha256": digest}, "data.sequence_length": 9,

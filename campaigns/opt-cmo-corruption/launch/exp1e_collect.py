@@ -21,8 +21,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from experiments.artifacts import atomic_write_json
-from workflow.lifecycle import parse_lifecycle
+from core.artifacts import atomic_write_json
+from ebl.schema.lifecycle import parse_lifecycle
 from exp1e_development import ARM, finite_metrics, lifecycle as development_lifecycle, summarize
 
 STAGES = {"prepare": "feature_cache", "devices": "device_bundle", f"hwa__{ARM}": "hwa_source"}

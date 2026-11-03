@@ -1,8 +1,9 @@
 """Native ebl execution boundary for CIFAR-10 crossbar study stages."""
 from pathlib import Path
 
-from experiments.artifacts import RunStore, sha256_file, atomic_write_json
-from experiments.schema import to_plain_data
+from ebl.runtime.store import RunStore
+from core.artifacts import sha256_file, atomic_write_json
+from core.contracts import to_plain_data
 from .common import ROOT, Data, setup_cuda, heartbeat
 
 

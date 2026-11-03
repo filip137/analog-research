@@ -50,7 +50,7 @@ def test_summary_requires_three_distinct_arrays():
 
 def test_collected_four_study_report_covers_all_arrays_and_hwa_controls(tmp_path, monkeypatch):
     import json
-    from experiments.artifacts import atomic_write_json, sha256_file
+    from core.artifacts import atomic_write_json, sha256_file
     from experiments.cifar_crossbar import full_epoch_report as module
     monkeypatch.setattr(module, "plot", lambda *a: None)
     for dataset in ("cifar10", "cifar100"):

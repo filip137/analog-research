@@ -6,8 +6,8 @@ import json
 import pytest
 import torch
 
-from experiments.artifacts import atomic_write_json, sha256_file
-from training.star_targets import (
+from core.artifacts import atomic_write_json, sha256_file
+from core.star_targets import (
     CROSSBAR_STATE_REPRESENTATION,
     StarSourceBinding,
     StarTargetAccumulator,

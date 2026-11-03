@@ -2,7 +2,7 @@
 
 import torch
 
-from training import output_calibration as oc
+import methods.calibration.output as oc
 
 
 import pytest
@@ -11,7 +11,7 @@ import pytest
 @pytest.mark.parametrize("scope", ["model", "analog"])
 def test_decomposed_forward_equals_native_student(scope):
     from test_workflow_opt import tiny_teacher
-    from workflow.networks import opt_mlp
+    import networks.opt as opt_mlp
     torch.manual_seed(0)
     network = opt_mlp.OptMlpSuffix(tiny_teacher(), 2, tile_size=8, scope=scope).eval()
     tokens = torch.randint(0, 64, (3, 9))

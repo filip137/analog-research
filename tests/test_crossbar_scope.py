@@ -10,7 +10,7 @@ import sys
 import pytest
 
 from ebl.cli import main
-from experiments.definitions import EXPERIMENT_REGISTRY, RETIRED_EXPERIMENT_IDS
+from ebl.registry import EXPERIMENT_REGISTRY, RETIRED_EXPERIMENT_IDS
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -76,7 +76,7 @@ for name in (
     'experiments.cifar_crossbar.sweep_runtime',
     'experiments.cifar_crossbar.om_open_loop_runtime',
     'experiments.cifar_crossbar.closed_loop_lr_runtime',
-    'workflow.runtime',
+    'ebl.runtime.lifecycle',
 ):
     importlib.import_module(name)
 '''

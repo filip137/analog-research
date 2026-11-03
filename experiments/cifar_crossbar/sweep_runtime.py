@@ -4,15 +4,22 @@ from pathlib import Path
 import json, os, time, math
 import torch
 from torch.nn import functional as F
-from experiments.artifacts import RunStore, atomic_write_json, sha256_file
-from experiments.cifar_crossbar.runtime import source_model, evaluate, save, load
-from experiments.cifar_crossbar.model import CrossbarSuffix, state_hash, tensor_hash
-from experiments.cifar_crossbar.devices import clone_cpu
+from ebl.runtime.store import RunStore
+from core.artifacts import atomic_write_json, sha256_file
+from experiments.cifar_crossbar.runtime import source_model
+from networks.cifar_metrics import evaluate
+from core.tensor_io_native import save, load
+from networks.cifar_model import CrossbarSuffix
+from core.tensor_identity import state_hash, tensor_hash
+from core.tensor_io import clone_cpu
 from experiments.cifar_crossbar.fault_runtime import cache_context
 from experiments.cifar_crossbar.full_epoch_runtime import build_cache, trajectory, array_identity
-from experiments.cifar_crossbar.hwa_fault_runtime import augment_images, sampled_weights, case_name
+from networks.cifar_augmentation import augment_images
+from methods.hwa_sampling import sampled_weights
+from experiments.cifar_crossbar.hwa_fault_runtime import case_name
 from experiments.cifar_crossbar.sweep_config import SweepSpec, SOURCES, cases
-from experiments.cifar_crossbar.sweep_devices import make_array, MixedOmSampler, build_kernels, CompactCheckpoints
+from experiments.cifar_crossbar.sweep_devices import make_array, build_kernels, CompactCheckpoints
+from methods.hwa_sampling_om import MixedOmSampler
 
 ROOT=Path(__file__).resolve().parents[2]
 

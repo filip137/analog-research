@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from ebl.cli import main
-from experiments.artifacts import RunStore
+from ebl.runtime.store import RunStore
 from experiments.study_workflow import inspect_run
 
 

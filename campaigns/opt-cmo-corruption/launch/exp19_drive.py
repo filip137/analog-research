@@ -66,7 +66,7 @@ def main() -> int:
         lifecycle = json.loads(source.read_text())
         base = ROOT / "results/lifecycles" / lifecycle_id
         try:
-            command = [PYTHON, "-m", "workflow", "plan", str(source), "--teacher-weights", str(TEACHER), "--output",
+            command = [PYTHON, "-m", "ebl", "lifecycle", "plan", str(source), "--teacher-weights", str(TEACHER), "--output",
                        str(base / "plan"), "--runs", str(base / "runs"), "--device", "cuda", "--cpu-threads", "4",
                        "--python", PYTHON]
             for arm in lifecycle["hwa"]["arms"]:

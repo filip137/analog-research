@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 import torch
 from experiments.reram_program_verify.hwa_population_sampler import _request as parse_hwa_population_request
-from training.parameters import ParameterBinding, DenseWeight
-from training.ibm_reram_hwa import sample_om_array_population, save_om_array_population, load_om_array_population
+from core.parameters import ParameterBinding, DenseWeight
+from hardware.populations import sample_om_array_population, save_om_array_population, load_om_array_population
 
 
 def _population_request() -> dict[str, object]:
@@ -80,7 +80,7 @@ def test_repaired_assignment_changes_only_published_corrupt_sites(
         }
 
     monkeypatch.setattr(
-        "training.ibm_reram_hwa._sample_tile_hidden",
+        "hardware.populations._sample_tile_hidden",
         sample_hidden,
     )
     published = sample_om_array_population(
@@ -123,7 +123,7 @@ def test_om_array_population_npz_round_trip_and_fingerprint_gate(
         }
 
     monkeypatch.setattr(
-        "training.ibm_reram_hwa._sample_tile_hidden",
+        "hardware.populations._sample_tile_hidden",
         sample_hidden,
     )
     population = sample_om_array_population(

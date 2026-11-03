@@ -13,14 +13,18 @@ import time
 import torch
 from torch.nn import functional as F
 
-from experiments.artifacts import RunStore, atomic_write_json, sha256_file
-from experiments.cifar_crossbar.devices import clone_cpu
+from ebl.runtime.store import RunStore
+from core.artifacts import atomic_write_json, sha256_file
+from core.tensor_io import clone_cpu
 from experiments.cifar_crossbar.epoch_config import EpochSpec
 from experiments.cifar_crossbar.fault_runtime import cache_context, limited_cache
 from experiments.cifar_crossbar.hwa_fault_runtime import case_name, checked_sources, source_cases
-from experiments.cifar_crossbar.model import CrossbarSuffix, tensor_hash
-from experiments.cifar_crossbar.pcm_faults import GaussianEndpointArray, PermanentFaults
-from experiments.cifar_crossbar.runtime import evaluate, load, save, source_model
+from networks.cifar_model import CrossbarSuffix
+from core.tensor_identity import tensor_hash
+from hardware.devices.pcm import GaussianEndpointArray, PermanentFaults
+from networks.cifar_metrics import evaluate
+from core.tensor_io_native import load, save
+from experiments.cifar_crossbar.runtime import source_model
 
 ROOT = Path(__file__).resolve().parents[2]
 LEARNING_METHODS = ("calibration", "onchip_weights", "onchip_calibration")

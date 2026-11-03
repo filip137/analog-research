@@ -49,7 +49,7 @@ def main():
     for label in labels:
         root = RESULTS / label
         plan = root / "plan"
-        command = [py, "-m", "workflow", "plan", CONFIGS / f"opt125m-aihwkit-retention-{label}.json",
+        command = [py, "-m", "ebl", "lifecycle", "plan", CONFIGS / f"opt125m-aihwkit-retention-{label}.json",
                    "--teacher-weights", inputs["teacher"]["path"], "--output", plan,
                    "--device", "cuda:0", "--cpu-threads", "1", "--python", py]
         if label != "probe":
@@ -73,7 +73,7 @@ def main():
         run([py, "-m", "ebl", "runs", "inspect", *run_dirs, "--verify-artifacts", "--require-complete"],
             deadline=deadline, env=env)
         runs.append(root / "runs")
-    run([py, "-m", "workflow", "collect", *runs, "--output", RESULTS / f"collected-{args.phase}"],
+    run([py, "-m", "ebl", "lifecycle", "collect", *runs, "--output", RESULTS / f"collected-{args.phase}"],
         deadline=deadline, env=env)
     rows = json.loads((RESULTS / f"collected-{args.phase}" / "retention.json").read_text())
     expected = 24 if args.phase == "probe" else 72

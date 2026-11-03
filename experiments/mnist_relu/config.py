@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
-from experiments.schema import RunMode, config_error
+from core.contracts import RunMode, config_error
 
 
 EXPERIMENT_ID = "mnist_relu.v1"

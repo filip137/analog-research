@@ -15,7 +15,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[3]
 sys.path[:0] = [str(ROOT), str(Path(__file__).resolve().parent)]
 from slice_campaign import write_frozen
-from workflow.lifecycle import parse_lifecycle
+from ebl.schema.lifecycle import parse_lifecycle
 
 PREFIX = 'opt125m-cmo-l6-exp22-pv-learning'
 NOTE = 'campaigns/opt-cmo-corruption/series/002-onchip-recovery/experiments/exp-022-pv-learning-noise.md'

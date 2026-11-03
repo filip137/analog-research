@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-from campaigns import tmux_worker as worker
+import ebl.execution.tmux_worker as worker
 
 
 @pytest.fixture
@@ -92,7 +92,7 @@ def test_simultaneous_duplicate_launches_create_one_worker(spec_factory, tmp_pat
     path, spec, directory = spec_factory(
         "from pathlib import Path; import time; "
         "p=Path('launch-count'); p.write_text(p.read_text()+'x' if p.exists() else 'x'); time.sleep(.2)")
-    command = [sys.executable, "-m", "campaigns.tmux_worker", "launch", "--spec", str(path),
+    command = [sys.executable, "-m", "ebl.execution.tmux_worker", "launch", "--spec", str(path),
                "--attempt", spec["attempt_id"]]
     processes = [subprocess.Popen(command, stdout=subprocess.PIPE) for _ in range(2)]
     outputs = [json.loads(process.communicate(timeout=5)[0]) for process in processes]
@@ -127,7 +127,7 @@ def test_limits_kill_owned_descendants_but_leave_unrelated_worker(spec_factory, 
 @pytest.mark.skipif(shutil.which("tmux") is None, reason="tmux is required")
 def test_bridge_restart_preserves_gpu_reservation_and_renews_remote_lease(spec_factory, tmp_path):
     path, spec, directory = spec_factory("import time; print('running'); time.sleep(1.2)", lease_seconds=.8)
-    command = [sys.executable, "-m", "campaigns.tmux_worker", "bridge", "--spec", str(path),
+    command = [sys.executable, "-m", "ebl.execution.tmux_worker", "bridge", "--spec", str(path),
                "--attempt", spec["attempt_id"]]
     reservation = (tmp_path / "gpu.lock").open("a+")
     fcntl.flock(reservation, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -163,7 +163,7 @@ def test_bridge_restart_preserves_gpu_reservation_and_renews_remote_lease(spec_f
 @pytest.mark.skipif(shutil.which("tmux") is None, reason="tmux is required")
 def test_bridge_term_propagates_cancel_and_waits_for_worker(spec_factory):
     path, spec, directory = spec_factory("import time; time.sleep(30)")
-    process = subprocess.Popen([sys.executable, "-m", "campaigns.tmux_worker", "bridge", "--spec", str(path),
+    process = subprocess.Popen([sys.executable, "-m", "ebl.execution.tmux_worker", "bridge", "--spec", str(path),
                                 "--attempt", spec["attempt_id"]], stdout=subprocess.PIPE)
     try:
         wait_for(spec, directory, lambda x: not x.get("missing") and x["receipt"]["state"] == "running")

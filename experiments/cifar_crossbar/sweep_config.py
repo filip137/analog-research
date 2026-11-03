@@ -1,7 +1,7 @@
 """Frozen mixed-rate corruption-aware CIFAR experiment contract."""
 from dataclasses import dataclass, asdict, fields
 import math
-from experiments.schema import RunMode
+from core.contracts import RunMode
 from experiments.cifar_crossbar.fault_config import METHODS
 
 EXPERIMENT_ID = 'cifar_crossbar_fault_sweep.v1'

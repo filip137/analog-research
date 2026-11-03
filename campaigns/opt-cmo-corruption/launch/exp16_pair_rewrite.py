@@ -20,7 +20,7 @@ sys.path[:0] = [str(ROOT), str(Path(__file__).resolve().parent)]
 from exp1e_prepare_host import command, checked_input, sha256, DEFAULT_BASE
 from exp7_recovery_regimes import ARRAYS, CATALOG, TAGS, lifecycle as exp13_lifecycle
 from slice_campaign import write_frozen
-from workflow.lifecycle import parse_lifecycle, verify_provenance
+from ebl.schema.lifecycle import parse_lifecycle, verify_provenance
 
 PREFIX = 'opt125m-cmo-l6-exp16-pair-rewrite'
 NOTE = 'campaigns/opt-cmo-corruption/series/002-onchip-recovery/experiments/exp-016-pair-rewrite.md'
@@ -103,7 +103,7 @@ def generate(phase='full'):
 def reused_contract(base, reused, tag, array, lc):
     """Inputs of a random job: the exp-013 materialized P0 and its frozen upstream bundles."""
 
-    from experiments.cifar_crossbar.runtime import load
+    from core.tensor_io_native import load
     group = f'{tag}-{array}'
     ref = json.loads(CATALOG.read_text())[group]
     receipt = json.loads((reused/group/'portable.json').read_text())
@@ -135,7 +135,7 @@ def single_stage(lc, inputs, root, stage_id, env, *, allow_dirty=False):
 
     cfg = root/'lifecycle.json'
     write_frozen(cfg, lc.to_dict())
-    command([sys.executable, '-m', 'workflow', 'plan', str(cfg), '--teacher-weights',
+    command([sys.executable, '-m', 'ebl', 'lifecycle', 'plan', str(cfg), '--teacher-weights',
              inputs['artifacts']['teacher_weights']['path'], '--output', str(root/'plan'), '--device', 'cuda:0',
              '--cpu-threads', '1', '--python', sys.executable], cwd=ROOT)
     raw = json.loads((root/'plan/campaign.json').read_text())
@@ -215,14 +215,14 @@ def deploy_campaign(lc, ref, root, env):
     """exp1g's deployment-only slice: prepare, devices and every declared deployment from the frozen source."""
 
     from exp1g_four_arm import deployment_manifest
-    from workflow.lifecycle import provenance
-    from workflow.runtime import validate_source_fit
+    from ebl.schema.lifecycle import provenance
+    from ebl.schema.source_fit import validate_source_fit
     inputs = [checked_input(ref['path'], ref['sha256'])]
     original = parse_lifecycle(json.loads(ref['result'].with_name('config.resolved.json').read_text())['lifecycle'])
     verify_provenance(provenance(original, 'hwa_source', hwa_arm=ref['hwa_arm']), lc, 'hwa_source', hwa_arm=ref['hwa_arm'])
     validate_source_fit(lc, lc.hwa.arm(ref['hwa_arm']), json.loads(ref['result'].read_text())['metrics']['fit'])
     cfg = root/'lifecycle.json'; write_frozen(cfg, lc.to_dict())
-    command([sys.executable, '-m', 'workflow', 'plan', str(cfg), '--teacher-weights',
+    command([sys.executable, '-m', 'ebl', 'lifecycle', 'plan', str(cfg), '--teacher-weights',
              str(DEFAULT_BASE/'inputs/opt-125m-27dcfa74/pytorch_model.bin'), '--output', str(root/'plan'),
              '--device', 'cuda:0', '--cpu-threads', '1', '--python', sys.executable], cwd=ROOT, env=dict(os.environ, **env))
     manifest = root/'campaign.json'
@@ -236,7 +236,7 @@ def deploy_campaign(lc, ref, root, env):
 def materialize_kinds(tag, deploy_root, reused, output):
     """Portable P0s of one kinds deployment campaign, as exp-013 did for its random P0s (no new writes)."""
 
-    from workflow.portable_deployment import materialize, validate
+    from ebl.runtime.portable_deployment import materialize, validate
     lc = lifecycle(tag, 'kinds'); reports = []
     runs = sorted(deploy_root.glob('runs/*/stages/*/local/deploy__*/attempt-*/runs/*'))
     for array in ARRAYS:
@@ -253,7 +253,7 @@ def materialize_kinds(tag, deploy_root, reused, output):
 def kinds_contract(base, reused, kinds, tag, array, lc):
     """Inputs of a kinds on-chip slice: the materialized new P0 and the reused upstream bundles."""
 
-    from experiments.cifar_crossbar.runtime import load
+    from core.tensor_io_native import load
     ref = json.loads(CATALOG.read_text())[f'{tag}-{array}']
     receipt = json.loads((kinds/f'{tag}-{array}'/'portable.json').read_text())
     if not receipt['physical_state_preserved'] or receipt['new_device_writes']:
@@ -295,7 +295,7 @@ def prepare_host(host, base, reused, *, sources=None, kinds=None, phase='full'):
                 continue
             manifest, extra = deploy_campaign(lc, source_reference(sources, tag), root, env)
             native = root/'runs'/lc.lifecycle_id
-            validation = [sys.executable, '-m', 'campaigns.lifecycle_collect', 'validate', str(native), '--deployment-only']
+            validation = [sys.executable, '-m', 'ebl.execution.lifecycle_collect', 'validate', str(native), '--deployment-only']
             files, artifacts = [manifest], extra
         else:
             if family in ('random', 'random3'):
@@ -309,7 +309,7 @@ def prepare_host(host, base, reused, *, sources=None, kinds=None, phase='full'):
             write_frozen(root/'inputs.json', inputs)
             manifest = single_stage(lc, inputs, root, f'onchip__{inputs["hwa_arm"]}__{array}', env)
             native = root/'runs'/lc.lifecycle_id
-            validation = [sys.executable, '-m', 'campaigns.recovery_collect', 'validate', str(native),
+            validation = [sys.executable, '-m', 'ebl.execution.recovery_collect', 'validate', str(native),
                           '--inputs', str(root/'inputs.json')]
             files, artifacts = [manifest, root/'inputs.json', CATALOG], list(inputs['artifacts'].values())
         cfg = ROOT/'campaigns/opt-cmo-corruption/lifecycles'/(lc.lifecycle_id+'.json')
@@ -323,7 +323,7 @@ def prepare_host(host, base, reused, *, sources=None, kinds=None, phase='full'):
             str(manifest), '--output-dir', str(root/'runs'), '--resume', '--fail-fast']})
         cases.append({'id': jid, 'label': label, 'family': family, 'lifecycle_sha256': lc.digest(), 'dry_run_passed': True,
             'placement': {'workdir': str(ROOT), 'run_dir': str(receipt), 'gpu_models': [GPU_MODELS[host]],
-                'argv': [sys.executable, '-m', 'campaigns.tmux_worker', 'bridge', '--spec', str(worker)],
+                'argv': [sys.executable, '-m', 'ebl.execution.tmux_worker', 'bridge', '--spec', str(worker)],
                 'validate_argv': validation, 'campaign_python': sys.executable, 'campaign_worker_spec': str(worker),
                 'campaign_result_root': str(native),
                 **({'recovery_inputs': str(root/'inputs.json'), 'recovery_input_contract': inputs}
@@ -342,9 +342,10 @@ def check_realization(tag, array, teacher, portable, device='cuda:0'):
     """
 
     import torch
-    from experiments.cifar_crossbar.runtime import load
-    from workflow import deployment, program_verify
-    from workflow import devices as device_stage
+    from core.tensor_io_native import load
+    import methods.deployment as deployment
+    import methods.programming.lifecycle as program_verify
+    import hardware.arrays as device_stage
     lc = lifecycle(tag, 'kinds'); p0 = load(portable)
     group = json.loads(CATALOG.read_text())[f'{tag}-{array}']
     network = deployment.build_network(deployment.load_teacher(teacher, lc.network, device)[0], lc, group['hwa_arm'])
@@ -386,7 +387,7 @@ def campaign_manifest(phase, labels_, worker, evidence, revision, hosts, budget)
            'storage_roots': [{'target': h, 'path': str(worker)} for h in hosts]
              + [{'target': h, 'path': str(DEFAULT_BASE/'worker-receipts'/revision)} for h in hosts]
              + [{'target': 'local', 'path': str(evidence)}]}
-    from campaigns.execution_service import validate_manifest
+    from ebl.execution.service import validate_manifest
     validate_manifest(doc)
     return doc
 
@@ -546,15 +547,15 @@ def summarize(reports, exp13, phase='full'):
 
 def collect(queue_config, evidence):
     import fcntl
-    from experiments.artifacts import atomic_write_json
+    from core.artifacts import atomic_write_json
     label = os.environ['RUN_WATCH_JOB_ID'].removeprefix(PREFIX+'-'); _, _, family = parts(label)
     phase = 'random3' if family == 'random3' else 'full'
     exp13 = evidence.parents[1]/'opt125m-cmo-l6-exp7-recovery-regimes' if phase == 'random3' else evidence.parent/'opt125m-cmo-l6-exp7-recovery-regimes'
     if family == 'deploy':
-        from campaigns.lifecycle_collect import collect as deployment_collect
+        from ebl.execution.lifecycle_collect import collect as deployment_collect
         result = deployment_collect(queue_config, evidence/'collected', deployment_only=True)
         return {'collected': result, 'label': label}
-    from campaigns.recovery_collect import collect as native_collect
+    from ebl.execution.recovery_collect import collect as native_collect
     result = native_collect(queue_config, evidence/'collected'); folder = Path(result['collected'])
     report = checked_report(label, json.loads((folder/'measurements.json').read_text()),
         [json.loads(line) for line in (folder/'metrics.jsonl').read_text().splitlines() if line.strip()],
@@ -568,7 +569,7 @@ def collect(queue_config, evidence):
         expected = [l for l in labels(phase) if parts(l)[2] != 'deploy']
         if phase == 'random3' and label in CANARIES:
             from exp1f_cdt_lr import service, transition
-            from campaigns.execution_service import digest
+            from ebl.execution.service import digest
             manifest = json.loads((evidence/'prepared/queue/campaign.json').read_text())
             gate = evidence/'readiness/handoff.json'
             write_frozen(gate, {'manifest_sha256': digest(manifest), 'passed': True,

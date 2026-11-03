@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 import torch
 
-from experiments.artifacts import sha256_file
+from core.artifacts import sha256_file
 from experiments.mnist_analog_relu.crossbar_common import _matched_published_fault_overlay
 from experiments.mnist_analog_relu.staged_artifacts import (
     STAGED_PROGRAM_STREAM_ROLE,
@@ -15,7 +15,7 @@ from experiments.mnist_analog_relu.staged_artifacts import (
     population_state,
     save_device_state,
 )
-from training.ibm_om_standard_crossbar import (
+from hardware.om_crossbar import (
     CROSSBAR_TRAJECTORY_SEED_DERIVATION,
     IbmOmEffectiveCrossbarPlant,
     build_crossbar_layout,
@@ -23,7 +23,7 @@ from training.ibm_om_standard_crossbar import (
     crossbar_trajectory_seeds,
     tensor_sha256,
 )
-from training.ibm_reram_hwa import (
+from hardware.populations import (
     IbmReramArrayPopulation,
     om_array_population_fingerprint,
 )

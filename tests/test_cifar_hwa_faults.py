@@ -12,9 +12,10 @@ from experiments.cifar_crossbar.hwa_fault_config import (
     default_config,
     parse_config,
 )
-from experiments.cifar_crossbar.hwa_fault_runtime import augment_images, sampled_weights
-from experiments.cifar_crossbar.model import CifarResNet32, CrossbarSuffix
-from experiments.cifar_crossbar.pcm_faults import GaussianEndpointArray, PermanentFaults
+from networks.cifar_augmentation import augment_images
+from methods.hwa_sampling import sampled_weights
+from networks.cifar_model import CifarResNet32, CrossbarSuffix
+from hardware.devices.pcm import GaussianEndpointArray, PermanentFaults
 
 
 @pytest.fixture(autouse=True)
@@ -58,7 +59,7 @@ def test_gpu_style_augmentation_is_replayable_and_normalizes_after_padding():
     first = augment_images(raw, "cifar10", torch.Generator().manual_seed(1))
     second = augment_images(raw, "cifar10", torch.Generator().manual_seed(1))
     assert first.shape == raw.shape and torch.equal(first, second)
-    from experiments.cifar_crossbar.data import NORMALIZATION
+    from networks.cifar_data import NORMALIZATION
 
     mean, sd = NORMALIZATION["cifar10"]
     for c in range(3):
@@ -86,7 +87,7 @@ def test_full_native_fit_tune_screen_uses_only_development_for_selection(
 ):
     from ebl.cli import main
     from experiments.cifar_crossbar import hwa_fault_runtime as runtime
-    from experiments.cifar_crossbar.runtime import load
+    from core.tensor_io_native import load
     from experiments.study_workflow import prepare_study, summarize_study
 
     monkeypatch.setenv("EBL_DEFER_CURRENT_SIMULATIONS", "1")

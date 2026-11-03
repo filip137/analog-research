@@ -5,10 +5,10 @@ from pathlib import Path
 import pytest
 import torch
 
-from experiments.schema import ConfigError
-from training.reram_cmo import ACTIVE, HALF_RANGE_US, REFERENCE, CmoMatrix
-from workflow.lifecycle import parse_lifecycle
-from workflow.onchip import IdealizedWriteAdam, ThresholdedWriteAdam, _adam_command
+from core.contracts import ConfigError
+from hardware.devices.cmo import ACTIVE, HALF_RANGE_US, REFERENCE, CmoMatrix
+from ebl.schema.lifecycle import parse_lifecycle
+from methods.onchip import IdealizedWriteAdam, ThresholdedWriteAdam, _adam_command
 from test_workflow_cmo import cmo_inputs, small, template, case_doc
 from workflow_helpers import run_lifecycle
 
@@ -64,7 +64,7 @@ def test_device_rejects_invalid_write_noise_factors(factor):
 
 
 def test_threshold_and_issued_commands_do_not_depend_on_write_noise(monkeypatch):
-    import workflow.onchip as module
+    import methods.onchip as module
     physical, exact = faulty(), faulty()
     initial = exact.g.clone()
     wp, we = thresholded(physical), thresholded(exact, 0.)

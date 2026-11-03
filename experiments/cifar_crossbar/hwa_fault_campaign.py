@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from experiments.artifacts import atomic_write_json, sha256_file
+from core.artifacts import atomic_write_json, sha256_file
 from experiments.cifar_crossbar.analysis import records
 from experiments.cifar_crossbar.fault_config import METHODS
 from experiments.cifar_crossbar.hwa_fault_config import EXPERIMENT_ID, default_config

@@ -81,7 +81,7 @@ def main():
                 root = RESULTS / args.phase / kind / label
                 plan = root / "plan"
                 src = inputs["sources"][label]
-                command = [py, "-m", "workflow", "plan", CONFIGS / f"opt125m-healthy-year-{kind}-{label}.json",
+                command = [py, "-m", "ebl", "lifecycle", "plan", CONFIGS / f"opt125m-healthy-year-{kind}-{label}.json",
                            "--teacher-weights", inputs["teacher"]["path"], "--output", plan,
                            "--device", "cuda:0", "--cpu-threads", "1", "--python", py,
                            "--hwa-source", f"{src['arm']}={src['path']}"]
@@ -117,7 +117,7 @@ def main():
                             audits.append({"source": label, "model": row["model"], "baseline_exact": True,
                                            "original_parent": str(old), "new_parent": str(matches[0].parent)})
             collected = RESULTS / f"collected-{args.phase}-{kind}"
-            run([py, "-m", "workflow", "collect", *roots[kind], "--output", collected])
+            run([py, "-m", "ebl", "lifecycle", "collect", *roots[kind], "--output", collected])
             rows = json.loads((collected / f"{kind}.json").read_text())
             expected = len(labels) * (4 if kind == "retention" else 14)
             if len(rows) != expected or any(r["duplicate_coverage"] or not r["replay_exact"] or r["failed_devices"] or r["case"] != "nominal" for r in rows):

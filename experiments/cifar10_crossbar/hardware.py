@@ -12,15 +12,13 @@ import time
 import torch
 import torch.nn.functional as F
 
-from experiments.artifacts import atomic_write_json, sha256_file
+from core.artifacts import atomic_write_json, sha256_file
 from experiments.mnist_analog_relu.crossbar_common import (
     _sample_population, _program_endpoint, _matched_published_fault_overlay,
 )
-from training.ibm_om_standard_crossbar import (
-    build_crossbar_layout, map_logical_weights, standard_crossbar_logits,
-    IbmOmEffectiveCrossbarPlant, PulseAdam,
-)
-from training.closed_loop_crossbar_adam import ClosedLoopAdam
+from hardware.om_crossbar import build_crossbar_layout, map_logical_weights, standard_crossbar_logits, IbmOmEffectiveCrossbarPlant
+from methods.optimizers.om import PulseAdam
+from methods.optimizers.closed_loop_adam import ClosedLoopAdam
 from .common import checkpoint, cpu_tree, evaluate, heartbeat, load_teacher, tensor_hash
 
 SAMPLER = Path('/home/filip/miniconda3/envs/aihwkit/bin/python')

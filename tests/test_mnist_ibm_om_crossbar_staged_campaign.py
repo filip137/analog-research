@@ -20,7 +20,7 @@ from experiments.mnist_analog_relu.staged_config import (
 from experiments.mnist_analog_relu.staged_analysis import (
     PRODUCTION_ENDPOINTS as ANALYSIS_PRODUCTION_ENDPOINTS,
 )
-from experiments.schema import RunMode
+from core.contracts import RunMode
 from experiments.study_workflow import load_study_plan
 
 

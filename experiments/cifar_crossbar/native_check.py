@@ -16,7 +16,7 @@ def checks():
     from aihwkit.simulator.tiles import AnalogTile
     from aihwkit.inference.noise.pcm import PCMLikeNoiseModel
     from aihwkit.inference.compensation.drift import GlobalDriftCompensation
-    from experiments.cifar_crossbar.model import CifarResNet32, CrossbarSuffix
+    from networks.cifar_model import CifarResNet32, CrossbarSuffix
     from experiments.cifar_crossbar.pcm_reference import PcmInferenceNoise
     from experiments.cifar_crossbar.native import sample
 

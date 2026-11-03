@@ -47,7 +47,7 @@ def test_host_preparation_emits_current_pinned_grid_and_only_dry_runs(tmp_path, 
             return "a" * 40
         assert env["EBL_CORPUS_ROOT"] == str(corpus.parent)
         assert env["EBL_CAMPAIGN_STREAM"] == "1"
-        if argv[1:4] == ["-m", "workflow", "plan"]:
+        if argv[1:4] == ["-m", "ebl", "lifecycle", "plan"]:
             target = Path(argv[argv.index("--output") + 1])
             target.mkdir(parents=True, exist_ok=True)
             config = json.loads(Path(argv[4]).read_text())
@@ -75,7 +75,7 @@ def test_host_preparation_emits_current_pinned_grid_and_only_dry_runs(tmp_path, 
     assert len(record["cases"]) == count
     assert record["launched"] is False
     assert len([c for c in commands if "--dry-run" in c]) == count
-    assert len([c for c in commands if c[1:4] == ["-m", "workflow", "plan"]]) == count
+    assert len([c for c in commands if c[1:4] == ["-m", "ebl", "lifecycle", "plan"]]) == count
     assert sum(case["smoke"] for case in record["cases"]) == 2
     for case in record["cases"]:
         spec = json.loads(Path(case["campaign_worker_spec"]).read_text())
@@ -92,7 +92,7 @@ def test_host_preparation_emits_current_pinned_grid_and_only_dry_runs(tmp_path, 
 
 
 def test_host_preparation_rejects_dirty_checkout_before_writing(tmp_path, monkeypatch):
-    monkeypatch.setattr(prepare, "command", lambda *args, **kwargs: " M workflow/hwa.py\n")
+    monkeypatch.setattr(prepare, "command", lambda *args, **kwargs: " M methods/hwa.py\n")
     with pytest.raises(ValueError, match="clean committed"):
         prepare.prepare_host(tmp_path, source=tmp_path)
     assert list(tmp_path.iterdir()) == []

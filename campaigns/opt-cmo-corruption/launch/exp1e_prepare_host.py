@@ -22,8 +22,8 @@ for directory in (ROOT, Path(__file__).resolve().parent):
 
 import exp1e_development as development
 import slice_campaign
-from workflow.lifecycle import parse_lifecycle
-from workflow.networks.opt_mlp import PINNED
+from ebl.schema.lifecycle import parse_lifecycle
+from networks.opt import PINNED
 
 DEFAULT_BASE = Path("/home/filip/analog-research/opt-cmo-exp1")
 
@@ -89,7 +89,7 @@ def prepare_host(base: Path = DEFAULT_BASE, *, source: Path = ROOT, python: Path
         plan_root, runs_root = case_root / "plan", case_root / "runs"
         manifest_path, spec_path = case_root / "campaign-training.json", case_root / "tmux-worker.json"
         prepare_logs = case_root / "preparation"
-        plan_argv = [str(python), "-m", "workflow", "plan", str(config), "--teacher-weights", str(teacher),
+        plan_argv = [str(python), "-m", "ebl", "lifecycle", "plan", str(config), "--teacher-weights", str(teacher),
                      "--output", str(plan_root), "--runs", str(runs_root), "--device", "cuda:0",
                      "--cpu-threads", "1", "--python", str(python)]
         command(plan_argv, cwd=source, env=environment, logs=prepare_logs / "plan")
@@ -120,7 +120,7 @@ def prepare_host(base: Path = DEFAULT_BASE, *, source: Path = ROOT, python: Path
                         "native_run_root": str(runs_root), "queue_run_dir": str(worker_root),
                         "campaign_worker_spec": str(spec_path), "worker_spec_sha256": sha256(spec_path),
                         "timeout_seconds": worker_spec["timeout_seconds"], "lease_seconds": 900,
-                        "argv": [str(python), "-m", "campaigns.tmux_worker", "bridge", "--spec", str(spec_path)],
+                        "argv": [str(python), "-m", "ebl.execution.tmux_worker", "bridge", "--spec", str(spec_path)],
                         "prepared_files": [{"path": str(path), "sha256": sha256(path)} for path in
                                            [config, manifest_path, spec_path] +
                                            [Path(stage["config"]) for stage in manifest["stages"]]],

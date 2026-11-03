@@ -18,8 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from exp1e_development import NOTE
 from exp1e_prepare_host import command, checked_input, sha256, DEFAULT_BASE
 from slice_campaign import build_slice, write_frozen
-from workflow.lifecycle import parse_lifecycle
-from workflow.networks.opt_mlp import PINNED
+from ebl.schema.lifecycle import parse_lifecycle
+from networks.opt import PINNED
 
 PHASE = "opt-cmo-exp1e-digital-lr-20261011"
 PREFIX = "opt125m-cmo-l6-exp1e-digital"
@@ -85,7 +85,7 @@ def prepare_host(base):
             raise ValueError("Frozen lifecycle differs from the declared case")
         case_root = ROOT / "results/lifecycles" / lc.lifecycle_id
         plan = case_root / "plan"
-        command([python, "-m", "workflow", "plan", str(config), "--teacher-weights", str(teacher),
+        command([python, "-m", "ebl", "lifecycle", "plan", str(config), "--teacher-weights", str(teacher),
                  "--output", str(plan), "--device", "cuda:0", "--cpu-threads", "1", "--python", python],
                 cwd=ROOT, env=environment)
         manifest, receipt = build_slice(plan / "campaign.json", ["hwa__" + lc.hwa.arms[0].arm_id])
@@ -110,8 +110,8 @@ def prepare_host(base):
             "expected_seconds": expected, "budget_seconds": budget, "lifecycle_sha256": lc.digest(),
             "dry_run_passed": True, "placement": {
                 "workdir": str(ROOT), "run_dir": str(worker_root),
-                "argv": [python, "-m", "campaigns.tmux_worker", "bridge", "--spec", str(worker_path)],
-                "validate_argv": [python, "-m", "campaigns.lifecycle_collect", "validate", str(native_root), "--source-only"],
+                "argv": [python, "-m", "ebl.execution.tmux_worker", "bridge", "--spec", str(worker_path)],
+                "validate_argv": [python, "-m", "ebl.execution.lifecycle_collect", "validate", str(native_root), "--source-only"],
                 "campaign_python": python, "campaign_worker_spec": str(worker_path),
                 "campaign_result_root": str(native_root), "gpu_models": ["5090"],
                 "prepared_files": [{"path": str(p), "sha256": sha256(p)} for p in
@@ -167,14 +167,14 @@ def queue(receipts, output, controller):
         "storage_roots": [{"target": host, "path": info["source"]} for host, info in hosts.items()] +
             [{"target": host, "path": str(Path(info["base"]) / "worker-receipts" / info["source_revision"])} for host, info in hosts.items()],
         "cases": campaign_cases}
-    from campaigns.execution_service import validate_manifest
+    from ebl.execution.service import validate_manifest
     validate_manifest(manifest)
     write_frozen(output / "campaign.json", manifest)
     return {"manifest": str(output / "campaign.json"), "jobs": jobs, "submitted": False}
 
 
 def review(output):
-    from workflow.runtime import validate_source_fit
+    from ebl.schema.source_fit import validate_source_fit
     rows = []
     for item in json.loads((output / "index.json").read_text()):
         if item["job"].endswith("-smoke"):
@@ -204,7 +204,7 @@ def review(output):
         recommended = min((row for row in rows if row["mean_kl"] <= 1.01 * best), key=lambda row: row["digital_lr"])["digital_lr"]
     report = {"coverage_complete": complete, "cases": rows, "recommended_digital_lr_within_new_grid": recommended,
               "scientific_gate": "awaiting_scientific_review", "test_data_used": False}
-    from experiments.artifacts import atomic_write_json
+    from core.artifacts import atomic_write_json
     atomic_write_json(output / "digital-lr-review.json", report)
     return report
 
@@ -230,7 +230,7 @@ def main():
     elif args.command == "queue":
         result = queue(args.receipts, args.output, args.controller)
     else:
-        from campaigns.lifecycle_collect import collect
+        from ebl.execution.lifecycle_collect import collect
         result = collect(args.queue_config, args.output, source_only=True)
         result["review"] = review(args.output)
     print(json.dumps(result, indent=2, sort_keys=True))

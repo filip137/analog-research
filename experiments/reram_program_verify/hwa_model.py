@@ -7,8 +7,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from experiments.artifacts import atomic_write_json, sha256_file
-from training.ibm_reram_program_verify import PopulationStepEstimator
+from core.artifacts import atomic_write_json, sha256_file
+from methods.programming.om import PopulationStepEstimator
 
 
 SCHEMA = "ebl.ibm_reram.om_hwa_device_model"

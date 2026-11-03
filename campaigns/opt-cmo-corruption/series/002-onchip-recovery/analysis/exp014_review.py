@@ -15,7 +15,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[5]
 sys.path[:0] = [str(ROOT), str(ROOT/'campaigns/opt-cmo-corruption/launch')]
 import exp014_context as experiment
-from campaigns.recovery_collect import checked
+from ebl.execution.recovery_collect import checked
 
 CAPS = ('cap2', 'cap4', 'uncapped')
 COLORS = {'cap2':'#3b78a1', 'cap4':'#df8c27', 'uncapped':'#27866b'}

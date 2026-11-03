@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 import pytest
 import torch
-from training.flowers_drift import FlowersLaw, FlowersState
+from hardware.drift.flowers import FlowersLaw, FlowersState
 
 
 @pytest.mark.skipif(not torch.cuda.is_available() or 'FLOWERS_PROBE_MODEL' not in os.environ,

@@ -6,21 +6,22 @@ as a native bundle with provenance checks and exact on-chip replay.
 """
 
 import copy
+import ebl.runtime.device_sampling as device_sampling
 import json
 from pathlib import Path
 
 import pytest
 import torch
 
-from experiments.artifacts import sha256_file
-from experiments.cifar_crossbar.runtime import save
-from experiments.schema import ConfigError
-from workflow import data as data_stage
-from workflow import deployment
-from workflow import devices as device_stage
-from workflow.__main__ import main as workflow_main
-from workflow.lifecycle import parse_lifecycle
-from workflow.networks import opt_mlp
+from core.artifacts import sha256_file
+from core.tensor_io_native import save
+from core.contracts import ConfigError
+import networks.data as data_stage
+import methods.deployment as deployment
+import hardware.arrays as device_stage
+from ebl.lifecycle.cli import main as workflow_main
+from ebl.schema.lifecycle import parse_lifecycle
+import networks.opt as opt_mlp
 from workflow_helpers import lifecycle_document, network_for, om_raw, run_lifecycle
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -220,7 +221,7 @@ def opt_inputs(monkeypatch, tmp_path):
     teacher = tiny_teacher()
     monkeypatch.setattr(deployment, "load_teacher", lambda path, network, device: (teacher, "f" * 64))
     monkeypatch.setattr(
-        device_stage, "native_sample", lambda *, kind, size, seed, policy, variation, output: om_raw(size, seed)
+        device_sampling, "native_sample", lambda *, kind, size, seed, policy, variation, output: om_raw(size, seed)
     )
     corpora = tmp_path / "corpora"
     monkeypatch.setenv("EBL_CORPUS_ROOT", str(corpora))

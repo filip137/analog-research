@@ -5,10 +5,11 @@ import json
 import pytest
 import torch
 
-from workflow import context_views, deployment
-from workflow.lifecycle import parse_lifecycle, provenance, verify_provenance, StageSelection
-from workflow.networks import opt_mlp
-from workflow.__main__ import main as workflow_main
+import networks.context_views as context_views
+import methods.deployment as deployment
+from ebl.schema.lifecycle import parse_lifecycle, provenance, verify_provenance, StageSelection
+import networks.opt as opt_mlp
+from ebl.lifecycle.cli import main as workflow_main
 from test_workflow_cmo import cmo_inputs, small, case_doc
 from test_workflow_opt import tiny_teacher
 from workflow_helpers import run_lifecycle, run_stage

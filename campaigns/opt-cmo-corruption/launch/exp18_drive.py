@@ -38,7 +38,7 @@ def find_source(lifecycle_id: str) -> Path:
 def run(job: dict, driver_log: Path) -> int:
     lifecycle_id = job["lifecycle"]
     base = ROOT / "results/lifecycles" / lifecycle_id
-    command = [PYTHON, "-m", "workflow", "plan", f"campaigns/opt-cmo-corruption/lifecycles/{lifecycle_id}.json",
+    command = [PYTHON, "-m", "ebl", "lifecycle", "plan", f"campaigns/opt-cmo-corruption/lifecycles/{lifecycle_id}.json",
                "--teacher-weights", job["teacher_weights"], "--output", str(base / "plan"), "--runs",
                str(base / "runs"), "--device", "cuda", "--cpu-threads", "4", "--python", PYTHON]
     source = job.get("hwa_source")

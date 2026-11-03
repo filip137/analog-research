@@ -2,9 +2,11 @@ from dataclasses import replace
 import math
 import pytest
 import torch
-from training.writable_drift import DriftLaw, WritableDrift, MaskedAdam, cycle_normal, select_masks
-from training.drift_recovery_config import DriftRecovery
-from training.drift_recovery import refresh
+from hardware.drift.writable import DriftLaw, WritableDrift, cycle_normal
+from methods.optimizers.masked import MaskedAdam
+from methods.maintenance.selection import select_masks
+from methods.maintenance.config import DriftRecovery
+from methods.maintenance.recovery import refresh
 
 
 @pytest.fixture(autouse=True)

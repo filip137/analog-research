@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from workflow.lifecycle import parse_lifecycle, provenance, verify_provenance
+from ebl.schema.lifecycle import parse_lifecycle, provenance, verify_provenance
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("exp2_dense_baseline", ROOT / "campaigns/opt-cmo-corruption/launch/exp2_dense_baseline.py")
@@ -29,8 +29,8 @@ def test_full_pass_preserves_frozen_source_and_excludes_test_training():
 
 
 def test_frozen_source_manifest_trains_one_array_without_hwa_retraining(tmp_path, monkeypatch):
-    from workflow import plan
-    from workflow.lifecycle import Execution
+    import ebl.lifecycle.plan as plan
+    from core.execution import Execution
     # Only the pinned teacher hash is mocked; the actual native stage graph is built.
     monkeypatch.setattr(plan, "sha256_file", lambda _: study.PINNED["facebook/opt-125m"]["sha256"])
     lc = study.lifecycle("50m")

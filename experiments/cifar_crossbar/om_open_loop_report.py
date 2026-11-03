@@ -3,7 +3,7 @@ from collections import defaultdict
 import json
 import math
 from pathlib import Path
-from experiments.artifacts import atomic_write_json, sha256_file
+from core.artifacts import atomic_write_json, sha256_file
 from experiments.cifar_crossbar.om_open_loop_config import OmOpenLoopSpec
 from experiments.cifar_crossbar.sweep_config import SOURCES, cases
 from experiments.cifar_crossbar.hwa_fault_runtime import case_name

@@ -15,9 +15,11 @@ import torch
 
 from experiments.cifar_crossbar import full_epoch_runtime, sweep_runtime
 from experiments.cifar_crossbar.closed_loop_lr_updates import UncappedClosedLoopAdam
-from experiments.cifar_crossbar.devices import PulseWriter, clone_cpu, make_plant, prepare_population
-from experiments.cifar_crossbar.model import state_hash
-from experiments.cifar_crossbar.open_loop_updates import (
+from methods.optimizers.pulse import PulseWriter
+from core.tensor_io import clone_cpu
+from hardware.plants import make_plant, prepare_population
+from core.tensor_identity import state_hash
+from methods.optimizers.open_loop import (
     UncappedOpenLoopAdam,
     apply_pulse_counts,
     nominal_reset_counts,
@@ -25,9 +27,15 @@ from experiments.cifar_crossbar.open_loop_updates import (
 from experiments.cifar_crossbar.pcm_reference import PcmInferenceNoise
 from experiments.cifar_crossbar.sweep_config import default_config as sweep_config
 from experiments.cifar_crossbar.sweep_config import parse_config as parse_sweep
-from experiments.cifar_crossbar.sweep_devices import LayeredPcmArray, combined_om, make_array
-from workflow import devices, hwa, onchip, program_verify
-from workflow.lifecycle import DefectCase, parse_lifecycle
+from hardware.layered_pcm import LayeredPcmArray
+from hardware.population_binding import combined_om
+from experiments.cifar_crossbar.sweep_devices import make_array
+import hardware.arrays as devices
+import methods.hwa as hwa
+import methods.onchip as onchip
+import methods.programming.lifecycle as program_verify
+from hardware.config import DefectCase
+from ebl.schema.lifecycle import parse_lifecycle
 from workflow_helpers import (
     GMAX,
     LIFECYCLES,
@@ -145,8 +153,8 @@ def test_om_endpoint_characterization_matches_historical_kernel_tables():
     populations = om_populations((), (), kernel_size=80)
     kernels = program_verify.characterize_endpoints(populations, lc, "cpu")
     from experiments.cifar_crossbar.sweep_devices import prepare_population as legacy_prepare
-    from experiments.cifar_crossbar.devices import program as legacy_program
-    from experiments.cifar_crossbar.full_epoch_runtime import om_population
+    from methods.programming.pulse import program as legacy_program
+    from hardware.faults import om_population
 
     grid = torch.linspace(-1, 1, 5).repeat_interleave(16)
     for role in ("fit", "heldout"):

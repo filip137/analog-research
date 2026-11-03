@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 from ebl.cli import CharacterizeRequest, CommandHandlers, main
-from experiments.definitions import resolve_experiment_config
-from experiments.schema import ConfigError, RunMode
+from ebl.registry import resolve_experiment_config
+from core.contracts import ConfigError, RunMode
 from experiments.study_workflow import prepare_study, summarize_study
 
 

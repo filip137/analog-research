@@ -8,18 +8,24 @@ import time
 import gzip
 import io
 import torch
-from experiments.artifacts import RunStore, atomic_write_json, sha256_file
-from experiments.cifar_crossbar.runtime import load, save, source_model, evaluate
-from experiments.cifar_crossbar.model import CrossbarSuffix, tensor_hash
-from experiments.cifar_crossbar.devices import make_plant, clone_cpu
+from ebl.runtime.store import RunStore
+from core.artifacts import atomic_write_json, sha256_file
+from core.tensor_io_native import load, save
+from experiments.cifar_crossbar.runtime import source_model
+from networks.cifar_metrics import evaluate
+from networks.cifar_model import CrossbarSuffix
+from core.tensor_identity import tensor_hash
+from hardware.plants import make_plant
+from core.tensor_io import clone_cpu
 from experiments.cifar_crossbar.fault_runtime import cache_context, limited_cache
 from experiments.cifar_crossbar.full_epoch_runtime import trajectory, array_identity, restore_endpoint
 from experiments.cifar_crossbar.sweep_config import SOURCES, cases
 from experiments.cifar_crossbar.sweep_runtime import configure_runtime
-from experiments.cifar_crossbar.sweep_devices import combined_om, CompactCheckpoints, expand_checkpoint
+from hardware.population_binding import combined_om
+from experiments.cifar_crossbar.sweep_devices import CompactCheckpoints, expand_checkpoint
 from experiments.cifar_crossbar.hwa_fault_runtime import case_name
 from experiments.cifar_crossbar.om_open_loop_config import OmOpenLoopSpec
-from experiments.cifar_crossbar.open_loop_updates import UncappedOpenLoopAdam, nominal_reset_counts, apply_pulse_counts
+from methods.optimizers.open_loop import UncappedOpenLoopAdam, nominal_reset_counts, apply_pulse_counts
 
 ROOT = Path(__file__).resolve().parents[2]
 

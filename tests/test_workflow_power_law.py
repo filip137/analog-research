@@ -1,8 +1,8 @@
 import json
 import pytest
-from experiments.schema import ConfigError
-from workflow.__main__ import main as workflow_main
-from workflow.lifecycle import parse_lifecycle, provenance, verify_provenance
+from core.contracts import ConfigError
+from ebl.lifecycle.cli import main as workflow_main
+from ebl.schema.lifecycle import parse_lifecycle, provenance, verify_provenance
 from test_workflow_cmo import cmo_inputs, small, case_doc
 from workflow_helpers import run_lifecycle
 from test_power_law_drift import spec
@@ -47,7 +47,7 @@ def calibration(**overrides):
 
 
 def test_power_law_calibration_replays_parent_and_collects(cmo_inputs, tmp_path):
-    from workflow.lifecycle import StageSelection
+    from ebl.schema.lifecycle import StageSelection
     from workflow_helpers import run_stage
     weights, digest = cmo_inputs
     lc = small(**{'onchip': None, 'defects.cases': [case_doc()], 'retention': settings(),

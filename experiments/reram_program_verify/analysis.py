@@ -14,7 +14,7 @@ from typing import Any, Iterable, Mapping, Sequence
 import numpy as np
 import torch
 
-from experiments.artifacts import atomic_write_json
+from core.artifacts import atomic_write_json
 
 
 _QUANTILES = (0.01, 0.05, 0.5, 0.95, 0.99)

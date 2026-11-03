@@ -8,12 +8,12 @@ import pytest
 import torch
 from scipy import stats
 
-from experiments.artifacts import sha256_file
-from training.drift_recovery import tensor_hash
-from training.flowers_drift import FlowersLaw, FlowersState
-from training.initial_programming import targets, select_pairs, time_weights
-from training.initial_programming_config import InitialProgramming
-from workflow.lifecycle import parse_lifecycle, stage_selections, StageSelection, provenance, verify_provenance
+from core.artifacts import sha256_file
+from methods.maintenance.recovery import tensor_hash
+from hardware.drift.flowers import FlowersLaw, FlowersState
+from methods.initial_programming import targets, select_pairs, time_weights
+from methods.programming.config import InitialProgramming
+from ebl.schema.lifecycle import parse_lifecycle, stage_selections, StageSelection, provenance, verify_provenance
 from test_workflow_cmo import cmo_inputs, small, case_doc
 from workflow_helpers import run_stage
 
@@ -118,8 +118,8 @@ def test_native_stage_source_identity_coverage_cost_and_replay(cmo_inputs,tmp_pa
     cfg = replace(config(tmp_path), source_sha256=sha256_file(source), cohort_sha256=tensor_hash(tokens),
                   policy=policy, assignment_seeds=(271001,), validation_sequences=2,
                   evaluation_seconds=(0.,60.,3600.),canary=True)
-    from training.initial_programming import prebias_table
-    monkeypatch.setattr('workflow.initial_programming.prebias_table',
+    from methods.initial_programming import prebias_table
+    monkeypatch.setattr('ebl.runtime.initial_programming.prebias_table',
                         lambda law,settings,anchor: prebias_table(law,settings,anchor,points=129,quadrature=128))
     doc = lc.to_dict(); doc['initial_programming'] = cfg.to_dict()
     custom = parse_lifecycle(doc)

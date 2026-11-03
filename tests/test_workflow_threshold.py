@@ -4,10 +4,10 @@ import json
 import pytest
 import torch
 
-from experiments.schema import ConfigError
-from training.reram_cmo import CmoMatrix
-from workflow.lifecycle import parse_lifecycle
-from workflow.onchip import IdealizedWriteAdam, ThresholdedWriteAdam
+from core.contracts import ConfigError
+from hardware.devices.cmo import CmoMatrix
+from ebl.schema.lifecycle import parse_lifecycle
+from methods.onchip import IdealizedWriteAdam, ThresholdedWriteAdam
 from test_workflow_cmo import cmo_inputs, small, template, case_doc
 from workflow_helpers import run_lifecycle
 
@@ -53,7 +53,7 @@ def test_accumulation_delays_then_issues_the_sum_without_rounding_up():
 
 
 def test_accumulator_conserves_signed_commands_even_for_stuck_write_attempts(monkeypatch):
-    import workflow.onchip as module
+    import methods.onchip as module
     mask = torch.tensor([[True, False, False], [False, False, False]])
     stuck = torch.full((2, 3), 48.6)
     array = CmoMatrix(3, 7, 2., 1., "cpu", (mask, stuck))

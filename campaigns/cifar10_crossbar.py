@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 
-from experiments.artifacts import atomic_write_json, sha256_file
+from core.artifacts import atomic_write_json, sha256_file
 
 ROOT = Path(__file__).resolve().parents[1]
 STUDY = ROOT / 'results/cifar10-hwa-recovery-20260917-v1'

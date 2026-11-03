@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from training.affine_retention import AffineDriftModel
+from hardware.drift.affine import AffineDriftModel
 
 
 class JointReference:

@@ -52,7 +52,7 @@ def test_tolerance_and_invalid_metric():
 
 def test_lora_gate_and_receipt_are_idempotent(tmp_path, monkeypatch):
     import json
-    from campaigns.execution_service import digest
+    from ebl.execution.service import digest
     root = tmp_path
     (root/'prepared/queue').mkdir(parents=True)
     (root/'readiness').mkdir()

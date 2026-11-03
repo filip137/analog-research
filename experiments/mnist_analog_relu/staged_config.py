@@ -12,7 +12,7 @@ import math
 from typing import Any, Mapping, TypeAlias
 
 from experiments.mnist_relu.config import _integer, _keys, _number, _object
-from experiments.schema import RunMode, config_error
+from core.contracts import RunMode, config_error
 
 
 EXPERIMENT_ID = "mnist_ibm_om_crossbar_relu.v2"
