@@ -7,6 +7,11 @@ For a small bounded exploratory test, use one Markdown note:
 Reuse an already assigned note in place when available. No extra README, idea board,
 exploration, hypothesis file, series, result note or ledger is required for a pilot.
 
+The note and linked lifecycle live on the responsible `exp/<id>` branch. They
+declare which of corrupted devices, write noise and drift the run studies, with
+the selected models, parameters, controls and budget. Shared instructions set the
+research scope; they do not supply a run's simulation settings.
+
 The note grows through the roles:
 
 - Explorer: question, expected outcome, matched comparison, measurement/decision rule and budget.
@@ -79,7 +84,8 @@ hypotheses: ["H-001"]
 Link hypotheses and predecessor evidence; name missing inputs.
 
 ## Cases and controls
-List arms, seeds, held-fixed factors and comparison/evidence regime.
+List enabled corrupted-device, write-noise and drift effects, their models and
+parameters, arms, seeds, held-fixed factors and comparison/evidence regime.
 
 ## Execution contract
 Explorer: specify the computation and scientific contract; link existing configs when

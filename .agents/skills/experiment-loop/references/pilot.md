@@ -6,6 +6,8 @@ State: planned. Branch: `exp/<id>`. Authorization: <assigned scope; planning alo
 What do we want to learn; which decision follows? Expected outcome and alternatives.
 
 ## Frozen comparison
+On this experiment branch, declare enabled corrupted-device, write-noise and drift
+effects, their models/parameters and interactions, and the selected controls.
 Cases, control/intervention, inputs and initialization, fixed factors, measurements,
 predeclared decision rule, evidence class, confounds, excluded claims. For a lifecycle:
 each Explorer-owned field (see SKILL.md) with its value, marked proposed or confirmed.

@@ -11,7 +11,7 @@ procedure, not the menu.
 ## 1. Prior evidence
 
 Search before designing: `campaigns/*/series/*/results/`, `campaigns/pilots/*.md`
-and `docs/*_results.md` (grep the network, technology, defect kind and arm names).
+and `docs/*_results.md` (search the network, technology, defect, noise, drift and arm names).
 Campaign result notes carry a one-line `summary` in their frontmatter; read those first.
 Write a short linked list of what is already known and under which regime. If the
 question is already answered in that regime, stop and say so; if a related result
@@ -22,61 +22,55 @@ recommend for the choice at hand.
 
 ## 2. Question and decision
 
-- One question, phrased as a comparison, e.g. "With N analog MLPs and gmax
-  fractions F, does on-chip learning close more of the teacher-KL gap than
-  calibration or rewrite, and at what pulse cost?"
+- One question comparing interventions under declared corrupted-device,
+  write-noise or drift conditions, with the outcome and physical cost explicit.
 - The decision it informs (continue, scale, change regime, stop).
 - The expected outcome and at least one alternative that would change the decision.
 
 ## 3. Frozen comparison
 
-Walk every Explorer field of the ownership table in [SKILL.md](../SKILL.md). Mark
-each choice `proposed` or `confirmed by user`; the user confirms the material ones:
-corpus, metric, number of analog layers, defect regime, comparison arms and budget.
-Starting proposals for OPT, from `examples/lifecycles/opt125m-cmo-mlp4-template.json`:
+On the experiment's `exp/<id>` branch, walk every Explorer field of the ownership
+table in [SKILL.md](../SKILL.md). Mark each choice `proposed` or `confirmed by user`.
+The user confirms material choices: network/analog subset, corpus, metric,
+defect/noise/drift regime, comparison arms and budget. Record the selected values
+in the note; the Codifier transcribes them into the lifecycle.
 
-- network: `opt_mlp_suffix`, `analog_decoder_layers` N (1–2 for a first probe);
-- technology `cmo` (the working device; [contract](../../../../docs/reram_cmo_device.md)),
-  `gaussian_endpoint` P&V at `acceptance_percent` 2.0, no relaxation;
-- defects: a `none` case plus the four hierarchical scenarios of the template:
-  - independent, array, die and both, at a 5 % synthetic mean, with κ = ∞ or 118
-    (about 2 percentage points at each level);
-  - `random` stuck values;
-  - 256×256 arrays (`deployment.tile_size`) and 48 arrays per die, which gives
-    three dies per MLP.
+- State which effects are enabled, absent or varied: corrupted devices, write
+  noise and drift. Declare their interactions when combined.
+- Specify technology, model revision, topology/mapping and conductance bounds.
+  For defects, record kinds, rates and placement. For programming and subsequent
+  writes, record the noise law and strength, affected devices, verify policy and
+  clipping. For drift, record the law, age grid, temporal correlations and
+  post-write reset behavior. Label idealized controls and extrapolations.
+- Select the network, analog subset, teacher and initialization with pinned inputs.
+  Declare corpus, sequence length, disjoint adaptation/evaluation cohorts,
+  objective, primary metric and selection rule.
+- Declare HWA sources and settings, calibration, rewrite and learning controls,
+  update laws and physical cost measurements. For HWA choices consult
+  [`hwa_papers/`](../../../../hwa_papers/README.md), recording which follow the
+  papers and which deviate, with reasons.
+- Declare independent assignment and selection arrays, programming realizations
+  and trajectory pairing. A one-assignment pilot cannot establish generality.
+- Freeze learning rates and epochs from cited evidence or a separate development
+  lifecycle, without tuning on the evaluation split.
 
-  Choose the mean, the concentrations and the stuck `kind` per question, in one
-  list that is never pooled. If 5 % destroys performance, lower the mean before
-  testing recovery;
-- HWA sources: `digital` and `standard_hwa`, with the CMO `hwa.noise_std` and
-  `hwa.noise_scaling` (Gaussian weight noise) declared in the note; add
-  `cdt_<kind>` only when corruption-aware training is part of the question (CMO
-  supports it: temporary stuck active and reference devices). Every HWA setting
-  must be checked against [`hwa_papers/`](../../../../hwa_papers/README.md). This
-  covers noise model, magnitude and scaling; clipping; corruption masks;
-  objective and distillation; training data and token budget; learning-rate
-  schedule; checkpoint selection. Mark each choice in the note as following
-  Rasch 2023 or Büchel 2025, or as a stated deviation with its reason;
-- on-chip arms: the five standard ones (`none`, `calibration`, `rewrite`,
-  `onchip_weights`, `onchip_calibration`), `cmo_idealized_write_adam`;
-- arrays: one assignment for a labelled pilot, at least three for any claim;
-  selection arrays separate from assignments;
-- metric: `teacher_kl` primary, perplexity reported; corpus, sequence length and
-  cohort sizes declared, with adaptation and evaluation tokens disjoint;
-- learning rates and epochs: cited from an earlier frozen result or chosen by a
-  separate development lifecycle; never tuned on the evaluation split.
+Select a compatible template from `examples/lifecycles/` after these choices are
+resolved. Template values and prior campaign defaults do not choose the next run's
+science. Link and pin any shared protocol the experiment adopts.
 
 ## 4. Decision rule
 
 Fill and freeze before any result exists; thresholds are labelled `proposed` until
-the user confirms them.
+the user confirms them. Adapt this teacher-KL example to the declared metric,
+time aggregation and physical cost units.
 
 ```text
-Unit: one assignment x one defect case. Never pool across defect rates.
+Unit: one assignment x one declared defect/noise/drift condition.
+Keep distinct conditions separate.
 gap closed = (initial - final) / (initial - clean), in teacher KL on <split>
 Matched effect: learn arm vs the hold arm with the same calibration flag and HWA source.
 Viability: best learn row vs the best no-weight-learning row (none, calibration,
-  rewrite) across the declared HWA sources, same assignment and case.
+  rewrite) across the declared HWA sources, same assignment and condition.
 On-chip is viable for <regime> if, in at least <k> of <n> assignments,
   gap closed improves by >= <delta> over that best alternative at <= <cost>
   pulses per cell. Inconclusive if <...>. Report cost for every learn row.
@@ -87,6 +81,8 @@ On-chip is viable for <regime> if, in at least <k> of <n> assignments,
 - Teacher, analog subset, corpus, cohorts, minibatch order, objective, seeds and
   budget are identical across arms; only the declared intervention differs.
 - Programming realizations of one assignment are not independent arrays.
+- Temporal pairing and post-write randomness match the declared model and time grid;
+  a shared seed alone does not establish matched trajectories.
 - HWA selection uses selection arrays and development data, never test data.
 - A smoke or probe is not evidence; partial coverage stays labelled partial.
 - Any change of corpus, tokenization or cohort between arms invalidates the comparison.

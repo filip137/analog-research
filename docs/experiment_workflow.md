@@ -49,6 +49,13 @@ The campaign README is a short overview and links. Experiment notes own specific
 the current handoff and run locations; result notes own measurements and interpretation.
 The generated ledger displays recorded judgments; it neither launches nor concludes.
 
+The shared research scope is corrupted devices, write noise and drift. The branch
+responsible for the experimental run owns its simulation details in the note and
+lifecycle: selected effects and models, numerical settings, controls, inputs, metric
+and budget. Commit those choices before launch. Shared instructions and example
+configs are not a substitute for that declaration. Merge the experiment records
+at the git checkpoints; their settings remain specific to that experiment.
+
 `campaigns/runner.py`, `schema.py` and `manifests/` remain the optional subprocess
 orchestrator. Their executable manifests are distinct from research campaign notes.
 Existing `studies/*.json` plans still prepare and enforce their exact config contracts.

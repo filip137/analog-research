@@ -2,29 +2,29 @@
 
 ## Scope and research question
 
-These instructions apply to `main` (named `codex/revised-hwa-training` until 3 November
-2026). This tree determines when
-on-chip training is a viable post-deployment adaptation strategy for networks
-deployed on crossbar arrays with corrupt devices:
+These instructions apply to `main` (named `codex/revised-hwa-training` until
+3 November 2026). This worktree studies hardware-aware training, deployment
+and on-chip adaptation of crossbar arrays under three effects: **corrupted
+devices, write noise and drift**, individually and in declared combinations.
 
-> When, and at what physical update cost, does on-chip training of a deployed array
-> recover performance lost to device corruption beyond hardware-aware training,
-> re-programming and matched digital calibration?
+> When, and at what physical update cost, does on-chip training recover
+> performance lost to corrupted devices, write noise or drift beyond
+> hardware-aware training, re-programming and matched digital calibration?
 
 On-chip training is viable for a regime only when it beats the best predeclared
 no-weight-learning alternative (HWA-only deployment, rewrite of frozen targets,
 digital calibration) at matched data and budget, holds across independent array
-assignments and defect rates, and its write cost (pulses per cell, touched cells,
-verify reads) is reported. One favorable endpoint, assignment or defect case is
-not a general result. Negative and regime-limited answers are valid outcomes.
+assignments and the declared conditions, and its write cost (pulses per cell,
+touched cells, verify reads) is reported. One favorable endpoint, assignment,
+defect case, noise level or age is not a general result. Negative and
+regime-limited answers are valid outcomes.
 
-Since 30 October 2026 the priority is drift rather than corruption. The order is
-a device model first, then HWA and program-and-verify, then maintenance, and
-only then on-chip learning. The drift records are owned by the shared study in
-the workspace, [`../on-chip-learning/`](../on-chip-learning/README.md), which is
-outside this repository and lists the active campaigns. Crossbar code and
-native runs stay in this tree. The standard device model is defined under
-[Drift](#drift). The corruption work below remains reference evidence.
+`main` owns the shared scientific and workflow contracts, reusable code and
+reference evidence. The branch responsible for an experiment owns its simulation
+choices. Shared crossbar/DRN study records live in
+[`../on-chip-learning/`](../on-chip-learning/README.md); crossbar code and native
+runs stay in this tree. Consult the assigned campaign for its current question
+and direction.
 
 The initial target is OPT-125M. Completed MNIST, dense CIFAR-10 and ResNet-32
 CIFAR-10/100 work is reference evidence and the validated reference implementation
@@ -50,112 +50,89 @@ adapters. Historical execution code is at `16938bf`. Keep unrelated maintenance 
 - `results/`, `artifacts/`, `data/`: ignored raw evidence, frozen sources and datasets.
 - `docs/`: active contracts and historical records; `tests/`: numerical and workflow checks.
 
+## Simulation details belong to the experiment branch
+
+On the experiment's `exp/<id>` branch, declare the selected settings in its
+experiment or pilot note and strict lifecycle before launch. This includes:
+
+- which of corrupted devices, write noise and drift are enabled, their models,
+  parameters and interactions, and the controls that isolate their effects;
+- device technology and model revision, topology and mapping, conductance bounds,
+  programming/verify law, write/reset behavior and temporal correlations;
+- network and analog subset, teacher and initialization, corpus and cohorts,
+  objective, metric, adaptation arms, selection rule and physical cost accounting;
+- assignment and trajectory seeds, repetitions, time grid, compute/storage budget,
+  source and input identities, output paths and execution handoff.
+
+Use existing contracts and templates as implementation references. A template or
+a previous experiment does not select settings for a new run. Link any adopted
+shared protocol and freeze its version or hash with the run. Material scientific
+choices require user authorization; the Codifier does not fill unresolved choices.
+The note and lifecycle are committed and integrated at the workflow's git
+checkpoints. Once merged into `main`, they remain records of that experiment.
+
 ## Transformer target
 
-Crossbar arrays replace the MLPs: `fc1` (768→3072) and `fc2` (3072→768) of the
-last N OPT-125M decoder layers (4,718,592 logical weights per layer). Attention
-stays digital: `q/k/v/out_proj`, QKᵀ, softmax and attention times V. The MLP
-activation, biases, LayerNorm, token and position embeddings and the tied LM
-head are also digital. Moving attention projections onto arrays is a separate,
-explicitly assigned regime.
+The implemented OPT family is `opt_mlp_suffix`: crossbar arrays replace `fc1`
+(768→3072) and `fc2` (3072→768) of the last N OPT-125M decoder layers,
+4,718,592 logical weights per layer. Attention, the MLP activation, biases,
+LayerNorm, embeddings and tied LM head stay digital. Moving attention
+projections onto arrays is a separate, explicitly assigned regime.
 
-The lifecycle family `opt_mlp_suffix` implements this. The number of analog
-MLPs (`network.analog_decoder_layers`), the corruption kinds and fractions
-(`defects.cases`), the HWA sources and the on-chip arms are lifecycle settings:
-varying them never needs new code. Start from `examples/lifecycles/opt125m-cmo-mlp4-template.json`
-and follow [the lifecycle contract](docs/crossbar_lifecycle.md); its extension
-points name where any genuinely missing capability goes. Record the analog layers
-and logical weight count with every result.
+Declare N, teacher, corpus, sequence length, cohorts and primary metric in the
+experiment branch. Record the analog layers and logical weight count with every
+result. The pinned pretrained FP32 teacher reference is in
+`workflow/networks/opt_mlp.py`. A declared `network.teacher` may instead use a
+task-fine-tuned FP32 teacher with merged LoRA, a pinned SHA-256 and recorded
+fine-tuning provenance; retain the matched pretrained-teacher control. A deployed
+digital adapter remains a separate, escalated regime.
 
-The teacher is the pinned FP32 OPT-125M checkpoint (revision and SHA-256 in
-`workflow/networks/opt_mlp.py`). The corpus, sequence length, cohort sizes and
-primary metric (teacher KL or perplexity) are Explorer choices, declared in the
-experiment note and the lifecycle before running; the corpus is pre-tokenized
-with `python -m workflow corpus` and pinned by SHA-256. Adaptation and evaluation
-tokens never overlap. Measure memory, throughput and storage on one or two
-analog layers before scaling: device-state cost grows with every analog weight.
-
-The user approved task-fine-tuned teachers on October 15, 2026 (exp-018). A
-lifecycle may declare `network.teacher`: an FP32 OPT-125M fine-tuned on a
-labelled multiple-choice task, with LoRA merged into its weights. That teacher
-is pinned by SHA-256 and has a recorded fine-tuning provenance. With a declared
-`task`, the task accuracy may be the primary metric. Each such lifecycle has a
-matched pretrained-teacher control that differs only in the teacher. LoRA here
-only prepares teachers; a deployed digital adapter remains a separate,
-escalated regime.
+Follow the [lifecycle contract](docs/crossbar_lifecycle.md) and select the template
+in `examples/lifecycles/` that matches the declared regime. The corpus is
+pre-tokenized with `python -m workflow corpus` and pinned by SHA-256. Adaptation
+and evaluation tokens never overlap. Measure memory, throughput and storage
+before scaling the analog subset: device-state cost grows with every weight.
 
 ## Corrupt devices
 
-Defects are permanent physical faults defined by the lifecycle `defects` section:
-kind (`open`, `gmax`, `random`, and for CMO `gmin`), rate and placement per physical device. All arms of
-one assignment share that array's fault map, so they are matched conditions, not
-independent arrays. Writes never repair a defect; verify persistence. Corruption
-masks used in HWA training are temporary and are never the deployed fault map.
-Report results per assignment and defect case; do not pool across defect rates.
-CMO faults are placed hierarchically ([CMO device contract](docs/reram_cmo_device.md)):
+Defects are permanent physical faults. The experiment branch declares their
+kind, rate and placement in `defects`. All arms of one assignment share that
+array's fault map; these are matched conditions, not independent arrays. Writes
+never repair a defect; verify persistence. Corruption masks sampled during HWA
+are temporary and are never the deployed fault map.
 
-- die and array fault rates are drawn from Beta distributions whose
-  concentrations set die-to-die and array-to-array variation;
-- the fault total is exact per MLP, so scenarios at the same mean differ only
-  in how the faults are distributed;
-- the stuck value (`kind`) is an experimental variable, with `random` as the
-  default.
+Report each assignment and defect case separately. Identify synthetic fault
+statistics as such. The [CMO device contract](docs/reram_cmo_device.md) describes
+the supported hierarchical placement model when that model is selected.
 
-The rates and their spreads are synthetic, not measured CMO statistics.
-Report results per scenario.
+## Write noise
+
+Distinguish initial programming error from noise on subsequent writes, and both
+from temporary HWA perturbations or read noise. The experiment branch declares
+the write law, noise distribution and strength, affected devices, correlations,
+clipping and any verify/retry policy. Keep the realized apparent state after a
+write until a declared physical process changes it. Noise-free writes are a
+named idealized control. Report physical writes, touched cells, pulses and
+verify reads at the level supported by the model; endpoint commands are not
+measured pulse, energy or latency costs.
 
 ## Drift
 
-The standard device model was set by the user on 3 November 2026. It is the
-CMO deployment under [Data and initialization](#data-and-initialization),
-followed by the power-law drift the user supplied on 28 October
-([specification](../on-chip-learning/campaigns/drift/power-law-model.md)). One
-knob sets the temporal correlation
-([25-h evidence](../on-chip-learning/campaigns/drift-mitigation/series/001-device-model/results/retention-25h-correlation-20261103/README.md)):
+The experiment branch declares the drift law, conductance window, coefficients,
+time units and grid, temporal correlations, affected devices and behavior after
+a write. State how programming error, drift, read noise and permanent faults
+interact. Distinguish measured support from assumed sensitivities and time
+extrapolations, and report clipping at both bounds.
 
-```text
-G_p   = CMO endpoint draw for the target, clamped once into 9–88.2 µS (the first read)
-u     = τ / 1 h,   τ = seconds since the device's latest write (no programming-to-read delay)
-G(τ)  = clip(G_p + m·u^α + s·u^β·Y(τ), 9, 88.2)
-Corr(Y(τ1), Y(τ2)) = (τ1/τ2)^κ  for τ1 ≤ τ2,   κ = ln ρ* / ln(5 min / 25 h)
-exact step: Y ← c·Y + √(1 − c²)·z,   c = (τ_prev/τ_next)^κ
-```
+Check the selected law against the implementation before running: a marginal
+law at one age does not establish its temporal process or rewrite semantics.
+Keep historical replay contracts intact. For shared drift modules mirrored in
+`drn/`, coordinate changes to both copies. Paired stochastic trajectories must
+follow the declared coupling and compatible time grids.
 
-- **Nominal values:** m = −2 µS, s = 3 µS, α = 0.23, β = 0.11 and
-  ρ* = Corr(Y(5 min), Y(25 h)) = 0.335 (κ ≈ 0.19), as measured on the 25-h data.
-  A sweep of s, the exponents or ρ* is declared in the experiment note, with
-  values in µS.
-- **Devices and writes:** every physical device drifts, the reference devices
-  as well as the active ones. A full rewrite draws a fresh CMO endpoint,
-  restarts τ and draws a fresh Y (R1). A persistent per-device share f of Y
-  (`rho` in `training/writable_drift.py`) is a declared sensitivity; the
-  default is f = 0.
-- **What κ affects:** at every age the marginal is the power law, whatever κ
-  is, so single-age results do not depend on ρ*. Anything that reads at one age
-  and acts at another does. ρ* = 1 (κ = 0, ε fixed for a whole write episode)
-  is the model of the runs before 3 November and is now a labelled sensitivity
-  case.
-- **Refinements:** read noise is folded into s. Separate read noise,
-  conductance-binned coefficients, heavy tails, a programming-to-read delay and
-  ages past 25 h are declared refinements or labelled extrapolations.
-- **Named alternatives:** the flowers fit (`training/flowers_drift.py`,
-  supported to 1.7 h), the AIHWKit retention laws in
-  `training/inference_retention.py`, other observation bounds and ideal
-  programming (G0 = target). Label results under these as such and never pool
-  them with the standard model.
-- **Information and reporting:** controllers observe only read conductances.
-  ε, Y, κ and other hidden draws stay on the analysis side, except in labelled
-  oracle arms. Report clipping at both bounds with every result.
-
-**Implementation status:**
-- `training/power_law_drift.py` (lifecycle `retention.power_law`) and
-  `training/writable_drift.py` implement only κ = 0.
-- `writable_drift.py` writes exact endpoints, without the CMO draw.
-- Add both before any multi-age, rewrite or learning run under the standard
-  model. Keep κ = 0 replays of earlier runs bit-exact, and declare ρ* in each
-  lifecycle.
-- Paired arms share drift draws only if they advance on the same time grid.
-- Both modules are mirrored verbatim in `drn/`; change the two copies together.
+The [recorded CMO/drift reference](docs/archive/cmo-drift-model-20261103.md)
+preserves the earlier parameters and implementation limitations. Any model
+adopted from it must be selected explicitly in the experiment's note and lifecycle.
 
 ## Scientific and physical contracts
 
@@ -192,23 +169,11 @@ exact replay contract.
 
 ## Data and initialization
 
-The OPT experiments use IBM CMO/HfOx ReRAM (`devices.technology: "cmo"`), as
-specified in the [CMO device contract](docs/reram_cmo_device.md):
-
-- the Falcone et al. (2025) 2 % program-and-verify fit as released in AIHWKit
-  1.1.0 `ReRamCMONoiseModel`, over 9–88.2 µS;
-- two devices per weight, read as `q=a-r`: an active device, and a reference
-  device programmed to mid-range;
-- either device can be corrupted;
-- one unclamped Gaussian endpoint per device at deployment, held afterwards;
-- HWA injects Gaussian weight noise on every minibatch: `hwa.noise_std`, per
-  matrix or per output channel (the Analog Foundation Models convention),
-  declared per experiment;
-- corruption-aware HWA arms add temporary i.i.d. stuck active and reference
-  devices;
-- the `cmo_idealized_write_adam` on-chip law: one noisy write per active
-  device and step on the held state, with no verify and no retry, so write
-  errors persist.
+Declare device sources and initialization in the experiment branch. Pin exact
+model revisions, data and checkpoint paths and hashes. CMO, OM and PCM are
+separate supported regimes with different programming and update semantics;
+the [CMO device contract](docs/reram_cmo_device.md) and
+[lifecycle contract](docs/crossbar_lifecycle.md) describe their implementations.
 
 HWA training decisions — noise model, magnitude and scaling, weight clipping
 and mapping, corruption-aware masks, objective and distillation, training data
@@ -218,18 +183,15 @@ two reference papers in [`hwa_papers/`](hwa_papers/README.md): Rasch et al.
 (arXiv:2505.09663). The experiment note states which choices follow them and
 which deviate, and why.
 
-AIHWKit's CMO drift and read-noise models stay disabled; drift follows the
-[standard drift model](#drift). IBM optimized-material
-(OM) ReRAM (`"om"`: literal AIHWKit cells, pulse P&V and pulse laws) and
-Gaussian PCM (`"pcm"`) remain supported, separately declared regimes.
-Label results exploratory and model-based, not fabricated-hardware measurements. Follow
-[synapse-data provenance rules](docs/synapse_data.md) for measured evidence; do not
-substitute datasets, preprocessing, tokenization or cohorts between matched arms.
+Label results exploratory and model-based, not fabricated-hardware measurements.
+Follow [synapse-data provenance rules](docs/synapse_data.md) for measured evidence;
+do not substitute datasets, preprocessing, tokenization or cohorts between
+matched arms.
 
-Predeclare initialization. HWA and non-HWA arms start from the same logical state;
-recovery arms start from the same named deployment unless initialization is the
-intervention. Use explicit paths, revisions and hashes, never the newest checkpoint.
-Strict configs and campaign lifecycles define inputs; historical
+HWA and non-HWA arms start from the same logical state; recovery arms start from
+the same named deployment unless initialization is the intervention. Use explicit
+paths, revisions and hashes, never the newest checkpoint. Strict configs and
+campaign lifecycles define inputs; historical
 [initialization protocols](docs/initialization_protocols.md) provide lineage only.
 
 ## Workflow and authority
@@ -258,7 +220,7 @@ Assigned execution authorizes implementation, proportional checks, launch,
 monitoring, collection, interpretation and understood retries within scope and
 budget. Planning alone does not authorize launch. Make cases, target, budget,
 duration and output paths visible before substantial execution. Escalate material
-scientific choices (analog subset, corpus, metric, defect regime, comparison arms),
+scientific choices (analog subset, corpus, metric, defect/noise/drift regime, comparison arms),
 missing access, unrelated effects or scope/budget changes. Cleanup/migration does
 not expand remote, shared-GPU or overnight permissions.
 

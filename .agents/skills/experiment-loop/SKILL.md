@@ -1,6 +1,6 @@
 ---
 name: experiment-loop
-description: Take crossbar research questions in this worktree (OPT-125M on-chip recovery with corrupt devices; the CIFAR reference) from question to interpretation. Use when designing, specifying, setting up, launching, monitoring or reviewing any experiment or lifecycle.
+description: Take crossbar research questions about corrupted devices, write noise and drift from question to interpretation. Use when designing, specifying, setting up, launching, monitoring or reviewing an experiment or lifecycle in this worktree.
 ---
 
 # Experiment loop
@@ -16,6 +16,11 @@ Each experiment has three records: the **note** says why (question, frozen
 comparison, decision rule, budget, handoff, verdict); the **lifecycle JSON** says
 what to compute ([contract](../../../docs/crossbar_lifecycle.md)); the native
 **bundles** record what happened.
+
+The shared scope is corrupted devices, write noise and drift. The responsible
+`exp/<id>` branch owns the selected simulation details in its note and lifecycle:
+enabled effects, models and parameters, controls, data, metric and budget. Templates
+and earlier experiments are references; use only choices adopted for this run.
 
 ## Roles
 
@@ -33,8 +38,9 @@ what to compute ([contract](../../../docs/crossbar_lifecycle.md)); the native
 | question, decision and primary metric | seed values, keeping their roles disjoint |
 | `network`: model and number of analog decoder layers | cohort details within the declared sizes |
 | corpus, sequence length, cohort sizes, evaluation split | `deployment.tile_size` (except under CMO hierarchical defects, where it is the physical array size) |
-| technology and P&V method | OM characterization bins and samples |
+| technology, programming/write-noise law and P&V method | OM characterization bins and samples |
 | defect kinds and fractions (`defects.cases`); for CMO the die/array concentrations, `arrays_per_die` and array size | `max_examples` for labelled smokes and probes |
+| drift law, time grid, correlations, bounds and write/reset semantics | |
 | HWA sources: noise strength (and CMO `hwa.noise_std`), corruption awareness, selection cases | execution device, threads and output paths |
 | on-chip arms, update law, learning rates, epochs, write budget | the stage plan and runner commands |
 | number of assignment and selection arrays; compute, storage and time caps | |

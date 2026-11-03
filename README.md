@@ -1,20 +1,26 @@
 # Crossbar hardware-aware training and on-chip learning
 
-This HWA worktree studies hardware-aware training, deployment and array-specific
-recovery on simulated crossbar arrays. It includes dense MNIST/CIFAR networks and
-full CIFAR-10/100 ResNet-32 networks with a frozen digital prefix and four or eight
-analog suffix convolutions plus the classifier.
+This worktree studies hardware-aware training, deployment and on-chip adaptation
+of simulated crossbar arrays under **corrupted devices, write noise and drift**.
+OPT-125M is the current transformer target. Completed MNIST and CIFAR studies
+remain reference evidence.
 
-Start with the [CIFAR scientific campaign](campaigns/cifar-crossbar-hwa-recovery/README.md)
-and [reproduction guide](docs/cifar_reproduction.md). The campaign records historical
-results, their controls and limitations, and the October 2026 migration from the
-original `server_code/.codex/worktrees` checkouts.
+Start with [AGENTS.md](AGENTS.md) for the shared scientific scope and the
+[experiment workflow](docs/experiment_workflow.md). The branch responsible for
+each experimental run declares its simulation models, parameters, controls,
+inputs, metric and budget in its experiment or pilot note and lifecycle.
+[`../on-chip-learning/`](../on-chip-learning/README.md) owns shared crossbar/DRN
+study records and lists the active campaigns.
+
+Historical CIFAR results, controls and migration provenance are in the
+[CIFAR campaign](campaigns/cifar-crossbar-hwa-recovery/README.md) and
+[reproduction guide](docs/cifar_reproduction.md).
 
 The supported execution interface is the native experiment CLI:
 
 ```bash
-python -m ebl describe --experiment cifar_crossbar_fault_sweep.v1
-python -m ebl describe --experiment cifar10_ibm_om_crossbar.v1
+python -m ebl describe --experiment crossbar_lifecycle.v1
+python -m ebl describe --json
 ```
 
 Each training invocation requires an exact config, explicit input artifacts and
@@ -23,8 +29,8 @@ source/runtime identity, metrics and checkpoints. The CIFAR reproduction helper
 prints these commands using verified local inputs; see the guide for setup.
 
 New experimental loops are campaign **lifecycles**: one strict JSON definition
-states the question, devices and defects, then the deployment of the digital
-weights, HWA, program-and-verify and on-chip training. Each step calls a
+states the question and selected device effects, then the relevant deployment,
+HWA, program-and-verify, retention and adaptation stages. Each step calls a
 reusable function in `workflow/`; see the [lifecycle contract](docs/crossbar_lifecycle.md).
 
 OM recovery models physical pulse updates with held apparent-state forwards.
@@ -52,8 +58,9 @@ New work follows the [experiment workflow](docs/experiment_workflow.md).
 snapshots; current specifications and conclusions belong to campaign or pilot notes.
 
 See the [supported-scope guide](docs/crossbar_scope.md) and
-[runtime commands](docs/experiment_runtime.md) for the 14 registered experiment
-families. EP/DRN, LoRA and MNIST crossbar v1 execution code is available at
+[runtime commands](docs/experiment_runtime.md) for execution guidance;
+`python -m ebl describe --json` lists the current registered experiment families.
+EP/DRN, LoRA and MNIST crossbar v1 execution code is available at
 pre-cleanup commit `16938bf`; historical scientific records remain in this tree.
 The framework originated in the
 [energy-based-learning project](https://github.com/rain-neuromorphics/energy-based-learning).

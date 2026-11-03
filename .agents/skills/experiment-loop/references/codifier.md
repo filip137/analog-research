@@ -9,8 +9,9 @@ change a scientific setting to make something fit or pass.
 
 ## 1. Spec check
 
-Compare the note with the ownership table in [SKILL.md](../SKILL.md). Every
-Explorer field must be resolved and the material ones confirmed by the user. If not,
+Work on the assigned experiment branch. Compare its note with the ownership
+table in [SKILL.md](../SKILL.md), including enabled defects, write noise and drift.
+Every Explorer field must be resolved and the material ones confirmed by the user. If not,
 return the list of open fields to the Explorer; do not fill them.
 
 ## 2. Supported check
@@ -34,14 +35,16 @@ changed" in the note. Never add a per-study runtime or bypass the stages.
 
 ## 4. Lifecycle file
 
-Copy `examples/lifecycles/opt125m-cmo-mlp4-template.json` (the CMO working device;
-`opt125m-om-mlp4-template.json` only for a declared OM regime) to
+Use the template in `examples/lifecycles/` that matches the note's declared
+regime, and save the exact definition on the experiment branch at
 `campaigns/<campaign>/lifecycles/<lifecycle_id>.json` (file name equals the id).
 
-- Explorer fields: transcribe verbatim from the note.
-- Codifier fields: assignment seeds 271001, 271002, ...; selection seeds 211001, ...;
-  `endpoint_seed_offset` 10000; characterization seeds 231001/231002 (the parser
-  rejects collisions); `tile_size` 512; `max_examples` 0 for evidence.
+- Explorer fields: transcribe verbatim from the note, including each selected
+  device effect and its settings. A template never supplies an unresolved choice.
+- Codifier fields: choose explicit seeds with disjoint roles and record them.
+  Preserve the note's physical array size when placement depends on it;
+  otherwise choose computational tiling within the engineering allowance.
+  Use `max_examples` 0 for evidence.
 - Run `python -m workflow check` and `python -m workflow describe <file>`; paste the
   describe summary (stages, trajectories, analog weights, state estimate) into the
   note. If the estimate exceeds the Explorer's storage cap, escalate before going on.
@@ -49,12 +52,13 @@ Copy `examples/lifecycles/opt125m-cmo-mlp4-template.json` (the CMO working devic
 ## 5. Cost probe
 
 Required the first time a technology, number of analog layers or batch size runs.
-Write `<lifecycle_id>-probe.json`, labelled as a probe in its question: the same
-network, devices and on-chip arms, one assignment, one HWA source that trains, the
-`none` case plus one corrupted case, `max_examples` 8 and one epoch per stage.
-Saved state per trajectory does not shrink with `max_examples`, so check the probe's
-own `describe` estimate first; the reduced sources and cases keep it near 4 GB per
-analog decoder layer (OM).
+Write `<lifecycle_id>-probe.json`, labelled as a probe in its question, retaining
+the declared network, device effects and execution stages. Reduce assignments,
+sources, cohorts and updates within the probe allowance, and cover representative
+control/impaired conditions from the assigned comparison. A drift-only probe does
+not acquire defects or HWA training simply because a template includes them.
+Saved state per trajectory does not shrink with `max_examples`, so check the
+probe's own `describe` estimate before running.
 
 Plan and run it locally (steps 6 and 7 with the probe). From each stage's
 `result.json` read `elapsed_seconds` and `peak_gpu_memory_bytes`; for CPU runs, time
