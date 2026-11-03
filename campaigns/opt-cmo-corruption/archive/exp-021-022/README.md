@@ -1,8 +1,8 @@
 # exp-021 and exp-022 lifecycles (archived)
 
 These 29 lifecycles come from branch `codex/exp021-onchip-lr-screen`, which was never
-merged into `codex/revised-hwa-training`. They were copied here on 3 November 2026,
-before the branch and its worktree were removed. The code that ran them is kept at the
+merged into `codex/revised-hwa-training` (now `main`). They were copied here on 3 November 2026,
+so that the branch and its worktree can be removed. The code that ran them is kept at the
 tag `archive/exp021-onchip-lr-screen`. The branch also added two exp-016 lifecycles
 (`opt125m-cmo-l6-exp16-pair-rewrite-std3-kinds-{learn,sweep}`). Identical copies
 were already in `../../lifecycles/`, where the exp-016 note expects them, so they are

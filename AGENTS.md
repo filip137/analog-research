@@ -2,7 +2,8 @@
 
 ## Scope and research question
 
-These instructions apply to `codex/revised-hwa-training`. This tree determines when
+These instructions apply to `main` (named `codex/revised-hwa-training` until 3 November
+2026). This tree determines when
 on-chip training is a viable post-deployment adaptation strategy for networks
 deployed on crossbar arrays with corrupt devices:
 
