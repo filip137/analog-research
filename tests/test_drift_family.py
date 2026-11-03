@@ -1,10 +1,13 @@
-"""Drift-regimes exp-001 unit checks for training/drift_family.py."""
+"""Drift-regimes exp-001 unit checks for training/drift_family.py.
+
+Mirrored verbatim in the DRN worktree with the module; the PCM reference test
+needs hwa's training/inference_retention.py and skips where it is absent.
+"""
 import math
 
 import pytest
 import torch
 
-import training.inference_retention as retention
 from training.drift_family import (CMO_SIGMA, PcmDriftCells, PcmFamily, ReramDriftCells,
                                    ReramFamily, kappa_from_rho_star, program_verify)
 from training.reram_cmo import PROGRAMMING_SIGMA
@@ -170,6 +173,7 @@ def test_reads_are_exact_and_counted():
 
 # -- PCM -----------------------------------------------------------------------------
 def test_pcm_without_writes_is_the_pinned_aihwkit_snapshot(monkeypatch):
+    retention = pytest.importorskip('training.inference_retention')
     target = torch.linspace(9, 88.2, 5000)
     law = PcmFamily(drift_min=0., drift_max=1e9)
     c = PcmDriftCells(target, law=law, seed=5, name='pcm')
