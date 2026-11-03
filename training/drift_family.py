@@ -499,7 +499,7 @@ class PcmDriftCells(_Cells):
 
 
 @torch.no_grad()
-def program_verify(cells, indices, targets, *, attempts, threshold, verify_seconds):
+def program_verify(cells, indices, targets, *, attempts, threshold, verify_seconds, first_written=False):
     """Reset ``indices`` to ``targets`` with program-and-verify; returns cost counts.
 
     Attempt k resets the pending devices at the clock. Unless k == attempts, the
@@ -507,6 +507,8 @@ def program_verify(cells, indices, targets, *, attempts, threshold, verify_secon
     those whose standardized deviation exceeds ``threshold`` are reset again.
     The last attempt is kept without a verify read, so attempts == 1 is a single
     unverified reset. Devices outside ``indices`` keep drifting meanwhile.
+    With ``first_written`` the devices were just programmed to ``targets`` at the
+    clock (for example by construction), and that write is attempt 1.
     """
     if type(attempts) is not int or attempts < 1:
         raise ValueError('Expected a positive integer attempt cap.')
@@ -521,11 +523,17 @@ def program_verify(cells, indices, targets, *, attempts, threshold, verify_secon
     if pending.numel() != goal.numel():
         raise ValueError('Expected one target per device.')
     goal = goal.clamp(cells.law.program_min, cells.law.program_max)
+    if first_written:
+        flat = lambda t: t.reshape(-1)[pending]
+        if (bool((flat(cells.last_write) != cells.clock).any())
+                or not torch.equal(flat(cells.requested), goal)):
+            raise ValueError('first_written requires the devices to be programmed to targets at the clock.')
     histogram = [0] * attempts
     writes = reads = 0
     start = cells.clock
     for k in range(1, attempts + 1):
-        cells.write(pending, goal)
+        if k > 1 or not first_written:
+            cells.write(pending, goal)
         writes += pending.numel()
         if k == attempts:
             histogram[k - 1] += pending.numel()

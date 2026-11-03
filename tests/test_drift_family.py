@@ -233,3 +233,18 @@ def test_pcm_program_verify_rejects_fast_drifters():
     z = (c.oracle_nu() - mean) / std
     assert float(z.square().mean()) == pytest.approx(.2489, abs=.02)
     assert stats['reset_attempts'] / 100_000 == pytest.approx(1.8229, abs=.02)
+
+
+def test_construction_can_count_as_the_first_verified_attempt():
+    a, b = reram(20_000), reram(20_000)
+    ids = torch.arange(20_000)
+    first = program_verify(a, ids, a.target, attempts=3, threshold=.8, verify_seconds=60.,
+                           first_written=True)
+    assert first['reset_attempts'] >= 20_000 and a.write_commands == first['reset_attempts'] - 20_000
+    second = program_verify(b, ids, b.target, attempts=3, threshold=.8, verify_seconds=60.)
+    assert second['reset_attempts'] == b.write_commands
+    c = reram(10)
+    c.advance(5.)
+    with pytest.raises(ValueError, match='first_written'):
+        program_verify(c, torch.arange(10), c.target, attempts=2, threshold=.8, verify_seconds=60.,
+                       first_written=True)

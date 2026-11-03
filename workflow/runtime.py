@@ -30,7 +30,7 @@ from experiments.artifacts import RunStore, atomic_write_json, sha256_file
 from experiments.cifar_crossbar.model import state_hash, tensor_hash
 from experiments.cifar_crossbar.runtime import load, save
 from workflow import data as data_stage
-from workflow import deployment, hwa, onchip, program_verify, retention, compensation, drift_recovery, initial_programming
+from workflow import deployment, hwa, onchip, program_verify, retention, compensation, drift_recovery, initial_programming, drift_regimes
 from workflow import devices as device_stage
 from workflow.lifecycle import EXPERIMENT_ID, StageConfig, provenance, verify_provenance
 from workflow.networks import family
@@ -55,6 +55,7 @@ REQUIRED_INPUTS = {
     "compensate": {"teacher_weights", "device_data", "device_model", "weights", "device_state"},
     "drift_recovery": {"teacher_weights", "device_data", "device_model", "weights"},
     "initial_programming": {"teacher_weights", "device_data", "device_model", "weights"},
+    "drift_regimes": {"teacher_weights", "device_data", "device_model", "weights"},
 }
 
 
@@ -499,6 +500,7 @@ STAGES = {
     "compensate": compensation.run,
     "drift_recovery": drift_recovery.run,
     "initial_programming": initial_programming.run,
+    "drift_regimes": drift_regimes.run,
 }
 
 

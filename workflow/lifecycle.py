@@ -31,7 +31,7 @@ SCHEMA_VERSION = 1
 EXPERIMENT_ID = "crossbar_lifecycle.v1"
 PROVENANCE_SCHEMA = "crossbar_lifecycle.provenance.v1"
 
-STAGE_KINDS = ("prepare", "devices", "hwa", "deploy", "onchip", "retention", "compensate", "drift_recovery", "initial_programming")
+STAGE_KINDS = ("prepare", "devices", "hwa", "deploy", "onchip", "retention", "compensate", "drift_recovery", "initial_programming", "drift_regimes")
 CIFAR_FAMILY = "cifar_resnet32_suffix"
 OPT_FAMILY = "opt_mlp_suffix"
 # Converted layer3 convolutions (two per block) plus the always-analog classifier.
@@ -1690,7 +1690,7 @@ SECTIONS = (
 )
 # Optional sections are omitted from the document and from every provenance
 # record when absent, so lifecycles without them keep their digests.
-OPTIONAL_SECTIONS = ("transfer_tests", "recovery_views", "retention", "drift_compensation", "task", "drift_recovery", "initial_programming")
+OPTIONAL_SECTIONS = ("transfer_tests", "recovery_views", "retention", "drift_compensation", "task", "drift_recovery", "initial_programming", "drift_regimes")
 LIFECYCLE_KEYS = ("schema", "schema_version", "lifecycle_id") + SECTIONS
 
 # Upstream artifacts are reusable exactly when the sections they depend on are
@@ -1883,6 +1883,7 @@ class Lifecycle:
     task: Optional[Task] = None
     drift_recovery: object = None
     initial_programming: object = None
+    drift_regimes: object = None
 
     @property
     def onchip_cases(self):
@@ -1942,6 +1943,23 @@ def _cross_validate(lifecycle: Lifecycle) -> None:
             raise config_error('initial_programming', 'to use only the nominal fault-free case', lifecycle.defects.to_dict())
         if initial.validation_sequences > data.development_sequences:
             raise config_error('initial_programming.validation_sequences', 'to select a development prefix', initial.validation_sequences)
+    regimes = lifecycle.drift_regimes
+    if regimes is not None:
+        if (family != OPT_FAMILY or devices.technology != 'cmo' or lifecycle.onchip is not None
+                or any(getattr(lifecycle, k) is not None for k in
+                       ('retention', 'drift_compensation', 'drift_recovery', 'initial_programming',
+                        'recovery_views', 'task', 'transfer_tests'))
+                or network.analog_lora is not None or lifecycle.deployment.read_noise != 0
+                or lifecycle.deployment.encoding != 'active_reference_pair'
+                or any(a.method == 'lora' for a in lifecycle.hwa.arms)):
+            raise config_error('drift_regimes', 'to use the frozen OPT pair mapping without other branches/read noise', regimes.to_dict())
+        if not set(regimes.assignment_seeds) <= set(devices.assignment_seeds):
+            raise config_error('drift_regimes.assignment_seeds', 'to select declared assignments', regimes.assignment_seeds)
+        if len(lifecycle.defects.cases) != 1 or lifecycle.defects.cases[0].kind != 'none':
+            raise config_error('drift_regimes', 'to use only the nominal fault-free case', lifecycle.defects.to_dict())
+        law = regimes.family
+        if (law.program_min, law.program_max) != (9., 88.2):
+            raise config_error('drift_regimes.law', 'to program into the source mapping window 9-88.2 uS', regimes.to_dict())
     custom = lifecycle.drift_recovery
     if custom is not None:
         if (family != OPT_FAMILY or devices.technology != 'cmo' or lifecycle.onchip is not None
@@ -2161,6 +2179,13 @@ def parse_lifecycle(payload: Any) -> Lifecycle:
             initial = InitialProgramming.parse(raw['initial_programming'])
         except ValueError as error:
             raise config_error('initial_programming', str(error), raw['initial_programming']) from error
+    regimes = None
+    if 'drift_regimes' in raw:
+        from training.drift_regimes_config import DriftRegimes
+        try:
+            regimes = DriftRegimes.parse(raw['drift_regimes'])
+        except (ValueError, TypeError) as error:
+            raise config_error('drift_regimes', str(error), raw['drift_regimes']) from error
     if 'drift_recovery' in raw:
         from training.drift_recovery_config import DriftRecovery
         try:
@@ -2185,6 +2210,7 @@ def parse_lifecycle(payload: Any) -> Lifecycle:
         task=_task(raw["task"]) if "task" in raw else None,
         drift_recovery=custom,
         initial_programming=initial,
+        drift_regimes=regimes,
     )
     _cross_validate(lifecycle)
     return lifecycle
@@ -2287,6 +2313,8 @@ def _selection(raw: Any, lifecycle: Lifecycle) -> StageSelection:
         raise config_error('stage', 'to select a declared custom-recovery assignment', raw)
     if kind == 'initial_programming' and (lifecycle.initial_programming is None or seed not in lifecycle.initial_programming.assignment_seeds):
         raise config_error('stage', 'to select a declared initial-programming realization', raw)
+    if kind == 'drift_regimes' and (lifecycle.drift_regimes is None or seed not in lifecycle.drift_regimes.assignment_seeds):
+        raise config_error('stage', 'to select a declared drift-regimes realization', raw)
     return StageSelection(kind, arm, seed)
 
 
@@ -2337,6 +2365,7 @@ STAGE_OUTPUTS = {
     "compensate": ("compensation_measurements", "compensation_states"),
     "drift_recovery": ("drift_recovery_measurements", "drift_recovery_trajectories"),
     "initial_programming": ("initial_programming_measurements", "initial_programming_summary", "initial_programming_state", "flowers_model"),
+    "drift_regimes": ("drift_regimes_measurements", "drift_regimes_summary", "drift_regimes_references"),
 }
 
 
@@ -2345,6 +2374,9 @@ def stage_selections(lifecycle: Lifecycle) -> list[StageSelection]:
 
     stages = [StageSelection("prepare"), StageSelection("devices")]
     stages += [StageSelection("hwa", arm.arm_id) for arm in lifecycle.hwa.arms]
+    if lifecycle.drift_regimes is not None:
+        return stages + [StageSelection('drift_regimes', arm.arm_id, seed)
+                         for arm in lifecycle.hwa.arms for seed in lifecycle.drift_regimes.assignment_seeds]
     if lifecycle.initial_programming is not None:
         return stages + [StageSelection('initial_programming', arm.arm_id, seed)
                          for arm in lifecycle.hwa.arms for seed in lifecycle.initial_programming.assignment_seeds]
@@ -2381,7 +2413,7 @@ def stage_inputs(selection: StageSelection, lifecycle: Optional["Lifecycle"] = N
     if (selection.kind == "hwa" and lifecycle is not None
             and lifecycle.hwa.arm(selection.hwa_arm).method == "lora"):
         inputs["weights"] = BASE_SOURCE
-    if selection.kind in ("deploy", "retention", "compensate", "drift_recovery", "initial_programming"):
+    if selection.kind in ("deploy", "retention", "compensate", "drift_recovery", "initial_programming", "drift_regimes"):
         inputs["weights"] = (StageSelection("hwa", selection.hwa_arm).stage_id, "hwa_source")
         if selection.kind == "compensate":
             inputs["device_state"] = (StageSelection("retention", selection.hwa_arm, selection.array_seed).stage_id, "retention_states")

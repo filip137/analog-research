@@ -29,7 +29,8 @@ def summary(lifecycle) -> dict:
     devices, hwa, onchip = lifecycle.devices, lifecycle.hwa, lifecycle.onchip
     stages = stage_selections(lifecycle)
     deployments = len(hwa.arms) * len(devices.assignment_seeds) * len(lifecycle.defects.cases)
-    if lifecycle.retention is not None or lifecycle.drift_recovery is not None or lifecycle.initial_programming is not None:
+    if (lifecycle.retention is not None or lifecycle.drift_recovery is not None
+            or lifecycle.initial_programming is not None or lifecycle.drift_regimes is not None):
         deployments = 0
     trajectories = (0 if onchip is None else len(hwa.arms) * len(devices.assignment_seeds)
                     * len(lifecycle.onchip_cases) * len(onchip.arms))
@@ -63,6 +64,7 @@ def summary(lifecycle) -> dict:
                        if (kind != "retention" or lifecycle.retention is not None)
                        and (kind != "drift_recovery" or lifecycle.drift_recovery is not None)
                        and (kind != "initial_programming" or lifecycle.initial_programming is not None)
+                       and (kind != "drift_regimes" or lifecycle.drift_regimes is not None)
                        and (kind != "compensate" or lifecycle.drift_compensation is not None)},
         **({"retention": lifecycle.retention.to_dict(),
             "retention_snapshots": len(hwa.arms) * len(lifecycle.retention.assignment_seeds)
@@ -78,6 +80,13 @@ def summary(lifecycle) -> dict:
             'initial_programming_snapshots': len(hwa.arms)*len(lifecycle.initial_programming.assignment_seeds)*len(lifecycle.initial_programming.evaluation_seconds),
             'initial_programming_state_gb_estimate': len(hwa.arms)*len(lifecycle.initial_programming.assignment_seeds)*lifecycle.network.analog_weights*9/1e9}
            if lifecycle.initial_programming is not None else {}),
+        **({'drift_regimes': lifecycle.drift_regimes.to_dict(),
+            'drift_regimes_trajectories': len(hwa.arms)*len(lifecycle.drift_regimes.assignment_seeds),
+            'drift_regimes_snapshots': len(hwa.arms)*len(lifecycle.drift_regimes.assignment_seeds)*len(lifecycle.drift_regimes.evaluation_seconds),
+            'drift_regimes_physical_devices': 2*lifecycle.network.analog_weights,
+            # ReramDriftCells: ~44 B/device at f = 0, ~52 B with a persistent share; held in device memory.
+            'drift_regimes_device_state_gb': round(2*lifecycle.network.analog_weights*52/1e9, 2)}
+           if lifecycle.drift_regimes is not None else {}),
         **({"drift_recovery": lifecycle.drift_recovery.to_dict(),
             "custom_drift_physical_devices": 2*lifecycle.network.analog_weights,
             "custom_drift_state_gb_per_trajectory": 2*lifecycle.network.analog_weights*26.4/1e9}
@@ -316,7 +325,7 @@ def _write_rows(rows: list[dict], key_fields: tuple[str, ...], output: Path, nam
 
 
 def _collect(args) -> int:
-    rows, deployments, retention, compensation, recovery, initial = [], [], [], [], [], []
+    rows, deployments, retention, compensation, recovery, initial, regimes = [], [], [], [], [], [], []
     for root in args.roots:
         for result_path in sorted(Path(root).rglob("result.json")):
             result = json.loads(result_path.read_text())
@@ -352,6 +361,13 @@ def _collect(args) -> int:
                     raise ValueError(f'Changed initial-programming measurements: {path}')
                 from workflow.initial_programming import flat_rows
                 initial.extend(flat_rows(json.loads(path.read_text()), result_path.parent))
+            elif kind == 'drift_regimes':
+                artifact = next(a for a in result['artifacts'] if a['kind'] == 'drift_regimes_measurements')
+                path = result_path.parent / artifact['path']
+                if sha256_file(path) != artifact['sha256']:
+                    raise ValueError(f'Changed drift-regimes measurements: {path}')
+                from workflow.drift_regimes import flat_rows as regime_rows
+                regimes.extend(regime_rows(json.loads(path.read_text()), result_path.parent))
             elif kind == "drift_recovery":
                 artifact = next(a for a in result['artifacts'] if a['kind'] == 'drift_recovery_measurements')
                 path = result_path.parent / artifact['path']
@@ -372,11 +388,14 @@ def _collect(args) -> int:
                                       args.output, 'drift_recovery') if recovery else 0
     initial_duplicates = _write_rows(initial, ('source_sha256', 'model_sha256', 'cohort_sha256', 'policy', 'realization', 'seconds', 'canary'),
                                      args.output, 'initial_programming') if initial else 0
+    regime_duplicates = _write_rows(regimes, ('source_sha256', 'cohort_sha256', 'regime', 'arm', 'realization', 'seconds', 'canary'),
+                                    args.output, 'drift_regimes') if regimes else 0
     print(json.dumps({"rows": len(rows), "duplicates": duplicates, "deployments": len(deployments),
                       "retention_snapshots": len(retention), "retention_duplicates": retention_duplicates,
                       "compensated_snapshots": len(compensation), "compensation_duplicates": compensation_duplicates,
                       "recovery_measurements": len(recovery), "recovery_duplicates": recovery_duplicates,
                       "initial_programming_snapshots": len(initial), "initial_programming_duplicates": initial_duplicates,
+                      "drift_regimes_snapshots": len(regimes), "drift_regimes_duplicates": regime_duplicates,
                       "deployment_duplicates": deployment_duplicates, "output": str(args.output)}))
     return 0
 
