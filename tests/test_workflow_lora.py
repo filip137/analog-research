@@ -3,7 +3,7 @@ import json
 import pytest
 import torch
 
-from core.tensor_io_native import load
+from core.serialization import load
 from core.contracts import ConfigError
 from methods.config import DigitalLora
 from ebl.schema.lifecycle import parse_lifecycle

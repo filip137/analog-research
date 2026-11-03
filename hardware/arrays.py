@@ -1,6 +1,5 @@
-"""hardware.arrays — extracted native implementation; formats and numerical order preserved."""
+"""Physical array construction, permanent faults and native state codecs."""
 from __future__ import annotations
-from pathlib import Path
 import numpy as np
 import torch
 from hardware.plants import make_plant, population_fingerprint
@@ -9,9 +8,6 @@ from hardware.devices.pcm import GaussianEndpointArray, PermanentFaults
 from core.seeds import binding_seed
 from hardware.population_binding import combined_om
 from hardware.devices.cmo import G_MAX_US, G_MIN_US, STUCK_US as CMO_STUCK_US, CmoMatrix
-
-
-from core.paths import REPO_ROOT as ROOT
 
 
 class PcmEndpointArray:
@@ -409,6 +405,8 @@ def fresh_array(*, technology, layout, assignment_seed, case, populations, devic
                 acceptance_percent, domains):
     """Construct one assignment under one defect case, before programming."""
 
+    if technology not in ("cmo", "pcm", "om"):
+        raise ValueError(f"Unsupported physical technology: {technology!r}")
     dataset, endpoint = namespace, endpoint_seed
     if technology == "cmo":
         faults = None

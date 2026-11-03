@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 from core.tensor_identity import state_hash
-from core.tensor_io_native import load
+from core.serialization import load
 from core.seeds import binding_seed
 from hardware.arrays import ROOT
 

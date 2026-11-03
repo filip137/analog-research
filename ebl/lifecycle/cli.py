@@ -199,7 +199,7 @@ def _plan(args) -> int:
 
 
 def _corpus(args) -> int:
-    from core.tensor_io_native import save
+    from core.serialization import save
     from networks.opt import build_corpus
 
     root = args.root or (Path(os.environ["EBL_CORPUS_ROOT"]) if os.environ.get("EBL_CORPUS_ROOT") else None)
@@ -225,7 +225,7 @@ def _corpus(args) -> int:
 def _task_data(args) -> int:
     """Build a pinned choice-task file and its gold-continuation token stream."""
 
-    from core.tensor_io_native import save
+    from core.serialization import save
     import pandas
     from transformers import AutoTokenizer
 

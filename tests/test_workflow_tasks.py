@@ -14,7 +14,7 @@ import torch
 
 from ebl.cli import TrainRequest
 from core.artifacts import sha256_file
-from core.tensor_io_native import load, save
+from core.serialization import load, save
 from ebl.registry import get_definition
 from core.contracts import ConfigError
 import networks.deployment as deployment

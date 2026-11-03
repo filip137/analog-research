@@ -9,8 +9,8 @@ from experiments.cifar_crossbar.sweep_devices import make_array, CompactCheckpoi
 from hardware.population_binding import combined_om
 from methods.hwa_sampling_om import MixedOmSampler
 from networks.cifar_model import CifarResNet32, CrossbarSuffix
-from core.tensor_io import clone_cpu
-from core.tensor_io_native import save, load
+from core.serialization import clone_cpu
+from core.serialization import save, load
 from networks.cifar_metrics import evaluate
 from experiments.cifar_crossbar.full_epoch_runtime import trajectory, restore_endpoint
 

@@ -103,7 +103,7 @@ def generate(phase='full'):
 def reused_contract(base, reused, tag, array, lc):
     """Inputs of a random job: the exp-013 materialized P0 and its frozen upstream bundles."""
 
-    from core.tensor_io_native import load
+    from core.serialization import load
     group = f'{tag}-{array}'
     ref = json.loads(CATALOG.read_text())[group]
     receipt = json.loads((reused/group/'portable.json').read_text())
@@ -253,7 +253,7 @@ def materialize_kinds(tag, deploy_root, reused, output):
 def kinds_contract(base, reused, kinds, tag, array, lc):
     """Inputs of a kinds on-chip slice: the materialized new P0 and the reused upstream bundles."""
 
-    from core.tensor_io_native import load
+    from core.serialization import load
     ref = json.loads(CATALOG.read_text())[f'{tag}-{array}']
     receipt = json.loads((kinds/f'{tag}-{array}'/'portable.json').read_text())
     if not receipt['physical_state_preserved'] or receipt['new_device_writes']:
@@ -342,7 +342,7 @@ def check_realization(tag, array, teacher, portable, device='cuda:0'):
     """
 
     import torch
-    from core.tensor_io_native import load
+    from core.serialization import load
     import networks.deployment as deployment
     import methods.programming.lifecycle as program_verify
     import hardware.arrays as device_stage

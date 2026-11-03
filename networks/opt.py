@@ -33,7 +33,7 @@ from core.artifacts import sha256_file
 from core.cohorts import cohort_receipt
 from hardware.mapping import MatrixSpec
 from core.tensor_identity import state_hash, tensor_hash
-from core.tensor_io_native import load
+from core.serialization import load
 from hardware.config import SCALINGS
 
 SPLITS = ("hwa", "training", "development", "test")

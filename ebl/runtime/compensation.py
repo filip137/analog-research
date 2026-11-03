@@ -8,7 +8,7 @@ import torch
 
 from core.artifacts import atomic_write_json, content_hash, sha256_file
 from core.tensor_identity import state_hash, tensor_hash
-from core.tensor_io_native import load, save
+from core.serialization import load, save
 import methods.calibration.output as output_calibration
 import hardware.devices.cmo as cmo
 from hardware.readout import Compensation

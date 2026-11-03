@@ -27,7 +27,7 @@ import time
 
 import torch
 
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 from core.tensor_identity import tensor_hash
 import networks.data as data_stage
 import hardware.arrays as device_stage

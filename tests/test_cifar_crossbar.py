@@ -11,8 +11,8 @@ from hardware.plants import EndpointKernel, make_plant, prepare_population
 from methods.optimizers.pulse import PulseWriter
 from networks.cifar_model import CifarResNet32, CrossbarSuffix
 from experiments.cifar_crossbar.pcm_reference import PcmInferenceNoise
-from core.tensor_io_native import save as native_save
-from core.tensor_io_native import load as native_load
+from core.serialization import save as native_save
+from core.serialization import load as native_load
 
 
 def raw_population(kind="om", size=12):

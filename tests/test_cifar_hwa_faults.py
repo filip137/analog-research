@@ -87,7 +87,7 @@ def test_full_native_fit_tune_screen_uses_only_development_for_selection(
 ):
     from ebl.cli import main
     from experiments.cifar_crossbar import hwa_fault_runtime as runtime
-    from core.tensor_io_native import load
+    from core.serialization import load
     from experiments.study_workflow import prepare_study, summarize_study
 
     monkeypatch.setenv("EBL_DEFER_CURRENT_SIMULATIONS", "1")

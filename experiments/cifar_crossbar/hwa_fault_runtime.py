@@ -12,14 +12,14 @@ from ebl.runtime.store import RunStore
 from core.artifacts import atomic_write_json, sha256_file
 from networks.cifar_data import cache_features, get_dataset, split_indices
 from core.cohorts import cohort_receipt
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 from experiments.cifar_crossbar.fault_runtime import adapt, cache_context, limited_cache
 from experiments.cifar_crossbar.hwa_fault_config import ComparisonSpec
 from networks.cifar_model import CrossbarSuffix
 from hardware.devices.pcm import GaussianEndpointArray, PermanentFaults
 from networks.cifar_sources import SOURCES
 from networks.cifar_metrics import evaluate
-from core.tensor_io_native import load, save
+from core.serialization import load, save
 from experiments.cifar_crossbar.runtime import source_model
 from methods.hwa_sampling import sampled_weights
 from networks.cifar_augmentation import augment_images

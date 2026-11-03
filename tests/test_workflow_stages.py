@@ -16,7 +16,7 @@ import torch
 from experiments.cifar_crossbar import full_epoch_runtime, sweep_runtime
 from experiments.cifar_crossbar.closed_loop_lr_updates import UncappedClosedLoopAdam
 from methods.optimizers.pulse import PulseWriter
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 from hardware.plants import make_plant, prepare_population
 from core.tensor_identity import state_hash
 from methods.optimizers.open_loop import (

@@ -15,7 +15,7 @@ from torch.nn import functional as F
 
 from ebl.runtime.store import RunStore
 from core.artifacts import atomic_write_json, sha256_file
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 from experiments.cifar_crossbar.epoch_config import EpochSpec
 from experiments.cifar_crossbar.fault_runtime import cache_context, limited_cache
 from experiments.cifar_crossbar.hwa_fault_runtime import case_name, checked_sources, source_cases
@@ -23,7 +23,7 @@ from networks.cifar_model import CrossbarSuffix
 from core.tensor_identity import tensor_hash
 from hardware.devices.pcm import GaussianEndpointArray, PermanentFaults
 from networks.cifar_metrics import evaluate
-from core.tensor_io_native import load, save
+from core.serialization import load, save
 from experiments.cifar_crossbar.runtime import source_model
 
 ROOT = Path(__file__).resolve().parents[2]

@@ -15,7 +15,7 @@ import pytest
 import torch
 
 from core.tensor_identity import tensor_hash
-from core.tensor_io_native import load
+from core.serialization import load
 from core.contracts import ConfigError
 import hardware.devices.cmo as reram_cmo
 from hardware.devices.cmo import CmoMatrix

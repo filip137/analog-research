@@ -5,7 +5,7 @@ from hardware.plants import prepare_population, make_plant
 from methods.programming.pulse import program
 from hardware.faults import om_population
 from core.tensor_identity import state_hash
-from core.tensor_io_native import save, load
+from core.serialization import save, load
 from core.artifacts import sha256_file
 from hardware.layered_pcm import LayeredPcmArray
 from hardware.population_binding import combined_om

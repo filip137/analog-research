@@ -99,7 +99,7 @@ def eligible(label, host):
 
 
 def input_contract(base, reused, label):
-    from core.tensor_io_native import load
+    from core.serialization import load
     tag, array, _ = parts(label); group = f'{tag}-{array}'
     ref = json.loads(CATALOG.read_text())[group]; lc = lifecycle(label)
     receipt = json.loads((reused/group/'portable.json').read_text())

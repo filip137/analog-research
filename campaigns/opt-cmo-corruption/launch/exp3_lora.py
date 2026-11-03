@@ -69,7 +69,7 @@ def input_contract(base, reused):
         raise ValueError('Wrong physical deployment conversion')
     expected['device_state']=portable['sha256']
     artifacts={role:checked_input(path,expected[role]) for role,path in paths.items()}
-    from core.tensor_io_native import load
+    from core.serialization import load
     p0=load(paths['device_state'])
     if p0['materialized_from_sha256']!=portable['parent_sha256'] or p0['source_sha256']!='86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028':
         raise ValueError('Wrong frozen source or P0 parent')

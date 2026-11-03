@@ -1,7 +1,7 @@
 """hardware.population_binding — extracted native implementation; formats and numerical order preserved."""
 from __future__ import annotations
 import torch
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 from hardware.plants import population_fingerprint
 from hardware.faults import om_population
 from core.seeds import binding_seed

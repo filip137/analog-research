@@ -6,7 +6,7 @@ inspects device identities to decide how many pulses to apply.
 """
 import math
 import torch
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 
 
 def nominal_reset_counts(target, nominal_step):

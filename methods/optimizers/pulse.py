@@ -1,7 +1,7 @@
 """methods.optimizers.pulse — extracted native implementation; formats and numerical order preserved."""
 from __future__ import annotations
 import torch
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 
 
 class PulseWriter:

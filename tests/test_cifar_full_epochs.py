@@ -10,11 +10,11 @@ import torch
 from experiments.cifar_crossbar.full_epoch_config import FullEpochSpec, default_config, parse_config
 from experiments.cifar_crossbar.full_epoch_runtime import make_array, restore_endpoint, trajectory
 from hardware.faults import om_population
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 from experiments.cifar_crossbar.fault_runtime import cache_context
 from networks.cifar_model import CifarResNet32, CrossbarSuffix
 from networks.cifar_metrics import evaluate
-from core.tensor_io_native import save, load
+from core.serialization import save, load
 
 
 @pytest.fixture(autouse=True)

@@ -5,7 +5,7 @@ import time
 import torch
 from core.artifacts import atomic_write_json, sha256_file
 from core.tensor_identity import state_hash, tensor_hash
-from core.tensor_io_native import load, save
+from core.serialization import load, save
 from core.seeds import binding_seed
 import hardware.devices.cmo as cmo
 from hardware.drift.inference import RetentionSeries

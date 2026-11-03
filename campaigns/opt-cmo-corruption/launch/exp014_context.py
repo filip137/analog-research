@@ -124,7 +124,7 @@ def make_cache(lc,base,key):
 
 
 def inputs_for(lc,array,cache,base):
-    from core.tensor_io_native import load
+    from core.serialization import load
     ref=json.loads(CATALOG.read_text())[str(array)]
     paths={k:Path(v['path']) for k,v in ref['artifacts'].items()}
     # Inputs copied to this isolated worker are immutable byte-identical files.

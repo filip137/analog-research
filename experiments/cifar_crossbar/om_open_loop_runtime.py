@@ -10,13 +10,13 @@ import io
 import torch
 from ebl.runtime.store import RunStore
 from core.artifacts import atomic_write_json, sha256_file
-from core.tensor_io_native import load, save
+from core.serialization import load, save
 from experiments.cifar_crossbar.runtime import source_model
 from networks.cifar_metrics import evaluate
 from networks.cifar_model import CrossbarSuffix
 from core.tensor_identity import tensor_hash
 from hardware.plants import make_plant
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 from experiments.cifar_crossbar.fault_runtime import cache_context, limited_cache
 from experiments.cifar_crossbar.full_epoch_runtime import trajectory, array_identity, restore_endpoint
 from experiments.cifar_crossbar.sweep_config import SOURCES, cases

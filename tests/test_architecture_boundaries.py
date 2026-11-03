@@ -66,3 +66,11 @@ def test_physical_fault_groups_follow_supplied_domains():
     assert result['receipt']['groups'][0]['group'] == 'declared-group'
     with pytest.raises(ValueError, match='one fault-domain'):
         hierarchical_faults(layout, 8, 12, case, 271001, 'declared-namespace', domains={})
+
+
+def test_array_constructor_rejects_unknown_physical_technology():
+    from hardware.arrays import fresh_array
+    with pytest.raises(ValueError, match='Unsupported physical technology'):
+        fresh_array(technology='unregistered', layout=(), assignment_seed=1, case=None,
+                    populations={}, device='cpu', namespace='test', endpoint_seed=2,
+                    noise_scale=1, tile_size=8, arrays_per_die=1, acceptance_percent=2, domains={})

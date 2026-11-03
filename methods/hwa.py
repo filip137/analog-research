@@ -42,7 +42,7 @@ import time
 
 import torch
 
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 from methods.hwa_sampling import sampled_weights
 from core.tensor_identity import state_hash
 from methods.hwa_sampling_om import MixedOmSampler

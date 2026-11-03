@@ -31,7 +31,7 @@ def run_train(request) -> int:
     from ebl.runtime.store import RunStore
     from core.artifacts import atomic_write_json, sha256_file
     from core.tensor_identity import state_hash
-    from core.tensor_io_native import load
+    from core.serialization import load
     import networks.tasks as tasks
     import networks.opt as opt_mlp
     from ebl.runtime.lifecycle import ROOT, configure_runtime

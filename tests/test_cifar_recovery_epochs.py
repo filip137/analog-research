@@ -13,7 +13,7 @@ from experiments.cifar_crossbar.fault_runtime import adapt, cache_context
 from networks.cifar_model import CifarResNet32, CrossbarSuffix
 from hardware.devices.pcm import GaussianEndpointArray, PermanentFaults
 from networks.cifar_metrics import evaluate
-from core.tensor_io_native import load, save
+from core.serialization import load, save
 
 
 @pytest.fixture(autouse=True)

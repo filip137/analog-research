@@ -119,7 +119,7 @@ def test_uncapped_contract_and_full_sweep_coverage():
 
 def test_compressed_checkpoints_preserve_exact_tensors_and_rng(tmp_path):
     from experiments.cifar_crossbar.om_open_loop_runtime import save_compressed
-    from core.tensor_io_native import load
+    from core.serialization import load
     port = CountingPort()
     writer = UncappedOpenLoopAdam(port, port.state, learning_rate=.014, seed=10)
     writer.step(torch.tensor([1., -2., .1]))

@@ -14,7 +14,7 @@ import pytest
 import torch
 
 from core.artifacts import sha256_file
-from core.tensor_io_native import save
+from core.serialization import save
 from core.contracts import ConfigError
 import networks.data as data_stage
 import networks.deployment as deployment

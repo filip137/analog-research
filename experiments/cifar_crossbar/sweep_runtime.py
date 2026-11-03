@@ -8,10 +8,10 @@ from ebl.runtime.store import RunStore
 from core.artifacts import atomic_write_json, sha256_file
 from experiments.cifar_crossbar.runtime import source_model
 from networks.cifar_metrics import evaluate
-from core.tensor_io_native import save, load
+from core.serialization import save, load
 from networks.cifar_model import CrossbarSuffix
 from core.tensor_identity import state_hash, tensor_hash
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 from experiments.cifar_crossbar.fault_runtime import cache_context
 from experiments.cifar_crossbar.full_epoch_runtime import build_cache, trajectory, array_identity
 from networks.cifar_augmentation import augment_images

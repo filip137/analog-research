@@ -8,7 +8,7 @@ in the differential pair, so either bank or both banks may fail.
 from dataclasses import dataclass
 import torch
 
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 from core.tensor_identity import state_hash
 
 

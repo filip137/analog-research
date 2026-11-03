@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 from core.artifacts import atomic_write_json, sha256_file
-from core.tensor_io_native import save
+from core.serialization import save
 from methods.maintenance.recovery import tensor_hash
 from hardware.drift.flowers import FlowersLaw, FlowersState, named_seed
 from methods.initial_programming import targets, prebias_table, select_pairs, observation_report, finish_observation_report, time_weights

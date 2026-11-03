@@ -10,7 +10,7 @@ from pathlib import Path
 import torch
 from core.artifacts import atomic_write_json, sha256_file
 from core.tensor_identity import tensor_hash
-from core.tensor_io_native import load, save
+from core.serialization import load, save
 import hardware.arrays as devices
 import methods.programming.lifecycle as program_verify
 from ebl.schema.lifecycle import parse_lifecycle, verify_provenance

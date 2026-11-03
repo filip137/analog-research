@@ -5,7 +5,7 @@ import json
 import pytest
 import torch
 
-from core.tensor_io_native import load
+from core.serialization import load
 from core.contracts import ConfigError
 from hardware.devices.cmo import CmoMatrix, HALF_RANGE_US
 import methods.programming.lifecycle as program_verify

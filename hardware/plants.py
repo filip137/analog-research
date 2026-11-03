@@ -6,7 +6,7 @@ import torch
 from hardware.populations import IbmReramArrayPopulation
 from hardware.om_crossbar import IbmOmEffectiveCrossbarPlant, _counter_keyed_standard_normal
 from core.tensor_identity import state_hash
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 
 
 def prepare_population(

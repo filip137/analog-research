@@ -23,7 +23,7 @@ from networks.cifar_augmentation import augment_images
 from networks.cifar_model import CifarResNet32, CrossbarSuffix
 from networks.cifar_sources import SOURCES
 from networks.cifar_metrics import evaluate as _evaluate
-from core.tensor_io_native import load
+from core.serialization import load
 from networks.config import DEVELOPMENT_SPLIT, TRAINING_SPLIT
 
 FEATURE_SPLITS = ("training", "development", "test")

@@ -8,7 +8,7 @@ import torch
 from ebl.runtime.store import RunStore
 from core.artifacts import atomic_write_json, sha256_file
 from core.tensor_identity import state_hash, tensor_hash
-from core.tensor_io_native import load, save
+from core.serialization import load, save
 import networks.data as data_stage
 import networks.deployment as deployment
 import methods.hwa as hwa

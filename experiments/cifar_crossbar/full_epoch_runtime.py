@@ -12,7 +12,7 @@ from core.artifacts import atomic_write_json, sha256_file
 from networks.cifar_data import cache_features, get_dataset, split_indices
 from hardware.plants import EndpointKernel, make_plant, prepare_population
 from methods.optimizers.pulse import PulseWriter
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 from methods.programming.pulse import program
 from experiments.cifar_crossbar.fault_runtime import cache_context
 from experiments.cifar_crossbar.full_epoch_config import FullEpochSpec
@@ -22,7 +22,7 @@ from networks.cifar_model import CrossbarSuffix
 from core.tensor_identity import state_hash, tensor_hash
 from hardware.devices.pcm import GaussianEndpointArray, PermanentFaults
 from networks.cifar_metrics import evaluate
-from core.tensor_io_native import load, save
+from core.serialization import load, save
 from experiments.cifar_crossbar.runtime import source_model
 from hardware.faults import om_population
 

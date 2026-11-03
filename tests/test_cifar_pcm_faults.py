@@ -140,7 +140,7 @@ def test_native_fault_screen_restores_all_controls_and_writes_valid_bundle(
 ):
     from ebl.cli import main
     from experiments.cifar_crossbar import fault_runtime as runtime
-    from core.tensor_io_native import save
+    from core.serialization import save
     from experiments.study_workflow import prepare_study, summarize_study
 
     monkeypatch.setenv("EBL_DEFER_CURRENT_SIMULATIONS", "1")

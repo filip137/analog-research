@@ -12,7 +12,7 @@ import pytest
 import torch
 
 from core.artifacts import sha256_file
-from core.tensor_io_native import load
+from core.serialization import load
 from core.contracts import ConfigError
 import hardware.arrays as device_stage
 import ebl.runtime.lifecycle as runtime

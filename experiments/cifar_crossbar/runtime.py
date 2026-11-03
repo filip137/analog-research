@@ -15,12 +15,12 @@ from networks.cifar_data import get_dataset, split_indices, cache_features
 from core.cohorts import cohort_receipt
 from hardware.plants import EndpointKernel, make_plant, prepare_population
 from methods.optimizers.pulse import PulseWriter
-from core.tensor_io import clone_cpu
+from core.serialization import clone_cpu
 from methods.programming.pulse import program
 from networks.cifar_model import CifarResNet32, CrossbarSuffix
 from core.tensor_identity import tensor_hash
 from networks.cifar_sources import SOURCES
-from core.tensor_io_native import load, save
+from core.serialization import load, save
 from networks.cifar_metrics import evaluate
 
 

@@ -10,7 +10,7 @@ from ebl.runtime.store import RunStore
 from core.artifacts import atomic_write_json, sha256_file
 from experiments.cifar_crossbar.closed_loop_lr_config import ClosedLoopLRSpec, LRS, DEV_SEEDS
 from experiments.cifar_crossbar.closed_loop_lr_updates import UncappedClosedLoopAdam
-from core.tensor_io_native import load
+from core.serialization import load
 from experiments.cifar_crossbar.runtime import source_model
 from networks.cifar_metrics import evaluate
 from networks.cifar_model import CrossbarSuffix
