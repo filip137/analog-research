@@ -136,6 +136,7 @@
     "epochs": 1,
     "batch_size": 8,
     "seed": 41,
+    "clip_write_targets": true,
     "arms": [
       {
         "id": "none",

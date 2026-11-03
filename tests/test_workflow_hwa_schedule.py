@@ -17,8 +17,16 @@ from workflow_helpers import Store
 TEMPLATE = Path(__file__).resolve().parents[1] / "examples/lifecycles/opt125m-cmo-mlp4-template.json"
 
 
-def document(kind="linear_warmup_decay", *, scope="model"):
+def legacy_template():
+    """The template before bounded on-chip write targets, whose identities these tests freeze."""
+
     doc = json.loads(TEMPLATE.read_text())
+    doc["onchip"].pop("clip_write_targets")
+    return doc
+
+
+def document(kind="linear_warmup_decay", *, scope="model"):
+    doc = legacy_template()
     doc["network"]["analog_decoder_layers"] = 2
     doc["deployment"]["tile_size"] = 8
     doc["data"].update(hwa_sequences=5, max_examples=0, sequence_length=9)
@@ -268,7 +276,7 @@ def test_schedule_rejects_ambiguous_or_incomplete_configuration(setting):
 
 
 def test_legacy_serialization_and_digests_are_unchanged():
-    doc = json.loads(TEMPLATE.read_text())
+    doc = legacy_template()
     lifecycle = parse_lifecycle(doc)
     assert lifecycle.hwa.lr_schedule is None
     assert "lr_schedule" not in lifecycle.hwa.shared_dict()

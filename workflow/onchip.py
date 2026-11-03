@@ -160,23 +160,27 @@ class IdealizedWriteAdam:
     no retry, so earlier write errors persist in the held state. A declared
     ``write_noise_scale`` multiplies the write noise only (0 is the exact-write
     oracle); undeclared, the physical law and its checkpoints are unchanged.
+    ``clip_write_targets`` clips each requested G + dG to the conductance range
+    before the noise draw; undeclared, targets stay unbounded as before.
     """
 
     contract = "crossbar_lifecycle.cmo_idealized_write_adam.v1"
 
-    def __init__(self, array, *, learning_rate, write_noise_scale=None):
+    def __init__(self, array, *, learning_rate, write_noise_scale=None, clip_write_targets=False):
         self.array, self.learning_rate = array, float(learning_rate)
         self.write_noise_scale = None if write_noise_scale is None else float(write_noise_scale)
+        self.clip_write_targets = bool(clip_write_targets)
         template = array.read()
         self.first = torch.zeros_like(template)
         self.second = torch.zeros_like(template)
         self.step_index = 0
 
     def _write(self, command):
+        bounds = {"clip_targets": True} if self.clip_write_targets else {}
         if self.write_noise_scale is None:
-            self.array.write(command)
+            self.array.write(command, **bounds)
         else:
-            self.array.write(command, noise_factor=self.write_noise_scale)
+            self.array.write(command, noise_factor=self.write_noise_scale, **bounds)
 
     @torch.no_grad()
     def step(self, gradient):
@@ -194,6 +198,7 @@ class IdealizedWriteAdam:
                 "second": self.second,
                 "step_index": self.step_index,
                 **({} if self.write_noise_scale is None else {"write_noise_scale": self.write_noise_scale}),
+                **({"clip_write_targets": True} if self.clip_write_targets else {}),
             }
         )
 
@@ -212,8 +217,9 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
 
     def __init__(self, array, *, learning_rate, threshold_sigma, accumulate_updates,
                  acceptance_percent, noise_scale, max_write_attempts_per_device=None, write_noise_scale=None,
-                 write_roles=None):
-        super().__init__(array, learning_rate=learning_rate, write_noise_scale=write_noise_scale)
+                 write_roles=None, clip_write_targets=False):
+        super().__init__(array, learning_rate=learning_rate, write_noise_scale=write_noise_scale,
+                         clip_write_targets=clip_write_targets)
         from training.reram_cmo import HALF_RANGE_US, MID_US, programming_sigma
 
         # The threshold references the device noise scale, never the write-noise factor.
@@ -264,7 +270,8 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
             super()._write(command)
         else:
             self.array.write(command, roles=self.write_roles,
-                             noise_factor=1.0 if self.write_noise_scale is None else self.write_noise_scale)
+                             noise_factor=1.0 if self.write_noise_scale is None else self.write_noise_scale,
+                             **({"clip_targets": True} if self.clip_write_targets else {}))
 
     def diagnostics(self):
         values = {
@@ -278,6 +285,8 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
         }
         if self.write_noise_scale is not None:
             values["write_noise_scale"] = self.write_noise_scale
+        if self.clip_write_targets:
+            values["clip_write_targets"] = True
         if self.write_roles is not None:
             values.update(write_roles="verified_partner", write_role_map_sha256=tensor_hash(self.write_roles),
                           active_training_devices=int((self.write_roles == 0).sum()),
@@ -320,7 +329,8 @@ def make_writer(array, lifecycle, *, write_roles=None):
         )
     if onchip.update_law == "cmo_idealized_write_adam":
         return IdealizedWriteAdam(array, learning_rate=onchip.learning_rate,
-                                  write_noise_scale=onchip.write_noise_scale)
+                                  write_noise_scale=onchip.write_noise_scale,
+                                  clip_write_targets=bool(onchip.clip_write_targets))
     if onchip.update_law == "cmo_thresholded_write_adam":
         return ThresholdedWriteAdam(
             array, learning_rate=onchip.learning_rate, threshold_sigma=onchip.threshold_sigma,
@@ -330,6 +340,7 @@ def make_writer(array, lifecycle, *, write_roles=None):
             max_write_attempts_per_device=onchip.max_write_attempts_per_device,
             write_noise_scale=onchip.write_noise_scale,
             write_roles=write_roles,
+            clip_write_targets=bool(onchip.clip_write_targets),
         )
     raise ValueError(f"Expected an OM or CMO writer update law. Provided value: {onchip.update_law!r}.")
 
@@ -484,7 +495,7 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
             if onchip.development_every_steps and global_step % onchip.development_every_steps == 0:
                 was_training = network.training
                 development = network_family.evaluate(network, cache["development"], device, q=array.read())
-                cost_now = {key: value - baseline[key] for key, value in array.cost().items()}
+                cost_now = {key: value - baseline.get(key, 0) for key, value in array.cost().items()}
                 store.append_metric({"stage": "onchip_development", "case": label, "arm": arm.arm_id,
                                      "epoch": epoch, "global_step": global_step,
                                      "development": development, "cost": cost_now,
@@ -505,7 +516,8 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
             raise RuntimeError("Digital LoRA changed the held physical deployment.")
         if rewritten and not learn and tensor_hash(array.read()) != rewritten["rewritten_apparent_sha256"]:
             raise RuntimeError("A held arm changed the array after its fault rewrite.")
-        cost = {key: value - baseline[key] for key, value in array.cost().items()}
+        # Bounded-write counters appear only after the first clipped write, so they start from zero.
+        cost = {key: value - baseline.get(key, 0) for key, value in array.cost().items()}
         if om:
             count = writer.count if writer else rewrite_count
             cost.update(

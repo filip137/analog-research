@@ -1277,6 +1277,8 @@ class Onchip:
     case_labels: Optional[tuple[str, ...]] = None
     microbatch_size: Optional[int] = None
     write_noise_scale: Optional[float] = None
+    # Clips CMO on-chip write targets G + dG to [G_min, G_max] before the noise draw; absent means unbounded.
+    clip_write_targets: Optional[bool] = None
     # Multiplies ``learning_rate`` per one-based update of CMO weight learning; absent means constant.
     lr_schedule: Optional[HwaLrSchedule] = None
 
@@ -1312,6 +1314,8 @@ class Onchip:
             value["microbatch_size"] = self.microbatch_size
         if self.write_noise_scale is not None:
             value["write_noise_scale"] = self.write_noise_scale
+        if self.clip_write_targets is not None:
+            value["clip_write_targets"] = self.clip_write_targets
         if self.lr_schedule is not None:
             value["lr_schedule"] = self.lr_schedule.to_dict()
         value["arms"] = [arm.to_dict() for arm in self.arms]
@@ -1365,6 +1369,8 @@ def _onchip(raw: Any, technology: str) -> Onchip:
         keys += ("microbatch_size",)
     if "write_noise_scale" in raw and law.startswith("cmo_"):
         keys += ("write_noise_scale",)
+    if "clip_write_targets" in raw and law.startswith("cmo_"):
+        keys += ("clip_write_targets",)
     if "lr_schedule" in raw and law.startswith("cmo_"):
         keys += ("lr_schedule",)
     raw = _object(raw, "onchip", keys)
@@ -1461,6 +1467,9 @@ def _onchip(raw: Any, technology: str) -> Onchip:
             raise config_error("onchip.arms", "to omit rewrite under a declared write_noise_scale", raw["arms"])
         # A one-shot fault rewrite is a P&V programming event, like deployment: it keeps
         # its physical endpoint noise from its own streams; the factor covers learning writes.
+    if "clip_write_targets" in raw:
+        # Bounds learning writes only; deployment and fault-rewrite programming keep their own laws.
+        extra["clip_write_targets"] = _boolean(raw["clip_write_targets"], "onchip.clip_write_targets")
     if "lr_schedule" in raw:
         extra["lr_schedule"] = _hwa_lr_schedule(raw["lr_schedule"], "onchip.lr_schedule")
     if "development_every_steps" in raw:

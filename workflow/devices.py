@@ -203,10 +203,10 @@ class CmoArray:
         for child, piece in zip(self.children, self._slices(target)):
             child.program(piece, reference)
 
-    def write(self, delta, noise_factor=1.0, roles=None):
+    def write(self, delta, noise_factor=1.0, roles=None, clip_targets=False):
         role_slices = [None] * len(self.children) if roles is None else self._slices(roles)
         for child, piece, role in zip(self.children, self._slices(delta), role_slices):
-            child.write(piece, noise_factor, roles=role)
+            child.write(piece, noise_factor, roles=role, clip_targets=clip_targets)
 
     def read(self):
         return torch.cat([child.read() for child in self.children])

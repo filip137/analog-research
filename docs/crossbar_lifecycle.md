@@ -381,6 +381,21 @@ still drawn, so it advances identically. Lifecycles that declare it reject
 its physical endpoint noise, so exact learning starts from the physical rewrite. Writer checkpoints
 and thresholded diagnostics record the declared value.
 
+Optional `onchip.clip_write_targets` (CMO laws only, a Boolean) bounds each
+on-chip write target: T = clip(G + ΔG, G_min, G_max) with [9, 88.199997] µS,
+then G ← T + f·noise_scale·σ(T)·ξ. The noisy endpoint itself is held unclipped,
+so a written device can still sit a fraction of σ outside the range. Active and
+`verified_partner` reference writes are bounded alike; the threshold gate acts
+on the command before clipping, so the realized displacement can be smaller
+than the threshold. The noise stream advances identically. Deployment
+programming and `fault_rewrite` targets keep their own laws. Bounded runs add
+`clipped_write_targets` (healthy written devices whose target was moved) to the
+array cost and the device-state checkpoint; writer checkpoints and thresholded
+diagnostics record the declared flag.
+Omitted, targets are unbounded and every existing lifecycle digest and checkpoint
+is unchanged. The OPT CMO template declares `true` from 20 October 2026, so new
+lifecycles are bounded by default; historical campaign lifecycles stay unbounded.
+
 Optional `onchip.lr_schedule` (CMO laws only) takes the `hwa.lr_schedule` kinds
 and fields. On-chip update u (one-based) uses `learning_rate × factor(u)`, and
 `total_steps` must equal the full on-chip budget (epochs × updates per epoch).

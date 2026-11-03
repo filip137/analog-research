@@ -262,7 +262,11 @@ G_a  ← G_a + ΔG + noise_scale · σ_PV(G_a + ΔG) · ξ       (healthy active
   random-walks by about √n · σ_PV, roughly 0.56 µS per write at mid-range.
 - A zero learning rate, and a device whose command is exactly zero, write
   nothing.
-- The requested G + ΔG is not clamped (see the open decisions below).
+- The requested G + ΔG is not clamped unless the lifecycle declares
+  `onchip.clip_write_targets: true`. Then the target is clipped to
+  [G_min, G_max] before the noise draw, and the noisy endpoint is held
+  unclipped ([lifecycle contract](crossbar_lifecycle.md)). The OPT CMO
+  template declares it from 20 October 2026; earlier lifecycles are unbounded.
 - An optional `onchip.write_noise_scale` f multiplies the write term to
   f · noise_scale · σ_PV(G_a + ΔG) · ξ. f = 0 is an exact-write oracle used to
   diagnose write noise, not a device model; programming noise is unchanged
@@ -325,9 +329,12 @@ The cost of each epoch is reported per assignment and arm:
 
 ## Open decisions
 
-- **Out-of-range conductances.** Deployment and on-chip results are
-  unclamped and counted. A physical bound or saturation rule must be declared
-  before the first claim that depends on it.
+- **Out-of-range conductances.** Deployment endpoints and the noisy
+  endpoints of writes are unclamped and counted. On-chip write *targets* are
+  bounded to [G_min, G_max] when `onchip.clip_write_targets` is declared
+  (default in the OPT CMO template from 20 October 2026); results before that,
+  including exp-001–022, used unbounded targets. A saturation rule for the
+  endpoints themselves is still undecided.
 - **Drift.** The planned next stage applies drift to the same held
   conductances, with no P&V repeated before post-deployment retraining. It
   needs its own `relaxation` model.

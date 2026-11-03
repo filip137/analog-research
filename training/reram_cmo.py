@@ -11,7 +11,9 @@ table and silently selects the 0.2 % fit; its 2 % fit needs
 Each weight is a pair of physical devices read as q = (G_a - G_r) / 39.6 uS:
 an active device programmed to MID_US + 39.6 q and a reference device
 programmed to MID_US. Both carry their own programming error, and either may
-be stuck. On-chip writes default to active devices; an explicit verified role
+be stuck. On-chip write targets are unbounded unless a write declares
+``clip_targets``, which projects G + dG onto [G_MIN_US, G_MAX_US] before the
+noise draw. On-chip writes default to active devices; an explicit verified role
 map can select the reference instead, with the opposite logical-update sign. Conductances are held:
 reads return the same state until a program or write changes it. Stuck
 devices hold their stuck conductance through every program and write. There
@@ -167,12 +169,26 @@ class CmoMatrix:
         self.device_programs += roles.numel() - failed
         self.stuck_write_attempts += failed
 
+    def _target(self, requested, written, clip):
+        """The requested write target, optionally projected onto [G_MIN_US, G_MAX_US] before noise."""
+
+        if not clip:
+            return requested
+        bounded = requested.clamp(G_MIN_US, G_MAX_US)
+        if not hasattr(self, "clipped_write_targets"):
+            self.clipped_write_targets = 0
+        self.clipped_write_targets += int((written & (bounded != requested)).sum())
+        return bounded
+
     @torch.no_grad()
-    def write(self, delta, noise_factor=1.0, roles=None):
-        """G_a <- G_a + dG + f sigma(G_a + dG) xi on every active device with a nonzero update.
+    def write(self, delta, noise_factor=1.0, roles=None, clip_targets=False):
+        """G_a <- T + f sigma(T) xi, T = G_a + dG, on every active device with a nonzero update.
 
         ``noise_factor`` f scales write noise only; 1 is the physical law and 0 an
         exact-write oracle. Programming noise and stuck devices are unaffected.
+        With ``clip_targets``, T is clipped to [G_MIN_US, G_MAX_US] before the
+        noise draw; the noisy endpoint itself is held unclipped. The noise
+        stream advances identically either way.
         """
 
         if self.g is None:
@@ -192,7 +208,7 @@ class CmoMatrix:
             held = torch.where(reference, self.g[REFERENCE], self.g[ACTIVE])
             change = torch.where(reference, -delta, delta) * HALF_RANGE_US
             # One draw per logical weight, just as in the legacy active-only law.
-            drawn = self._draw(held + change, noise_factor)
+            drawn = self._draw(self._target(held + change, written, clip_targets), noise_factor)
             self.g = torch.stack((torch.where(written & ~reference, drawn, self.g[ACTIVE]),
                                   torch.where(written & reference, drawn, self.g[REFERENCE])))
             self.writes += written & ~reference
@@ -204,8 +220,8 @@ class CmoMatrix:
             return
         requested = delta != 0
         written = requested & ~self.mask[ACTIVE]
-        active = torch.where(written, self._draw(self.g[ACTIVE] + delta * HALF_RANGE_US, noise_factor),
-                             self.g[ACTIVE])
+        target = self._target(self.g[ACTIVE] + delta * HALF_RANGE_US, written, clip_targets)
+        active = torch.where(written, self._draw(target, noise_factor), self.g[ACTIVE])
         self.g = torch.stack((active, self.g[REFERENCE]))
         self.writes += written
         self.device_writes += int(written.sum())
@@ -266,6 +282,9 @@ class CmoMatrix:
             "device_writes": self.device_writes,
             "stuck_write_attempts": self.stuck_write_attempts,
             "verify_reads": self.verify_reads,
+            # Recorded only once a bounded write has been issued, so unbounded costs keep their keys.
+            **({"clipped_write_targets": self.clipped_write_targets}
+               if hasattr(self, "clipped_write_targets") else {}),
         }
 
     def state_dict(self) -> dict:
@@ -280,6 +299,8 @@ class CmoMatrix:
             "rng": self.generator.get_state(),
             # Verify reads are recorded only once taken, so earlier states keep their bytes.
             "counters": counters + ([self.verify_reads] if self.verify_reads else []),
+            **({"clipped_write_targets": self.clipped_write_targets}
+               if hasattr(self, "clipped_write_targets") else {}),
         }
 
     def load_state_dict(self, state) -> None:
@@ -294,6 +315,10 @@ class CmoMatrix:
             self.reference_writes = state["reference_writes"].to(device).clone()
         elif hasattr(self, "reference_writes"):
             del self.reference_writes
+        if "clipped_write_targets" in state:
+            self.clipped_write_targets = int(state["clipped_write_targets"])
+        elif hasattr(self, "clipped_write_targets"):
+            del self.clipped_write_targets
         self.generator.set_state(state["rng"].cpu())
         counters = list(state["counters"])
         if len(counters) not in (4, 5):
