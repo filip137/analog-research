@@ -212,6 +212,31 @@ requires the declared policy or explicit authorization and an audit of removals;
 never rewrite original manifests to pretend removed evidence still exists. These
 workflow changes do not silently change scientific runner checkpoint behavior.
 
+## Version control
+
+On 2026-11-03 the user granted standing authority, within assigned work, to commit,
+to merge into the trunk `main` and to push the trunk to
+`origin`. It covers an experiment's own `exp/<id>` branch and the trunk. Other
+branches, tags, pull requests and repositories, and any launch, host or budget,
+still need their own authorization. The procedure is the skill's
+[git checkpoints](../.agents/skills/experiment-loop/SKILL.md#git-checkpoints).
+
+- Each experiment or pilot works on its own branch and worktree from its first
+  changed file until it closes. The trunk checkout is for integration and for
+  short edits committed at once.
+- Commit at the checkpoints and before ending any turn that changed files.
+- Evidence runs launch from a pinned checkout of a commit already merged into the
+  trunk and pushed. `--allow-dirty` is for probes and smokes; the runner hashes
+  untracked sources without keeping them.
+- Stage paths by name; never `git add -A`, `git add .` or `git commit -a`. Raw
+  results, checkpoints, datasets and logs stay out of Git.
+- Never force-push, and never rebase, amend or reset a commit that a run, bundle
+  or note names.
+- Never stash, discard or commit another agent's or the user's uncommitted
+  changes; when they block a merge, stop and report.
+- An experiment is closed only when its branch is merged into the trunk and
+  pushed, and its worktrees are removed.
+
 ## Overhead and acceptance
 
 Read the assigned record first; load contracts only as needed. Pass paths and compact

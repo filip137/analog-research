@@ -43,6 +43,67 @@ A field the note leaves open goes back to the Explorer; the Codifier never fills
 it. Learning rates come from a separate development lifecycle or a cited earlier
 result, frozen before the comparison runs.
 
+## Git checkpoints
+
+Each experiment or pilot lives on its own branch, from the first file it changes
+until it closes. The user granted standing authority to commit, merge and push
+([version control](../../../docs/experiment_workflow.md#version-control)). The trunk
+is `main`, checked out at `/home/filip/analog-research/hwa`. `<id>` is the
+experiment id (`exp-023`) or the pilot's file name (`20261103-<slug>`). Reuse the
+branch and worktree if they already exist.
+
+```bash
+TRUNK=/home/filip/analog-research/hwa
+WT=/home/filip/analog-research/worktrees/hwa-<id>
+git -C $TRUNK worktree add -b exp/<id> $WT main
+```
+
+Edit and commit in `$WT` only, staging the paths you changed by name. Commit at
+each checkpoint, and before ending any turn that changed files: uncommitted work
+outlives the chat that made it and is what goes stale.
+
+| Checkpoint | Commit on `exp/<id>` | Then |
+| --- | --- | --- |
+| Explorer hands off | note: question, frozen comparison, budget | — |
+| Codifier launches | code, tests, lifecycles, note with describe summary and probe | integrate; launch from a pinned checkout of this commit |
+| Launch or handoff changes | note handoff: handles, attempts, incidents | — |
+| Reviewer closes | result or pilot note, verdict, regenerated ledger | integrate; close |
+
+Integrate from `$WT`:
+
+```bash
+git merge main                          # resolve here; regenerate ledger.md instead of hand-merging it
+python -m pytest <affected tests>       # when code changed
+git -C $TRUNK merge --ff-only exp/<id>  # if the trunk moved meanwhile, start again
+git -C $TRUNK push origin main
+```
+
+If the trunk checkout refuses because of uncommitted changes there, stop and report
+them; never stash, discard or commit them. Never force-push, and never rebase,
+amend or reset a commit that a run, bundle or note names.
+
+Launch campaigns from a pinned checkout, not from `$WT`. The runner fingerprints
+the source commit, so a later note commit in the launch tree would make `--resume`
+redo finished stages. Probes and smokes may run in `$WT`. Raw outputs go under
+`$TRUNK/results/`, never inside a worktree, so removing one never removes evidence.
+
+```bash
+git -C $TRUNK worktree add --detach $TRUNK/results/lifecycles/<lifecycle_id>/source-<sha> <sha>
+```
+
+Close after collection and review:
+
+```bash
+git -C $WT status --short --ignored     # caches only; anything else is evidence to move first
+git -C $TRUNK worktree remove $WT
+git -C $TRUNK worktree remove $TRUNK/results/lifecycles/<lifecycle_id>/source-<sha>
+git -C $TRUNK branch -d exp/<id>        # refuses an unmerged branch: then it is not closed
+```
+
+An experiment with an unmerged branch or a remaining worktree is not closed. List
+leftovers with `git -C $TRUNK branch --list 'exp/*' --no-merged main`
+and `git -C $TRUNK worktree list`.
+
 ## Monitor
 
 One owner per case. Short runs stay with the executing agent; delegate only when useful
@@ -64,7 +125,8 @@ Interpret collected evidence against the original decision rule. Separate observ
 from inference, label uncertainty/confounds and retrospective claims, and give a scoped
 verdict plus next decision in the same pilot/result note. Negative science is not an
 operational failure. Retries are not replicates. Do not rerun to obtain a preferred answer.
-Refresh a full campaign's generated ledger when notes change; pilots need none.
+Refresh a full campaign's generated ledger when notes change; pilots need none. The
+review ends with the closing [git checkpoint](#git-checkpoints).
 
 ## Context and delegation
 

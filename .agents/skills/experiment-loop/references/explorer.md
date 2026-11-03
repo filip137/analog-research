@@ -109,4 +109,5 @@ table; an extension is Codifier work, not a blocker.
 
 Hand the note to the Codifier only when every Explorer field is resolved and the
 material ones are confirmed. Escalate scientific choices to the user instead of
-choosing silently.
+choosing silently. The note lives on the experiment's own branch from its first
+draft; commit it there before handing off ([git checkpoints](../SKILL.md#git-checkpoints)).

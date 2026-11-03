@@ -248,7 +248,11 @@ notes. Each crossbar loop is a strict lifecycle in `campaigns/<campaign>/lifecyc
 with `python -m ebl campaign run` and collected with `python -m workflow collect`.
 The note links the lifecycle and owns the decision rule, budget, handoff and
 interpretation. These supersede former study/manifest lifecycles and conflicting
-external closeout skills.
+external closeout skills. Each experiment or pilot works on its own `exp/<id>`
+branch and worktree, commits at the loop's
+[git checkpoints](.agents/skills/experiment-loop/SKILL.md#git-checkpoints), and is
+merged into `main` and pushed at launch and at closeout. No
+changed file is left uncommitted at the end of a turn.
 
 Assigned execution authorizes implementation, proportional checks, launch,
 monitoring, collection, interpretation and understood retries within scope and

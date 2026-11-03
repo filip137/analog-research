@@ -67,21 +67,29 @@ to the Explorer/user; do not shrink cohorts, arrays, cases or epochs on your own
 ## 6. Plan and dry run
 
 ```bash
+RUN=/home/filip/analog-research/hwa/results/lifecycles/<id>   # absolute, never inside a worktree
 python -m workflow plan campaigns/<campaign>/lifecycles/<id>.json \
-  --teacher-weights <teacher> --output results/lifecycles/<id>/plan \
+  --teacher-weights <teacher> --output $RUN/plan \
   [--device cuda:N] [--cpu-threads K]
-python -m ebl campaign run --manifest results/lifecycles/<id>/plan/campaign.json \
-  --output-dir results/lifecycles/<id>/runs --dry-run
+python -m ebl campaign run --manifest $RUN/plan/campaign.json \
+  --output-dir $RUN/runs --dry-run
 ```
 
-Add `--allow-dirty` only for probes or smokes from an uncommitted tree, and say so.
+Run these in the checkout that will execute, because the plan pins it: the
+experiment worktree for a probe or smoke, the pinned launch checkout of step 7 for
+evidence. Add `--allow-dirty` only for probes or smokes from an uncommitted tree,
+and say so.
 
 ## 7. Launch gate
 
 Before launching, show the user the cases, target host/device, budget, expected
-duration and output paths. Launch only under assigned execution, in a persistent
-session (e.g. tmux), with `python -m ebl campaign run ... --resume`, and record the
-session, PID and log path. Verify initial semantic progress, not just a live process:
+duration and output paths. Then take the launch [git checkpoint](../SKILL.md#git-checkpoints):
+commit code, tests, lifecycles and the note on `exp/<id>`, integrate into the trunk
+and push, create the pinned checkout of that commit, and plan from it (step 6)
+without `--allow-dirty`. Remote hosts check out the same pushed commit. Launch only
+under assigned execution, in a persistent session (e.g. tmux), with
+`python -m ebl campaign run ... --resume`, and record the session, PID and log path.
+Verify initial semantic progress, not just a live process:
 
 - `prepare`: complete, with digital `teacher_kl` at most 1e-6 (the gate fails otherwise);
 - `devices`: `kernel_adequate` true (OM);
@@ -89,7 +97,9 @@ session, PID and log path. Verify initial semantic progress, not just a live pro
 
 ## 8. Handoff and failures
 
-Fill the note's "Current execution and monitoring handoff": cases, lifecycle and
+Fill the note's "Current execution and monitoring handoff", then commit it on
+`exp/<id>`, again at each material change: branch, launch commit and pinned
+checkout, cases, lifecycle and
 plan paths with digests, run root, session/PID/log, expected stage order and
 durations from the probe, next check, deadline and remaining budget, inspect and
 collect commands (`python -m ebl runs inspect RUN_DIR --verify-artifacts
