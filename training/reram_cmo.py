@@ -119,6 +119,10 @@ class CmoMatrix:
         self.device_writes = 0
         self.stuck_write_attempts = 0
         self.verify_reads = 0
+        # A seed recipe is valid only through the first full program. Even a
+        # zero-update write advances the RNG, and a verify changes accounting.
+        # Restored tensors have their own history and must retain full state.
+        self._deployment_replayable = True
         self.mask = torch.zeros((2, size), dtype=torch.bool, device=device)
         self.stuck = torch.zeros((2, size), device=device)
         if stuck is not None:
@@ -131,6 +135,11 @@ class CmoMatrix:
     @property
     def failed(self) -> int:
         return int(self.mask.sum())
+
+    def can_rebuild_deployment(self) -> bool:
+        """Whether the initial target and constructor seeds recover all state."""
+
+        return self._deployment_replayable and self.program_calls == 1
 
     def fault_digest(self) -> str:
         """Identity of the permanent defects."""
@@ -153,6 +162,7 @@ class CmoMatrix:
             raise ValueError("Expected one finite normalized target in [-1, 1] per weight.")
         if not reference and self.g is None:
             raise RuntimeError("Expected programmed reference devices before reprogramming active devices only.")
+        self._deployment_replayable &= self.program_calls == 0 and reference
         active = to_conductance(target)
         if reference:
             drawn = self._draw(torch.stack((active, torch.full_like(active, MID_US))))
@@ -181,10 +191,11 @@ class CmoMatrix:
             raise ValueError("Expected one finite normalized update per weight.")
         if isinstance(noise_factor, bool) or not math.isfinite(noise_factor) or noise_factor < 0:
             raise ValueError(f"Expected a finite nonnegative write-noise factor. Provided value: {noise_factor!r}.")
+        if roles is not None and (roles.shape != (self.size,) or roles.dtype != torch.int8
+                                 or bool(((roles < -1) | (roles > REFERENCE)).any())):
+            raise ValueError("Expected int8 write roles: -1 blocked, 0 active, 1 reference.")
+        self._deployment_replayable = False
         if roles is not None:
-            if (roles.shape != (self.size,) or roles.dtype != torch.int8
-                    or bool(((roles < -1) | (roles > REFERENCE)).any())):
-                raise ValueError("Expected int8 write roles: -1 blocked, 0 active, 1 reference.")
             reference = roles == REFERENCE
             requested = (delta != 0) & (roles >= 0)
             failed = torch.where(reference, self.mask[REFERENCE], self.mask[ACTIVE])
@@ -228,6 +239,7 @@ class CmoMatrix:
         requested = torch.where(selected, target_us.to(self.g), self.g)
         if not bool(torch.isfinite(requested).all()) or bool((requested[selected] < 0).any()):
             raise ValueError("Expected finite nonnegative conductance targets for the selected devices.")
+        self._deployment_replayable = False
         noise = torch.randn(requested.shape, device=requested.device, generator=generator)
         drawn = requested + self.noise_scale * programming_sigma(requested, self.acceptance) * noise
         programmed = selected & ~self.mask
@@ -242,6 +254,7 @@ class CmoMatrix:
 
         if self.g is None:
             raise RuntimeError("Expected a programmed CMO matrix before reading it.")
+        self._deployment_replayable = False
         self.verify_reads += self.g.numel()
         return self.g.detach().clone()
 
@@ -287,6 +300,7 @@ class CmoMatrix:
             raise ValueError("Expected the same CMO acceptance range and noise scale.")
         if state["faults_sha256"] != self.fault_digest():
             raise ValueError("Expected the same permanent CMO defects.")
+        self._deployment_replayable = False
         device = self.writes.device
         self.g = state["g"].to(device).clone()
         self.writes = state["writes"].to(device).clone()

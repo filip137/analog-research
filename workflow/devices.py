@@ -244,9 +244,9 @@ class CmoArray:
         return sum(child.out_of_range() for child in self.children)
 
     def freshly_programmed(self) -> bool:
-        """Programmed exactly once (both devices) and never written since."""
+        """Every matrix can be rebuilt from its first program, including RNG and costs."""
 
-        return all(child.program_calls == 1 and child.device_writes == 0 for child in self.children)
+        return all(child.can_rebuild_deployment() for child in self.children)
 
     def verify_permanence(self) -> None:
         for child in self.children:
@@ -511,9 +511,11 @@ def array_identity(array, technology: str) -> dict:
 def array_state(array, technology: str, *, portable=False) -> dict:
     """Compact state: OM populations are restored from the device bundle.
 
-    A CMO array programmed once and never written is fully determined by its
-    target, seeds and fault map; it is stored as identities and rebuilt by
-    reprogramming on the same execution-device type, then verified.
+    A CMO array programmed once with no subsequent stateful operations is
+    fully determined by its target, seeds and fault map; it is stored as
+    identities and rebuilt on the same execution-device type, then verified.
+    Writes (including zero updates), verifies and full-state restores require
+    tensors, RNG state and counters even when the held weights are unchanged.
     """
 
     if technology == "cmo" and array.freshly_programmed() and not portable and not getattr(array, "portable_state", False):

@@ -300,6 +300,49 @@ def test_arrays_bind_each_matrix_to_its_own_stream_and_report_programming():
     assert identity["failed_devices"] == 0 and identity["physical_devices"] == 2 * target.numel()
 
 
+@pytest.mark.parametrize("event", ["none", "zero_write", "blocked_write", "verify", "restore"])
+def test_compact_array_state_preserves_future_writes_and_costs(event):
+    layout = [MatrixSpec("decoder.layers.0.fc1", (4, 4), 0, 16, 1.0)]
+    target = torch.linspace(-0.5, 0.5, 16)
+    mask = torch.zeros((2, 16), dtype=torch.bool)
+    mask[0, 0] = True
+    stuck = torch.full((2, 16), reram_cmo.G_MIN_US)
+
+    def fresh():
+        return device_stage.CmoArray(
+            layout, NAMESPACE, 19, 2.0, 1.0, "cpu",
+            {"matrices": {layout[0].name: (mask, stuck)}, "receipt": {}},
+        )
+
+    original = fresh()
+    original.program(target)
+    child = original.children[0]
+    if event in ("zero_write", "blocked_write"):
+        delta = torch.zeros_like(target)
+        if event == "blocked_write":
+            delta[0] = 0.01
+        # Exercise the state owner directly, not only the array wrapper.
+        child.write(delta)
+    elif event == "verify":
+        child.read_devices()
+    elif event == "restore":
+        child.load_state_dict(child.state_dict())
+
+    saved = device_stage.array_state(original, "cmo")
+    assert saved["kind"] == ("layered_cmo_deployment" if event == "none" else "layered_cmo")
+    restored = fresh()
+    device_stage.load_array_state(restored, saved, "cmo", target)
+    for step in range(3):
+        assert torch.equal(original.read(), restored.read())
+        assert original.cost() == restored.cost()
+        assert torch.equal(child.writes, restored.children[0].writes)
+        assert torch.equal(child.generator.get_state(), restored.children[0].generator.get_state())
+        delta = torch.full_like(target, 0.01 * (step + 1))
+        original.write(delta)
+        restored.write(delta)
+    assert torch.equal(original.read(), restored.read())
+
+
 def test_faulted_arrays_hold_stuck_devices_and_report_their_identity():
     lc = small()
     network = deployment.build_network(tiny_teacher(), lc)
