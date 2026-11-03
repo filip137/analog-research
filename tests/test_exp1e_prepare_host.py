@@ -47,10 +47,10 @@ def test_host_preparation_emits_current_pinned_grid_and_only_dry_runs(tmp_path, 
             return "a" * 40
         assert env["EBL_CORPUS_ROOT"] == str(corpus.parent)
         assert env["EBL_CAMPAIGN_STREAM"] == "1"
-        if argv[1:4] == ["-m", "ebl", "lifecycle", "plan"]:
+        if argv[1:5] == ["-m", "ebl", "lifecycle", "plan"]:
             target = Path(argv[argv.index("--output") + 1])
             target.mkdir(parents=True, exist_ok=True)
-            config = json.loads(Path(argv[4]).read_text())
+            config = json.loads(Path(argv[5]).read_text())
             stages = []
             for name, dependencies in (("prepare", []), ("devices", ["prepare"]),
                                        ("hwa__standard_hwa_model", ["prepare", "devices"])):
@@ -75,7 +75,7 @@ def test_host_preparation_emits_current_pinned_grid_and_only_dry_runs(tmp_path, 
     assert len(record["cases"]) == count
     assert record["launched"] is False
     assert len([c for c in commands if "--dry-run" in c]) == count
-    assert len([c for c in commands if c[1:4] == ["-m", "ebl", "lifecycle", "plan"]]) == count
+    assert len([c for c in commands if c[1:5] == ["-m", "ebl", "lifecycle", "plan"]]) == count
     assert sum(case["smoke"] for case in record["cases"]) == 2
     for case in record["cases"]:
         spec = json.loads(Path(case["campaign_worker_spec"]).read_text())

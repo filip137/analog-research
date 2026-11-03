@@ -406,11 +406,33 @@ class OptMlpSuffix(nn.Module):
             hidden = digital.embed(hidden.tokens)
             for i in range(self.start):
                 hidden = digital.layers[i](hidden)
+        return self.forward_suffix(hidden, q, digital=digital)
+
+    def forward_suffix(self, hidden, q, *, digital, correction=None, capture=False):
+        """Shared suffix traversal for native weights and physical drift adapters.
+
+        Corrections act on the complete MLP output before the residual addition.
+        Captures retain the normalized input and uncorrected output for fitting.
+        """
+
+        if q.shape != self.q.shape:
+            raise ValueError("Expected one normalized value per analog MLP weight.")
+        if correction is not None and len(correction) != len(self.mlp_norms):
+            raise ValueError("Expected one correction per analog MLP.")
+        captures = []
         for k, i in enumerate(range(self.start, len(self.teacher.layers))):
             hidden = digital.layers[i].attention(hidden)
-            y = self._matrix(self.mlp_norms[k](hidden), 2 * k, q)
-            hidden = hidden + self._matrix(F.relu(y), 2 * k + 1, q)
-        return digital.logits(hidden[:, :-1])
+            x = self.mlp_norms[k](hidden)
+            y = self._matrix(x, 2 * k, q)
+            y = self._matrix(F.relu(y), 2 * k + 1, q)
+            if capture:
+                captures.append((x, y))
+            if correction is not None:
+                a, b = correction[k]
+                y = y * a + b
+            hidden = hidden + y
+        logits = digital.logits(hidden[:, :-1])
+        return (logits, captures) if capture else logits
 
     def forward(self, tokens, q=None):
         return self.forward_features(self.features(tokens), q)

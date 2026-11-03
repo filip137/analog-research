@@ -17,7 +17,7 @@ from core.artifacts import sha256_file
 from core.tensor_io_native import save
 from core.contracts import ConfigError
 import networks.data as data_stage
-import methods.deployment as deployment
+import networks.deployment as deployment
 import hardware.arrays as device_stage
 from ebl.lifecycle.cli import main as workflow_main
 from ebl.schema.lifecycle import parse_lifecycle

@@ -98,6 +98,8 @@ class CampaignRunRequest:
     allow_dirty: bool
     fail_fast: bool
     command: Tuple[str, ...]
+    stage_ids: Tuple[str, ...] = ()
+    input_overrides: Tuple[str, ...] = ()
 
 
 Handler = Callable[[Any], Optional[int]]
@@ -228,6 +230,11 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         metavar="CAMPAIGN_COMMAND",
     )
+    artifact = campaign_commands.add_parser("artifact", help="resolve a matching completed stage artifact without launching")
+    artifact.add_argument("--manifest", type=Path, required=True)
+    artifact.add_argument("--output-dir", type=Path, required=True)
+    artifact.add_argument("--stage", required=True)
+    artifact.add_argument("--kind", required=True)
     campaign_run = campaign_commands.add_parser(
         "run",
         help="execute stages from a versioned campaign manifest",
@@ -274,6 +281,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="continue launching independent stages after failures (default)",
     )
     campaign_run.set_defaults(fail_fast=False)
+    campaign_run.add_argument("--stage", action="append", default=[],
+                              help="execute this stage; unselected dependencies must already match (repeatable)")
+    campaign_run.add_argument("--input", action="append", default=[], metavar="STAGE:ROLE=PATH",
+                              help="bind an explicit artifact; its contents enter the stage fingerprint (repeatable)")
 
     study = commands.add_parser(
         "study",
@@ -658,6 +669,8 @@ def _default_campaign_handler(request: CampaignRunRequest) -> int:
             dry_run=request.dry_run,
             allow_dirty=request.allow_dirty,
             fail_fast=request.fail_fast,
+            stage_ids=request.stage_ids,
+            input_overrides=request.input_overrides,
         )
     except (
         OSError,
@@ -753,6 +766,17 @@ def _dispatch(
         )
 
 
+    if args.command_name == "campaign" and args.campaign_command == "artifact":
+        from ebl.execution.schema import load_campaign_manifest
+        from ebl.execution.runner import completed_artifact
+        try:
+            artifact = completed_artifact(load_campaign_manifest(args.manifest), manifest_path=args.manifest,
+                                          output_root=args.output_dir, stage_id=args.stage, kind=args.kind)
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+            raise ConfigError(str(error)) from error
+        print(json.dumps(artifact))
+        return 0
+
     if (
         args.command_name == "campaign"
         and args.campaign_command == "run"
@@ -772,6 +796,8 @@ def _dispatch(
             allow_dirty=args.allow_dirty,
             fail_fast=args.fail_fast,
             command=command,
+            stage_ids=tuple(args.stage),
+            input_overrides=tuple(args.input),
         )
         return _handler_result(
             handlers.campaign_run or _default_campaign_handler,

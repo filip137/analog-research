@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""source_record.py RUNS STAGE: print '<source path> <sha256>' of STAGE's complete run, or nothing."""
+"""source_record.py MANIFEST RUNS STAGE: resolve an unchanged completed HWA source."""
 import json
-from pathlib import Path
+import subprocess
 import sys
 
-runs, stage = sys.argv[1:3]
-for path in sorted(Path(runs, stage).glob("*/result.json"), reverse=True):
-    result = json.loads(path.read_text())
-    if result.get("status") == "complete":
-        [item] = [a for a in result["artifacts"] if a["kind"] == "hwa_source"]
-        print(path.parent / item["path"], item["sha256"])
-        break
+manifest, runs, stage = sys.argv[1:4]
+completed = subprocess.run([sys.executable, '-m', 'ebl', 'campaign', 'artifact', '--manifest', manifest,
+                            '--output-dir', runs, '--stage', stage, '--kind', 'hwa_source'],
+                           check=True, capture_output=True, text=True)
+record = json.loads(completed.stdout)
+print(record['path'], record['sha256'])

@@ -14,13 +14,14 @@ from core.tensor_io_native import load
 from core.contracts import ConfigError
 import hardware.devices.cmo as cmo
 from hardware.devices.cmo import ACTIVE, REFERENCE, CmoMatrix
-import methods.deployment as deployment
+import networks.deployment as deployment
 import methods.programming.lifecycle as program_verify
 import hardware.arrays as device_stage
 from ebl.schema.lifecycle import parse_lifecycle
 from test_workflow_cmo import case_doc, cmo_inputs, mlp_layout, scenario, small, template, NAMESPACE
 from test_workflow_opt import tiny_teacher
 from workflow_helpers import run_lifecycle
+from networks.mapping import fault_domains
 
 ROOT = Path(__file__).resolve().parents[1]
 ORACLE_PAIR = {"detection": "oracle", "roles": "pair", "seed": 241016}
@@ -125,7 +126,7 @@ def tiny_arrays(lc, case, noise_scale=1.0):
     network = deployment.build_network(tiny_teacher(), lc)
     target = network.q.detach()
     faults = None if case.kind == "none" else device_stage.hierarchical_faults(
-        network.layout, lc.deployment.tile_size, lc.defects.arrays_per_die, case, 271001, lc.network.binding_namespace)
+        network.layout, lc.deployment.tile_size, lc.defects.arrays_per_die, case, 271001, lc.network.binding_namespace, domains=fault_domains(network.layout))
     array = device_stage.CmoArray(network.layout, lc.network.binding_namespace, lc.devices.endpoint_seed(271001),
                                   2.0, noise_scale, "cpu", faults)
     array.program(target)

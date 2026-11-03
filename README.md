@@ -6,7 +6,7 @@ OPT-125M is the current transformer target. Completed MNIST and CIFAR studies
 remain reference evidence.
 
 Start with [AGENTS.md](AGENTS.md) for the shared scientific scope and the
-[experiment workflow](docs/experiment_workflow.md). The branch responsible for
+[simulation workflow](workflow/README.md). The branch responsible for
 each experimental run declares its simulation models, parameters, controls,
 inputs, metric and budget in its experiment or pilot note and lifecycle.
 [`../on-chip-learning/`](../on-chip-learning/README.md) owns shared crossbar/DRN
@@ -31,7 +31,8 @@ prints these commands using verified local inputs; see the guide for setup.
 New experimental loops are campaign **lifecycles**: one strict JSON definition
 states the question and selected device effects, then the relevant deployment,
 HWA, program-and-verify, retention and adaptation stages. Each step calls a
-reusable function in `workflow/`; see the [lifecycle contract](docs/crossbar_lifecycle.md).
+method composed by `ebl/runtime/`; see the [lifecycle contract](docs/crossbar_lifecycle.md)
+and [architecture map](docs/architecture.md).
 
 OM recovery models physical pulse updates with held apparent-state forwards.
 The main PCM recovery studies use Gaussian endpoint reprogramming. Both compute
@@ -41,19 +42,22 @@ controls and physical update counts.
 
 ## Code and evidence
 
-- `workflow/`: the standard lifecycle stages and their strict schema.
-- `experiments/cifar_crossbar/`: ResNet mapping, HWA/CDT, deployment, recovery,
-  strict configs, reports and input relocation.
-- `experiments/cifar10_crossbar/`: the separate dense CIFAR-10 experiment.
-- `experiments/mnist_analog_relu/` and `training/`: shared crossbar plants,
-  population samplers, HWA and update controllers.
+- `workflow/`: define, prepare, execute and review guidance for agents.
+- `ebl/`: discovery, lifecycle schema, execution, scheduling and collection.
+- `networks/`: OPT construction, pinned teachers, analog subsets and CIFAR models.
+- `hardware/`: device laws, mapping, permanent faults, held state and drift.
+- `methods/`: HWA, on-chip learning, calibration, programming and maintenance.
+- `core/`: shared configuration, identities, artifact utilities and serialization.
+- `experiments/`: characterization entry points and supported historical reproductions.
 - `examples/cifar_crossbar/`, `examples/cifar10_crossbar/`: exact scientific configs.
 - `campaigns/`: question-led experiment/result records and generated ledgers.
 - `results/` and `artifacts/`: ignored native bundles, checkpoints, datasets,
   source snapshots, plots and migration inventories. A Git checkout alone does
   not contain these historical data.
 
-New work follows the [experiment workflow](docs/experiment_workflow.md).
+New work follows the [simulation workflow](workflow/README.md).
+Use `python -m ebl lifecycle check/describe/plan/collect` for lifecycle operations.
+`workflow/` is documentation only; replay old commands from their pinned checkout.
 `docs/current_simulations.md` and `docs/experimental_manifest.md` are historical
 snapshots; current specifications and conclusions belong to campaign or pilot notes.
 

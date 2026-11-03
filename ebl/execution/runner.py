@@ -823,6 +823,40 @@ def _stream_stage(command: list[str], *, cwd: Path, attempt: Path) -> subprocess
                                        stderr_path.read_text(encoding="utf-8", errors="replace"))
 
 
+def _selected_inputs(spec, stage_ids, input_overrides):
+    """Resolve an explicit execution slice without changing its campaign contract."""
+    stages = {stage.stage_id: stage for stage in spec.stages}
+    selected = set(stage_ids) if stage_ids else set(stages)
+    if len(stage_ids) != len(set(stage_ids)) or not selected <= stages.keys():
+        raise ValueError("Expected distinct selected stages from the campaign manifest.")
+    overrides = {}
+    for item in input_overrides:
+        key, separator, value = item.partition('=')
+        stage, colon, role = key.partition(':')
+        if (not separator or not colon or not value or stage not in selected
+                or role not in stages[stage].inputs or (stage, role) in overrides):
+            raise ValueError("Expected unique --input STAGE:ROLE=PATH bindings for selected stage inputs.")
+        path = Path(value).expanduser().resolve()
+        if not path.is_file():
+            raise ValueError(f"Expected an existing explicit input: {path}")
+        overrides[stage, role] = InputRef(path=path)
+    dependencies = {}
+    for stage in spec.stages:
+        dependencies[stage.stage_id] = tuple(
+            dependency for dependency in stage.depends_on
+            if not (roles := [role for role, ref in stage.inputs.items() if ref.stage == dependency])
+            or not all((stage.stage_id, role) in overrides for role in roles)
+        )
+    needed = set(selected)
+    pending = list(selected)
+    while pending:
+        for dependency in dependencies[pending.pop()]:
+            if dependency not in needed:
+                needed.add(dependency)
+                pending.append(dependency)
+    return selected, needed, dependencies, overrides
+
+
 def run_campaign(
     spec: CampaignSpec,
     *,
@@ -832,6 +866,9 @@ def run_campaign(
     dry_run: bool = False,
     allow_dirty: bool = False,
     fail_fast: bool = False,
+    stage_ids: tuple[str, ...] = (),
+    input_overrides: tuple[str, ...] = (),
+    reuse_only: bool = False,
 ) -> dict[str, Mapping[str, Any]]:
     """Execute a campaign in dependency order.
 
@@ -839,15 +876,22 @@ def run_campaign(
     as ``skipped_dependency`` without launching its target process.
     """
 
+    if reuse_only and dry_run:
+        raise ValueError("Completed-stage inspection cannot be combined with dry-run.")
+    selected, needed, dependencies, overrides = _selected_inputs(spec, stage_ids, input_overrides)
     contract_record = _campaign_contract_record(
         spec,
         manifest_path=manifest_path,
     )
     campaign_root = output_root.expanduser().resolve() / spec.campaign_id
-    campaign_root.mkdir(parents=True, exist_ok=True)
-    _establish_campaign_contract(campaign_root, contract_record)
-    (campaign_root / "stages").mkdir(exist_ok=True)
-    (campaign_root / "aggregate").mkdir(exist_ok=True)
+    if reuse_only:
+        if _read_json(campaign_root / "campaign.resolved.json") != contract_record:
+            raise ValueError("Expected the same completed campaign contract and source manifest.")
+    else:
+        campaign_root.mkdir(parents=True, exist_ok=True)
+        _establish_campaign_contract(campaign_root, contract_record)
+        (campaign_root / "stages").mkdir(exist_ok=True)
+        (campaign_root / "aggregate").mkdir(exist_ok=True)
 
     targets = {item.target_id: item for item in spec.targets}
     target_info = {
@@ -863,6 +907,8 @@ def run_campaign(
     stop_launching = False
 
     for stage in topological_stages(spec):
+        if stage.stage_id not in needed:
+            continue
         stage_root = (
             campaign_root
             / "stages"
@@ -870,10 +916,11 @@ def run_campaign(
             / stage.target_id
             / stage.stage_id
         )
-        stage_root.mkdir(parents=True, exist_ok=True)
+        if not reuse_only:
+            stage_root.mkdir(parents=True, exist_ok=True)
         failed_dependencies = [
             dependency
-            for dependency in stage.depends_on
+            for dependency in dependencies[stage.stage_id]
             if records[dependency]["status"]
             not in ({"complete", "dry_run"} if dry_run else {"complete"})
         ]
@@ -894,6 +941,7 @@ def run_campaign(
             records[stage.stage_id] = record
             continue
 
+        inputs = {role: overrides.get((stage.stage_id, role), ref) for role, ref in stage.inputs.items()}
         if dry_run:
             resolved_inputs: Mapping[str, Path | str] = {
                 key: (
@@ -901,7 +949,7 @@ def run_campaign(
                     if ref.path is not None
                     else f"@stage:{ref.stage}:{ref.artifact_kind}"
                 )
-                for key, ref in stage.inputs.items()
+                for key, ref in inputs.items()
             }
             missing_paths = [
                 str(value)
@@ -916,7 +964,7 @@ def run_campaign(
         else:
             resolved_inputs = {
                 key: _resolved_input(ref, stage_records=records)
-                for key, ref in stage.inputs.items()
+                for key, ref in inputs.items()
             }
         if not stage.config.is_file():
             raise ValueError(
@@ -928,7 +976,7 @@ def run_campaign(
             target_identity=target_info[stage.target_id]["source"],
             resolved_inputs=resolved_inputs,
         )
-        if resume:
+        if resume or reuse_only or stage.stage_id not in selected:
             reusable = _reusable_record(
                 stage_root,
                 fingerprint=fingerprint,
@@ -936,6 +984,12 @@ def run_campaign(
             if reusable is not None:
                 records[stage.stage_id] = reusable
                 continue
+
+        if reuse_only or stage.stage_id not in selected:
+            raise ValueError(
+                f"Selected stages require a matching completed dependency {stage.stage_id!r}; "
+                "select it explicitly or bind its inputs with --input."
+            )
 
         attempt = _next_attempt(stage_root)
         output_dir = attempt / "runs"
@@ -1029,6 +1083,8 @@ def run_campaign(
         if status == "failed" and fail_fast:
             stop_launching = True
 
+    if reuse_only:
+        return records
     atomic_write_json(
         campaign_root / "aggregate" / "results.json",
         {
@@ -1038,3 +1094,11 @@ def run_campaign(
         },
     )
     return records
+
+
+def completed_artifact(spec, *, manifest_path, output_root, stage_id, kind):
+    """Resolve a completed artifact using the runner's full reuse contract."""
+    records = run_campaign(spec, manifest_path=manifest_path, output_root=output_root,
+                           stage_ids=(stage_id,), reuse_only=True)
+    path = _resolved_input(InputRef(stage=stage_id, artifact_kind=kind), stage_records=records)
+    return {"path": str(path), "sha256": sha256_file(path), "run_result": records[stage_id]["run_result"]}

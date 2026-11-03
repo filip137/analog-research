@@ -246,20 +246,6 @@ def hidden_faults(array):
             torch.cat([child.stuck for child in array.children], 1))
 
 
-def fault_group(name: str) -> str:
-    """The module owning an analog matrix, e.g. ``decoder.layers.11`` for its fc1 and fc2.
-
-    Analog LoRA matrices (``...fc1.lora_a``, ``...fc1.lora_b``) form their own group per adapted
-    matrix, so adding adapters never changes a base group's arrays, rates or fault stream.
-    """
-
-    return name.rsplit(".", 1)[0]
-
-
-def adapter_matrix(name: str) -> bool:
-    return name.endswith((".lora_a", ".lora_b"))
-
-
 def physical_arrays(layout, tile_size, devices_per_weight=2):
     """Physical arrays in mapping order, each with its devices' flat indices.
 
@@ -304,20 +290,29 @@ def _allocate(rng, total, sizes, weights):
     return counts
 
 
-def hierarchical_faults(layout, tile_size, arrays_per_die, case, assignment_seed, namespace):
+def hierarchical_faults(layout, tile_size, arrays_per_die, case, assignment_seed, namespace, *, domains):
     """Permanent stuck devices of one assignment and defect case (see the module docstring)."""
 
+    if set(domains) != {m.name for m in layout}:
+        raise ValueError("Expected one fault-domain descriptor per mapped matrix.")
+    roles = {}
+    for domain in domains.values():
+        if not domain.group or type(domain.adapter) is not bool:
+            raise ValueError("Expected explicit fault-group identities and adapter roles.")
+        if domain.group in roles and roles[domain.group] != domain.adapter:
+            raise ValueError("A physical fault group cannot mix base and adapter roles.")
+        roles[domain.group] = domain.adapter
     target = getattr(case, "target", "all")
-    adapters = any(adapter_matrix(m.name) for m in layout)
+    adapters = any(domain.adapter for domain in domains.values())
     by_matrix = {m.name: (np.zeros(2 * m.size, dtype=bool), np.zeros(2 * m.size, dtype=np.float32)) for m in layout}
     arrays = physical_arrays(layout, tile_size)
     groups, receipt_groups = {}, []
     for array in arrays:
-        groups.setdefault(fault_group(array["matrix"]), []).append(array)
+        groups.setdefault(domains[array["matrix"]].group, []).append(array)
     for group, members in groups.items():
         # A targeted case leaves the other subset healthy; each group keeps its own stream, so a
         # targeted subset fails exactly as it does in the matching untargeted case.
-        adapter = adapter_matrix(members[0]["matrix"])
+        adapter = domains[members[0]["matrix"]].adapter
         mu = case.rate if target == "all" or (target == "adapter") == adapter else 0.0
         seed = binding_seed(assignment_seed, namespace, f"{group}/faults")
         die_rng, array_rng, count_rng, device_rng, value_rng = (
@@ -409,31 +404,32 @@ def hierarchical_faults(layout, tile_size, arrays_per_die, case, assignment_seed
     return {"matrices": matrices, "receipt": receipt}
 
 
-def fresh_array(lifecycle, layout, assignment_seed, case, populations, device):
+def fresh_array(*, technology, layout, assignment_seed, case, populations, device,
+                namespace, endpoint_seed, noise_scale, tile_size, arrays_per_die,
+                acceptance_percent, domains):
     """Construct one assignment under one defect case, before programming."""
 
-    devices, dataset = lifecycle.devices, lifecycle.network.binding_namespace
-    endpoint = devices.endpoint_seed(assignment_seed)
-    if devices.technology == "cmo":
+    dataset, endpoint = namespace, endpoint_seed
+    if technology == "cmo":
         faults = None
         if case.kind != "none":
             faults = hierarchical_faults(
-                layout, lifecycle.deployment.tile_size, lifecycle.defects.arrays_per_die, case, assignment_seed, dataset
+                layout, tile_size, arrays_per_die, case, assignment_seed, dataset, domains=domains
             )
         return CmoArray(
-            layout, dataset, endpoint, lifecycle.program_verify.acceptance_percent, devices.noise_scale, device, faults
+            layout, dataset, endpoint, acceptance_percent, noise_scale, device, faults
         )
-    if devices.technology == "pcm":
+    if technology == "pcm":
         return PcmEndpointArray(
-            layout, dataset, case, assignment_seed, endpoint, devices.noise_scale, device
+            layout, dataset, case, assignment_seed, endpoint, noise_scale, device
         )
     if populations is None:
         raise ValueError("Expected sampled OM populations for an OM lifecycle.")
     population = combined_om(
         populations, layout, dataset, assignment_seed, endpoint, case.sampler_kind, case.rate
     )
-    if devices.noise_scale != 1.0:
-        population = dict(population, noise_scale=devices.noise_scale)
+    if noise_scale != 1.0:
+        population = dict(population, noise_scale=noise_scale)
         population["fingerprint"] = population_fingerprint(population)
     return make_plant(population, endpoint, device)
 

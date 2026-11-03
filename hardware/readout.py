@@ -69,3 +69,19 @@ class Compensation:
     @classmethod
     def from_state_dict(cls, states, device):
         return cls([MatrixCorrection.from_state_dict(s, device) for s in states])
+
+
+def tile_compensation(initial, current, layout, tile_size):
+    """Per-tile global drift compensation from one-hot reference reads."""
+
+    result = current.clone()
+    for spec in layout:
+        a = initial[spec.offset : spec.offset + spec.size].reshape(spec.shape[0], -1)
+        b = result[spec.offset : spec.offset + spec.size].reshape_as(a)
+        for output in range(0, a.shape[0], tile_size):
+            for row in range(0, a.shape[1], tile_size):
+                ref = a[output : output + tile_size, row : row + tile_size]
+                new = b[output : output + tile_size, row : row + tile_size]
+                factor = ref.abs().mean().clamp_min(1e-4) / new.abs().mean().clamp_min(1e-4)
+                new.mul_(factor)
+    return result

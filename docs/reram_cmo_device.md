@@ -337,15 +337,15 @@ The cost of each epoch is reported per assignment and arm:
 
 ## Code and tests
 
-- `training/reram_cmo.py`: the law, the encoding and `CmoMatrix`.
-- `workflow/devices.py`: `CmoArray`, a layer-bound array, and
+- `hardware/devices/cmo.py`: the law, the encoding and `CmoMatrix`.
+- `hardware/arrays.py`: `CmoArray`, a layer-bound array, and
   `hierarchical_faults`, the die/array fault sampler.
-- `workflow/program_verify.py`: the `gaussian_endpoint` report and the
+- `methods/programming/lifecycle.py`: the `gaussian_endpoint` report and the
   fault-aware pair rewrite (`detect_stuck_devices`, `pair_rewrite_plan`,
   `fault_rewrite`).
-- `workflow/hwa.py`: the constant-σ HWA weight noise.
-- `workflow/onchip.py`: `IdealizedWriteAdam`.
-- `workflow/lifecycle.py`: `TECHNOLOGIES["cmo"]`, `CMO_ACCEPTANCE_PERCENT`,
+- `methods/hwa.py`: the constant-σ HWA weight noise.
+- `methods/onchip.py`: `IdealizedWriteAdam`.
+- `ebl/schema/lifecycle.py`: `TECHNOLOGIES["cmo"]`, `CMO_ACCEPTANCE_PERCENT`,
   `hwa.noise_std`, and the hierarchical defect cases with `arrays_per_die`.
 
 `tests/test_workflow_cmo.py` checks:

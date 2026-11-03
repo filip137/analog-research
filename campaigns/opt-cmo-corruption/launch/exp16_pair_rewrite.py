@@ -343,7 +343,7 @@ def check_realization(tag, array, teacher, portable, device='cuda:0'):
 
     import torch
     from core.tensor_io_native import load
-    import methods.deployment as deployment
+    import networks.deployment as deployment
     import methods.programming.lifecycle as program_verify
     import hardware.arrays as device_stage
     lc = lifecycle(tag, 'kinds'); p0 = load(portable)

@@ -14,8 +14,7 @@ becomes documentation; its commands move to `ebl lifecycle`.
 
 Tiny and OPT-width synthetic CPU workloads compare baseline and extracted code,
 using FP32, one thread, seeds 1729/2718/31415/1618, three warm-ups and ten timed
-repetitions in three fresh processes per version. Setup is timed separately from
-operations. Report distributions, unique persistent storage, peak RSS and native
+repetitions in three fresh processes per version. Setup and restoration are outside operation timings. Report distributions, unique persistent storage, peak RSS and native
 checkpoint size/save/load. These measurements make no scientific accuracy claim.
 
 ## Budget and evidence

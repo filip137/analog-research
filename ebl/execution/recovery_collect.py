@@ -129,7 +129,7 @@ def export(root, inputs):
     files['inspection.json']=inspection
     files['stage-config.json']=Path(contract['stages'][0]['config']).read_text()
     with tempfile.TemporaryDirectory(prefix='recovery-collect-') as tmp:
-        subprocess.run([sys.executable,'-m','workflow','collect',str(run),'--output',tmp],check=True,capture_output=True,text=True,timeout=180)
+        subprocess.run([sys.executable,"-m", "ebl", "lifecycle",'collect',str(run),'--output',tmp],check=True,capture_output=True,text=True,timeout=180)
         payload = {'schema':'lifecycle.reused_recovery.v1','root':str(root),'run':str(run),
             'campaign_resolved':contract_text,'source_manifest':Path(contract['source_manifest']['path']).read_text(),
             'aggregate':aggregate_text,'files':files,'rows_json':(Path(tmp)/'rows.json').read_text(),

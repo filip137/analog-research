@@ -10,7 +10,7 @@ from core.artifacts import atomic_write_json, sha256_file
 from core.tensor_identity import state_hash, tensor_hash
 from core.tensor_io_native import load, save
 import networks.data as data_stage
-import methods.deployment as deployment
+import networks.deployment as deployment
 import methods.hwa as hwa
 import methods.onchip as onchip
 import methods.programming.lifecycle as program_verify

@@ -95,7 +95,7 @@ def native_plan(lc,base,identifier=None):
     identifier=identifier or lc.lifecycle_id
     root=ROOT/'results/lifecycles'/identifier
     config=ROOT/'campaigns/opt-cmo-corruption/lifecycles'/(lc.lifecycle_id+'.json')
-    command([sys.executable,'-m','workflow','plan',str(config),'--teacher-weights',
+    command([sys.executable,"-m", "ebl", "lifecycle",'plan',str(config),'--teacher-weights',
         str(base/'inputs/opt-125m-27dcfa74/pytorch_model.bin'),'--output',str(root/'plan'),
         '--device','cuda:0','--cpu-threads','1','--python',sys.executable],cwd=ROOT)
     raw=json.loads((root/'plan/campaign.json').read_text());raw['campaign_id']=identifier

@@ -6,7 +6,7 @@ import pytest
 import torch
 
 import networks.context_views as context_views
-import methods.deployment as deployment
+import networks.deployment as deployment
 from ebl.schema.lifecycle import parse_lifecycle, provenance, verify_provenance, StageSelection
 import networks.opt as opt_mlp
 from ebl.lifecycle.cli import main as workflow_main

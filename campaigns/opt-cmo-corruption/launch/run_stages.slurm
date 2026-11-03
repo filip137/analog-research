@@ -24,6 +24,11 @@ export OMP_NUM_THREADS=10 MKL_NUM_THREADS=10
 cd "$SRC"
 echo "host=$(hostname) job=$SLURM_JOB_ID start=$(date -Is) commit=$(git rev-parse HEAD) id=$ID args=$*"
 nvidia-smi --query-gpu=name,memory.used --format=csv,noheader
-python "$BASE/launch/run_stages.py" --source "$SRC" --plan "results/lifecycles/$ID/plan" \
-  --runs "results/lifecycles/$ID/runs" "$@"
+stage_args=()
+while (($#)); do
+  if [[ "$1" == --input ]]; then stage_args+=(--input "$2"); shift 2
+  else stage_args+=(--stage "$1"); shift; fi
+done
+python -m ebl campaign run --manifest "results/lifecycles/$ID/plan/campaign.json" \
+  --output-dir "results/lifecycles/$ID/runs" --resume "${stage_args[@]}"
 echo "end=$(date -Is)"

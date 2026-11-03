@@ -7,7 +7,7 @@ SKILL = Path(__file__).resolve().parents[1]
 ROOT = SKILL.parents[2]
 DOCUMENTS = [SKILL / 'SKILL.md', *sorted((SKILL / 'references').glob('*.md'))]
 LINK = re.compile(r'\]\(([^)#\s]+)(?:#[^)]*)?\)')
-# Backticked repository paths, e.g. `workflow/networks/opt_mlp.py`.
+# Backticked repository paths, e.g. `networks/opt.py`.
 PATH = re.compile(r'`((?:[\w.-]+/)+[\w.-]+\.(?:py|md|json))`')
 
 

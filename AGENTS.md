@@ -33,18 +33,20 @@ work belong to sibling worktrees; using a digital adapter as a comparison arm he
 is a material scientific choice to escalate. Do not restore retired solvers or
 adapters. Historical execution code is at `16938bf`. Keep unrelated maintenance out.
 
-- `ebl/`: public CLI for train, validate, characterize, campaigns, studies and inspection.
-- `workflow/`: the standard lifecycle: strict schema and one reusable function per step
-  (devices/defects, deployment, HWA, P&V, on-chip), run as `crossbar_lifecycle.v1` stages;
-  `workflow/networks/` holds the network families (`opt_mlp_suffix`, `cifar_resnet32_suffix`).
-- `training/`: crossbar plants, pulse optimizers, populations, endpoint models,
-  explicit parameter catalogs and checkpoint codecs.
+- `workflow/`: agent navigation and authoritative execution policy; documentation only.
+- `ebl/`: public CLI, experiment registry, lifecycle schema, runtime stages,
+  subprocess runner, scheduling, recovery and collection.
+- `core/`: neutral configuration, artifact identities, serialization and cache I/O.
+- `networks/`: OPT/CIFAR architecture, teachers, data and physical-forward adapters.
+- `hardware/`: mappings, device populations, permanent defects, held state and drift laws.
+- `methods/`: HWA, on-chip learning, calibration, programming/verify, maintenance,
+  digital optimizers and training checkpoint codecs.
 - `experiments/reram_program_verify/`: characterization, fitting, native samplers,
   storage and analysis of the device models.
 - `experiments/cifar_crossbar/`, `cifar10_crossbar/`, `mnist_analog_relu/`, `mnist_relu/`:
   reference CIFAR/MNIST packages, frozen for reproduction.
 - `campaigns/`: notes, lifecycle definitions (`<campaign>/lifecycles/*.json`), results,
-  generated navigation and the subprocess-only orchestrator.
+  and generated navigation. The subprocess-only orchestrator is in `ebl/execution/`.
 - `examples/`, `studies/`, `labs/tools/`: exact configs (including the OPT lifecycle
   templates in `examples/lifecycles/`), legacy plans, CIFAR analysis.
 - `results/`, `artifacts/`, `data/`: ignored raw evidence, frozen sources and datasets.
@@ -82,14 +84,14 @@ projections onto arrays is a separate, explicitly assigned regime.
 Declare N, teacher, corpus, sequence length, cohorts and primary metric in the
 experiment branch. Record the analog layers and logical weight count with every
 result. The pinned pretrained FP32 teacher reference is in
-`workflow/networks/opt_mlp.py`. A declared `network.teacher` may instead use a
+`networks/opt.py`. A declared `network.teacher` may instead use a
 task-fine-tuned FP32 teacher with merged LoRA, a pinned SHA-256 and recorded
 fine-tuning provenance; retain the matched pretrained-teacher control. A deployed
 digital adapter remains a separate, escalated regime.
 
 Follow the [lifecycle contract](docs/crossbar_lifecycle.md) and select the template
 in `examples/lifecycles/` that matches the declared regime. The corpus is
-pre-tokenized with `python -m workflow corpus` and pinned by SHA-256. Adaptation
+pre-tokenized with `python -m ebl lifecycle corpus` and pinned by SHA-256. Adaptation
 and evaluation tokens never overlap. Measure memory, throughput and storage
 before scaling the analog subset: device-state cost grows with every weight.
 
@@ -196,7 +198,7 @@ campaign lifecycles define inputs; historical
 
 ## Workflow and authority
 
-Precedence: the user, then this file (science), the [execution policy](docs/experiment_workflow.md)
+Precedence: the user, then this file (science), the [execution policy](workflow/policy.md)
 (process), the experiment-loop skill (procedure) and the experiment note (rules of one
 experiment). Every experiment follows the [experiment-loop skill](.agents/skills/experiment-loop/SKILL.md)
 (Explorer, Codifier, Monitor, Reviewer); the Explorer and Codifier procedures are its
@@ -206,8 +208,8 @@ Records follow the [artifact conventions](.agents/skills/experiment-loop/referen
 a small pilot is one note from the [pilot template](.agents/skills/experiment-loop/references/pilot.md)
 in `campaigns/pilots/`; sustained work is a campaign with series, experiment and result
 notes. Each crossbar loop is a strict lifecycle in `campaigns/<campaign>/lifecycles/`
-([contract](docs/crossbar_lifecycle.md)), planned with `python -m workflow plan`, run
-with `python -m ebl campaign run` and collected with `python -m workflow collect`.
+([contract](docs/crossbar_lifecycle.md)), planned with `python -m ebl lifecycle plan`, run
+with `python -m ebl campaign run` and collected with `python -m ebl lifecycle collect`.
 The note links the lifecycle and owns the decision rule, budget, handoff and
 interpretation. These supersede former study/manifest lifecycles and conflicting
 external closeout skills. Each experiment or pilot works on its own `exp/<id>`

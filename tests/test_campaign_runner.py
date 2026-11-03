@@ -664,6 +664,59 @@ def test_resume_reuses_only_a_matching_complete_stage(
     assert len(launches) == 1
 
 
+@pytest.mark.parametrize('changed', ['config', 'input', 'source'])
+def test_selected_stages_never_reuse_by_completion_alone(tmp_path, monkeypatch, changed):
+    config = tmp_path / 'train.json'
+    config.write_text('{}')
+    weights = tmp_path / 'weights.pt'
+    weights.write_bytes(b'original')
+    spec = CampaignSpec.parse({
+        'schema_version': 1, 'campaign_id': 'selected', 'targets': [_target(tmp_path)],
+        'stages': [{'id': name, 'case_id': 'case', 'target': 'target', 'command': 'train',
+                    'config': str(config), 'inputs': {'weights': {'path': str(weights)}}}
+                   for name in ('selected', 'unrelated')]}, base_dir=tmp_path)
+    source = _preflight(None, allow_dirty=False)
+    monkeypatch.setattr(runner, '_preflight', lambda *a, **kw: source)
+    launches = []
+    def complete(command, **kwargs):
+        launches.append(command)
+        _complete_result(Path(command[command.index('--output-dir') + 1]) / 'run')
+        return SimpleNamespace(returncode=0, stdout='', stderr='')
+    monkeypatch.setattr(runner.subprocess, 'run', complete)
+    options = dict(output_root=tmp_path / 'outputs', stage_ids=('selected',), resume=True)
+    first = runner.run_campaign(spec, **options)
+    again = runner.run_campaign(spec, **options)
+    assert set(again) == {'selected'}
+    assert len(launches) == 1
+    if changed == 'config': config.write_text('{"changed": true}')
+    elif changed == 'input': weights.write_bytes(b'changed')
+    else: source['source']['commit'] = 'different-source'
+    after = runner.run_campaign(spec, **options)
+    assert len(launches) == 2
+    assert after['selected']['fingerprint'] != first['selected']['fingerprint']
+
+
+def test_selected_stage_requires_completed_dependency_or_explicit_input(tmp_path, monkeypatch):
+    config = tmp_path / 'train.json'
+    config.write_text('{}')
+    weights = tmp_path / 'external.pt'
+    weights.write_bytes(b'pinned external weights')
+    spec = CampaignSpec.parse({
+        'schema_version': 1, 'campaign_id': 'selected', 'targets': [_target(tmp_path)],
+        'stages': [
+            {'id': 'parent', 'case_id': 'case', 'target': 'target', 'command': 'train', 'config': str(config)},
+            {'id': 'child', 'case_id': 'case', 'target': 'target', 'command': 'train', 'config': str(config),
+             'depends_on': ['parent'], 'inputs': {'weights': {'stage': 'parent', 'artifact_kind': 'weights'}}}]},
+        base_dir=tmp_path)
+    monkeypatch.setattr(runner, '_preflight', _preflight)
+    with pytest.raises(ValueError, match='matching completed dependency'):
+        runner.run_campaign(spec, output_root=tmp_path / 'outputs', stage_ids=('child',), dry_run=True)
+    records = runner.run_campaign(spec, output_root=tmp_path / 'outputs', stage_ids=('child',),
+                                  input_overrides=(f'child:weights={weights}',), dry_run=True)
+    assert set(records) == {'child'}
+    assert str(weights) in records['child']['command']
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
@@ -945,3 +998,32 @@ def test_stream_stage_drains_both_pipes_after_display_disconnect(tmp_path, monke
     assert result.returncode == 0
     assert (tmp_path / "stdout.log").read_bytes() == b"o" * payload_size
     assert (tmp_path / "stderr.log").read_bytes() == b"e" * payload_size
+
+
+def test_completed_artifact_uses_fingerprints_without_writes_or_launches(tmp_path, monkeypatch):
+    config = tmp_path / 'train.json'
+    config.write_text('{}')
+    spec = CampaignSpec.parse({'schema_version': 1, 'campaign_id': 'lookup', 'targets': [_target(tmp_path)],
+        'stages': [{'id': 'train', 'case_id': 'case', 'target': 'target', 'command': 'train',
+                    'config': str(config)}]}, base_dir=tmp_path)
+    monkeypatch.setattr(runner, '_preflight', _preflight)
+    def complete(command, **kwargs):
+        run_dir = Path(command[command.index('--output-dir') + 1]) / 'run'
+        run_dir.mkdir(parents=True)
+        (run_dir / 'weights.pt').write_bytes(b'weights')
+        _complete_result(run_dir, artifacts=[_artifact(run_dir, 'weights.pt', kind='weights')])
+        return SimpleNamespace(returncode=0, stdout='', stderr='')
+    monkeypatch.setattr(runner.subprocess, 'run', complete)
+    output = tmp_path / 'outputs'
+    runner.run_campaign(spec, output_root=output)
+    before = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in output.rglob('*') if p.is_file()}
+    def forbidden(*args, **kwargs):
+        pytest.fail('Read-only artifact lookup attempted a write or launch')
+    monkeypatch.setattr(runner.subprocess, 'run', forbidden)
+    monkeypatch.setattr(runner, 'atomic_write_json', forbidden)
+    record = runner.completed_artifact(spec, manifest_path=None, output_root=output, stage_id='train', kind='weights')
+    assert Path(record['path']).read_bytes() == b'weights'
+    assert before == {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in output.rglob('*') if p.is_file()}
+    config.write_text('{"changed":true}')
+    with pytest.raises(ValueError, match='matching completed dependency'):
+        runner.completed_artifact(spec, manifest_path=None, output_root=output, stage_id='train', kind='weights')

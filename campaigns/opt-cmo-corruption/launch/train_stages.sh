@@ -12,9 +12,12 @@ cd "$SRC"
 echo "host=$(hostname) start=$(date -Is) commit=$(git rev-parse HEAD) id=$ID stages=$*"
 nvidia-smi --query-gpu=name,memory.used,utilization.gpu --format=csv,noheader
 "$PY" -c "import torch; print('torch', torch.__version__)"
-"$PY" -m workflow plan "campaigns/opt-cmo-corruption/lifecycles/$ID.json" \
+"$PY" -m ebl lifecycle plan "campaigns/opt-cmo-corruption/lifecycles/$ID.json" \
   --teacher-weights "$BASE/inputs/opt-125m-27dcfa74/pytorch_model.bin" \
   --output "results/lifecycles/$ID/plan" --device cuda:0 --cpu-threads 8 > /dev/null
-"$PY" "$BASE/launch/run_stages.py" --source "$SRC" --plan "results/lifecycles/$ID/plan" \
-  --runs "results/lifecycles/$ID/runs" "$@"
+stage_args=()
+for stage in "$@"; do stage_args+=(--stage "$stage"); done
+"$PY" -m ebl campaign run --manifest "results/lifecycles/$ID/plan/campaign.json" \
+  --output-dir "results/lifecycles/$ID/runs" --resume "${stage_args[@]}"
+
 echo "end=$(date -Is) id=$ID"

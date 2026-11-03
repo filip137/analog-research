@@ -507,7 +507,7 @@ satisfy a production plan.
 
 AIHWKit samples each identity's fitted device-to-device parameters with an
 identity-derived construction seed. The pulse transition is then evaluated by
-`training/ibm_reram_program_verify.py` with explicit per-trajectory PyTorch
+`hardware/devices/om.py` with explicit per-trajectory PyTorch
 streams. CPU execution retains scalar per-trajectory generators. CUDA
 execution generates each independently seeded stream in buffered CPU blocks
 and stages those immutable draws on the GPU; exact replay uses recorded seeds,

@@ -37,7 +37,7 @@ def _collect(args) -> int:
                 path = result_path.parent / artifact["path"]
                 if sha256_file(path) != artifact["sha256"]:
                     raise ValueError(f"Changed compensation measurements: {path}")
-                from ebl.runtime.compensation import flat_rows
+                from ebl.lifecycle.compensation_rows import flat_rows
                 compensation.extend(flat_rows(json.loads(path.read_text()), result_path.parent))
             elif kind == 'initial_programming':
                 artifact = next(a for a in result['artifacts'] if a['kind'] == 'initial_programming_measurements')

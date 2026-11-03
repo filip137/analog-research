@@ -26,6 +26,7 @@ from test_workflow_cmo import NAMESPACE, case_doc, cmo_inputs, small  # noqa: F4
 from test_workflow_opt import tiny_teacher, tokens
 from test_workflow_tasks import tiny_task
 from workflow_helpers import request_for
+from networks.mapping import fault_domains
 
 LORA = AnalogLora(rank=2, alpha=4.0)
 
@@ -62,10 +63,10 @@ def test_zero_adapters_reproduce_the_base_and_set_adapters_add_their_low_rank_pa
 def test_targeted_faults_split_the_untargeted_fault_map_exactly():
     layout = adapter_network().layout
     maps = {target: device_stage.hierarchical_faults(layout, 8, 12, DefectCase("random", 50000, hierarchical=True,
-                                                                                  target=target), 271002, NAMESPACE)
+                                                                                  target=target), 271002, NAMESPACE, domains=fault_domains(layout))
             for target in ("all", "base", "adapter")}
     for spec in layout:
-        adapter = device_stage.adapter_matrix(spec.name)
+        adapter = fault_domains(layout)[spec.name].adapter
         mask_all = maps["all"]["matrices"][spec.name][0]
         assert torch.equal(maps["adapter" if adapter else "base"]["matrices"][spec.name][0], mask_all)
         assert not bool(maps["base" if adapter else "adapter"]["matrices"][spec.name][0].any())

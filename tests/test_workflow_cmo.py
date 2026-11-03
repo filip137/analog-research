@@ -19,7 +19,7 @@ from core.tensor_io_native import load
 from core.contracts import ConfigError
 import hardware.devices.cmo as reram_cmo
 from hardware.devices.cmo import CmoMatrix
-import methods.deployment as deployment
+import networks.deployment as deployment
 import methods.hwa as hwa
 import methods.programming.lifecycle as program_verify
 import hardware.arrays as device_stage
@@ -31,6 +31,7 @@ from ebl.schema.lifecycle import parse_lifecycle, provenance, stage_selections, 
 from networks.opt import MatrixSpec, StudentInput
 from test_workflow_opt import changed, tiny_teacher, write_corpus
 from workflow_helpers import lifecycle_document, run_lifecycle
+from networks.mapping import fault_domains
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "examples/lifecycles/opt125m-cmo-mlp4-template.json"
@@ -199,7 +200,7 @@ def test_fault_totals_are_exact_per_group_and_dies_stay_within_a_group():
     # (active and reference rows of 4 inputs); dies of 12 leave a partial third die.
     layout = mlp_layout((1, 2), 32, 16)
     for case in (scenario(), scenario(array=50.0), scenario(die=50.0), scenario(die=50.0, array=50.0)):
-        faults = device_stage.hierarchical_faults(layout, 8, 12, case, 271001, NAMESPACE)
+        faults = device_stage.hierarchical_faults(layout, 8, 12, case, 271001, NAMESPACE, domains=fault_domains(layout))
         receipt = faults["receipt"]
         assert [g["group"] for g in receipt["groups"]] == ["decoder.layers.1", "decoder.layers.2"]
         for group in receipt["groups"]:
@@ -226,7 +227,7 @@ def test_scenarios_control_array_and_die_variation_at_a_fixed_total():
     layout = mlp_layout((11,), 640, 640)
 
     def draw(**concentrations):
-        receipt = device_stage.hierarchical_faults(layout, 32, 40, scenario(**concentrations), 271001, NAMESPACE)
+        receipt = device_stage.hierarchical_faults(layout, 32, 40, scenario(**concentrations), 271001, NAMESPACE, domains=fault_domains(layout))
         [group] = receipt["receipt"]["groups"]
         rates = [[a["rate"] for a in group["arrays"] if a["die"] == d] for d in range(len(group["dies"]))]
         fractions = [a["failed_devices"] / a["devices"] for a in group["arrays"]]
@@ -247,7 +248,7 @@ def test_scenarios_control_array_and_die_variation_at_a_fixed_total():
 
 @pytest.mark.parametrize("kind", ["open", "gmin", "gmax", "random"])
 def test_stuck_values_follow_the_declared_kind(kind):
-    faults = device_stage.hierarchical_faults(mlp_layout((11,), 64, 64), 16, 4, scenario(kind), 271001, NAMESPACE)
+    faults = device_stage.hierarchical_faults(mlp_layout((11,), 64, 64), 16, 4, scenario(kind), 271001, NAMESPACE, domains=fault_domains(mlp_layout((11,), 64, 64)))
     values = torch.cat([stuck[mask] for mask, stuck in faults["matrices"].values()])
     assert len(values) == round(0.05 * 2 * 2 * 64 * 64)
     if kind == "random":
@@ -259,10 +260,10 @@ def test_stuck_values_follow_the_declared_kind(kind):
 
 def test_fault_maps_are_deterministic_and_bound_per_group():
     case = scenario(die=118.0, array=118.0)
-    first = device_stage.hierarchical_faults(mlp_layout((1, 2), 32, 16), 8, 12, case, 271001, NAMESPACE)
-    again = device_stage.hierarchical_faults(mlp_layout((1, 2), 32, 16), 8, 12, case, 271001, NAMESPACE)
-    other = device_stage.hierarchical_faults(mlp_layout((1, 2), 32, 16), 8, 12, case, 271002, NAMESPACE)
-    alone = device_stage.hierarchical_faults(mlp_layout((2,), 32, 16), 8, 12, case, 271001, NAMESPACE)
+    first = device_stage.hierarchical_faults(mlp_layout((1, 2), 32, 16), 8, 12, case, 271001, NAMESPACE, domains=fault_domains(mlp_layout((1, 2), 32, 16)))
+    again = device_stage.hierarchical_faults(mlp_layout((1, 2), 32, 16), 8, 12, case, 271001, NAMESPACE, domains=fault_domains(mlp_layout((1, 2), 32, 16)))
+    other = device_stage.hierarchical_faults(mlp_layout((1, 2), 32, 16), 8, 12, case, 271002, NAMESPACE, domains=fault_domains(mlp_layout((1, 2), 32, 16)))
+    alone = device_stage.hierarchical_faults(mlp_layout((2,), 32, 16), 8, 12, case, 271001, NAMESPACE, domains=fault_domains(mlp_layout((2,), 32, 16)))
     assert first["receipt"]["identity_sha256"] == again["receipt"]["identity_sha256"]
     assert first["receipt"]["identity_sha256"] != other["receipt"]["identity_sha256"]
     # A group's defects do not depend on which other groups are analog.

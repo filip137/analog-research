@@ -33,82 +33,16 @@ from core.tensor_identity import tensor_hash
 from methods.optimizers.open_loop import apply_pulse_counts, nominal_reset_counts
 from core.seeds import binding_seed
 import hardware.devices.cmo as cmo
-from hardware.drift.inference import PCM_READ_TIME, PCM_T0, pcm_coefficients, pcm_snapshot
+from hardware.drift.pcm import PcmDrift
 import hardware.arrays as device_stage
 from hardware.config import FAILURE_KINDS
 
-G_MAX = 25.0
-DRIFT_T0 = PCM_T0
-READ_TIME = PCM_READ_TIME
 
 
-def pcm_drift(programmed, relative, generator, seconds):
-    """Conductances read ``seconds`` after programming (AIHWKit 1.1.0 PCM).
-
-    ``relative`` is the programming target over g_max; it sets the drift
-    coefficients. Equations match ``experiments.cifar_crossbar.pcm_reference``.
-    """
-
-    # Keep this programming-event API and its random stream unchanged. A time
-    # sweep calls pcm_coefficients once and reuses it across pcm_snapshot calls.
-    nu = pcm_coefficients(relative, generator, g_max=1.0)
-    return pcm_snapshot(programmed, nu, generator, seconds, g_max=G_MAX)
 
 
-def tile_compensation(initial, current, layout, tile_size):
-    """Per-tile global drift compensation from one-hot reference reads."""
-
-    result = current.clone()
-    for spec in layout:
-        a = initial[spec.offset : spec.offset + spec.size].reshape(spec.shape[0], -1)
-        b = result[spec.offset : spec.offset + spec.size].reshape_as(a)
-        for output in range(0, a.shape[0], tile_size):
-            for row in range(0, a.shape[1], tile_size):
-                ref = a[output : output + tile_size, row : row + tile_size]
-                new = b[output : output + tile_size, row : row + tile_size]
-                factor = ref.abs().mean().clamp_min(1e-4) / new.abs().mean().clamp_min(1e-4)
-                new.mul_(factor)
-    return result
 
 
-class PcmDrift:
-    """Relax a programmed PCM array once per programming event."""
-
-    contract = "crossbar_lifecycle.pcm_drift_aihwkit_1.1.0.v1"
-
-    def __init__(self, seconds, compensation, layout, tile_size, seed, device):
-        self.seconds, self.compensation = float(seconds), bool(compensation)
-        self.layout, self.tile_size = tuple(layout), tile_size
-        self.generator = torch.Generator(device=device).manual_seed(seed)
-        self.realizations = 0
-
-    def apply(self, array):
-        programmed = array.programmed_read()
-        pieces = []
-        for child in array.children:
-            target = torch.stack((child.target.clamp_min(0), (-child.target).clamp_min(0))) * G_MAX
-            observed = pcm_drift(child.g, target / G_MAX, self.generator, self.seconds)
-            # Permanent failures keep their stuck conductance at every time.
-            observed = child.faults.apply(observed)
-            pieces.append((observed[0] - observed[1]) / G_MAX)
-        relaxed = torch.cat(pieces)
-        if self.compensation:
-            relaxed = tile_compensation(programmed, relaxed, self.layout, self.tile_size)
-        self.realizations += 1
-        return relaxed
-
-    def state_dict(self):
-        return {
-            "contract": [self.contract, self.seconds, self.compensation, self.tile_size],
-            "rng": self.generator.get_state(),
-            "realizations": self.realizations,
-        }
-
-    def load_state_dict(self, state):
-        if list(state["contract"]) != [self.contract, self.seconds, self.compensation, self.tile_size]:
-            raise ValueError("Expected the same PCM relaxation contract.")
-        self.generator.set_state(state["rng"].cpu())
-        self.realizations = state["realizations"]
 
 
 def configure(array, lifecycle, assignment_seed):
@@ -136,7 +70,14 @@ def configure(array, lifecycle, assignment_seed):
 def fresh(lifecycle, layout, assignment_seed, case, populations, device):
     """A fresh array of one assignment and defect case, ready to program."""
 
-    array = device_stage.fresh_array(lifecycle, layout, assignment_seed, case, populations, device)
+    from networks.mapping import fault_domains
+
+    array = device_stage.fresh_array(
+        technology=lifecycle.devices.technology, layout=layout, assignment_seed=assignment_seed,
+        case=case, populations=populations, device=device, namespace=lifecycle.network.binding_namespace,
+        endpoint_seed=lifecycle.devices.endpoint_seed(assignment_seed), noise_scale=lifecycle.devices.noise_scale,
+        tile_size=lifecycle.deployment.tile_size, arrays_per_die=lifecycle.defects.arrays_per_die,
+        acceptance_percent=lifecycle.program_verify.acceptance_percent, domains=fault_domains(layout))
     return configure(array, lifecycle, assignment_seed)
 
 

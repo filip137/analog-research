@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from core.contracts import ConfigError
-import methods.deployment as deployment
+import networks.deployment as deployment
 import methods.hwa as hwa
 from ebl.schema.lifecycle import parse_lifecycle
 from test_workflow_opt import tiny_teacher, tokens

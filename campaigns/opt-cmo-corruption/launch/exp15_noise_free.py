@@ -145,7 +145,7 @@ def prepare_host(host, base, reused):
             raise ValueError('Lifecycle changed')
         jid = PREFIX+'-'+label; root = ROOT/'results/lifecycles'/jid
         inputs_path = root/'inputs.json'; write_frozen(inputs_path, inputs)
-        command([sys.executable,'-m','workflow','plan',str(cfg),'--teacher-weights',inputs['artifacts']['teacher_weights']['path'],
+        command([sys.executable,"-m", "ebl", "lifecycle",'plan',str(cfg),'--teacher-weights',inputs['artifacts']['teacher_weights']['path'],
                  '--output',str(root/'plan'),'--device','cuda:0','--cpu-threads','1','--python',sys.executable], cwd=ROOT)
         plan = root/'plan/campaign.json'; raw = json.loads(plan.read_text())
         stage = next(s for s in raw['stages'] if s['id'] == f'onchip__{inputs["hwa_arm"]}__{array}')

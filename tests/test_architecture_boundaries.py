@@ -51,3 +51,18 @@ def test_restricted_checkpoint_failure_never_retries_unrestricted(tmp_path, monk
 
 def test_workflow_is_documentation_only():
     assert not list((ROOT / 'workflow').rglob('*.py'))
+
+
+def test_physical_fault_groups_follow_supplied_domains():
+    from hardware.arrays import hierarchical_faults
+    from hardware.config import DefectCase
+    from hardware.mapping import FaultDomain, MatrixSpec
+    # A suffix which once implicitly meant "adapter" has no meaning to hardware.
+    layout = [MatrixSpec('arbitrary.lora_a', (16, 16), 0, 256, 1.)]
+    case = DefectCase('random', 50000, hierarchical=True, target='base')
+    result = hierarchical_faults(layout, 8, 12, case, 271001, 'declared-namespace',
+                                  domains={'arbitrary.lora_a': FaultDomain('declared-group', False)})
+    assert result['receipt']['failed_devices'] == round(512 * .05)
+    assert result['receipt']['groups'][0]['group'] == 'declared-group'
+    with pytest.raises(ValueError, match='one fault-domain'):
+        hierarchical_faults(layout, 8, 12, case, 271001, 'declared-namespace', domains={})

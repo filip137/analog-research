@@ -34,6 +34,8 @@ import hardware.arrays as devices
 import methods.hwa as hwa
 import methods.onchip as onchip
 import methods.programming.lifecycle as program_verify
+from hardware.drift.pcm import pcm_drift
+from hardware.readout import tile_compensation
 from hardware.config import DefectCase
 from ebl.schema.lifecycle import parse_lifecycle
 from workflow_helpers import (
@@ -85,9 +87,9 @@ def test_pcm_drift_matches_transcribed_aihwkit_inference_law():
     relative = target / 25.0
     sigma = 0.26348 + 1.965 * relative - 1.1731 * relative.square()
     programmed = (target + sigma * torch.randn(target.shape, generator=generator)).clamp_min(0)
-    observed = program_verify.pcm_drift(programmed, relative, generator, 3600.0)
+    observed = pcm_drift(programmed, relative, generator, 3600.0)
     q0 = (programmed[0] - programmed[1]) / 25.0
-    qt = program_verify.tile_compensation(q0, (observed[0] - observed[1]) / 25.0, network.layout, network.tile_size)
+    qt = tile_compensation(q0, (observed[0] - observed[1]) / 25.0, network.layout, network.tile_size)
     assert torch.equal(q0, q0_ref) and torch.equal(qt, qt_ref)
 
 

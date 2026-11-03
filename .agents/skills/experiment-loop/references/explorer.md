@@ -90,7 +90,7 @@ On-chip is viable for <regime> if, in at least <k> of <n> assignments,
 ## 6. Budget caps
 
 Copy the template to a scratch path, set the proposed fields and `max_examples` 0,
-and run `python -m workflow describe <draft> --json` (it launches nothing). Record stage runs,
+and run `python -m ebl lifecycle describe <draft> --json` (it launches nothing). Record stage runs,
 trajectories, analog weights and the state estimate. Then set caps: compute hours,
 storage GB, deadline, stopping conditions and checkpoint retention. Wall-clock time
 stays unknown until the Codifier's cost probe; say so in the note.

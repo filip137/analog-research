@@ -17,7 +17,7 @@ from core.artifacts import sha256_file
 from core.tensor_io_native import load, save
 from ebl.registry import get_definition
 from core.contracts import ConfigError
-import methods.deployment as deployment
+import networks.deployment as deployment
 import networks.tasks as tasks
 import methods.teacher_lora as teacher_lora
 from ebl.lifecycle.cli import main as workflow_main

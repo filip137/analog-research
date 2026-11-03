@@ -12,9 +12,10 @@ import pytest
 import torch
 
 import networks.data as data_stage
-import methods.deployment as deployment
+import networks.deployment as deployment
 import ebl.runtime.lifecycle as runtime
 import hardware.arrays as device_stage
+import ebl.runtime.device_sampling as device_sampling
 from ebl.lifecycle.cli import main as workflow_main
 from ebl.schema.lifecycle import StageSelection, parse_lifecycle
 from workflow_helpers import (
@@ -56,7 +57,7 @@ def teacher_weights(monkeypatch, tmp_path):
         lambda teacher_, network, lc, device: synthetic_cache(teacher_, network, n=lc.data.max_examples),
     )
     monkeypatch.setattr(
-        device_stage,
+        device_sampling,
         "native_sample",
         lambda *, kind, size, seed, policy, variation, output: om_raw(size, seed),
     )

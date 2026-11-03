@@ -43,15 +43,5 @@ class CrossbarAdapter:
         digital = self.network.digital if self.network.digital is not None else self.network.teacher
         hidden = digital.embed(tokens.to(self.device))
         for i in range(self.network.start): hidden = digital.layers[i](hidden)
-        captures = []
-        for k, i in enumerate(range(self.network.start, len(digital.layers))):
-            hidden = digital.layers[i].attention(hidden)
-            x = self.network.mlp_norms[k](hidden)
-            y = self.block(k, x, q)
-            if capture: captures.append((x, y))
-            if correction is not None:
-                a, b = correction[k]
-                y = y*a+b
-            hidden = hidden+y
-        out = digital.logits(hidden[:, :-1])
-        return (out, captures) if capture else out
+        return self.network.forward_suffix(hidden, q, digital=digital,
+                                           correction=correction, capture=capture)

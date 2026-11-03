@@ -78,7 +78,7 @@ def prepare_host(host, base, reused, *, prepared_lifecycles=None, screen_budget=
         if parse_lifecycle(json.loads(config.read_text())).digest() != lc.digest():
             raise ValueError('Scientific lifecycle changed')
         root = ROOT/'results/lifecycles'/lc.lifecycle_id
-        command([python,'-m','workflow','plan',str(config),'--teacher-weights',inputs['artifacts']['teacher_weights']['path'],
+        command([python,"-m", "ebl", "lifecycle",'plan',str(config),'--teacher-weights',inputs['artifacts']['teacher_weights']['path'],
                  '--output',str(root/'plan'),'--device','cuda:0','--cpu-threads','1','--python',python],cwd=ROOT)
         plan = root/'plan/campaign.json'; raw = json.loads(plan.read_text())
         stage = next(s for s in raw['stages'] if s['id'] == f'onchip__{ARM}__{ARRAY}')

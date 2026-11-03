@@ -5,7 +5,7 @@ strict JSON file. That file states the research question, the devices and their
 defects, and then four steps: (i) how the digital weights are deployed,
 (ii) whether and how HWA training is done, (iii) how program-and-verify (P&V) is
 done, and (iv) the on-chip training setup. Each step calls one reusable function
-in `workflow/`. The public `python -m ebl` CLI executes the loop as native run
+in `methods/`, composed by `ebl/runtime/`. The public `python -m ebl` CLI executes the loop as native run
 bundles.
 
 The `network` section selects a **network family**: `opt_mlp_suffix` (OPT-125M
@@ -25,18 +25,18 @@ equivalence with the latest historical loops (see [Equivalence](#equivalence-wit
 | What | Where |
 | --- | --- |
 | Lifecycle definition | `campaigns/<campaign>/lifecycles/<lifecycle_id>.json`; the file name equals `lifecycle_id` |
-| Decision rule, budget, handoff | the linked experiment or pilot note (unchanged [workflow](experiment_workflow.md)) |
+| Decision rule, budget, handoff | the linked experiment or pilot note (unchanged [workflow](../workflow/policy.md)) |
 | Measurements and interpretation | the result or pilot note |
-| Schema (stdlib only) | `workflow/lifecycle.py` |
-| (a) Devices and defects | `workflow/devices.py`: `fresh_array`, `sample_populations`, `array_identity`, `CmoArray`; CMO device law in `training/reram_cmo.py` ([contract](reram_cmo_device.md)) |
-| (i) Deployment of digital weights | `workflow/deployment.py`: `build_network`, `mapping_receipt`, `targets` |
-| (ii) HWA | `workflow/hwa.py`: `train_source`, `selection_score` |
-| (iii) Program-and-verify | `workflow/program_verify.py`: `fresh`, `program`, `characterize_endpoints`, `PcmDrift` |
-| (iv) On-chip training | `workflow/onchip.py`: `train_arm`, `ClosedLoopPulseAdam`, `OpenLoopPulseAdam`, `IdealizedWriteAdam` |
-| Network families | `workflow/networks/`: `opt_mlp.py`, `cifar_resnet32.py` (one module each, same functions) |
-| Cohorts and caches | `workflow/data.py`, dispatching to the family |
-| One native stage run | `workflow/runtime.py`, reached through `python -m ebl train` |
-| Plan, check, collect, corpus | `python -m workflow` (`workflow/plan.py`, `workflow/__main__.py`) |
+| Schema (stdlib only) | `ebl/schema/lifecycle.py` |
+| (a) Devices and defects | `hardware/arrays.py`: `fresh_array`, `array_identity`, `CmoArray`; native sampling in `ebl/runtime/device_sampling.py`; CMO device law in `hardware/devices/cmo.py` ([contract](reram_cmo_device.md)) |
+| (i) Deployment of digital weights | `networks/deployment.py`: `build_network`, `mapping_receipt`, `targets` |
+| (ii) HWA | `methods/hwa.py`: `train_source`, `selection_score` |
+| (iii) Program-and-verify | `methods/programming/lifecycle.py`: `fresh`, `program`; characterization in `ebl/runtime/device_sampling.py`, PCM relaxation in `hardware/drift/pcm.py` |
+| (iv) On-chip training | `methods/onchip.py`: `train_arm`, `ClosedLoopPulseAdam`, `OpenLoopPulseAdam`, `IdealizedWriteAdam` |
+| Network families | `networks/`: `opt.py`, `cifar.py` (one module each, same functions) |
+| Cohorts and caches | `networks/data.py`, dispatching to the family |
+| One native stage run | `ebl/runtime/lifecycle.py`, reached through `python -m ebl train` |
+| Plan, check, collect, corpus | `python -m ebl lifecycle` (`ebl/lifecycle/plan.py`, `ebl/lifecycle/cli.py`) |
 | OPT templates | `examples/lifecycles/opt125m-cmo-mlp4-template.json` (CMO, the working device) and `opt125m-om-mlp4-template.json` (OM reference); copy into a campaign; not experiments |
 
 ## The definition
@@ -137,7 +137,7 @@ physical device count.
 
 | | `opt_mlp_suffix` | `cifar_resnet32_suffix` |
 | --- | --- | --- |
-| Teacher | `facebook/opt-125m` `pytorch_model.bin` at revision `27dcfa74`, or the declared fine-tuned `network.teacher` (same layout, pinned by its own SHA-256), loaded as FP32 by the native decoder in `workflow/networks/opt_mlp.py` (tested against Hugging Face) | pinned public ResNet-32 checkpoint |
+| Teacher | `facebook/opt-125m` `pytorch_model.bin` at revision `27dcfa74`, or the declared fine-tuned `network.teacher` (same layout, pinned by its own SHA-256), loaded as FP32 by the native decoder in `networks/opt.py` (tested against Hugging Face) | pinned public ResNet-32 checkpoint |
 | Analog matrices | `fc1` (768→3072) and `fc2` (3072→768) of the last `analog_decoder_layers` decoder layers; 4,718,592 weights per layer | last `analog_convolutions` layer3 convolutions plus the classifier |
 | Digital and frozen | embeddings, earlier decoder layers, all attention, LayerNorms, tied LM head | prefix convolutions and BN |
 | Calibration (`calibration` arms) | per-matrix output gains, the MLP biases and the LayerNorm in front of each analog MLP (`output_gain_mlp_layer_norm_mlp_bias`) | output gains, BN affine of converted blocks, classifier bias |
@@ -145,7 +145,7 @@ physical device count.
 | Metrics | token-weighted `teacher_kl`, `cross_entropy`, `perplexity`, next-token accuracy and teacher agreement over positions 0..T-2 of each sequence, with `scored_tokens`; with a `task`, also multiple-choice metrics on `task_development` and `task_test` (below) | `teacher_kl`, `accuracy_percent`, teacher agreement |
 | `prepare` gate | the clean digital suffix must reproduce the teacher (KL ≤ 1e-6), and with a `task` also its continuation-token and choice KL | full test split must reproduce the published accuracy |
 
-OPT data: `python -m workflow corpus` tokenizes train, validation and test text
+OPT data: `python -m ebl lifecycle corpus` tokenizes train, validation and test text
 files with the pinned tokenizer (one BOS at the start of each split) into
 `$EBL_CORPUS_ROOT/<name>.pt`, and prints the SHA-256 the lifecycle must
 declare. HWA and recovery sequences are nested prefixes of a seeded shuffle of
@@ -158,7 +158,7 @@ large to cache. The corpus itself is an Explorer choice, recorded in the note.
 
 Added for exp-018 (user-approved October 15, 2026).
 
-**Task data.** `python -m workflow task-data` (`workflow/tasks.py`) reads one
+**Task data.** `python -m ebl lifecycle task-data` (`networks/tasks.py`) reads one
 pinned task source: the official train and validation parquet files of
 HellaSwag, SST-2 or PIQA.
 - It applies lm-eval-harness v0.4 templates and `_encode_pair` encoding. Each
@@ -200,7 +200,7 @@ checkpoint; `load_teacher` and `plan` then require its SHA-256 instead of the
 pinned one. The teacher is part of the `network` section, so every artifact
 identity includes it, while fault maps and endpoints stay bound to the model.
 Such teachers are made by the native experiment `opt_task_teacher.v1`
-(`workflow/teacher_lora.py`):
+(`methods/teacher_lora.py`):
 - LoRA on the declared linear layers of every decoder layer.
 - Loss: multiple-choice cross entropy over the summed continuation
   log-likelihoods.
@@ -601,7 +601,7 @@ native execution verifies serialized baseline and per-age replay. As with the
 existing endpoint arrays, RNG replay requires the same execution-device type
 and compatible PyTorch environment.
 
-`workflow collect` exports `retention.json` and `.csv`, with each source,
+`ebl lifecycle collect` exports `retention.json` and `.csv`, with each source,
 assignment, case, device model and snapshot separate. Rows include baseline,
 clean and aged metrics, physical counts, zero retention writes/verifies,
 apparent-state hashes and residuals. Readiness smokes remain labelled as such.
@@ -624,7 +624,7 @@ are affine activation corrections, not BatchNorm-running-statistics updates.
 Digital input/output/per-tile operators act around the unchanged held apparent
 MVM. Native parent hashes, same-array snapshots, calibration serialization,
 one exact uncompensated control and frozen source parameters are checked.
-`workflow collect` emits `compensation.json` and `.csv`: absolute metrics,
+`ebl lifecycle collect` emits `compensation.json` and `.csv`: absolute metrics,
 aging KL regained (undefined for an aging gap <=1e-6), required calibration reads,
 reference storage and digital parameter counts. No physical writes occur.
 
@@ -670,7 +670,7 @@ store adapter tensors separately, replay exactly, and report adapter parameters,
 extra MACs/token and zero adaptation writes. These branches remain digital at
 inference; merging them into an array would be a separate intervention.
 
-`python -m workflow.portable_deployment` expands an existing compact CMO P0 on
+`python -m ebl.runtime.portable_deployment` expands an existing compact CMO P0 on
 its original GPU into held tensors, binding the new artifact to its parent hash.
 It preserves the original bundle and checks exact apparent-state equality;
 this is a serialization conversion, not a new endpoint draw. Portable states
@@ -678,7 +678,7 @@ stay explicit when saved again, avoiding cross-GPU RNG reconstruction.
 
 A recovery-only native campaign may contain one onchip stage with four explicit
 frozen inputs (`teacher_weights`, `device_data`, `device_model`, `device_state`).
-Use `python -m campaigns.recovery_collect validate RUN_ROOT --inputs INPUTS.json`
+Use `python -m ebl.execution.recovery_collect validate RUN_ROOT --inputs INPUTS.json`
 and its `collect` command for this manifest shape. The input contract pins all
 four hashes, array identity and apparent-state hashes; the collector checks
 native inspection, lineage, trajectory coverage, presentation count, exact replay
@@ -727,7 +727,7 @@ sections unchanged, replace each deploy stage's `weights` dependency with the
 explicit saved `hwa_source` path, and omit the HWA stage from the execution
 manifest. Keep the new prepare and devices stages and every declared assignment;
 adding `transfer_tests` requires a new feature cache but no new training.
-`python -m campaigns.lifecycle_collect validate RUN_ROOT --deployment-only`
+`python -m ebl.execution.lifecycle_collect validate RUN_ROOT --deployment-only`
 checks this manifest shape, the original source bundle and its full artifact
 hashes, compatible source provenance, exact input lineage, and complete deployment
 coverage. The same explicit mode is available for `export` and `collect`; it does
@@ -747,7 +747,7 @@ A CMO array that was programmed once and never written is stored compactly.
 The state holds its fault and apparent-state hashes, and it is rebuilt by
 reprogramming the saved target on the same execution-device type, then
 verified. CMO P0 bundles therefore hold only the model and target, about
-8 bytes per weight, and arms that never write add almost nothing. `python -m workflow
+8 bytes per weight, and arms that never write add almost nothing. `python -m ebl lifecycle
 describe` prints the analog weight count and this final-state estimate
 (trajectories × weights × 90 bytes for OM, 35 for PCM and CMO). Budget it before launch,
 and measure memory, throughput and actual sizes on a smoke run with one or two
@@ -756,7 +756,7 @@ analog layers before scaling the number of layers.
 ## Running a lifecycle
 
 Planning and checking launch nothing. Execution follows the [workflow
-policy](experiment_workflow.md): make cases, target, budget, duration and output
+policy](../workflow/policy.md): make cases, target, budget, duration and output
 paths visible before substantial runs.
 
 ```bash
@@ -765,23 +765,23 @@ export EBL_CORPUS_ROOT="$PWD/data/corpora"                    # OPT only
 export EBL_CIFAR_ROOT="$PWD/artifacts/cifar_inputs/data"      # CIFAR only
 OPT=~/.cache/huggingface/hub/models--facebook--opt-125m/snapshots/27dcfa74d334bc871f3234de431e71c6eeba5dd6
 # OPT, once per corpus: prints the name and SHA-256 for data.corpus
-python -m workflow corpus --name <corpus> --model-dir $OPT \
+python -m ebl lifecycle corpus --name <corpus> --model-dir $OPT \
   --train train.txt --validation validation.txt --test test.txt
 # OPT labelled task: prints the task file and stream names and SHA-256 for task.choices and data.corpus
-python -m workflow task-data --task hellaswag --name <task> --model-dir $OPT \
+python -m ebl lifecycle task-data --task hellaswag --name <task> --model-dir $OPT \
   --train train.parquet --validation validation.parquet --development-examples 2000 --split-seed <seed>
 # OPT fine-tuned teacher (opt_task_teacher.v1 config); declare its merged SHA-256 in network.teacher
 python -m ebl train --config teacher.json --output-dir results/teachers/<id> \
   --teacher-weights $OPT/pytorch_model.bin --device-data $EBL_CORPUS_ROOT/<task>.pt
-python -m workflow check
-python -m workflow describe campaigns/<campaign>/lifecycles/<id>.json
-python -m workflow plan campaigns/<campaign>/lifecycles/<id>.json \
+python -m ebl lifecycle check
+python -m ebl lifecycle describe campaigns/<campaign>/lifecycles/<id>.json
+python -m ebl lifecycle plan campaigns/<campaign>/lifecycles/<id>.json \
   --teacher-weights $OPT/pytorch_model.bin \
   --output results/lifecycles/<id>/plan [--device cuda:0] [--cpu-threads 4]
 python -m ebl campaign run --manifest results/lifecycles/<id>/plan/campaign.json \
   --output-dir results/lifecycles/<id>/runs [--dry-run] [--resume] [--allow-dirty]
 python -m ebl runs inspect RUN_DIR --verify-artifacts --require-complete
-python -m workflow collect results/lifecycles/<id>/runs --output results/lifecycles/<id>/collected
+python -m ebl lifecycle collect results/lifecycles/<id>/runs --output results/lifecycles/<id>/collected
 ```
 
 For CIFAR, pass `artifacts/cifar_inputs/cifar10_resnet32-ef93fc4d.pt` as the
@@ -881,14 +881,14 @@ then write the lifecycle:
 
 | Missing | Where to extend |
 | --- | --- |
-| network family or model (e.g. another OPT size, analog attention) | a module in `workflow/networks/` with the functions listed in its `__init__.py`; `network` parsing and `PRIMARY_METRICS`/`CALIBRATIONS` in `workflow/lifecycle.py` |
+| network family or model (e.g. another OPT size, analog attention) | a module in `networks/` with the functions listed in its `__init__.py`; `network` parsing and `PRIMARY_METRICS`/`CALIBRATIONS` in `networks/config.py` |
 | data or metric | the family module (`build_cache`, `evaluate`) and its `data` parser |
-| labelled task or template | `TASKS` in `workflow/tasks.py`, `TASK_NAMES` in `workflow/lifecycle.py` |
-| teacher fine-tuning recipe | `workflow/teacher_lora.py` (`opt_task_teacher.v1`) |
-| analog adapters, targeted faults, adapter training | `OptMlpSuffix` (`analog_lora`), `workflow/devices.py` (`target`), `workflow/hwa.py` (`train_lora`) |
-| defect kind or placement | `FAILURE_KINDS` and `_defects` in `workflow/lifecycle.py`; fault construction in `workflow/devices.py` |
-| technology, P&V method or relaxation | `TECHNOLOGIES` in `workflow/lifecycle.py`; `workflow/devices.py`, `workflow/program_verify.py` |
-| on-chip update law | `TECHNOLOGIES[...].update_laws`; `make_writer` in `workflow/onchip.py` |
+| labelled task or template | `TASKS` in `networks/tasks.py`, `TASK_NAMES` in `networks/config.py` |
+| teacher fine-tuning recipe | `methods/teacher_lora.py` (`opt_task_teacher.v1`) |
+| analog adapters, targeted faults, adapter training | `OptMlpSuffix` (`analog_lora`), `hardware/arrays.py` (`target`), `methods/hwa.py` (`train_lora`) |
+| defect kind or placement | `FAILURE_KINDS` and `_defects` in `hardware/config.py`; fault construction in `hardware/arrays.py` |
+| technology, P&V method or relaxation | `TECHNOLOGIES` in `hardware/config.py`; `hardware/arrays.py`, `methods/programming/lifecycle.py` |
+| on-chip update law | `TECHNOLOGIES[...].update_laws`; `make_writer` in `methods/onchip.py` |
 
 Never add a per-study runtime or bypass the stages for one experiment.
 
@@ -934,13 +934,13 @@ synthetic assumed temporal coupling, not a measured device time process.
 FP32 clean post-HWA and digital-teacher logits are cached once on the exact token
 cohort, retained as hashed native artifacts, and reused for all rows. Outputs add
 clean-HWA KL, spread amplitude, perplexity ratio to first read, and clipping/drift
-statistics. `workflow collect` retains each time/sigma row separately.
+statistics. `ebl lifecycle collect` retains each time/sigma row separately.
 
 ### Initial programming with a fitted Flowers model
 
 The optional `initial_programming` section runs one preparation policy per native
 stage and realization, then evaluates passive retention. Its strict settings are
-defined by `training.initial_programming_config.InitialProgramming`. It requires
+defined by `methods.programming.config.InitialProgramming`. It requires
 a pinned frozen OPT/CMO HWA source, a pinned Flowers JSON model and token-cohort
 hash, only the nominal defect case, no other recovery branch and no extra read
 noise. Upstream source/cache provenance is unchanged when this optional branch
@@ -962,6 +962,6 @@ full-program/read counts. Final apparent conductances and selected pair masks
 are saved and replayed exactly. Mid-trajectory resume is unsupported. The
 `initial_programming_measurements`, `initial_programming_summary`,
 `initial_programming_state` and `flowers_model` artifacts are collected through
-the standard workflow. `workflow collect` exports one row per policy,
+the standard workflow. `ebl lifecycle collect` exports one row per policy,
 realization and age, flagging duplicate coverage. This branch does not assert
 measured programming timing, pulse cost or physical equivalence of populations.

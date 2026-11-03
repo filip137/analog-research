@@ -10,6 +10,7 @@ from core.tensor_io_native import load
 from core.contracts import ConfigError
 import hardware.devices.cmo as cmo
 import ebl.runtime.retention as retention
+import hardware.drift.retention as physical_retention
 from ebl.lifecycle.cli import main as workflow_main, summary
 from ebl.schema.lifecycle import parse_lifecycle, provenance, verify_provenance, stage_selections
 from ebl.lifecycle.plan import build_plan
@@ -61,14 +62,14 @@ def test_retention_rejects_invalid_regimes(key, value):
 @pytest.mark.parametrize("model", retention.MODELS)
 def test_mapping_preserves_weights_without_noise_and_maps_fault_quantiles(model):
     q = torch.linspace(-1, 1, 101)
-    target = retention.targets(q, model)
+    target = physical_retention.targets(q, model)
     torch.testing.assert_close((target[0] - target[1]) / retention.MODELS[model]["normalizer"], q,
                                rtol=1e-5, atol=2e-7)
     case = lifecycle().defects.cases[1]
     mask = torch.tensor([[True, False, True]])
     quantiles = torch.tensor([[0., .5, 1.]])
     stuck = cmo.G_MIN_US + quantiles * (cmo.G_MAX_US - cmo.G_MIN_US)
-    actual_mask, values = retention.mapped_faults(mask, stuck, case, model, "cpu")
+    actual_mask, values = physical_retention.mapped_faults(mask, stuck, case, model, "cpu")
     assert torch.equal(actual_mask, mask)
     expected = retention.MODELS[model]["g_min"] + quantiles * (
         retention.MODELS[model]["g_max"] - retention.MODELS[model]["g_min"])
@@ -84,11 +85,11 @@ def test_programming_matches_the_pinned_aihwkit_model(model):
     reference = {"pcm": lambda: PCMLikeNoiseModel(),
                  "reram_cmo": lambda: ReRamCMONoiseModel(acceptance_range=2),
                  "reram_wan2022": lambda: ReRamWan2022NoiseModel(g_max=40)}[model]()
-    target = retention.targets(torch.linspace(-1, 1, 101), model)
+    target = physical_retention.targets(torch.linspace(-1, 1, 101), model)
     with torch.random.fork_rng(devices=[]):
         torch.manual_seed(615)
         expected = reference.apply_programming_noise_to_conductance(target)
-    actual = retention.program(target, model, torch.Generator().manual_seed(615), acceptance=2, noise_scale=1)
+    actual = physical_retention.program(target, model, torch.Generator().manual_seed(615), acceptance=2, noise_scale=1)
     torch.testing.assert_close(actual, expected, rtol=1e-6, atol=1e-6)
 
 

@@ -24,11 +24,11 @@ rssh() { ssh -o BatchMode=yes -o ConnectTimeout=20 "$@"; }
 for ARM in "$@"; do
   echo "$(date -Is) [$ID] waiting for hwa__$ARM on $HOST"
   while true; do
-    INFO=$(rssh $HOST "python3 $FBASE/launch/source_record.py $FRUNS hwa__$ARM" 2>/dev/null)
+    INFO=$(rssh $HOST "cd $FBASE/$CLONE && ~/miniconda3/envs/py312/bin/python ../launch/source_record.py results/lifecycles/$ID/plan/campaign.json results/lifecycles/$ID/runs hwa__$ARM" 2>/dev/null)
     [ -n "$INFO" ] && break
     if ! rssh $HOST "$ALIVE" >/dev/null 2>&1; then
       sleep 30
-      INFO=$(rssh $HOST "python3 $FBASE/launch/source_record.py $FRUNS hwa__$ARM" 2>/dev/null)
+      INFO=$(rssh $HOST "cd $FBASE/$CLONE && ~/miniconda3/envs/py312/bin/python ../launch/source_record.py results/lifecycles/$ID/plan/campaign.json results/lifecycles/$ID/runs hwa__$ARM" 2>/dev/null)
       [ -n "$INFO" ] && break
       echo "$(date -Is) [$ID] FAIL: chain on $HOST ended without a complete hwa__$ARM"; exit 3
     fi
@@ -72,8 +72,12 @@ done
 rssh jean-zay "bash $R/launch/inspect_collect.sh $ID $JSRC"
 scp -q "jean-zay:$JSRC/results/lifecycles/$ID/collected/deployments.*" "$LOCAL/collected/"
 scp -q "jean-zay:$JSRC/results/lifecycles/$ID/inspect.txt" "$LOCAL/collected/inspect-jean-zay.txt"
-rssh $HOST "cd $FBASE/$CLONE && ~/miniconda3/envs/py312/bin/python -m ebl runs inspect \$(ls -d results/lifecycles/$ID/runs/*/*/) --verify-artifacts --require-complete > results/lifecycles/$ID/inspect.txt 2>&1; echo ${HOST}_inspect_exit=\$?"
+rssh $HOST "cd $FBASE/$CLONE && ~/miniconda3/envs/py312/bin/python -m ebl runs inspect \$(find results/lifecycles/$ID/runs -name result.json -printf '%h ') --verify-artifacts --require-complete > results/lifecycles/$ID/inspect.txt 2>&1; echo ${HOST}_inspect_exit=\$?"
 scp -q "$HOST:$FBASE/$CLONE/results/lifecycles/$ID/inspect.txt" "$LOCAL/collected/inspect-$HOST.txt"
-for ARM in "$@"; do scp -q "$HOST:$FRUNS/hwa__$ARM/*/metrics.jsonl" "$LOCAL/hwa-metrics/$ARM.jsonl"; done
+for ARM in "$@"; do
+  INFO=$(rssh $HOST "cd $FBASE/$CLONE && ~/miniconda3/envs/py312/bin/python ../launch/source_record.py results/lifecycles/$ID/plan/campaign.json results/lifecycles/$ID/runs hwa__$ARM") || exit 8
+  SRCPATH=${INFO% *}
+  scp -q "$HOST:${SRCPATH%/checkpoints/*}/metrics.jsonl" "$LOCAL/hwa-metrics/$ARM.jsonl" || exit 8
+done
 ls -la "$LOCAL/collected" "$LOCAL/hwa-metrics"
 echo "$(date -Is) [$ID] DONE"

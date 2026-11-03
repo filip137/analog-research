@@ -94,7 +94,7 @@ def prepare_host(host,base,reused):
     for label in labels():
         lc=lifecycle(label); cfg=ROOT/'campaigns/opt-cmo-corruption/lifecycles'/(lc.lifecycle_id+'.json')
         root=ROOT/'results/lifecycles'/lc.lifecycle_id
-        command([python,'-m','workflow','plan',str(cfg),'--teacher-weights',inputs['artifacts']['teacher_weights']['path'],
+        command([python,"-m", "ebl", "lifecycle",'plan',str(cfg),'--teacher-weights',inputs['artifacts']['teacher_weights']['path'],
                  '--output',str(root/'plan'),'--device','cuda:0','--cpu-threads','1','--python',python],cwd=ROOT)
         plan=root/'plan/campaign.json'; raw=json.loads(plan.read_text())
         stage=next(s for s in raw['stages'] if s['id']==f'onchip__{ARM}__{ARRAY}')

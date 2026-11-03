@@ -1,7 +1,7 @@
 # Crossbar experiment runtime
 
 The public entry point is `python -m ebl`. It resolves a strict JSON config through
-`experiments/definitions.py` and dispatches to the selected runtime. Unknown
+`ebl/registry.py` and dispatches to the selected runtime. Unknown
 settings and unsupported modes fail before the numerical runtime loads.
 [Supported families](crossbar_scope.md) include crossbars, digital teacher controls
 and device characterization.
@@ -30,10 +30,10 @@ resume and population schemas remain compatible.
 `campaign run --manifest ... --output-dir ...` orchestrates exact configs and
 explicit inputs through subprocesses, with dry runs and completed-stage reuse.
 Campaign lifecycles (`crossbar_lifecycle.v1`) are planned into such a manifest by
-`python -m workflow plan`; see the [lifecycle contract](crossbar_lifecycle.md).
+`python -m ebl lifecycle plan`; see the [lifecycle contract](crossbar_lifecycle.md).
 Optional `study prepare`, `study summarize` and `study finalize` commands retain
 study inspection and local review receipts. Current work follows the
-[experiment workflow](experiment_workflow.md); cleanup does not update global
+[experiment workflow](../workflow/policy.md); cleanup does not update global
 historical ledgers.
 
 Retired EP/DRN/LoRA experiments and the older MNIST crossbar v1 runtime remain at

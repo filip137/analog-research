@@ -4,7 +4,7 @@ Input: a note whose Explorer fields are resolved. Output: the lifecycle file, an
 missing capability with its test, cost-probe measurements, the plan, a launch only
 under assigned execution, and the note's handoff. Read the
 [lifecycle contract](../../../../docs/crossbar_lifecycle.md) fully and the
-[execution policy](../../../../docs/experiment_workflow.md) for launch rules. Never
+[execution policy](../../../../workflow/policy.md) for launch rules. Never
 change a scientific setting to make something fit or pass.
 
 ## 1. Spec check
@@ -25,10 +25,10 @@ changed" in the note. Never add a per-study runtime or bypass the stages.
 
 - Teacher: the pinned checkpoint, e.g. for OPT
   `~/.cache/huggingface/hub/models--facebook--opt-125m/snapshots/<revision>/pytorch_model.bin`
-  with the revision and SHA-256 in `workflow/networks/opt_mlp.py`.
+  with the revision and SHA-256 in `networks/opt.py`.
 - Corpus (OPT): `$EBL_CORPUS_ROOT/<name>.pt` with the declared SHA-256
   (`sha256sum`). If absent, build it from the note's text files with
-  `python -m workflow corpus --name <name> --model-dir <snapshot> --train ... --validation ... --test ...`
+  `python -m ebl lifecycle corpus --name <name> --model-dir <snapshot> --train ... --validation ... --test ...`
   and copy the printed digest into the note and the lifecycle.
 - OM populations: `EBL_AIHWKIT_PYTHON` must name the AIHWKit 1.1.0 interpreter
   (OM only; CMO and PCM are analytic).
@@ -45,7 +45,7 @@ regime, and save the exact definition on the experiment branch at
   Preserve the note's physical array size when placement depends on it;
   otherwise choose computational tiling within the engineering allowance.
   Use `max_examples` 0 for evidence.
-- Run `python -m workflow check` and `python -m workflow describe <file>`; paste the
+- Run `python -m ebl lifecycle check` and `python -m ebl lifecycle describe <file>`; paste the
   describe summary (stages, trajectories, analog weights, state estimate) into the
   note. If the estimate exceeds the Explorer's storage cap, escalate before going on.
 
@@ -72,7 +72,7 @@ to the Explorer/user; do not shrink cohorts, arrays, cases or epochs on your own
 
 ```bash
 RUN=/home/filip/analog-research/hwa/results/lifecycles/<id>   # absolute, never inside a worktree
-python -m workflow plan campaigns/<campaign>/lifecycles/<id>.json \
+python -m ebl lifecycle plan campaigns/<campaign>/lifecycles/<id>.json \
   --teacher-weights <teacher> --output $RUN/plan \
   [--device cuda:N] [--cpu-threads K]
 python -m ebl campaign run --manifest $RUN/plan/campaign.json \
@@ -107,6 +107,6 @@ checkout, cases, lifecycle and
 plan paths with digests, run root, session/PID/log, expected stage order and
 durations from the probe, next check, deadline and remaining budget, inspect and
 collect commands (`python -m ebl runs inspect RUN_DIR --verify-artifacts
---require-complete`; `python -m workflow collect <runs> --output <collected>`) and the
+--require-complete`; `python -m ebl lifecycle collect <runs> --output <collected>`) and the
 escalation route. Retry only understood operational failures, within the same budget,
 keeping every failed attempt; retries are not replicates.

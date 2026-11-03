@@ -7,7 +7,7 @@ description: Take crossbar research questions about corrupted devices, write noi
 
 Read root AGENTS.md and the assigned pilot/experiment note first, enter at the
 appropriate role and reuse completed work. Precedence: the user, then AGENTS.md
-(science), the [execution policy](../../../docs/experiment_workflow.md) (authorization,
+(science), the [execution policy](../../../workflow/policy.md) (authorization,
 resources, checks, storage), this skill (procedure) and the note (rules of one
 experiment). [Artifact conventions](references/artifacts.md) own note structure.
 Planning alone launches nothing; assigned execution continues through interpretation.
@@ -53,7 +53,7 @@ result, frozen before the comparison runs.
 
 Each experiment or pilot lives on its own branch, from the first file it changes
 until it closes. The user granted standing authority to commit, merge and push
-([version control](../../../docs/experiment_workflow.md#version-control)). The trunk
+([version control](../../../workflow/policy.md#version-control)). The trunk
 is `main`, checked out at `/home/filip/analog-research/hwa`. `<id>` is the
 experiment id (`exp-023`) or the pilot's file name (`20261103-<slug>`). Reuse the
 branch and worktree if they already exist.
@@ -120,7 +120,7 @@ and keep unaffected work observed. Do not improvise repairs, retries, cancellati
 scientific changes as Monitor.
 
 Collect and inspect explicit bundles with `python -m ebl runs inspect` and
-`python -m workflow collect`; reconcile cases, failures/exclusions/replacements and
+`python -m ebl lifecycle collect`; reconcile cases, failures/exclusions/replacements and
 measurements. Record factual validity and coverage separately. A truthful partial
 bundle can be reviewed. If continuous supervision is unavailable, report the gap and
 next action.
