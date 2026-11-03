@@ -157,7 +157,9 @@ def test_study_freezes_inputs_pair_fixture_and_within_eight_claim() -> None:
 def test_readme_and_protocol_record_current_partial_evidence() -> None:
     readme = (_CONFIG_ROOT / "README.md").read_text(encoding="utf-8")
     protocol = (
-        _ROOT / "docs" / "ibm_om_hwa_program_verify_pilot.md"
+        _ROOT
+        / "campaigns/ibm-om-deployment-recovery/series/001-common-window"
+        / "experiments/exp-003-eight-device.md"
     ).read_text(encoding="utf-8")
     normalized_readme = " ".join(readme.split())
     normalized_protocol = " ".join(protocol.split())
