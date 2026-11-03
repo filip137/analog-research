@@ -30,7 +30,7 @@ from experiments.artifacts import RunStore, atomic_write_json, sha256_file
 from experiments.cifar_crossbar.model import state_hash, tensor_hash
 from experiments.cifar_crossbar.runtime import load, save
 from workflow import data as data_stage
-from workflow import deployment, hwa, onchip, program_verify
+from workflow import deployment, hwa, onchip, program_verify, retention, compensation, drift_recovery, initial_programming
 from workflow import devices as device_stage
 from workflow.lifecycle import EXPERIMENT_ID, StageConfig, provenance, verify_provenance
 from workflow.networks import family
@@ -51,6 +51,10 @@ REQUIRED_INPUTS = {
     "hwa": {"teacher_weights", "device_data", "device_model"},
     "deploy": {"teacher_weights", "device_data", "device_model", "weights"},
     "onchip": {"teacher_weights", "device_data", "device_model", "device_state"},
+    "retention": {"teacher_weights", "device_data", "device_model", "weights"},
+    "compensate": {"teacher_weights", "device_data", "device_model", "weights", "device_state"},
+    "drift_recovery": {"teacher_weights", "device_data", "device_model", "weights"},
+    "initial_programming": {"teacher_weights", "device_data", "device_model", "weights"},
 }
 
 
@@ -145,16 +149,21 @@ def train_hwa(stage: Stage):
     arm = lifecycle.hwa.arm(stage.selection.hwa_arm)
     cache = stage.cache()
     bundle = stage.device_bundle()
-    outcome = hwa.train_source(
-        lifecycle=lifecycle,
-        arm=arm,
-        network=stage.network,
-        teacher=stage.teacher,
-        cache=cache,
-        device_bundle=bundle,
-        store=stage.store,
-        device=stage.device,
-    )
+    if arm.method == "lora":
+        base, receipt = lora_base(stage, arm)
+        outcome = hwa.train_lora(lifecycle=lifecycle, arm=arm, network=stage.network, base=base, base_receipt=receipt,
+                                 cache=cache, device_bundle=bundle, store=stage.store, device=stage.device)
+    else:
+        outcome = hwa.train_source(
+            lifecycle=lifecycle,
+            arm=arm,
+            network=stage.network,
+            teacher=stage.teacher,
+            cache=cache,
+            device_bundle=bundle,
+            store=stage.store,
+            device=stage.device,
+        )
     stage.network.load_state_dict(outcome["model"])
     clean = stage.family.evaluate(stage.network, cache["development"], stage.device)
     path = stage.run_dir / "checkpoints/source.pt"
@@ -176,6 +185,50 @@ def train_hwa(stage: Stage):
         "test_used_for_selection": False,
     }
     return result, [("hwa_source", path)]
+
+
+def lora_base(stage: Stage, arm):
+    """The frozen whole-model HWA base of a LoRA arm, pinned by the arm's SHA-256.
+
+    It comes from another lifecycle (no adapters), so its own provenance is recorded as
+    lineage, and only the teacher, technology and completed fit are required to match.
+    """
+
+    path = stage.request.weights
+    digest = sha256_file(path)
+    if digest != arm.base_source.sha256:
+        raise ValueError(f"Expected LoRA base source {arm.base_source.name!r} with SHA-256 {arm.base_source.sha256}. "
+                         f"Provided value: {path} with SHA-256 {digest}.")
+    base = load(path)
+    record = base.get("provenance", {})
+    fit = base.get("fit", {})
+    if (record.get("kind") != "hwa_source" or base.get("context", {}).get("teacher_sha256") != stage.context["teacher_sha256"]
+            or fit.get("status") != "complete" or base.get("arm", {}).get("scope") != "model"):
+        raise ValueError("Expected a completed whole-model HWA source of the same teacher as the LoRA base.")
+    receipt = {"name": arm.base_source.name, "sha256": digest, "lifecycle_id": record.get("lifecycle_id"),
+               "lifecycle_sha256": record.get("lifecycle_sha256"), "sections": record.get("sections"),
+               "hwa_arm": record.get("hwa_arm"), "hwa_arm_sha256": record.get("hwa_arm_sha256"),
+               "selected_epoch": fit.get("selected_epoch"), "development_kl": fit.get("development_kl")}
+    return base, receipt
+
+
+def validate_lora_fit(lifecycle, arm, fit):
+    if fit.get("kind") != "lora" or fit.get("base_source", {}).get("sha256") != arm.base_source.sha256:
+        raise ValueError("Expected a LoRA source on the declared base.")
+    hwa = lifecycle.hwa
+    if fit.get("maximum_epochs") != hwa.epochs or fit.get("epochs_run") != hwa.epochs or fit.get("rejection") is not None:
+        raise ValueError("Expected the complete declared LoRA epoch budget.")
+    history = fit.get("history", [])
+    epochs = [e for e in range(hwa.epochs + 1) if e == 0 or e % hwa.selection_every == 0 or e == hwa.epochs]
+    if [item.get("epoch") for item in history] != epochs:
+        raise ValueError("Expected the complete LoRA checkpoint-selection history.")
+    labels = [case.label for case in arm.selection_cases]
+    for item in history:
+        if [case.get("case") for case in item.get("cases", [])] != labels:
+            raise ValueError("LoRA selection cases differ from the declared cases.")
+    selected = max(history, key=lambda item: (item["score"], -item["epoch"]))
+    if fit.get("selected_epoch") != selected["epoch"] or fit.get("development_score") != selected["score"]:
+        raise ValueError("LoRA source does not identify the declared best checkpoint.")
 
 
 def validate_source_fit(lifecycle, arm, fit):
@@ -201,6 +254,8 @@ def validate_source_fit(lifecycle, arm, fit):
         if fit.get("kind") != "digital_teacher":
             raise ValueError("Expected the unchanged pretrained source.")
         return
+    if arm.method == "lora":
+        return validate_lora_fit(lifecycle, arm, fit)
     hwa = lifecycle.hwa
     maximum = fit.get("maximum_epochs")
     if (type(maximum) is not int or maximum not in {hwa.epochs, hwa.epochs + hwa.extension_epochs}
@@ -375,6 +430,8 @@ def train_onchip(stage: Stage):
                 {
                     "lifecycle_id": lifecycle.lifecycle_id,
                     "technology": stage.technology,
+                    **({"fine_tuned_teacher": lifecycle.network.teacher.to_dict()}
+                       if getattr(lifecycle.network, "teacher", None) is not None else {}),
                     "hwa_arm": arm_id,
                     "array_seed": seed,
                     "endpoint_seed": p0["endpoint_seed"],
@@ -416,6 +473,8 @@ def train_onchip(stage: Stage):
                 "onchip_arm": row["onchip_arm"],
                 "initial": {k: row["initial"][split][k] for k in metrics},
                 "final": {k: row["final"][split][k] for k in metrics},
+                **({"task_test": {state: {k: row[state]["task_test"][k] for k in stage.family.TASK_SUMMARY_METRICS}
+                                  for state in ("initial", "final")}} if lifecycle.task is not None else {}),
                 "cost": row["cost"],
             }
             for row in rows
@@ -436,6 +495,10 @@ STAGES = {
     "hwa": train_hwa,
     "deploy": deploy,
     "onchip": train_onchip,
+    "retention": retention.run,
+    "compensate": compensation.run,
+    "drift_recovery": drift_recovery.run,
+    "initial_programming": initial_programming.run,
 }
 
 
@@ -459,9 +522,11 @@ def configure_runtime(execution, seed) -> dict:
     }
 
 
-def _inputs(request, kind) -> list[dict]:
+def _inputs(request, kind, lifecycle=None, selection=None) -> list[dict]:
     provided = {role for role in INPUT_ROLES if getattr(request, role, None) is not None}
     required = REQUIRED_INPUTS[kind]
+    if kind == "hwa" and lifecycle is not None and lifecycle.hwa.arm(selection.hwa_arm).method == "lora":
+        required = required | {"weights"}
     if provided != required:
         raise ValueError(
             f"Expected exactly the {kind} stage inputs {sorted(required)}. "
@@ -472,17 +537,28 @@ def _inputs(request, kind) -> list[dict]:
         for role in INPUT_ROLES
         if role in provided
     ]
+    if kind == 'initial_programming':
+        settings = lifecycle.initial_programming
+        model_path = Path(settings.model_path)
+        digest = sha256_file(model_path)
+        if digest != settings.model_sha256:
+            raise ValueError('Pinned Flowers model changed.')
+        inputs.append({'role': 'flowers_model', 'path': str(model_path), 'sha256': digest})
+    return inputs + staged_source_inputs()
+
+
+def staged_source_inputs() -> list[dict]:
+    """The verified staged-source receipt (``EBL_SOURCE_RECEIPT``) of a run outside a clean checkout."""
+
     receipt_path = os.environ.get("EBL_SOURCE_RECEIPT")
-    if receipt_path:
-        receipt = json.loads(Path(receipt_path).read_text())
-        for name, digest in receipt["files"].items():
-            source = (ROOT / name).resolve()
-            if not source.is_relative_to(ROOT) or sha256_file(source) != digest:
-                raise ValueError(f"Staged source snapshot mismatch: {name}")
-        inputs.append(
-            {"role": "staged_source_snapshot", "path": receipt_path, "sha256": sha256_file(Path(receipt_path))}
-        )
-    return inputs
+    if not receipt_path:
+        return []
+    receipt = json.loads(Path(receipt_path).read_text())
+    for name, digest in receipt["files"].items():
+        source = (ROOT / name).resolve()
+        if not source.is_relative_to(ROOT) or sha256_file(source) != digest:
+            raise ValueError(f"Staged source snapshot mismatch: {name}")
+    return [{"role": "staged_source_snapshot", "path": receipt_path, "sha256": sha256_file(Path(receipt_path))}]
 
 
 def run_train(request) -> int:
@@ -490,7 +566,7 @@ def run_train(request) -> int:
     if not isinstance(config, StageConfig):
         raise TypeError("Expected a crossbar lifecycle stage config.")
     lifecycle, selection = config.lifecycle, config.stage
-    inputs = _inputs(request, selection.kind)
+    inputs = _inputs(request, selection.kind, lifecycle, selection)
     store = RunStore.create(
         output_root=request.output_dir,
         experiment_id=EXPERIMENT_ID,

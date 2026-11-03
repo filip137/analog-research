@@ -47,8 +47,8 @@ normalized before hashing.
 
 | Section | Fixes |
 | --- | --- |
-| `question` | `text`, `decision`, `primary_metric` (OPT: `teacher_kl` or `perplexity`; CIFAR: `teacher_kl` or `accuracy_percent`), `evidence_class` (`exploratory_model_based`) |
-| `network` | OPT: `family`, `model` (`facebook/opt-125m`), `analog_decoder_layers` (1–12, counted from the last layer). CIFAR: `family`, `dataset`, `analog_convolutions` (0, 2, 4 or 8, plus the classifier) |
+| `question` | `text`, `decision`, `primary_metric` (OPT: `teacher_kl` or `perplexity`, or `task_accuracy_norm_percent`/`task_accuracy_percent` with a declared `task`; CIFAR: `teacher_kl` or `accuracy_percent`), `evidence_class` (`exploratory_model_based`) |
+| `network` | OPT: `family`, `model` (`facebook/opt-125m`), `analog_decoder_layers` (1–12, counted from the last layer), an optional `teacher` (`name`, `sha256`) naming a fine-tuned FP32 checkpoint instead of the pinned one, and optional `analog_lora` (`rank`, `alpha`): analog adapter matrices on every analog MLP. CIFAR: `family`, `dataset`, `analog_convolutions` (0, 2, 4 or 8, plus the classifier) |
 | `data` | OPT: pinned `corpus` (name and SHA-256), `sequence_length`, split seed, HWA, recovery, development and test sequence counts, `evaluation`, `max_examples`. CIFAR: split seed, HWA, recovery and development image counts, `evaluation`, `max_examples`. `max_examples` is non-zero only for labelled smokes |
 | `devices` | technology (`om`, `pcm`, `cmo`) and device model, write-noise scale, array identities and, for OM, population policy, variation and endpoint characterization |
 | `defects` | placement, persistence and the defect `cases` |
@@ -57,6 +57,7 @@ normalized before hashing.
 | `program_verify` (iii) | method, verify cycles and window (OM), acceptance range (CMO), relaxation |
 | `onchip` (iv) | update law, objective, learning rates, epochs, seed, write budget and matched `arms`; or `null` for a deployment-only loop with no on-chip stage |
 | `transfer_tests` (optional) | OPT only: extra test cohorts from other pinned corpora, scored at every evaluation. Omitted when absent, so lifecycles without it keep their digests |
+| `task` (optional) | OPT only: a labelled multiple-choice task (`name`, pinned `choices` file, `decision` `acc_norm` or `acc`, `development_examples`, `evaluation_examples`) scored at every evaluation; see [Labelled tasks and fine-tuned teachers](#labelled-multiple-choice-tasks-and-fine-tuned-teachers-opt). Omitted when absent |
 
 ### (a) Question, devices and defects
 
@@ -106,7 +107,7 @@ uses `hierarchical_die_array` placement:
 | Populations | literal AIHWKit 1.1.0 cells, repaired baseline (`EBL_AIHWKIT_PYTHON`) | analytic | analytic |
 | HWA noise model | `om_endpoint_kernel`: residual tables of the declared P&V law on independent characterization cells | `pcm_gaussian_endpoint` | `additive_gaussian_weight`: Gaussian weight noise of `hwa.noise_std` per matrix or per output channel; temporary stuck active/reference devices for corruption-aware arms |
 | P&V methods | `closed_loop`, `open_loop_nominal` | `gaussian_endpoint` | `gaussian_endpoint` with `acceptance_percent` 2.0 (or 0.2) |
-| Relaxation | `none` (OM retention and drift are not modelled) | `none` or `pcm_drift` | `none` (CMO drift and read noise are not modelled yet) |
+| Relaxation | `none` (OM retention and drift are not modelled) | `none` or `pcm_drift` | `none` in deployment; the optional frozen-source `retention` branch models CMO relaxation and read noise |
 | On-chip laws | `om_closed_loop_pulse_adam`, `om_open_loop_pulse_adam` | `pcm_endpoint_reprogramming` | `cmo_idealized_write_adam` |
 
 These are hardware-derived fitted models and presets. Label results as
@@ -136,13 +137,13 @@ physical device count.
 
 | | `opt_mlp_suffix` | `cifar_resnet32_suffix` |
 | --- | --- | --- |
-| Teacher | `facebook/opt-125m` `pytorch_model.bin` at revision `27dcfa74`, loaded as FP32 by the native decoder in `workflow/networks/opt_mlp.py` (tested against Hugging Face) | pinned public ResNet-32 checkpoint |
+| Teacher | `facebook/opt-125m` `pytorch_model.bin` at revision `27dcfa74`, or the declared fine-tuned `network.teacher` (same layout, pinned by its own SHA-256), loaded as FP32 by the native decoder in `workflow/networks/opt_mlp.py` (tested against Hugging Face) | pinned public ResNet-32 checkpoint |
 | Analog matrices | `fc1` (768→3072) and `fc2` (3072→768) of the last `analog_decoder_layers` decoder layers; 4,718,592 weights per layer | last `analog_convolutions` layer3 convolutions plus the classifier |
 | Digital and frozen | embeddings, earlier decoder layers, all attention, LayerNorms, tied LM head | prefix convolutions and BN |
 | Calibration (`calibration` arms) | per-matrix output gains, the MLP biases and the LayerNorm in front of each analog MLP (`output_gain_mlp_layer_norm_mlp_bias`) | output gains, BN affine of converted blocks, classifier bias |
 | Data | non-overlapping sequences of one pre-tokenized corpus (below) | class-balanced 45000/5000 CIFAR split |
-| Metrics | token-weighted `teacher_kl`, `cross_entropy`, `perplexity`, next-token accuracy and teacher agreement over positions 0..T-2 of each sequence, with `scored_tokens` | `teacher_kl`, `accuracy_percent`, teacher agreement |
-| `prepare` gate | the clean digital suffix must reproduce the teacher (KL ≤ 1e-6) | full test split must reproduce the published accuracy |
+| Metrics | token-weighted `teacher_kl`, `cross_entropy`, `perplexity`, next-token accuracy and teacher agreement over positions 0..T-2 of each sequence, with `scored_tokens`; with a `task`, also multiple-choice metrics on `task_development` and `task_test` (below) | `teacher_kl`, `accuracy_percent`, teacher agreement |
+| `prepare` gate | the clean digital suffix must reproduce the teacher (KL ≤ 1e-6), and with a `task` also its continuation-token and choice KL | full test split must reproduce the published accuracy |
 
 OPT data: `python -m workflow corpus` tokenizes train, validation and test text
 files with the pinned tokenizer (one BOS at the start of each split) into
@@ -152,6 +153,105 @@ the train blocks; development and test sequences are the first blocks of the
 validation and test splits. The frozen prefix and teacher logits are recomputed
 per minibatch, because per-token teacher distributions (50,272 classes) are too
 large to cache. The corpus itself is an Explorer choice, recorded in the note.
+
+#### Labelled multiple-choice tasks and fine-tuned teachers (OPT)
+
+Added for exp-018 (user-approved October 15, 2026).
+
+**Task data.** `python -m workflow task-data` (`workflow/tasks.py`) reads one
+pinned task source: the official train and validation parquet files of
+HellaSwag, SST-2 or PIQA.
+- It applies lm-eval-harness v0.4 templates and `_encode_pair` encoding. Each
+  scored row also starts with BOS.
+- It writes two files into the corpus directory:
+  - a `crossbar_lifecycle.choice_task.v1` file holding every example's context,
+    its K continuations, the label and the continuation character counts;
+  - a `token_corpus.v1` stream of BOS + context + gold continuation per example.
+- Splits:
+  - `test` is the official validation split.
+  - `development` is a seeded hold-out from train, disjoint by group (HellaSwag
+    source, SST-2 sentence, PIQA goal).
+  - The remaining train examples form the stream's train split.
+- The command prints both SHA-256 digests, the split counts and an overlap
+  receipt.
+- The stream is the lifecycle's `data.corpus`; HWA and recovery use its train
+  blocks only.
+
+**Task cohorts and metrics.** A `task` section adds `task_development` and
+`task_test` cohorts: the first examples of the development and test splits.
+Every evaluation (deploy, on-chip epochs, final, replay) scores them on the held
+apparent state, through the same prefix, teacher and `forward_features` path:
+- Rows are right-padded, which is safe under the causal mask.
+- Each continuation's log-probability is summed in float64.
+- Metrics:
+  - `accuracy_percent`: argmax of the sums.
+  - `accuracy_norm_percent`: sums divided by character count, as lm-eval does.
+  - `choice_kl` and `choice_kl_norm`: KL against the teacher over the softmax of
+    the raw or normalised choice scores.
+  - teacher agreement.
+  - continuation-token `teacher_kl`.
+  - a per-example `predictions` string, for paired tests.
+- On-chip development checks also score `task_development`.
+- HWA checkpoint selection still uses stream teacher KL.
+- `collect` adds `<state>_task_<split>_<metric>` columns.
+
+**Fine-tuned teachers.** `network.teacher` declares a fine-tuned FP32
+checkpoint; `load_teacher` and `plan` then require its SHA-256 instead of the
+pinned one. The teacher is part of the `network` section, so every artifact
+identity includes it, while fault maps and endpoints stay bound to the model.
+Such teachers are made by the native experiment `opt_task_teacher.v1`
+(`workflow/teacher_lora.py`):
+- LoRA on the declared linear layers of every decoder layer.
+- Loss: multiple-choice cross entropy over the summed continuation
+  log-likelihoods.
+- Selection uses development data only.
+- The selected adapters are merged into FP32 and exported as a Hugging Face
+  `pytorch_model.bin`.
+- Export gates:
+  - the reload reproduces the merged tensors and logits bitwise;
+  - the merged and adapter forwards agree;
+  - non-adapted parameters are unchanged.
+- The run writes `teacher_provenance.json`.
+
+LoRA only prepares the teacher; it is never a deployed digital adapter here.
+
+#### Analog LoRA adapters on a frozen HWA base (OPT)
+
+Added for exp-019 (user-approved October 15, 2026). `network.analog_lora`
+(`rank`, `alpha`; per-output-channel scaling only) gives each base matrix W two
+further analog matrices: A (rank × in) and B (out × rank), named `<W>.lora_a`
+and `<W>.lora_b`.
+- **Placement.** They follow the base matrices in the flat target vector `q`,
+  so P&V, fault maps, fault rewrites and evaluation treat them as arrays.
+- **Computation.** The adapter path is x → A → B, digitised between the arrays
+  and scaled by α/r. It is added in logical units before the frozen output gain
+  and bias.
+- **Initial state.** Adapters start at zero with unit scales, an exact no-op,
+  so the `prepare` gate still holds.
+- **Fault groups.** Each adapted matrix's A and B form their own fault group, so
+  base fault maps are unchanged by adding adapters.
+- **Targeted faults.** A defect case may set `target` (`base` or `adapter`; the
+  default is all arrays; the label gains `_base` or `_adapter`). Faults then go
+  only into that subset's groups, exactly as in the untargeted case.
+
+**LoRA HWA arms.** An HWA arm with `method: lora` trains only the adapters on a
+frozen whole-model HWA source. The source comes from another lifecycle and is
+pinned by `base_source {name, sha256}`; plan it with
+`--lora-base ARM=PATH`.
+- The base's analog targets, digital copy and calibration are copied in and
+  checked unchanged.
+- Adapter masters (logical units; A uniform ±1/√in, B = 0) train with Adam at
+  the arm's `learning_rate`, with linear warm-up over `warmup_fraction` and
+  cosine decay to zero.
+- Each step maps the masters to normalised targets, using their current
+  output-channel abs-max as the digital scale, and adds the declared CMO noise
+  to every analog weight.
+- The objective `hwa.objective: task_choice_token_mean` minimises the task's
+  multiple-choice cross entropy over per-token mean continuation
+  log-likelihoods, on `task.training_examples` labelled train examples.
+- Checkpoints, from epoch 0 (the base without adapters), are selected by
+  development decision accuracy on the selection arrays after real P&V.
+- A LoRA source's provenance includes the `task` section.
 
 ### (ii) HWA: if, and how noise- or corruption-aware
 
@@ -443,6 +543,91 @@ mandatory; interrupted-stage resume is still unsupported.
 
 ## Stages, artifacts and reuse
 
+### Frozen-source retention sweeps (OPT CMO sources)
+
+An optional `retention` section creates an inference-only branch after HWA:
+
+```json
+{"models": ["reram_cmo", "pcm", "reram_wan2022"],
+ "seconds": [1, 86400, 172800], "assignment_seeds": [271002],
+ "case_labels": ["nominal", "random_30000ppm"], "seed": 391013,
+ "read_noise": false}
+```
+
+Require `onchip: null`, OPT CMO sources with nominal programming noise, no P&V
+relaxation and zero per-MVM read noise. Assignments and cases select subsets
+of the unchanged source lifecycle. A `retention__<arm>__<assignment>` stage
+replaces deployment and consumes the same teacher, cache, device bundle and
+HWA-source inputs. The optional section never changes upstream provenance.
+`workflow plan --hwa-source ARM=/absolute/source.pt` substitutes an explicit
+frozen source and omits its HWA stage; repeat for multiple sources. The plan
+records the file hash and the runtime retains the normal source-provenance,
+completion and teacher/mapping gates.
+
+Each frozen normalized weight is remapped into the declared model: CMO uses
+active/reference pairs over 9–88.199997 uS (2% or 0.2% programming fit as declared
+by the source); PCM uses positive/negative pairs over 0–25 uS; Wan-2022 uses
+positive/negative pairs over 0–40 uS. All use two physical devices per weight.
+CMO hierarchical fault locations stay matched across the three models. Random
+stuck values retain their uniform quantile within each model's range; open,
+gmin and gmax map to the corresponding target-model bounds (open is zero).
+This is transfer of the frozen source to separately modelled technologies,
+not aging one physical CMO array with interchangeable laws.
+
+Programming draws happen once per model, matrix and assignment, with the
+existing endpoint seed binding. PCM drift coefficients are sampled once per
+device. Every requested age starts from that programming baseline, with
+age-specific noise streams and held apparent weights throughout evaluation.
+Stuck devices retain their conductance. The `read_noise` flag enables the
+separate PCM/CMO read-noise terms only; Wan supplies no separate fit. Drift
+compensation and additional writes are absent. CMO/Wan snapshots describe
+marginal age distributions, not a measured joint time process.
+
+Wan supports exactly 1, 86400 and 172800 seconds. Its programming baseline is
+the 1-second fit, reused exactly for the 1-second row; later snapshots sample
+total error about the target without adding programming noise a second time.
+An optional `"wan_noise_scales": [1, 1.5, 2, ...]` (finite, increasing, including 1)
+multiplies Wan's fitted endpoint sigma for every aged Wan snapshot. The 1-second
+programming baseline is never scaled. All scales reuse that age's normal draw,
+so they are matched realizations and scale 1 reproduces the unscaled snapshot
+exactly. Scaled rows carry `noise_scale` and the snapshot label `t<seconds>s-x<scale>`.
+Multiples above one are synthetic stress tests beyond the published fit, not a
+device model. The field is omitted from the section at its default `[1]`.
+CMO supports ages >=1 second in this sweep. PCM baseline means the programmed
+state without invoking its zero-time read-noise function. CMO clamps only the
+positive-age snapshots, as in AIHWKit. Saved state includes targets, programmed
+conductances, faults, PCM coefficients, seeds, encoding and source identities;
+native execution verifies serialized baseline and per-age replay. As with the
+existing endpoint arrays, RNG replay requires the same execution-device type
+and compatible PyTorch environment.
+
+`workflow collect` exports `retention.json` and `.csv`, with each source,
+assignment, case, device model and snapshot separate. Rows include baseline,
+clean and aged metrics, physical counts, zero retention writes/verifies,
+apparent-state hashes and residuals. Readiness smokes remain labelled as such.
+This branch does not enable CMO drift during HWA selection or on-chip training.
+
+An additional optional `drift_compensation` section replaces the retention stage
+with a native `compensate` stage that consumes a **completed** retention state
+index via `workflow plan --retention-source ARM:SEED=/absolute/retention_states.json`.
+It requires unchanged parent scientific sections and `retention.read_noise: false`.
+Its strict fields are `methods`, `calibration_sequences`, `row_column_iterations`
+and `gain_bounds`. Methods are `global`, `tile_global`, `row`, `column`,
+`row_column`, `global_shift` and `global_moments`. Calibration sequences are the
+first declared count from the training cohort; held-out data is never fitted.
+Global/tile/column/input-row gains use baseline-to-aged mean-absolute one-hot
+MVM responses. Combined row/column gains use fixed-iteration diagonal least
+squares. The last two methods match output means or means/variances after global
+gain, using programmed-array reference statistics. OPT has LayerNorm, so these
+are affine activation corrections, not BatchNorm-running-statistics updates.
+
+Digital input/output/per-tile operators act around the unchanged held apparent
+MVM. Native parent hashes, same-array snapshots, calibration serialization,
+one exact uncompensated control and frozen source parameters are checked.
+`workflow collect` emits `compensation.json` and `.csv`: absolute metrics,
+aging KL regained (undefined for an aging gap <=1e-6), required calibration reads,
+reference storage and digital parameter counts. No physical writes occur.
+
 ### Recovery context views (OPT)
 
 Optional top-level `recovery_views` keeps frozen HWA/deployment data unchanged
@@ -520,10 +705,10 @@ arms:
 
 | Artifact | Depends on |
 | --- | --- |
-| `feature_cache` | `network`, `data`, and `transfer_tests` when declared |
+| `feature_cache` | `network`, `data`, and `transfer_tests` and `task` when declared |
 | `device_bundle` | `network`, `devices`, `program_verify` |
 | `hwa_source` | `network`, `data`, `devices`, `deployment`, `program_verify`, shared `hwa` settings and its own arm |
-| `deployment` | all of the above for its arm, plus `defects`, and `transfer_tests` when declared |
+| `deployment` | all of the above for its arm, plus `defects`, and `transfer_tests` and `task` when declared |
 
 `transfer_tests` never determines a source, so adding a second test domain
 reuses existing sources. Each entry names a `label`, a pinned `corpus` (name
@@ -582,6 +767,12 @@ OPT=~/.cache/huggingface/hub/models--facebook--opt-125m/snapshots/27dcfa74d334bc
 # OPT, once per corpus: prints the name and SHA-256 for data.corpus
 python -m workflow corpus --name <corpus> --model-dir $OPT \
   --train train.txt --validation validation.txt --test test.txt
+# OPT labelled task: prints the task file and stream names and SHA-256 for task.choices and data.corpus
+python -m workflow task-data --task hellaswag --name <task> --model-dir $OPT \
+  --train train.parquet --validation validation.parquet --development-examples 2000 --split-seed <seed>
+# OPT fine-tuned teacher (opt_task_teacher.v1 config); declare its merged SHA-256 in network.teacher
+python -m ebl train --config teacher.json --output-dir results/teachers/<id> \
+  --teacher-weights $OPT/pytorch_model.bin --device-data $EBL_CORPUS_ROOT/<task>.pt
 python -m workflow check
 python -m workflow describe campaigns/<campaign>/lifecycles/<id>.json
 python -m workflow plan campaigns/<campaign>/lifecycles/<id>.json \
@@ -667,6 +858,13 @@ CMO has no historical loop to match bit for bit. Instead,
 - The legacy PCM pulse plant.
 - Repeated endpoint realizations of one assignment.
 - Per-epoch on-chip checkpoints; only final states are kept.
+- Labelled tasks other than HellaSwag, SST-2 and PIQA; generative, few-shot or
+  variable-K tasks; a `task` together with retention, drift compensation or
+  recovery views; masked (answer-only) objectives. Task LoRA as a deployed
+  digital adapter is a separate, escalated regime.
+- Analog LoRA with per-layer scaling, retention, recovery views or digital
+  adapters; LoRA arms beside other trained HWA arms; on-chip learning tested on
+  adapter arrays.
 - Device-independent PCM and CMO endpoint draws. As in the historical
   `GaussianEndpointArray`, programming noise (and CMO write noise) uses the
   execution device's generator, so CPU and CUDA runs of one lifecycle realize
@@ -685,8 +883,85 @@ then write the lifecycle:
 | --- | --- |
 | network family or model (e.g. another OPT size, analog attention) | a module in `workflow/networks/` with the functions listed in its `__init__.py`; `network` parsing and `PRIMARY_METRICS`/`CALIBRATIONS` in `workflow/lifecycle.py` |
 | data or metric | the family module (`build_cache`, `evaluate`) and its `data` parser |
+| labelled task or template | `TASKS` in `workflow/tasks.py`, `TASK_NAMES` in `workflow/lifecycle.py` |
+| teacher fine-tuning recipe | `workflow/teacher_lora.py` (`opt_task_teacher.v1`) |
+| analog adapters, targeted faults, adapter training | `OptMlpSuffix` (`analog_lora`), `workflow/devices.py` (`target`), `workflow/hwa.py` (`train_lora`) |
 | defect kind or placement | `FAILURE_KINDS` and `_defects` in `workflow/lifecycle.py`; fault construction in `workflow/devices.py` |
 | technology, P&V method or relaxation | `TECHNOLOGIES` in `workflow/lifecycle.py`; `workflow/devices.py`, `workflow/program_verify.py` |
 | on-chip update law | `TECHNOLOGIES[...].update_laws`; `make_writer` in `workflow/onchip.py` |
 
 Never add a per-study runtime or bypass the stages for one experiment.
+
+### Custom drift recovery execution
+
+The optional `drift_recovery` branch uses the shared writable custom drift engine
+and a frozen HWA source. `curve_validation_sequences` optionally selects a fixed
+prefix for trajectory measurements while the full `validation_sequences` cohort
+still selects calibration and learning rate. `heldout_evaluation: "final"` limits
+transfer cohorts to each trajectory endpoint; its durability report uses validation.
+Omitting these options retains the original evaluation schedule and config digest.
+
+Optional `execution` declares `phase` (`prepare`, `screen`, or `trajectory`), a
+deterministic work-unit `key`, the completed `prepared_run` path, and completed
+`screen_runs`. All units use native `ebl` bundles. Preparation owns the shared FP32
+reference caches, masks, calibration selection and fresh baselines. Consumers bind
+the scientific settings, source, assignment, token identities and preparation hash;
+trajectory execution requires complete, nonduplicate LR-screen coverage. Whole
+trajectories are independently executable, with the same numerical path as a full
+run. This supports continuation between completed units, not resumption midway
+through an interrupted optimizer event.
+
+### Scalar power-law retention control
+
+For a synthetic, conductance-independent drift control, `retention.power_law`
+declares exactly `mean_us`, increasing nonnegative `sigmas_us`, positive
+`mean_exponent`, `spread_exponent`, `reference_seconds`, positive
+`development_sequences`, and `first_read_policy: "clamp_programmed"`.
+This currently requires `models: ["reram_cmo"]`, `case_labels: ["nominal"]`,
+read noise off, and no drift compensation. It preserves upstream HWA/cache
+provenance and evaluates the first declared number of development sequences.
+Its sigma list is crossed with `retention.seconds`, plus one first-read row.
+
+The existing native CMO programming draw is evaluated separately, then clamped
+once into the native window to define G_p. This explicitly declared admission
+differs from legacy unclamped CMO programming; counts and raw-programming metrics
+are reported. Every age evaluates clip(G_p + m u^alpha + s u^beta epsilon),
+u=t/t_ref, using the same saved per-device epsilon for all times and amplitudes.
+The state stores G_p and epsilon explicitly, and verifies zero-time identity and
+replay. There are no defects, calibration or additional writes. This is a
+synthetic assumed temporal coupling, not a measured device time process.
+
+FP32 clean post-HWA and digital-teacher logits are cached once on the exact token
+cohort, retained as hashed native artifacts, and reused for all rows. Outputs add
+clean-HWA KL, spread amplitude, perplexity ratio to first read, and clipping/drift
+statistics. `workflow collect` retains each time/sigma row separately.
+
+### Initial programming with a fitted Flowers model
+
+The optional `initial_programming` section runs one preparation policy per native
+stage and realization, then evaluates passive retention. Its strict settings are
+defined by `training.initial_programming_config.InitialProgramming`. It requires
+a pinned frozen OPT/CMO HWA source, a pinned Flowers JSON model and token-cohort
+hash, only the nominal defect case, no other recovery branch and no extra read
+noise. Upstream source/cache provenance is unchanged when this optional branch
+is absent or added. The legacy CMO endpoint law is bypassed explicitly: achieved
+first-read anchors equal requested feasible targets.
+
+Policies P0–P6 implement immediate release, waiting, mean prebias, one selective
+pair-rewrite pass, their combination, matched random rewrites and high common-mode
+mapping. Each full rewrite resets only touched cells and draws fresh randomness.
+The Gaussian-copula Markov kernel preserves the supplied cross-age law; the NIG
+transform applies to the total residual. A shared transition grid and named
+streams preserve matched untouched trajectories across policies. Read snapshots
+are held across tokens. Observations are explicitly clipped after sampling;
+clipping never modifies latent history. All positive read ages must be 3–6242 s.
+
+The native stage records initial/aged PPL, original-teacher references, clipped
+and raw diagnostics by starting-conductance bin, real preparation clocks and
+full-program/read counts. Final apparent conductances and selected pair masks
+are saved and replayed exactly. Mid-trajectory resume is unsupported. The
+`initial_programming_measurements`, `initial_programming_summary`,
+`initial_programming_state` and `flowers_model` artifacts are collected through
+the standard workflow. `workflow collect` exports one row per policy,
+realization and age, flagging duplicate coverage. This branch does not assert
+measured programming timing, pulse cost or physical equivalence of populations.

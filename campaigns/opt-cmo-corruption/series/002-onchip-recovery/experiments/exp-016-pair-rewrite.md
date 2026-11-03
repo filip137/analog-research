@@ -6,6 +6,365 @@ hypotheses: []
 ---
 # exp-016: fault-aware pair rewrite after deployment
 
+## Fifth phase: learning through the verified partner, gmin/gmax 2/4/6%
+
+**Assigned October 15, 2026, about 20:50.** Phase 4's learning wrote only to
+the original active device. Where the active device is stuck, the rewrite
+made the reference the useful device, but learning could not touch it: its
+commands hit the stuck device and used up the four-attempt cap (0.79–2.55M
+wasted attempts). The user asked whether learning trains "whatever device in
+the cell" and, when told it does not, asked to launch the partner-routed arm
+at 01:00.
+
+- **Cases and starting state:** phase 4's, i.e. `gmin`/`gmax` at 2, 4 and 6% on
+  array **271002 only**, starting from the same phase-3 deployment (`db378a16…`).
+- **Arms:** phase 4's three arms unchanged (`none`, `pair_rewrite_verify`,
+  `pair_rewrite_verify_recovery`), plus exp-017's
+  `pair_rewrite_verified_partner_recovery`. It is the same recipe with
+  `write_roles: verified_partner`:
+  - the role map comes from the controller's original verify scan, before the
+    rewrite, and never from the hidden fault map;
+  - train the active device unless it was flagged stuck, else the reference if
+    it was not flagged, else block the pair;
+  - a reference write applies the opposite sign (q = a − r); the cap counts
+    issued attempts per selected device;
+  - undetected faults still receive and waste attempts.
+- **Expectation, not a rule:** routing can retune the weights the rewrite
+  compensated through the partner. It cannot repair the clipped wrong-sign
+  weights, whose partner is already at its bound, and those dominate the
+  leftover. exp-017 at random 3% found no gain over original-active training.
+- **Rule:** sign rule per kind × rate on 271002, both held-out domains, teacher
+  KL primary. Partner learning "adds" over original-active learning if its
+  teacher KL is lower in both domains, "harms" if higher in both, "mixed"
+  otherwise. The same reading is given against `pair_rewrite_verify`. The
+  `none`, `pair_rewrite_verify` and `pair_rewrite_verify_recovery` arms must
+  reproduce phase 4 exactly. Report perplexity, writes, reference writes,
+  attempts on stuck devices and touched devices. Single-array and exploratory;
+  no calibration arm.
+- **Budget:** 0.5 GPU-hour and 20 GB on one idle 5090 (fifi), started at
+  01:00 Paris (night rule), finishing by 07:30. One predeclared `--resume`
+  retry after a failed first run.
+  - Estimate: phase 4 took 684 s for three arms; about 15–17 minutes.
+
+### Fifth-phase execution handoff
+
+Owner: this session (single Monitor).
+
+- **Lifecycle:** `campaigns/opt-cmo-corruption/lifecycles/opt125m-cmo-l6-exp16-pair-rewrite-std3-kinds-partner-learn.json`
+  (digest `7bfdd5f9…`, file sha256 `5a8a0cd3…`).
+  - Generated in the `b0c1f06` worker on fifi by `exp16_partner_lifecycle.py`
+    from the phase-4 lifecycle (`f582c5db…`). It changes only `lifecycle_id`,
+    `question` and the appended arm; the planned stage config differs from
+    phase 4's only in those fields.
+- **Plan and manifest:** `workflow plan` on fifi (cuda:0, one CPU thread, as in
+  phase 4); single-stage manifest `campaign-271002.json` (`c286b459…`) pins
+  `device_state` to deployment `db378a16…` and the exp-013 std3 cache and
+  devices. Dry run passed.
+- **Run:** fifi tmux `exp16-partner-0100` (`partner-at-0100-fifi.sh`, started
+  20:51) sleeps until 01:00 on October 16, then launches only when no process
+  holds the GPU, checking every 5 minutes until 07:30; if the GPU never frees,
+  it logs that and does not launch.
+  - The user then allowed "all gpus available". At 00:21 on October 16:
+    another user ran mumax3 jobs on loulou and trex, and had a CUDA MPS
+    server (no compute jobs) on riri. nom-cool-1 was unreachable, and
+    nom-cool-2's /home had only 7 GB free. The job is one stage of about 15
+    minutes, so it is not split.
+  - **Replaced launcher, 00:21:** fifi's tmux `exp16-partner-0100` now runs
+    `partner-run.sh fifi wait`: the same schedule, idle check and retry,
+    plus an atomic claim (`launch/exp16-partner/claim.lock` on fifi) before
+    launching.
+  - **Fallback on riri:** the 271002 deployment (`db378a16…`), lifecycle, plan
+    and manifest (`c286b459…`) were copied to riri's `b0c1f06` worker at the
+    same paths; riri's exp-013 cache/devices hashes match; dry run passed.
+    A coordinator on nom-cool-2 (tmux `exp16-partner-coord`) checks from
+    01:05 every 5 minutes until 07:30. If fifi has not claimed the run and
+    riri's GPU holds no process of any user, it claims the lock and starts
+    `partner-run.sh riri` in riri tmux `exp16-partner-riri`. riri's log is
+    `partner-chain-riri.log`.
+  - Worker outputs: `<worker>/results/lifecycles/opt125m-cmo-l6-exp16-pair-rewrite-std3-partner-learn/runs-271002`.
+  - Logs: `opt-cmo-exp1/launch/exp16-partner/partner-chain-fifi.log` and
+    `partner-271002.log`.
+- **Evidence (after collection):** `results/lifecycles/opt125m-cmo-l6-exp16-pair-rewrite/kinds-partner-learn-std3/`;
+  the launch files are already in its `launch/`.
+- **Complete, 01:44 on October 16.**
+  - fifi's GPU was held by another user's process from 01:00 to 01:25. The
+    coordinator then claimed riri, which ran 01:25–01:44 and exited with 0.
+    fifi's launcher saw the claim and exited without launching.
+  - Full inspection passed, and the three phase-4 arms reproduce phase 4
+    exactly.
+  - Cost: 1,156 s; 20 GB of raw runs on riri.
+  - Collected copies, both hosts' launch logs and `exp16_partner_report.py`
+    are in the evidence folder.
+  - All partner tmux sessions have ended; nothing is running.
+  - Results: [fifth phase](../results/exp-016.md#fifth-phase-learning-through-the-verified-partner-array-271002-october-16).
+
+## Fourth phase: on-chip learning on top of the rewrite, gmin/gmax 2/4/6%
+
+**Assigned October 15, 2026.** The user asked "will we test also on-chip
+learning on top?". When asked, they chose rates **2, 4 and 6%** and **learning
+only**: rewrite + learning against rewrite only. There is no calibration arm, so
+this phase cannot show whether digital calibration alone would match learning.
+
+- **Cases:** `gmin` and `gmax` at 2, 4 and 6% per physical device on arrays
+  271002–271004: 18 starting conditions.
+- **Starting state:** the phase-3 sweep deployments themselves. The lifecycle
+  keeps the sweep's `defects` (all 12 cases) and selects the six cases with
+  `onchip.case_labels`.
+- **Arms**, all from the same P0:
+  - `none` and `pair_rewrite_verify`: reference and anchor. They must
+    reproduce the phase-3 hashes.
+  - `pair_rewrite_verify_recovery`: the frozen exp-016 arm 5. It is the
+    verify rewrite followed by the exp-013 cap-4 recipe:
+    `cmo_thresholded_write_adam`, accumulated nominal 2σ threshold,
+    LR 0.003, 256 updates, 2,097,152 tokens, physical write noise, at most
+    four attempts per active device, data seed 20261008 and on-chip seed 53.
+    It uses the original-active update law and the fixed final endpoint.
+  - The learning rate is not re-tuned. It was chosen for noisy recovery from
+    unrewritten arrays, so a negative result does not rule out other recipes.
+- **Rule:** the frozen R6 sign rule, applied per kind × rate. Learning "adds"
+  if its teacher KL is below `pair_rewrite_verify` on all three arrays in both
+  held-out domains, "harms" if above on all of them, and is "mixed" otherwise.
+  Report perplexity, the paired changes and the write cost (writes, attempts on
+  stuck devices, touched devices) next to the rewrite cost.
+- **Budget:** 1.5 GPU-hours and 60 GB, on fifi and riri (the two-5090 daytime
+  limit) after the phase-3 stages end, finishing by 21:30 Paris. One understood
+  operational retry.
+  - Estimate: about 95 s per learning endpoint (the exp-013 rate on a 5090)
+    plus about 35 s per held endpoint, so about 17 minutes per array.
+
+### Fourth-phase execution handoff
+
+Owner: this session (single Monitor).
+
+- **Lifecycle:** `campaigns/opt-cmo-corruption/lifecycles/opt125m-cmo-l6-exp16-pair-rewrite-std3-kinds-learn.json`
+  (digest `f582c5db…`).
+  - Generated in the `b0c1f06` worker by `launch/exp16-kinds/exp16_learn_lifecycle.py`
+    from the phase-3 lifecycle (`3b4c688c…`).
+  - Only `lifecycle_id`, `question`, `onchip.arms` and `onchip.case_labels`
+    change. The arms are the helper's frozen `HOLD_ARMS` `none` and
+    `pair_rewrite_verify`, plus `RECOVERY_ARM`.
+- **Plan:** `workflow plan` on fifi; the identical plan directory was copied
+  to riri.
+- **Manifests:** one single-stage manifest per array
+  (`launch/exp16-kinds/exp16_single_stage.py`), each pinning `device_state`
+  to that array's phase-3 deployment:
+  - 271002: `57ffbff3…`, deployment `db378a16…`;
+  - 271003: `09f1f043…`, deployment `7d1355ce…`;
+  - 271004: `57c1dd14…`, deployment `d5544e27…`.
+
+  All three dry runs passed.
+- **Phase-3 state at launch:** on fifi, `271003` completed at 16:09. The
+  watcher then ended fifi's campaign as `271004` attempt-001 started; that
+  attempt is cancelled and preserved. riri is still running `271004`.
+- **Run:** chained launchers start once the phase-3 work is done and the GPU
+  is idle. If another process holds the GPU, they log it and do not launch.
+  - fifi: tmux `exp16-learn-chain` (`learn-chain-fifi.sh`) runs `271002`
+    (launched 16:25) and then `271003`. Outputs go to `<learn>/runs-27100x`,
+    logs to `learn-27100x.log`.
+  - riri: tmux `exp16-learn-chain` (`learn-chain-riri.sh`) was to run
+    `271004` after riri's phase-3 `271004` exited with 0.
+- **Scope reduced by the user, about 16:30:** "do one array only per task - no
+  need to do many seeds". Phase 4 is now **array 271002 only** (6 starting
+  conditions, 18 endpoints). Neither cancelled run had started:
+  - `271003`: its manifest was renamed `campaign-271003.cancelled-by-user.json`,
+    so fifi's chain exits without running it;
+  - `271004`: riri's waiting chain was stopped.
+
+  The R6 sign rule is read on 271002 alone, per kind × rate in both held-out
+  domains: a single-array, exploratory reading with no multi-array claim.
+  Phase 3's `271004` on riri was already running and is left to finish.
+- **Complete, 16:36.**
+  - `271002` ran 16:25–16:36 on fifi, exited 0 and passed full inspection.
+    The anchor arms reproduce phase 3 exactly.
+  - fifi's chain then exited with code 2 on the set-aside `271003` manifest,
+    as intended; no attempt was created.
+  - Cost: 684 s and 13 GB.
+  - Nothing is running.
+  - Results: [fourth phase](../results/exp-016.md#fourth-phase-on-chip-learning-on-top-of-the-rewrite-array-271002-october-15).
+
+## Third phase: std3 gmin/gmax rate sweep, 1–6%
+
+**Assigned October 15, 2026, after the second phase.** The user asked to
+"increase the percentage of the corrupt devices. do a sweep from 1 to 6".
+
+- **Cases:** `gmin` and `gmax` at 1, 2, 3, 4, 5 and 6% per physical device:
+  12 cases per array. Open and random are not included.
+  - The 3% cases repeat phase 2 inside the new lifecycle. Their held P0 and
+    rewritten states must reproduce the phase-2 apparent hashes, which also
+    shows the sweep's deployments are equivalent.
+- **Unchanged from phase 2:** std3, arrays 271002–271004 and the four frozen
+  held arms. Every lifecycle field except `defects.cases`, the id and the
+  question text is the same.
+  - The new lifecycle is `opt125m-cmo-l6-exp16-pair-rewrite-std3-kinds-sweep.json`,
+    generated from the frozen `std3-kinds` lifecycle by the same helper at
+    `b0c1f06`.
+  - Execution reuses the phase-2 path: a trimmed plan with pinned inputs, on
+    loulou.
+- **Report:** WikiText and generated perplexity, healthy versus faulty
+  versus rewritten, for each kind × rate × array. Teacher KL gap closed and
+  R1–R3 are evaluated per kind × rate, never pooled.
+- **Healthy reference:** the phase-1 nominal rows.
+- **Budget:** 1.5 GPU-hours, 120 GB on loulou, ending by 21:30 Paris today;
+  one understood operational retry.
+  - Estimate from phase 2: about 18 s per endpoint and about 12 s per deployed
+    case, so about 1,000 s per array and about 50 minutes in total.
+- **Local evidence root:**
+  `results/lifecycles/opt125m-cmo-l6-exp16-pair-rewrite/kinds-sweep-std3/`.
+
+### Third-phase execution handoff
+
+Owner: this session (single Monitor). **Launched October 15, 15:32 Paris, on
+fifi.**
+
+- **Host change:** loulou was planned, but at 15:31 another user's job
+  (kellian) occupied it. riri and trex were also busy.
+  - fifi (an idle RTX 5090) received the same `b0c1f06` bundle clone, the
+    frozen std3 source and the pinned exp-013 cache/devices; all hashes
+    verified.
+  - On fifi, `check-realization` for 271002 is identical to the exp-013
+    random-3% P0.
+  - fifi has a CUDA driver failure history (exp-009, exp-017). One understood
+    retry is allowed.
+- **Lifecycle:** `campaigns/opt-cmo-corruption/lifecycles/opt125m-cmo-l6-exp16-pair-rewrite-std3-kinds-sweep.json`
+  (digest `3b4c688c…`).
+  - Generated by `launch/exp16-kinds/exp16_sweep_lifecycle.py` in the worker.
+    It first asserts that the helper reproduces the frozen std3-kinds digest.
+  - Only `defects`, `lifecycle_id` and `question` change.
+- **Manifest:** the trimmed manifest `26bc6a67…` keeps the deploy and on-chip
+  stages for 271002–271004, with pinned inputs. Its dry run passed.
+- **Run:** tmux `exp16-sweep` on fifi. Log:
+  `opt-cmo-exp1/launch/exp16-kinds/sweep-run.log`. Output:
+  `<worker>/results/lifecycles/opt125m-cmo-l6-exp16-pair-rewrite-std3-sweep/runs/`.
+- **First attempt, failed about 15:39.**
+  - The three deployments completed.
+  - `onchip__…__271002` attempt-001 failed with exit −11 after about 45 s:
+    `dmesg` shows a segfault inside `libcuda.so.610.57.04` at 15:39:00. That
+    is the same signature as fifi's earlier driver faults.
+  - The failed attempt is preserved, along with its partial run directory and
+    log `sweep-run.log`.
+  - loulou, riri and trex were all occupied by other users.
+- **Retry 1 (the single allowed retry), 15:40 on fifi.** The same manifest
+  with `--resume` runs from unchanged inputs; the deployments are reused, not
+  redeployed.
+  - Session `exp16-sweep-r1`, log `sweep-run-retry1.log`; the on-chip stage
+    is `attempt-002`.
+  - This is not a replicate.
+  - If it fails again: stop and escalate. Either wait for loulou or ask the
+    user.
+  - **Outcome:** `onchip__…__271002` attempt-002 completed, and `271003` then
+    started on fifi.
+- **Placement amendment, 16:08 (the user noted riri was free).** The on-chip
+  stages were wrongly estimated at about 35 minutes per array, from a
+  misread partial progress count. They actually take about 15 minutes:
+  `271002` attempt-002 ran 15:40–15:55 and `271003` 15:55–16:09. The move
+  saved little time. `onchip__…__271004` moved to riri
+  (an idle RTX 5090). With fifi and riri, the daytime limit of two 5090s holds.
+  - riri received the same `b0c1f06` clone and the identical plan directory.
+  - It also received fifi's `deploy__…__271004` run directory at the same
+    absolute path; `deployment.pt` is `d5544e27…` on both hosts.
+  - riri's exp-013 std3 cache/devices are linked as `exp16-reused/std3`; the
+    hashes are verified and the stage input paths are identical.
+  - Manifest `campaign-riri-271004.json` (`693fdfea…`): the single stage with
+    `device_state` pinned to that deployment. Dry run passed. Output:
+    `<sweep>/runs-riri`, tmux `exp16-sweep-riri`, log `sweep-riri-271004.log`.
+  - On fifi, the watcher `stop-before-271004.sh` (tmux `exp16-stop-271004`)
+    ends fifi's campaign when it starts `onchip__…__271004`, so the array is
+    not computed twice. Any cancelled fifi attempt is preserved.
+  - riri's system clock is about 85 minutes behind the other hosts. Its run
+    timestamps are skewed; this is not scientific.
+  - This is a placement change, not a retry or a replicate.
+- **Complete, about 16:35.**
+  - Collection ran per completed attempt, using `exp16_attempts_collect.py`
+    on each host because fifi's aggregate file is not final after the
+    deliberate stop.
+  - All completed stages passed full inspection, and the 3% anchor is exact.
+  - Compute was about 1.0 GPU-hour of the 1.5 cap. Completed stages took
+    2,064 s on fifi and 1,457 s on riri, plus the failed and cancelled
+    attempts and the readiness check.
+  - Storage was 85 GB of 120: 57 GB on fifi and 28 GB on riri.
+  - Results: [third phase](../results/exp-016.md#third-phase-std3-gminmax-sweep-16-october-15).
+
+## Second phase: std3 with gmin, gmax and open at 3%
+
+**Assigned October 15, 2026 (implementation and execution).** The user asked:
+"test 3% of the weights at g_min and 3% at g_max on OPT (with the
+program-and-verify scheme) and report the PPL drop". This runs the deferred
+`kinds` part of the frozen comparison below, reduced to the std3 source. The
+frozen `std3-kinds` lifecycle and helper are used unchanged, and nothing else
+from the deferred design is launched.
+
+- **Rate:** 3% per physical device (`rate_ppm` 30000), as in every earlier
+  exp-016 case. Each kind has exactly the random-3% fault positions, so about
+  5.8% of weights have one stuck device. *Proposed reading of "3% of the
+  weights"; stated to the user at launch.*
+- **Cases:** `gmin_30000ppm` and `gmax_30000ppm`, as requested. `open_30000ppm`
+  is part of the same frozen lifecycle and deployment and is reported
+  separately at little extra cost.
+- **Arms:** the four frozen held arms: `none`, `active_rewrite_oracle`,
+  `pair_rewrite_oracle` and `pair_rewrite_verify`. There is no learning arm.
+- **Source and arrays:** frozen std3 (`86522e23…`), assignments 271002–271004.
+  New deployments use the exp-013 deployment settings on an RTX 5090.
+  `check-realization` must confirm that healthy devices equal the exp-013
+  random-3% P0; otherwise kinds and random differ by more than stuck values.
+- **Healthy reference D0:** the phase-1 `nominal`/`none` rows of the same
+  arrays, which reproduce the exp-013 healthy P0.
+- **Report:** the user's headline is the perplexity drop. Report healthy,
+  faulty and rewritten perplexity on WikiText and generated text for each kind
+  and array, with teacher KL and gap closed alongside. Apply the frozen R1–R3
+  per kind (R4–R6 do not apply).
+- **Expected, from the desk estimate and the weight-level partner geometry:**
+  - gmin/gmax: the verify rewrite passes R1 at least as clearly as `random`;
+    the residual is about half the faulty weights left at zero;
+  - open: a larger residual, because 0 µS is below the 9 µS floor;
+  - active-only: possibly worse than no rewrite.
+- **Budget:** 1 GPU-hour, 40 GB on loulou, ending by 21:30 Paris today. One
+  understood operational retry. Estimate: about 900 s to deploy, then about
+  300 s for each of three slices on an RTX 5090.
+- **Host:** loulou (RTX 5090; idle at 14:46). Staging copies the frozen std3
+  source from trex.
+- **Local evidence root:**
+  `results/lifecycles/opt125m-cmo-l6-exp16-pair-rewrite/kinds-std3/`.
+
+### Second-phase execution handoff
+
+Owner: this session (single Monitor). **Launched October 15, about 14:50 Paris.**
+
+- **Worker:** loulou, a clean clone of `b0c1f06` from bundle `06287642…` at
+  `/home/filip/analog-research/opt-cmo-exp1/hwa-exp16-kinds-20261015`.
+- **Staged source:** frozen std3 (`86522e23…`), copied from trex to
+  `opt-cmo-exp1/inputs/exp1g-frozen-sources/std3/`.
+- **Pinned inputs:** the exp-013 std3 `cache.pt` (`b7438a37…`) and
+  `devices.pt` (`7bc1bd14…`), reached through `opt-cmo-exp1/exp16-kinds-reused/std3`.
+- **Operational deviation (no science change):**
+  - The helper's untested `deploy_campaign` rejects the kinds lifecycle,
+    because exp1g's `deployment_manifest` does not expect its `onchip__`
+    stages.
+  - Instead, the standard `workflow plan` manifest of the frozen
+    `std3-kinds` lifecycle (digest verified) is trimmed by
+    `launch/exp16-kinds/exp16_kinds_manifest.py`. It keeps
+    `deploy__…__27100{2,3,4}`, with the frozen source as weights, and
+    `onchip__…__27100{2,3,4}`.
+  - Both stages take the pinned cache and devices instead of recomputing them.
+  - Result: `campaign-kinds.json` (`0fb2f7bc…`); the dry run resolved.
+  - There is no portable materialization step: on-chip consumes each
+    in-campaign deployment directly.
+- **Readiness:** `check-realization` for std3/271002 on loulou found the gmin,
+  gmax and open arrays identical to the exp-013 random-3% P0 at all
+  54,924,408 healthy devices.
+- **Run:** tmux `exp16-kinds` on loulou. Log:
+  `opt-cmo-exp1/launch/exp16-kinds/run.log`. Output:
+  `<worker>/results/lifecycles/opt125m-cmo-l6-exp16-pair-rewrite-std3-deploy/runs/`.
+- **Complete, about 15:03.** All six stages exited 0 with no retries.
+  - Full artifact inspection passed.
+  - `check-realization` is identical on all three arrays.
+  - `recovery_collect export` assumes one-stage campaigns, so collection used
+    `launch/exp16-kinds/exp16_kinds_collect.py` instead: `ebl runs inspect`
+    plus `workflow collect` per stage.
+  - The report uses the frozen helper's `checked_report` plus a lineage check.
+  - Compute was under 0.3 GPU-hours; storage was 22 GB on loulou.
+  - The tmux session `exp16-kinds` has ended, and nothing is running.
+  - Results: [second phase](../results/exp-016.md#second-phase-std3-with-gmin-gmax-and-open-at-3-october-15).
+
 ## Completed first phase: healthy and random 3% only
 
 **Reviewed October 13, 2026:** all nine jobs and 90 endpoints completed and

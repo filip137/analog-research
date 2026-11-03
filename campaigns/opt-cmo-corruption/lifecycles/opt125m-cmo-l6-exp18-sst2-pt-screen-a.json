@@ -1,0 +1,203 @@
+{
+  "data": {
+    "corpus": {
+      "name": "sst2-opt125m-v1-stream",
+      "sha256": "ace4201b30b6936be6c0f8acaae8d8a2aa648b3611a9c3e1cde45979e2f40e6c"
+    },
+    "data_seed": 20261008,
+    "development_sequences": 128,
+    "evaluation": "test",
+    "hwa_sequences": 6144,
+    "max_examples": 0,
+    "recovery_sequences": 2048,
+    "sequence_length": 256,
+    "test_sequences": 64
+  },
+  "defects": {
+    "arrays_per_die": 48,
+    "cases": [
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "none",
+        "rate_ppm": 0
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 30000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "gmax",
+        "rate_ppm": 30000
+      }
+    ],
+    "persistence": "permanent",
+    "placement": "hierarchical_die_array"
+  },
+  "deployment": {
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias",
+    "encoding": "active_reference_pair",
+    "read_noise": 0.0,
+    "scaling": "per_output_channel_absmax",
+    "tile_size": 256
+  },
+  "devices": {
+    "assignment_seeds": [
+      271001,
+      271002
+    ],
+    "endpoint_seed_offset": 10000,
+    "model": "aihwkit_1.1.0_reram_cmo",
+    "noise_scale": 1.0,
+    "selection_seeds": [
+      211001,
+      211002
+    ],
+    "technology": "cmo"
+  },
+  "hwa": {
+    "arms": [
+      {
+        "corruption": null,
+        "digital_learning_rate": 1e-05,
+        "id": "standard_hwa_model",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "scope": "model",
+        "selection_cases": [
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "none",
+            "rate_ppm": 0
+          },
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "random",
+            "rate_ppm": 30000
+          }
+        ]
+      }
+    ],
+    "augment": false,
+    "batch_size": 32,
+    "epochs": 50,
+    "learning_rate": 0.005,
+    "lr_decay": 1.0,
+    "lr_milestones": [],
+    "lr_schedule": {
+      "kind": "cosine_warmup_decay",
+      "min_factor": 0.2,
+      "total_steps": 3200,
+      "warmup_steps": 26
+    },
+    "noise_model": "additive_gaussian_weight",
+    "noise_scaling": "output_channel_abs_max",
+    "noise_std": 0.03,
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "seed": 41,
+    "selection": {
+      "every_epochs": 8,
+      "extension_epochs": 0
+    },
+    "sequences_per_epoch": 2048
+  },
+  "lifecycle_id": "opt125m-cmo-l6-exp18-sst2-pt-screen-a",
+  "network": {
+    "analog_decoder_layers": 6,
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m"
+  },
+  "onchip": {
+    "accumulate_updates": true,
+    "arms": [
+      {
+        "calibration": false,
+        "id": "none",
+        "weights": "hold"
+      },
+      {
+        "calibration": true,
+        "id": "calibration",
+        "weights": "hold"
+      },
+      {
+        "calibration": false,
+        "fault_rewrite": {
+          "detection": "verify",
+          "roles": "pair",
+          "seed": 241016,
+          "threshold_sigma": 5.0
+        },
+        "id": "pair_rewrite_verify",
+        "weights": "hold"
+      },
+      {
+        "calibration": true,
+        "fault_rewrite": {
+          "detection": "verify",
+          "roles": "pair",
+          "seed": 241016,
+          "threshold_sigma": 5.0
+        },
+        "id": "pair_rewrite_verify_calibration",
+        "weights": "hold"
+      },
+      {
+        "calibration": false,
+        "fault_rewrite": {
+          "detection": "verify",
+          "roles": "pair",
+          "seed": 241016,
+          "threshold_sigma": 5.0
+        },
+        "id": "pair_rewrite_verify_recovery",
+        "weights": "learn"
+      }
+    ],
+    "batch_size": 32,
+    "calibration_learning_rate": 0.0001,
+    "case_labels": [
+      "random_30000ppm"
+    ],
+    "epochs": 4,
+    "learning_rate": 0.001,
+    "max_write_attempts_per_device": 4,
+    "objective": "teacher_kl",
+    "seed": 53,
+    "threshold_sigma": 2.0,
+    "training_cohort": "recovery",
+    "update_law": "cmo_thresholded_write_adam"
+  },
+  "program_verify": {
+    "acceptance_percent": 2.0,
+    "method": "gaussian_endpoint",
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "question": {
+    "decision": "Select the weight LR on rewrite+learn and the calibration LR on rewrite+calibration by minimum final task_development choice_kl (ties: lower LR). campaigns/opt-cmo-corruption/series/003-finetuned-tasks/experiments/exp-018-finetuned-task-recovery.md",
+    "evidence_class": "exploratory_model_based",
+    "primary_metric": "task_accuracy_norm_percent",
+    "text": "exp-018 development screen a: weight LR 0.001, calibration LR 0.0001, PT sst2, array 271001, random 3%."
+  },
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "task": {
+    "choices": {
+      "name": "sst2-opt125m-v1",
+      "sha256": "d0e4e957aab38dd2da79b7ab3b54bbf77cd8b646dbb593e610070be8718c66bb"
+    },
+    "decision": "acc_norm",
+    "development_examples": 3000,
+    "evaluation_examples": 100,
+    "name": "sst2"
+  }
+}

@@ -1,0 +1,11 @@
+{
+ "sst2": {
+  "teacher_id": "exp18-sst2-lora-r16-lr3e-4",
+  "learning_rate": "3e-4",
+  "sha256": "f8e351cb215f6016b8b21f33c98f9ef6a415abadc2c11ffb92365780581d60b3",
+  "run_dir": "exp18-sst2-lora-r16-lr3e-4/20261015T152136.937569Z-bbdf2341-1b82d765",
+  "development_accuracy_norm_percent": 94.5,
+  "zero_shot_accuracy_norm_percent": 58.5,
+  "g1_gain_points": 36.0
+ }
+}

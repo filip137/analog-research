@@ -1,0 +1,253 @@
+{
+  "data": {
+    "corpus": {
+      "name": "piqa-opt125m-v1-stream",
+      "sha256": "25670635606c8308d93b8570e82928d89e4313bf4052d8afed49619106af2a05"
+    },
+    "data_seed": 20261008,
+    "development_sequences": 128,
+    "evaluation": "test",
+    "hwa_sequences": 2048,
+    "max_examples": 0,
+    "recovery_sequences": 2048,
+    "sequence_length": 256,
+    "test_sequences": 64
+  },
+  "defects": {
+    "arrays_per_die": 48,
+    "cases": [
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "none",
+        "rate_ppm": 0
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 10000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 10000,
+        "target": "base"
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 10000,
+        "target": "adapter"
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 30000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 30000,
+        "target": "base"
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 30000,
+        "target": "adapter"
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "gmax",
+        "rate_ppm": 30000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "gmax",
+        "rate_ppm": 30000,
+        "target": "base"
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "gmax",
+        "rate_ppm": 30000,
+        "target": "adapter"
+      }
+    ],
+    "persistence": "permanent",
+    "placement": "hierarchical_die_array"
+  },
+  "deployment": {
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias",
+    "encoding": "active_reference_pair",
+    "read_noise": 0.0,
+    "scaling": "per_output_channel_absmax",
+    "tile_size": 256
+  },
+  "devices": {
+    "assignment_seeds": [
+      271002
+    ],
+    "endpoint_seed_offset": 10000,
+    "model": "aihwkit_1.1.0_reram_cmo",
+    "noise_scale": 1.0,
+    "selection_seeds": [
+      211001,
+      211002
+    ],
+    "technology": "cmo"
+  },
+  "hwa": {
+    "arms": [
+      {
+        "base_source": {
+          "name": "exp1g-std3",
+          "sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028"
+        },
+        "id": "lora_lr1em4",
+        "learning_rate": 0.0001,
+        "method": "lora",
+        "noise_strength": 1.0,
+        "selection_cases": [
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "none",
+            "rate_ppm": 0
+          }
+        ],
+        "warmup_fraction": 0.06
+      },
+      {
+        "base_source": {
+          "name": "exp1g-std3",
+          "sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028"
+        },
+        "id": "lora_lr3em4",
+        "learning_rate": 0.0003,
+        "method": "lora",
+        "noise_strength": 1.0,
+        "selection_cases": [
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "none",
+            "rate_ppm": 0
+          }
+        ],
+        "warmup_fraction": 0.06
+      },
+      {
+        "base_source": {
+          "name": "exp1g-std3",
+          "sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028"
+        },
+        "id": "lora_lr1em3",
+        "learning_rate": 0.001,
+        "method": "lora",
+        "noise_strength": 1.0,
+        "selection_cases": [
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "none",
+            "rate_ppm": 0
+          }
+        ],
+        "warmup_fraction": 0.06
+      }
+    ],
+    "augment": false,
+    "batch_size": 32,
+    "epochs": 4,
+    "learning_rate": 0.0003,
+    "lr_decay": 1.0,
+    "lr_milestones": [],
+    "noise_model": "additive_gaussian_weight",
+    "noise_scaling": "output_channel_abs_max",
+    "noise_std": 0.03,
+    "objective": "task_choice_token_mean",
+    "optimizer": "adam",
+    "seed": 41,
+    "selection": {
+      "every_epochs": 1,
+      "extension_epochs": 0
+    }
+  },
+  "lifecycle_id": "opt125m-cmo-l6-exp19-analog-lora-piqa",
+  "network": {
+    "analog_decoder_layers": 6,
+    "analog_lora": {
+      "alpha": 32.0,
+      "rank": 16
+    },
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m"
+  },
+  "onchip": {
+    "accumulate_updates": true,
+    "arms": [
+      {
+        "calibration": false,
+        "id": "none",
+        "weights": "hold"
+      },
+      {
+        "calibration": false,
+        "fault_rewrite": {
+          "detection": "verify",
+          "roles": "pair",
+          "seed": 241016,
+          "threshold_sigma": 5.0
+        },
+        "id": "pair_rewrite_verify",
+        "weights": "hold"
+      }
+    ],
+    "batch_size": 32,
+    "calibration_learning_rate": 0.0,
+    "epochs": 1,
+    "learning_rate": 0.003,
+    "max_write_attempts_per_device": 4,
+    "objective": "teacher_kl",
+    "seed": 53,
+    "threshold_sigma": 2.0,
+    "training_cohort": "recovery",
+    "update_law": "cmo_thresholded_write_adam"
+  },
+  "program_verify": {
+    "acceptance_percent": 2.0,
+    "method": "gaussian_endpoint",
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "question": {
+    "decision": "Per fault kind and rate on array 271002, compare paired test acc_norm loss of adapter-only vs base-only faults against the healthy deployment. campaigns/opt-cmo-corruption/series/003-finetuned-tasks/experiments/exp-019-analog-lora.md",
+    "evidence_class": "exploratory_model_based",
+    "primary_metric": "task_accuracy_norm_percent",
+    "text": "exp-019: do stuck devices in analog LoRA adapter arrays hurt piqa task accuracy more than the same per-device rate in the base MLP arrays of the frozen std3 HWA OPT-125M?"
+  },
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "task": {
+    "choices": {
+      "name": "piqa-opt125m-v1",
+      "sha256": "767bfbf120e57370296b3db4ff53132da7c005ffba151e9b070c179219d849a0"
+    },
+    "decision": "acc_norm",
+    "development_examples": 1500,
+    "evaluation_examples": 1838,
+    "name": "piqa",
+    "training_examples": 14612
+  }
+}

@@ -101,6 +101,74 @@ understood operational retries without changing the scientific contract. Materia
 scientific changes return to Explorer/user. If supervision must end without a real
 supported continuation, report the unmonitored gap and next required action honestly.
 
+### Completion results in the originating chat
+
+On 2026-10-14 the user authorized automatic completion callbacks to the Codex
+chat that launched the work. With `completion_notifications.enabled: true`,
+`python -m campaigns.execution_service register MANIFEST` records
+`CODEX_THREAD_ID` (or explicit `--thread UUID`) alongside the declared cases.
+The existing controller owns delivery; do not create another monitoring agent.
+When registering via another API or attaching an existing run, explicitly use:
+
+```bash
+python -m campaigns.execution_service notify-on-completion CAMPAIGN_ID \
+  --thread ORIGINATING_THREAD_UUID --result /absolute/path/to/summary.json
+```
+
+Use repeated `--job CASE_ID` for a selected subset and repeated `--result` for
+compact local reports. The default queue configuration is the existing service
+configuration; pass `--queue-config PATH` before the command for another queue.
+Already finished cases require deliberate `--include-existing`; do not subscribe
+historical work automatically. Record the returned watch ID in the handoff.
+
+After every selected case reaches a terminal state, the controller retains a
+hashed evidence bundle and calls `codex queue` for that originating thread.
+Collection must finish before a collected job counts as complete. Missing or
+invalid execution/collection receipts are reported as needing verification;
+failed, cancelled and expired cases retain their partial coverage. The receiving
+agent reads the evidence, acknowledges receipt using `ack-completion`, and posts
+metrics, controls, coverage, caveats and evidence links in the chat. It must not
+infer scientific validity from a successful process exit or launch new work.
+
+`status` exposes `campaign_completion_watches` and
+`campaign_completion_deliveries`. Distinguish queued delivery from acknowledgement
+by the chat. Known delivery failures retry within a small fixed bound; ambiguous
+timeouts or interrupted sends require inspection to avoid duplicate messages.
+The host, watcher and Codex app-server must remain reachable. A delivery error
+must not stop experiment supervision. Work launched outside this registered
+controller needs explicit integration before promising automatic chat results.
+
+### Operational repair authority
+
+On 2026-10-14 the user authorized extending the campaign recovery worker to fix
+understood operational bugs. For campaigns enrolled in `campaign_escalation`,
+set `allow_code_repairs: true` in the existing queue configuration and record the
+authorization alongside their IDs. This supersedes older instructions restricting
+that repair worker to predefined restarts. The first-response investigator stays
+read-only. Enrollment does not launch or reopen an experiment, extend a deadline,
+reset an incident, or grant another compute budget.
+
+The repair worker may reproduce a failure, patch operational code in an isolated
+checkout, repair an assigned launcher/environment, run regression checks, and
+deploy the tested change through the existing controller/launcher mechanism on
+already authorized targets. Preserve the original source and evidence, pin the
+new source, keep one controller and preserve worker identities and accounting.
+Scientific settings, mathematics, inputs, selection, recovery permissions, gates,
+shared software and unrelated jobs remain outside this authority. Never edit
+frozen checkouts or bypass source/resume checks; unsupported transitions return
+a blocker with the tested patch and required next action.
+
+Retries still use classified recovery commands and their existing guards. A
+controller repair may unblock ordinary admission within the original allowance.
+`repair_applied` is an audited operational claim, not a retry authorization or
+scientific completion: its `repair.json` binds the incident, old/new source
+identities, patch, passing tests and post-deployment probe to retained SHA-256
+evidence. The service validates that evidence and exposes it in `status` under
+`escalations`; the worker's report is never executed as a command. These checks
+do not prove the scientific equivalence of an arbitrary patch. Existing sandbox
+and approval review still apply. Keep current attempt/time limits and verify an
+actual repair canary before calling the deployed capability ready.
+
 ## Collection and review
 
 Inspect explicit bundle paths, without preparing a study or updating documents:

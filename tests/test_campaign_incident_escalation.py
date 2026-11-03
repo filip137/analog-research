@@ -1,5 +1,6 @@
 """Failure/restart tests for opt-in escalation; no model or GPU calls."""
 import json
+import hashlib
 from pathlib import Path
 import signal
 import sqlite3
@@ -65,6 +66,7 @@ def harness(tmp_path):
     {"campaigns": {}}, {"campaigns": {"main": ""}}, {"not_before": float("nan")},
     {"max_per_day": 7}, {"max_per_incident": True}, {"timeout_seconds": 301},
     {"timeout_seconds": 1.5}, {"unexpected": True},
+    {"allow_code_repairs": "true"}, {"allow_code_repairs": 1},
 ])
 def test_configuration_fails_closed(harness, bad):
     with pytest.raises(ValueError):
@@ -230,6 +232,77 @@ def test_blocked_does_not_retry_and_prompt_restricts_authority(harness):
     h.now[0] += 100000
     h.make().cycle()
     assert len(h.commands) == 1
+
+
+def repair_evidence(owner):
+    row = owner.rows()[-1]
+    folder = Path(row["payload"]["folder"])
+    def artifact(name, content):
+        (folder / name).write_text(content)
+        return {"path": name, "sha256": hashlib.sha256(content.encode()).hexdigest()}
+    receipt = {"version": 1, **{k: row[k] for k in ("incident_id", "campaign_id", "job_id")},
+               "source_before": "original-source", "source_after": "tested-source",
+               "patch": artifact("repair.patch", "retained operational patch\n"),
+               "tests": [{"argv": ["python", "-m", "pytest"], "returncode": 0,
+                          "log": artifact("tests.log", "1 passed\n")}],
+               "verification": {"argv": ["python", "probe.py"], "returncode": 0,
+                                "log": artifact("probe.log", "fresh observation succeeded\n")}}
+    (folder / "repair.json").write_text(json.dumps(receipt))
+    return folder, receipt
+
+
+def test_code_repairs_are_opt_in_and_report_requires_authorization(harness):
+    h = harness
+    h.incident()
+    owner = h.make()
+    owner.cycle()
+    repair_evidence(owner)
+    h.finish(owner, "repair_applied")
+    owner.cycle()
+    assert owner.rows()[0]["state"] == "failed"
+    assert "not authorized" in owner.rows()[0]["payload"]["error"]
+
+
+@pytest.mark.parametrize("fault", [None, "structured_source", "same_structured_revision", "missing", "wrong_incident", "failed_test", "failed_probe",
+                                  "tamper", "escape", "same_source", "no_tests", "malformed"])
+def test_code_repair_requires_bound_evidence_and_successful_verification(harness, fault):
+    h = harness
+    h.incident()
+    settings = {**h.settings, "allow_code_repairs": True}
+    owner = h.make(settings)
+    owner.cycle()
+    folder, receipt = repair_evidence(owner)
+    prompt = (folder / "prompt.txt").read_text()
+    assert "Do not change code" not in prompt
+    for text in ("isolated checkout", "Preserve dirty user work", "scientific configs",
+                 "remaining budget", "recover-resource-preemption", "post-deployment probe"):
+        assert text in prompt
+    command = json.loads((folder / "launch.json").read_text())["argv"]
+    assert command[command.index("--add-dir") + 1] == str(folder)
+    if fault == "wrong_incident": receipt["incident_id"] = 999
+    if fault == "failed_test": receipt["tests"][0]["returncode"] = 1
+    if fault == "failed_probe": receipt["verification"]["returncode"] = 1
+    if fault == "tamper": (folder / "tests.log").write_text("changed")
+    if fault == "escape": receipt["patch"]["path"] = "../outside.patch"
+    if fault == "same_source": receipt["source_after"] = receipt["source_before"]
+    if fault in {"structured_source", "same_structured_revision"}:
+        receipt["source_before"] = {"path": "/source", "revision": "original"}
+        receipt["source_after"] = {"path": "/isolated", "revision": "repaired" if fault == "structured_source" else "original"}
+    if fault == "no_tests": receipt["tests"] = []
+    if fault == "malformed": receipt = []
+    (folder / "repair.json").write_text(json.dumps(receipt))
+    if fault == "missing": (folder / "repair.json").unlink()
+    h.finish(owner, "repair_applied")
+    # The launch's authority survives a controller restart/config disable.
+    restarted = h.make(None)
+    restarted.cycle()
+    row = restarted.rows()[0]
+    valid = fault in {None, "structured_source"}
+    assert row["state"] == ("reported" if valid else "failed")
+    if valid:
+        assert row["payload"]["repair"] == receipt
+    assert h.db.execute("SELECT COUNT(*) FROM campaign_retries").fetchone()[0] == 0
+    assert h.db.execute("SELECT state FROM campaign_incidents").fetchone()[0] == "open"
 
 
 def test_dead_supervisor_without_terminal_receipt_retains_ownership(harness):

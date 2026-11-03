@@ -1,0 +1,110 @@
+{
+ "piqa": {
+  "teacher_id": "exp18-piqa-lora-r16-lr3e-4",
+  "learning_rate": "3e-4",
+  "run_dir": "exp18-piqa-lora-r16-lr3e-4/20261015T151226.391110Z-2da3a50a-7e057df9",
+  "development_accuracy_norm_percent": 64.0,
+  "zero_shot_accuracy_norm_percent": 61.73333333333333,
+  "sha256": "6049722b821bf231b02990c2195badff850c74824c09b731411e39501af60144",
+  "g1_gain_points": 2.266666666666673,
+  "g1_passed": false,
+  "screen": [
+   {
+    "teacher_id": "exp18-piqa-lora-r16-lr1e-4",
+    "learning_rate": "1e-4",
+    "run_dir": "exp18-piqa-lora-r16-lr1e-4/20261015T151554.026493Z-21492f41-b7295178",
+    "development_accuracy_norm_percent": 63.13333333333333,
+    "zero_shot_accuracy_norm_percent": 61.73333333333333,
+    "sha256": "efe67f9b004ba1e8f62c674f89f411ecd0e6d2b420b31b095cb4c7dd18772e75"
+   },
+   {
+    "teacher_id": "exp18-piqa-lora-r16-lr3e-4",
+    "learning_rate": "3e-4",
+    "run_dir": "exp18-piqa-lora-r16-lr3e-4/20261015T151226.391110Z-2da3a50a-7e057df9",
+    "development_accuracy_norm_percent": 64.0,
+    "zero_shot_accuracy_norm_percent": 61.73333333333333,
+    "sha256": "6049722b821bf231b02990c2195badff850c74824c09b731411e39501af60144"
+   },
+   {
+    "teacher_id": "exp18-piqa-lora-r16-lr1e-3",
+    "learning_rate": "1e-3",
+    "run_dir": "exp18-piqa-lora-r16-lr1e-3/20261015T151845.493517Z-7dcaf605-e877b4ad",
+    "development_accuracy_norm_percent": 57.666666666666664,
+    "zero_shot_accuracy_norm_percent": 61.73333333333333,
+    "sha256": "f1571f8c81634e80d27303d6d80868d8376833dbb4dd4e812343c331e698ec12"
+   }
+  ]
+ },
+ "sst2": {
+  "teacher_id": "exp18-sst2-lora-r16-lr3e-4",
+  "learning_rate": "3e-4",
+  "run_dir": "exp18-sst2-lora-r16-lr3e-4/20261015T152136.937569Z-bbdf2341-1b82d765",
+  "development_accuracy_norm_percent": 94.5,
+  "zero_shot_accuracy_norm_percent": 58.5,
+  "sha256": "f8e351cb215f6016b8b21f33c98f9ef6a415abadc2c11ffb92365780581d60b3",
+  "g1_gain_points": 36.0,
+  "g1_passed": true,
+  "screen": [
+   {
+    "teacher_id": "exp18-sst2-lora-r16-lr1e-4",
+    "learning_rate": "1e-4",
+    "run_dir": "exp18-sst2-lora-r16-lr1e-4/20261015T152602.093961Z-6964bf72-7ea8bfa3",
+    "development_accuracy_norm_percent": 94.03333333333333,
+    "zero_shot_accuracy_norm_percent": 58.5,
+    "sha256": "fc6f84fddba2aef4e14efce58d02b208c23c32e47eaff56940e38922bf625d98"
+   },
+   {
+    "teacher_id": "exp18-sst2-lora-r16-lr3e-4",
+    "learning_rate": "3e-4",
+    "run_dir": "exp18-sst2-lora-r16-lr3e-4/20261015T152136.937569Z-bbdf2341-1b82d765",
+    "development_accuracy_norm_percent": 94.5,
+    "zero_shot_accuracy_norm_percent": 58.5,
+    "sha256": "f8e351cb215f6016b8b21f33c98f9ef6a415abadc2c11ffb92365780581d60b3"
+   },
+   {
+    "teacher_id": "exp18-sst2-lora-r16-lr1e-3",
+    "learning_rate": "1e-3",
+    "run_dir": "exp18-sst2-lora-r16-lr1e-3/20261015T153029.161009Z-525530d1-0c225f6d",
+    "development_accuracy_norm_percent": 91.36666666666666,
+    "zero_shot_accuracy_norm_percent": 58.5,
+    "sha256": "1e71baddf3ab25501625dedbb5ce9b85d8d6c4e355d1e981f66796f95af3802a"
+   }
+  ]
+ },
+ "hellaswag": {
+  "teacher_id": "exp18-hellaswag-lora-r16-lr3e-4",
+  "learning_rate": "3e-4",
+  "run_dir": "exp18-hellaswag-lora-r16-lr3e-4/20261015T153453.721255Z-38f4634d-67044e9e",
+  "development_accuracy_norm_percent": 30.099999999999998,
+  "zero_shot_accuracy_norm_percent": 32.65,
+  "sha256": "cf118d138ea4f7a33cbdcdb72293068f160f9b43ed6ca307aa0f4ea12d787cb0",
+  "g1_gain_points": -2.5500000000000007,
+  "g1_passed": false,
+  "screen": [
+   {
+    "teacher_id": "exp18-hellaswag-lora-r16-lr1e-4",
+    "learning_rate": "1e-4",
+    "run_dir": "exp18-hellaswag-lora-r16-lr1e-4/20261015T154321.283343Z-28ddd2d5-7b5f3fee",
+    "development_accuracy_norm_percent": 29.049999999999997,
+    "zero_shot_accuracy_norm_percent": 32.65,
+    "sha256": "f4a69d8554b3391fa5d41f4571d0e990cf5abd08e2015a6457ff554141cf1966"
+   },
+   {
+    "teacher_id": "exp18-hellaswag-lora-r16-lr3e-4",
+    "learning_rate": "3e-4",
+    "run_dir": "exp18-hellaswag-lora-r16-lr3e-4/20261015T153453.721255Z-38f4634d-67044e9e",
+    "development_accuracy_norm_percent": 30.099999999999998,
+    "zero_shot_accuracy_norm_percent": 32.65,
+    "sha256": "cf118d138ea4f7a33cbdcdb72293068f160f9b43ed6ca307aa0f4ea12d787cb0"
+   },
+   {
+    "teacher_id": "exp18-hellaswag-lora-r16-lr1e-3",
+    "learning_rate": "1e-3",
+    "run_dir": "exp18-hellaswag-lora-r16-lr1e-3/20261015T155148.118912Z-9ff46743-adeb9c88",
+    "development_accuracy_norm_percent": 29.45,
+    "zero_shot_accuracy_norm_percent": 32.65,
+    "sha256": "23cd4b2274c8f15ef95bb4d0795c9b71a60faf2c2f268107c9dbf64037f1b997"
+   }
+  ]
+ }
+}

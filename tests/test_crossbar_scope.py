@@ -22,6 +22,8 @@ SUPPORTED = {
     "cifar_pcm_hwa_comparison.v1", "cifar_pcm_recovery_epochs.v1",
     "cifar_resnet_suffix_recovery.v1", "mnist_ibm_om_crossbar_relu.v2",
     "mnist_relu.v1", "mnist_relu.v2", "ibm_reram_program_verify.v1",
+    # Digital task-fine-tuned OPT teachers for the opt_mlp_suffix lifecycle.
+    "opt_task_teacher.v1",
 }
 
 

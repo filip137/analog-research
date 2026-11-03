@@ -1,0 +1,226 @@
+{
+  "data": {
+    "corpus": {
+      "name": "opt125m-synthetic-50m",
+      "sha256": "ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984"
+    },
+    "data_seed": 20261008,
+    "development_sequences": 256,
+    "evaluation": "development",
+    "hwa_sequences": 195226,
+    "max_examples": 0,
+    "recovery_sequences": 8192,
+    "sequence_length": 256,
+    "test_sequences": 0
+  },
+  "defects": {
+    "arrays_per_die": 48,
+    "cases": [
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "none",
+        "rate_ppm": 0
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 10000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 20000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 30000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 40000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 50000
+      }
+    ],
+    "persistence": "permanent",
+    "placement": "hierarchical_die_array"
+  },
+  "deployment": {
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias",
+    "encoding": "active_reference_pair",
+    "read_noise": 0.0,
+    "scaling": "per_output_channel_absmax",
+    "tile_size": 256
+  },
+  "devices": {
+    "assignment_seeds": [
+      271001,
+      271002,
+      271003,
+      271004,
+      271005
+    ],
+    "endpoint_seed_offset": 10000,
+    "model": "aihwkit_1.1.0_reram_cmo",
+    "noise_scale": 1.0,
+    "selection_seeds": [
+      211001,
+      211002
+    ],
+    "technology": "cmo"
+  },
+  "hwa": {
+    "arms": [
+      {
+        "corruption": null,
+        "digital_learning_rate": 1e-05,
+        "id": "standard_hwa_model",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "scope": "model",
+        "selection_cases": [
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "none",
+            "rate_ppm": 0
+          },
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "random",
+            "rate_ppm": 30000
+          }
+        ]
+      }
+    ],
+    "augment": false,
+    "batch_size": 32,
+    "epochs": 100,
+    "learning_rate": 0.005,
+    "lr_decay": 1.0,
+    "lr_milestones": [],
+    "lr_schedule": {
+      "kind": "cosine_warmup_decay",
+      "min_factor": 0.2,
+      "total_steps": 25600,
+      "warmup_steps": 205
+    },
+    "noise_model": "additive_gaussian_weight",
+    "noise_scaling": "output_channel_abs_max",
+    "noise_std": 0.03,
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "seed": 41,
+    "selection": {
+      "every_epochs": 2,
+      "extension_epochs": 0
+    },
+    "sequences_per_epoch": 8192
+  },
+  "lifecycle_id": "opt125m-cmo-drift-calibration",
+  "network": {
+    "analog_decoder_layers": 6,
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m"
+  },
+  "onchip": null,
+  "program_verify": {
+    "acceptance_percent": 2.0,
+    "method": "gaussian_endpoint",
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "question": {
+    "text": "How much of the scalar-drift perplexity loss at 24 h, 30 d and 365 d do closed-form digital calibrations recover, with zero device writes?",
+    "decision": "Exploratory development-only comparison of all predeclared methods on the saved time-survey snapshots; no selection, recovery training or necessity claim.",
+    "primary_metric": "perplexity",
+    "evidence_class": "exploratory_model_based"
+  },
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "retention": {
+    "models": [
+      "reram_cmo"
+    ],
+    "seconds": [
+      3600.0,
+      21600.0,
+      86400.0,
+      604800.0,
+      2592000.0,
+      31536000.0
+    ],
+    "assignment_seeds": [
+      271002
+    ],
+    "case_labels": [
+      "nominal"
+    ],
+    "seed": 391028,
+    "read_noise": false,
+    "power_law": {
+      "mean_us": -2.0,
+      "sigmas_us": [
+        0.0,
+        0.5,
+        1.0,
+        2.0,
+        3.0,
+        6.0,
+        12.0
+      ],
+      "mean_exponent": 0.23,
+      "spread_exponent": 0.11,
+      "reference_seconds": 3600.0,
+      "development_sequences": 64,
+      "first_read_policy": "clamp_programmed"
+    }
+  },
+  "drift_compensation": {
+    "methods": [
+      "global",
+      "tile_global",
+      "row",
+      "column",
+      "row_column",
+      "global_shift",
+      "global_moments",
+      "mlp_gain",
+      "mlp_shift",
+      "mlp_moments"
+    ],
+    "calibration_sequences": 128,
+    "row_column_iterations": 10,
+    "gain_bounds": [
+      0.1,
+      10.0
+    ],
+    "seconds": [
+      86400.0,
+      2592000.0,
+      31536000.0
+    ],
+    "sigmas_us": [
+      0.0,
+      0.5,
+      1.0,
+      2.0,
+      3.0,
+      6.0,
+      12.0
+    ]
+  }
+}

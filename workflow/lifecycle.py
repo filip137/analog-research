@@ -31,7 +31,7 @@ SCHEMA_VERSION = 1
 EXPERIMENT_ID = "crossbar_lifecycle.v1"
 PROVENANCE_SCHEMA = "crossbar_lifecycle.provenance.v1"
 
-STAGE_KINDS = ("prepare", "devices", "hwa", "deploy", "onchip")
+STAGE_KINDS = ("prepare", "devices", "hwa", "deploy", "onchip", "retention", "compensate", "drift_recovery", "initial_programming")
 CIFAR_FAMILY = "cifar_resnet32_suffix"
 OPT_FAMILY = "opt_mlp_suffix"
 # Converted layer3 convolutions (two per block) plus the always-analog classifier.
@@ -67,10 +67,25 @@ SCALINGS = ("per_layer_absmax", "per_output_channel_absmax")
 ADDITIVE_GAUSSIAN = "additive_gaussian_weight"
 NOISE_SCALINGS = ("matrix_full_scale", "output_channel_abs_max")
 OBJECTIVES = ("teacher_kl", "cross_entropy")
+# HWA may also train analog LoRA adapters on a labelled task: multiple-choice cross entropy
+# over per-token mean continuation log-likelihoods (workflow.tasks).
+TASK_HWA_OBJECTIVE = "task_choice_token_mean"
+HWA_OBJECTIVES = OBJECTIVES + (TASK_HWA_OBJECTIVE,)
+DEFECT_TARGETS = ("all", "base", "adapter")
+# On-chip recovery may also target the clean deployed source itself (KL to the intended weights).
+SOURCE_KL = "source_kl"
+ONCHIP_OBJECTIVES = OBJECTIVES + (SOURCE_KL,)
 CALIBRATION = "output_gain_bn_affine_classifier_bias"
 OPT_CALIBRATION = "output_gain_mlp_layer_norm_mlp_bias"
 # What each network family can report, calibrate and augment.
-PRIMARY_METRICS = {CIFAR_FAMILY: ("teacher_kl", "accuracy_percent"), OPT_FAMILY: ("teacher_kl", "perplexity")}
+# Task metrics need a declared ``task`` section (labelled multiple-choice evaluation).
+TASK_PRIMARY_METRICS = ("task_accuracy_norm_percent", "task_accuracy_percent")
+PRIMARY_METRICS = {
+    CIFAR_FAMILY: ("teacher_kl", "accuracy_percent"),
+    OPT_FAMILY: ("teacher_kl", "perplexity") + TASK_PRIMARY_METRICS,
+}
+TASK_NAMES = ("hellaswag", "sst2", "piqa")
+TASK_DECISIONS = ("acc_norm", "acc")
 CALIBRATIONS = {CIFAR_FAMILY: CALIBRATION, OPT_FAMILY: OPT_CALIBRATION}
 MAX_SEED = 2**31 - 1
 
@@ -314,16 +329,42 @@ class Network:
 
 
 @dataclass(frozen=True)
+class OptTeacher:
+    """A fine-tuned FP32 teacher (LoRA merged into the weights), pinned by SHA-256."""
+
+    name: str
+    sha256: str
+
+    def to_dict(self) -> dict:
+        return {"name": self.name, "sha256": self.sha256}
+
+
+@dataclass(frozen=True)
+class AnalogLora:
+    """Low-rank adapters A (rank x in) and B (out x rank) of every analog MLP matrix, on their own arrays."""
+
+    rank: int
+    alpha: float
+
+    def to_dict(self) -> dict:
+        return {"rank": self.rank, "alpha": self.alpha}
+
+
+@dataclass(frozen=True)
 class OptNetwork:
     """OPT decoder whose last ``analog_decoder_layers`` MLPs (fc1, fc2) are crossbars.
 
     Embeddings, the earlier decoder layers, every attention block, LayerNorms,
-    biases and the tied LM head stay digital.
+    biases and the tied LM head stay digital. ``teacher`` names a declared
+    fine-tuned checkpoint instead of the pinned pretrained one; it is part of
+    the network section, so every artifact identity includes it.
     """
 
     family: str
     model: str
     analog_decoder_layers: int
+    teacher: Optional[OptTeacher] = None
+    analog_lora: Optional[AnalogLora] = None
 
     @property
     def decoder_layers(self) -> int:
@@ -334,32 +375,51 @@ class OptNetwork:
         return OPT_MODELS[self.model]["max_positions"]
 
     @property
+    def adapter_weights(self) -> int:
+        spec = OPT_MODELS[self.model]
+        rank = 0 if self.analog_lora is None else self.analog_lora.rank
+        return self.analog_decoder_layers * 2 * rank * (spec["hidden_size"] + spec["ffn_dim"])
+
+    @property
     def analog_weights(self) -> int:
         spec = OPT_MODELS[self.model]
-        return self.analog_decoder_layers * 2 * spec["hidden_size"] * spec["ffn_dim"]
+        return self.analog_decoder_layers * 2 * spec["hidden_size"] * spec["ffn_dim"] + self.adapter_weights
 
     @property
     def binding_namespace(self) -> str:
         return self.model
 
     def describe(self) -> str:
-        return f"{self.model}, analog fc1/fc2 in the last {self.analog_decoder_layers} of {self.decoder_layers} decoder layers"
+        teacher = "" if self.teacher is None else f" (fine-tuned teacher {self.teacher.name})"
+        lora = ("" if self.analog_lora is None else
+                f", with rank-{self.analog_lora.rank} analog LoRA adapters ({self.adapter_weights:,} weights)")
+        return (f"{self.model}{teacher}, analog fc1/fc2 in the last {self.analog_decoder_layers} "
+                f"of {self.decoder_layers} decoder layers{lora}")
 
     def summary(self) -> dict:
         return {
             "model": self.model,
             "analog_decoder_layers": self.analog_decoder_layers,
             "analog_layer_indices": list(range(self.decoder_layers - self.analog_decoder_layers, self.decoder_layers)),
+            **({"teacher": self.teacher.to_dict()} if self.teacher is not None else {}),
+            **({"analog_lora": self.analog_lora.to_dict()} if self.analog_lora is not None else {}),
         }
 
     def mapping_fields(self) -> dict:
         return {"analog_decoder_layers": self.analog_decoder_layers, "analog_modules": ["fc1", "fc2"]}
 
     def result_fields(self) -> dict:
-        return {"model": self.model, "analog_decoder_layers": self.analog_decoder_layers}
+        return {"model": self.model, "analog_decoder_layers": self.analog_decoder_layers,
+                **({"fine_tuned_teacher": self.teacher.to_dict()} if self.teacher is not None else {}),
+                **({"analog_lora": self.analog_lora.to_dict()} if self.analog_lora is not None else {})}
 
     def to_dict(self) -> dict:
-        return {"family": self.family, "model": self.model, "analog_decoder_layers": self.analog_decoder_layers}
+        value = {"family": self.family, "model": self.model, "analog_decoder_layers": self.analog_decoder_layers}
+        if self.teacher is not None:
+            value["teacher"] = self.teacher.to_dict()
+        if self.analog_lora is not None:
+            value["analog_lora"] = self.analog_lora.to_dict()
+        return value
 
 
 def _network(raw: Any) -> Network | OptNetwork:
@@ -367,8 +427,20 @@ def _network(raw: Any) -> Network | OptNetwork:
         raise config_error("network", "to be an object", raw)
     family = _choice(raw.get("family"), "network.family", (CIFAR_FAMILY, OPT_FAMILY))
     if family == OPT_FAMILY:
-        raw = _object(raw, "network", ("family", "model", "analog_decoder_layers"))
+        keys = ("family", "model", "analog_decoder_layers") + tuple(k for k in ("teacher", "analog_lora") if k in raw)
+        raw = _object(raw, "network", keys)
         model = _choice(raw["model"], "network.model", tuple(OPT_MODELS))
+        teacher = None
+        if "teacher" in raw:
+            item = _object(raw["teacher"], "network.teacher", ("name", "sha256"))
+            if not isinstance(item["sha256"], str) or not _SHA256.match(item["sha256"]):
+                raise config_error("network.teacher.sha256", "to be a lowercase SHA-256 digest", item["sha256"])
+            teacher = OptTeacher(_identifier(item["name"], "network.teacher.name", _LIFECYCLE_ID), item["sha256"])
+        lora = None
+        if "analog_lora" in raw:
+            item = _object(raw["analog_lora"], "network.analog_lora", ("rank", "alpha"))
+            lora = AnalogLora(_integer(item["rank"], "network.analog_lora.rank", minimum=1, maximum=256),
+                              _number(item["alpha"], "network.analog_lora.alpha", positive=True))
         return OptNetwork(
             family=family,
             model=model,
@@ -378,6 +450,8 @@ def _network(raw: Any) -> Network | OptNetwork:
                 minimum=1,
                 maximum=OPT_MODELS[model]["decoder_layers"],
             ),
+            teacher=teacher,
+            analog_lora=lora,
         )
     raw = _object(raw, "network", ("family", "dataset", "analog_convolutions"))
     convolutions = raw["analog_convolutions"]
@@ -602,6 +676,57 @@ def _transfer_tests(raw: Any) -> TransferTests:
 
 
 @dataclass(frozen=True)
+class Task:
+    """Labelled multiple-choice evaluation of a task-fine-tuned OPT (``workflow.tasks``).
+
+    The pinned choice-task file supplies ``task_development`` (the first
+    ``development_examples`` held-out train examples) and ``task_test`` (the
+    first ``evaluation_examples`` of the official validation split). Both are
+    scored at every evaluation. Like transfer tests, they only add
+    measurements: feature caches and deployments depend on them, HWA sources do not.
+    """
+
+    name: str
+    choices_name: str
+    choices_sha256: str
+    decision: str
+    development_examples: int
+    evaluation_examples: int
+    # Labelled train examples for task-objective HWA (analog LoRA); omitted otherwise.
+    training_examples: Optional[int] = None
+
+    def to_dict(self) -> dict:
+        value = {
+            "name": self.name,
+            "choices": {"name": self.choices_name, "sha256": self.choices_sha256},
+            "decision": self.decision,
+            "development_examples": self.development_examples,
+            "evaluation_examples": self.evaluation_examples,
+        }
+        if self.training_examples is not None:
+            value["training_examples"] = self.training_examples
+        return value
+
+
+def _task(raw: Any) -> Task:
+    keys = ("name", "choices", "decision", "development_examples", "evaluation_examples")
+    raw = _object(raw, "task", keys + (("training_examples",) if isinstance(raw, Mapping) and "training_examples" in raw else ()))
+    choices = _object(raw["choices"], "task.choices", ("name", "sha256"))
+    if not isinstance(choices["sha256"], str) or not _SHA256.match(choices["sha256"]):
+        raise config_error("task.choices.sha256", "to be a lowercase SHA-256 digest", choices["sha256"])
+    return Task(
+        name=_choice(raw["name"], "task.name", TASK_NAMES),
+        choices_name=_identifier(choices["name"], "task.choices.name", _LIFECYCLE_ID),
+        choices_sha256=choices["sha256"],
+        decision=_choice(raw["decision"], "task.decision", TASK_DECISIONS),
+        development_examples=_integer(raw["development_examples"], "task.development_examples", minimum=1),
+        evaluation_examples=_integer(raw["evaluation_examples"], "task.evaluation_examples", minimum=1),
+        training_examples=(_integer(raw["training_examples"], "task.training_examples", minimum=1)
+                           if "training_examples" in raw else None),
+    )
+
+
+@dataclass(frozen=True)
 class Characterization:
     """Independent OM populations that measure the P&V endpoint law for HWA."""
 
@@ -715,6 +840,8 @@ class DefectCase:
     die_concentration: Optional[float] = None
     array_concentration: Optional[float] = None
     hierarchical: bool = False
+    # Analog LoRA only: stuck devices in every array (all), only the base MLP arrays or only the adapters.
+    target: str = "all"
 
     @property
     def label(self) -> str:
@@ -724,7 +851,7 @@ class DefectCase:
         for prefix, value in (("d", self.die_concentration), ("a", self.array_concentration)):
             if value is not None:
                 label += f"_{prefix}{value:g}"
-        return label
+        return label if self.target == "all" else f"{label}_{self.target}"
 
     @property
     def rate(self) -> float:
@@ -739,12 +866,15 @@ class DefectCase:
         value = {"kind": self.kind, "rate_ppm": self.rate_ppm}
         if self.hierarchical:
             value.update(die_concentration=self.die_concentration, array_concentration=self.array_concentration)
+        if self.target != "all":
+            value["target"] = self.target
         return value
 
 
 def _case(raw: Any, path: str, failure_kinds, hierarchical: bool = False) -> DefectCase:
     concentrations = ("die_concentration", "array_concentration")
-    raw = _object(raw, path, ("kind", "rate_ppm") + (concentrations if hierarchical else ()))
+    targeted = hierarchical and isinstance(raw, Mapping) and "target" in raw
+    raw = _object(raw, path, ("kind", "rate_ppm") + (concentrations if hierarchical else ()) + (("target",) if targeted else ()))
     kind = _choice(raw["kind"], f"{path}.kind", ("none",) + tuple(failure_kinds))
     rate = _integer(raw["rate_ppm"], f"{path}.rate_ppm", maximum=1_000_000)
     if (kind == "none") != (rate == 0):
@@ -757,7 +887,10 @@ def _case(raw: Any, path: str, failure_kinds, hierarchical: bool = False) -> Def
     }
     if kind == "none" and any(value is not None for value in values.values()):
         raise config_error(path, "to use null concentrations for kind 'none'", dict(raw))
-    return DefectCase(kind, rate, hierarchical=True, **values)
+    target = _choice(raw["target"], f"{path}.target", DEFECT_TARGETS) if targeted else "all"
+    if kind == "none" and target != "all":
+        raise config_error(path, "to target arrays only with stuck devices", dict(raw))
+    return DefectCase(kind, rate, hierarchical=True, target=target, **values)
 
 
 def _cases(raw: Any, path: str, failure_kinds, hierarchical: bool = False) -> tuple[DefectCase, ...]:
@@ -859,14 +992,23 @@ class HwaArm:
     scope: str = "analog"
     # Adam learning rate of the digital parameters of a ``model``-scope arm.
     digital_learning_rate: Optional[float] = None
+    # ``method: lora``: the frozen HWA base source, and the adapters' Adam rate and warm-up.
+    base_source: Optional[OptTeacher] = None
+    learning_rate: Optional[float] = None
+    warmup_fraction: Optional[float] = None
 
     @property
     def trains(self) -> bool:
-        return self.method == "hwa"
+        return self.method in ("hwa", "lora")
 
     def to_dict(self) -> dict:
         if not self.trains:
             return {"id": self.arm_id, "method": self.method}
+        if self.method == "lora":
+            return {"id": self.arm_id, "method": self.method, "noise_strength": self.noise_strength,
+                    "selection_cases": [case.to_dict() for case in self.selection_cases],
+                    "base_source": self.base_source.to_dict(), "learning_rate": self.learning_rate,
+                    "warmup_fraction": self.warmup_fraction}
         # The default analog scope is omitted, so existing arm digests are unchanged.
         scope = (
             {}
@@ -886,10 +1028,30 @@ class HwaArm:
 def _hwa_arm(raw: Any, path: str, technology: Technology) -> HwaArm:
     if not isinstance(raw, Mapping):
         raise config_error(path, "to be an object", raw)
-    method = _choice(raw.get("method"), f"{path}.method", ("none", "hwa"))
+    method = _choice(raw.get("method"), f"{path}.method", ("none", "hwa", "lora"))
     if method == "none":
         raw = _object(raw, path, ("id", "method"))
         return HwaArm(_identifier(raw["id"], f"{path}.id"), method)
+    if method == "lora":
+        raw = _object(raw, path, ("id", "method", "noise_strength", "selection_cases", "base_source", "learning_rate",
+                                  "warmup_fraction"))
+        base = _object(raw["base_source"], f"{path}.base_source", ("name", "sha256"))
+        if not isinstance(base["sha256"], str) or not _SHA256.match(base["sha256"]):
+            raise config_error(f"{path}.base_source.sha256", "to be a lowercase SHA-256 digest", base["sha256"])
+        warmup = _number(raw["warmup_fraction"], f"{path}.warmup_fraction")
+        if not 0 <= warmup < 1:
+            raise config_error(f"{path}.warmup_fraction", "to be in [0, 1)", warmup)
+        return HwaArm(
+            arm_id=_identifier(raw["id"], f"{path}.id"), method=method,
+            noise_strength=_number(raw["noise_strength"], f"{path}.noise_strength"),
+            selection_cases=_cases(raw["selection_cases"], f"{path}.selection_cases", technology.failure_kinds,
+                                   technology.defect_placement == HIERARCHICAL),
+            # The frozen base is a whole-model source; only the adapters train.
+            scope="model", digital_learning_rate=0.0,
+            base_source=OptTeacher(_identifier(base["name"], f"{path}.base_source.name", _LIFECYCLE_ID), base["sha256"]),
+            learning_rate=_number(raw["learning_rate"], f"{path}.learning_rate", positive=True),
+            warmup_fraction=warmup,
+        )
     keys = ("id", "method", "noise_strength", "corruption", "selection_cases")
     if "scope" in raw:
         keys += ("scope", "digital_learning_rate")
@@ -1104,7 +1266,7 @@ def _hwa(raw: Any, technology: str) -> Hwa:
         extra["lr_schedule"] = _hwa_lr_schedule(raw["lr_schedule"])
     return Hwa(
         noise_model=_choice(raw["noise_model"], "hwa.noise_model", (noise_model,)),
-        objective=_choice(raw["objective"], "hwa.objective", OBJECTIVES),
+        objective=_choice(raw["objective"], "hwa.objective", HWA_OBJECTIVES),
         optimizer=_choice(raw["optimizer"], "hwa.optimizer", ("adam",)),
         learning_rate=_number(raw["learning_rate"], "hwa.learning_rate", positive=True),
         lr_milestones=milestones,
@@ -1239,13 +1401,26 @@ class OnchipArm:
     digital_adapter: Optional[DigitalLora] = None
     fault_rewrite: Optional[FaultRewrite] = None
     write_roles: Optional[str] = None
+    # Analog LoRA only: learn only the adapter arrays (``adapter``); the default writes every array.
+    write_scope: str = "all"
+    # Optional weight learning rate of this arm; the shared ``onchip.learning_rate`` otherwise.
+    learning_rate: Optional[float] = None
 
     @property
     def trains(self) -> bool:
         return self.weights != "hold" or self.calibration or self.digital_adapter is not None
 
+    @property
+    def setting(self) -> tuple:
+        return (self.weights, self.calibration, self.digital_adapter, self.fault_rewrite, self.write_roles,
+                self.write_scope, self.learning_rate)
+
     def to_dict(self) -> dict:
         value = {"id": self.arm_id, "weights": self.weights, "calibration": self.calibration}
+        if self.write_scope != "all":
+            value["write_scope"] = self.write_scope
+        if self.learning_rate is not None:
+            value["learning_rate"] = self.learning_rate
         if self.digital_adapter is not None:
             value["digital_adapter"] = self.digital_adapter.to_dict()
         if self.fault_rewrite is not None:
@@ -1278,6 +1453,8 @@ class Onchip:
     case_labels: Optional[tuple[str, ...]] = None
     microbatch_size: Optional[int] = None
     write_noise_scale: Optional[float] = None
+    # ``development``: intermediate epochs score only the development cohorts; the final epoch is complete.
+    epoch_evaluation: Optional[str] = None
 
     @property
     def cohort_key(self) -> str:
@@ -1311,6 +1488,8 @@ class Onchip:
             value["microbatch_size"] = self.microbatch_size
         if self.write_noise_scale is not None:
             value["write_noise_scale"] = self.write_noise_scale
+        if self.epoch_evaluation is not None:
+            value["epoch_evaluation"] = self.epoch_evaluation
         value["arms"] = [arm.to_dict() for arm in self.arms]
         return value
 
@@ -1360,6 +1539,8 @@ def _onchip(raw: Any, technology: str) -> Onchip:
         keys += ("case_labels",)
     if "microbatch_size" in raw:
         keys += ("microbatch_size",)
+    if "epoch_evaluation" in raw:
+        keys += ("epoch_evaluation",)
     if "write_noise_scale" in raw and law.startswith("cmo_"):
         keys += ("write_noise_scale",)
     raw = _object(raw, "onchip", keys)
@@ -1367,7 +1548,7 @@ def _onchip(raw: Any, technology: str) -> Onchip:
     for index, item in enumerate(_list(raw["arms"], "onchip.arms")):
         path = f"onchip.arms[{index}]"
         keys = ("id", "weights", "calibration") + tuple(
-            name for name in ("digital_adapter", "fault_rewrite", "write_roles") if isinstance(item, Mapping) and name in item
+            name for name in ("digital_adapter", "fault_rewrite", "write_roles", "write_scope", "learning_rate") if isinstance(item, Mapping) and name in item
         )
         item = _object(item, path, keys)
         rewrite = None
@@ -1396,6 +1577,10 @@ def _onchip(raw: Any, technology: str) -> Onchip:
             )
             if item["weights"] != "hold" or item["calibration"] is not False:
                 raise config_error(path, "to hold weights and calibration fixed for digital LoRA", item)
+        scope = _choice(item["write_scope"], f"{path}.write_scope", ("all", "adapter")) if "write_scope" in item else "all"
+        rate = _number(item["learning_rate"], f"{path}.learning_rate", positive=True) if "learning_rate" in item else None
+        if (scope != "all" or rate is not None) and (item["weights"] != "learn" or law != "cmo_thresholded_write_adam"):
+            raise config_error(path, "to set write_scope or learning_rate only for thresholded CMO weight learning", item)
         arms.append(
             OnchipArm(
                 arm_id=_identifier(item["id"], f"{path}.id"),
@@ -1404,19 +1589,21 @@ def _onchip(raw: Any, technology: str) -> Onchip:
                 digital_adapter=adapter,
                 fault_rewrite=rewrite,
                 write_roles=write_roles,
+                write_scope=scope,
+                learning_rate=rate,
             )
         )
     arms = tuple(arms)
     if len({arm.arm_id for arm in arms}) != len(arms):
         raise config_error("onchip.arms", "to have unique ids", [arm.arm_id for arm in arms])
-    settings = {(arm.weights, arm.calibration, arm.digital_adapter, arm.fault_rewrite, arm.write_roles) for arm in arms}
+    settings = {arm.setting for arm in arms}
     if len(settings) != len(arms):
         raise config_error("onchip.arms", "to have unique weight/calibration settings", [a.to_dict() for a in arms])
     for arm in arms:
         # A weight-writing arm is interpretable only beside its matched
         # no-weight-write control with the same digital calibration.
         writes = arm.weights != "hold" or arm.digital_adapter is not None or arm.fault_rewrite is not None
-        if writes and ("hold", arm.calibration, None, None, None) not in settings:
+        if writes and ("hold", arm.calibration, None, None, None, "all", None) not in settings:
             raise config_error(
                 "onchip.arms",
                 f"to include a hold arm with calibration={arm.calibration} matching {arm.arm_id!r}",
@@ -1458,6 +1645,8 @@ def _onchip(raw: Any, technology: str) -> Onchip:
         # is a separate question, so the two are never mixed in one lifecycle.
         if any(arm.fault_rewrite is not None for arm in arms):
             raise config_error("onchip.arms", "to omit fault_rewrite under a declared write_noise_scale", raw["arms"])
+    if "epoch_evaluation" in raw:
+        extra["epoch_evaluation"] = _choice(raw["epoch_evaluation"], "onchip.epoch_evaluation", ("development",))
     if "development_every_steps" in raw:
         extra["development_every_steps"] = _integer(
             raw["development_every_steps"], "onchip.development_every_steps", minimum=1
@@ -1474,7 +1663,7 @@ def _onchip(raw: Any, technology: str) -> Onchip:
         extra["tolerance_steps"] = _number(raw["tolerance_steps"], "onchip.tolerance_steps", positive=True)
     return Onchip(
         update_law=law,
-        objective=_choice(raw["objective"], "onchip.objective", OBJECTIVES),
+        objective=_choice(raw["objective"], "onchip.objective", ONCHIP_OBJECTIVES),
         learning_rate=_number(raw["learning_rate"], "onchip.learning_rate"),
         calibration_learning_rate=_number(raw["calibration_learning_rate"], "onchip.calibration_learning_rate"),
         epochs=_integer(raw["epochs"], "onchip.epochs", minimum=1),
@@ -1501,16 +1690,16 @@ SECTIONS = (
 )
 # Optional sections are omitted from the document and from every provenance
 # record when absent, so lifecycles without them keep their digests.
-OPTIONAL_SECTIONS = ("transfer_tests", "recovery_views")
+OPTIONAL_SECTIONS = ("transfer_tests", "recovery_views", "retention", "drift_compensation", "task", "drift_recovery", "initial_programming")
 LIFECYCLE_KEYS = ("schema", "schema_version", "lifecycle_id") + SECTIONS
 
 # Upstream artifacts are reusable exactly when the sections they depend on are
 # unchanged; the question text, unrelated arms and later stages may change.
 ARTIFACT_SECTIONS = {
-    "feature_cache": ("network", "data", "transfer_tests", "recovery_views"),
+    "feature_cache": ("network", "data", "transfer_tests", "recovery_views", "task"),
     "device_bundle": ("network", "devices", "program_verify"),
     "hwa_source": ("network", "data", "devices", "deployment", "program_verify"),
-    "deployment": ("network", "data", "devices", "defects", "deployment", "program_verify", "transfer_tests"),
+    "deployment": ("network", "data", "devices", "defects", "deployment", "program_verify", "transfer_tests", "task"),
 }
 
 
@@ -1556,6 +1745,125 @@ def _recovery_views(raw):
 
 
 @dataclass(frozen=True)
+class Retention:
+    """Inference-only remapping of frozen CMO HWA sources into fitted device models."""
+
+    models: tuple[str, ...]
+    seconds: tuple[float, ...]
+    assignment_seeds: tuple[int, ...]
+    case_labels: tuple[str, ...]
+    seed: int
+    read_noise: bool
+    wan_noise_scales: tuple[float, ...] = (1.0,)
+    power_law: object = None
+
+    def to_dict(self):
+        value = {"models": list(self.models), "seconds": list(self.seconds),
+                 "assignment_seeds": list(self.assignment_seeds), "case_labels": list(self.case_labels),
+                 "seed": self.seed, "read_noise": self.read_noise}
+        if self.wan_noise_scales != (1.0,):
+            value["wan_noise_scales"] = list(self.wan_noise_scales)
+        if self.power_law is not None:
+            value["power_law"] = self.power_law.to_dict()
+        return value
+
+    def snapshots(self, model):
+        """Aged (seconds, noise scale) pairs; Wan's 1 s programming fit is never scaled."""
+        if self.power_law is not None:
+            return [(seconds, sigma) for seconds in self.seconds for sigma in self.power_law.sigmas_us]
+        return [(seconds, scale) for seconds in self.seconds
+                for scale in (self.wan_noise_scales if model == "reram_wan2022" and seconds != 1 else (1.0,))]
+
+
+def _retention(raw):
+    keys = ("models", "seconds", "assignment_seeds", "case_labels", "seed", "read_noise")
+    raw = _object(raw, "retention", keys + tuple(k for k in ("wan_noise_scales", "power_law") if k in raw))
+    models = tuple(_choice(v, "retention.models", ("pcm", "reram_cmo", "reram_wan2022"))
+                   for v in _list(raw["models"], "retention.models"))
+    seconds = tuple(_number(v, "retention.seconds", positive=True)
+                    for v in _list(raw["seconds"], "retention.seconds"))
+    labels = tuple(_text(v, "retention.case_labels") for v in _list(raw["case_labels"], "retention.case_labels"))
+    if len(set(models)) != len(models) or len(set(labels)) != len(labels):
+        raise config_error("retention", "to use unique models and case labels", raw)
+    if tuple(sorted(set(seconds))) != seconds:
+        raise config_error("retention.seconds", "to be unique and increasing", seconds)
+    if "reram_wan2022" in models and not set(seconds) <= {1., 86400., 172800.}:
+        raise config_error("retention.seconds", "to use only 1, 86400 or 172800 seconds for Wan-2022", seconds)
+    if "reram_cmo" in models and min(seconds) < 1:
+        raise config_error("retention.seconds", "to be at least one second for CMO", seconds)
+    scales = (1.0,)
+    if "wan_noise_scales" in raw:
+        scales = tuple(float(_number(v, "retention.wan_noise_scales", positive=True))
+                       for v in _list(raw["wan_noise_scales"], "retention.wan_noise_scales"))
+        if (1.0 not in scales or tuple(sorted(set(scales))) != scales
+                or any(not math.isfinite(v) for v in scales)):
+            raise config_error("retention.wan_noise_scales", "to be finite, unique, increasing and include 1", scales)
+        if "reram_wan2022" not in models or not set(seconds) - {1.}:
+            raise config_error("retention.wan_noise_scales", "to scale aged Wan-2022 snapshots only", raw)
+    power_law = None
+    if "power_law" in raw:
+        from training.power_law_drift import PowerLaw
+        try:
+            power_law = PowerLaw.parse(raw["power_law"])
+        except ValueError as error:
+            raise config_error("retention.power_law", str(error), raw["power_law"]) from error
+        if models != ("reram_cmo",) or labels != ("nominal",) or raw["read_noise"] or "wan_noise_scales" in raw:
+            raise config_error("retention.power_law", "to use nominal CMO arrays without read noise or Wan scaling", raw)
+    return Retention(models, seconds, _seeds(raw["assignment_seeds"], "retention.assignment_seeds"), labels,
+                     _integer(raw["seed"], "retention.seed", minimum=1, maximum=MAX_SEED),
+                     _boolean(raw["read_noise"], "retention.read_noise"), scales, power_law)
+
+
+MATRIX_COMPENSATIONS = ("global", "tile_global", "row", "column", "row_column", "global_shift", "global_moments")
+OUTPUT_CALIBRATIONS = ("mlp_gain", "mlp_shift", "mlp_moments")
+
+
+@dataclass(frozen=True)
+class DriftCompensation:
+    methods: tuple[str, ...]
+    calibration_sequences: int
+    row_column_iterations: int
+    gain_bounds: tuple[float, float]
+    # Scalar power-law parents only: the calibrated subset of their (age, spread) grid.
+    seconds: Optional[tuple[float, ...]] = None
+    sigmas_us: Optional[tuple[float, ...]] = None
+
+    def to_dict(self):
+        value = {"methods": list(self.methods), "calibration_sequences": self.calibration_sequences,
+                 "row_column_iterations": self.row_column_iterations, "gain_bounds": list(self.gain_bounds)}
+        if self.seconds is not None:
+            value.update(seconds=list(self.seconds), sigmas_us=list(self.sigmas_us))
+        return value
+
+    def snapshots(self, retention, model):
+        if self.seconds is None:
+            return retention.snapshots(model)
+        return [(seconds, sigma) for seconds in self.seconds for sigma in self.sigmas_us]
+
+
+def _drift_compensation(raw):
+    keys = ("methods", "calibration_sequences", "row_column_iterations", "gain_bounds")
+    subset = "seconds" in raw or "sigmas_us" in raw if isinstance(raw, Mapping) else False
+    raw = _object(raw, "drift_compensation", keys + (("seconds", "sigmas_us") if subset else ()))
+    methods = tuple(_choice(v, "drift_compensation.methods", MATRIX_COMPENSATIONS + OUTPUT_CALIBRATIONS)
+                    for v in _list(raw["methods"], "drift_compensation.methods"))
+    bounds = tuple(_number(v, "drift_compensation.gain_bounds", positive=True)
+                   for v in _list(raw["gain_bounds"], "drift_compensation.gain_bounds"))
+    if len(set(methods)) != len(methods) or len(bounds) != 2 or not bounds[0] <= 1 <= bounds[1]:
+        raise config_error("drift_compensation", "to use unique methods and bounds containing one", raw)
+    seconds = sigmas = None
+    if subset:
+        seconds = tuple(_number(v, "drift_compensation.seconds", positive=True)
+                        for v in _list(raw["seconds"], "drift_compensation.seconds"))
+        sigmas = tuple(_number(v, "drift_compensation.sigmas_us") for v in _list(raw["sigmas_us"], "drift_compensation.sigmas_us"))
+        if list(seconds) != sorted(set(seconds)) or list(sigmas) != sorted(set(sigmas)):
+            raise config_error("drift_compensation", "to list increasing distinct ages and spreads", raw)
+    return DriftCompensation(methods, _integer(raw["calibration_sequences"], "drift_compensation.calibration_sequences", minimum=1),
+                             _integer(raw["row_column_iterations"], "drift_compensation.row_column_iterations", minimum=1), bounds,
+                             seconds, sigmas)
+
+
+@dataclass(frozen=True)
 class Lifecycle:
     lifecycle_id: str
     question: Question
@@ -1570,6 +1878,11 @@ class Lifecycle:
     onchip: Optional[Onchip]
     transfer_tests: Optional[TransferTests] = None
     recovery_views: Optional[RecoveryViews] = None
+    retention: Optional[Retention] = None
+    drift_compensation: Optional[DriftCompensation] = None
+    task: Optional[Task] = None
+    drift_recovery: object = None
+    initial_programming: object = None
 
     @property
     def onchip_cases(self):
@@ -1615,6 +1928,63 @@ class Lifecycle:
 def _cross_validate(lifecycle: Lifecycle) -> None:
     devices, data, network = lifecycle.devices, lifecycle.data, lifecycle.network
     family = network.family
+    initial = lifecycle.initial_programming
+    if initial is not None:
+        if (family != OPT_FAMILY or devices.technology != 'cmo' or lifecycle.onchip is not None
+                or any(getattr(lifecycle, k) is not None for k in
+                       ('retention', 'drift_compensation', 'drift_recovery', 'recovery_views', 'task', 'transfer_tests'))
+                or network.analog_lora is not None or lifecycle.deployment.read_noise != 0
+                or any(a.method == 'lora' for a in lifecycle.hwa.arms)):
+            raise config_error('initial_programming', 'to use the frozen OPT pair mapping without other branches/read noise', initial.to_dict())
+        if not set(initial.assignment_seeds) <= set(devices.assignment_seeds):
+            raise config_error('initial_programming.assignment_seeds', 'to select declared assignments', initial.assignment_seeds)
+        if len(lifecycle.defects.cases) != 1 or lifecycle.defects.cases[0].kind != 'none':
+            raise config_error('initial_programming', 'to use only the nominal fault-free case', lifecycle.defects.to_dict())
+        if initial.validation_sequences > data.development_sequences:
+            raise config_error('initial_programming.validation_sequences', 'to select a development prefix', initial.validation_sequences)
+    custom = lifecycle.drift_recovery
+    if custom is not None:
+        if (family != OPT_FAMILY or devices.technology != 'cmo' or lifecycle.onchip is not None
+                or lifecycle.retention is not None or lifecycle.drift_compensation is not None
+                or lifecycle.recovery_views is not None or lifecycle.task is not None
+                or network.analog_lora is not None or lifecycle.deployment.read_noise != 0):
+            raise config_error('drift_recovery', 'to use the existing OPT pair encoding without other recovery branches or read noise', custom.to_dict())
+        if (custom.law.g_min, custom.law.g_max) != (9., 88.2):
+            raise config_error('drift_recovery.law', 'to preserve the source mapping window', custom.to_dict())
+        if not set(custom.assignment_seeds) <= set(devices.assignment_seeds):
+            raise config_error('drift_recovery.assignment_seeds', 'to select declared assignments', custom.assignment_seeds)
+        if any(c.kind != 'none' for c in lifecycle.defects.cases):
+            raise config_error('drift_recovery', 'to use a nominal fault-free case', lifecycle.defects.to_dict())
+    retention = lifecycle.retention
+    if lifecycle.drift_compensation is not None:
+        if retention is None or retention.read_noise:
+            raise config_error("drift_compensation", "to use held retention snapshots with read_noise false", retention)
+        compensation = lifecycle.drift_compensation
+        if retention.power_law is None:
+            if compensation.seconds is not None or set(compensation.methods) & set(OUTPUT_CALIBRATIONS):
+                raise config_error("drift_compensation", "to use age subsets and MLP-output methods only with the scalar power law",
+                                   compensation.to_dict())
+        elif (compensation.seconds is None or not set(compensation.seconds) <= set(retention.seconds)
+              or not set(compensation.sigmas_us) <= set(retention.power_law.sigmas_us)):
+            raise config_error("drift_compensation", "to select ages and spreads from the scalar power-law grid",
+                               compensation.to_dict())
+        if lifecycle.drift_compensation.calibration_sequences > lifecycle.data.cohort_size("training"):
+            raise config_error("drift_compensation.calibration_sequences", "to fit within the training cohort", lifecycle.drift_compensation.calibration_sequences)
+    if retention is not None:
+        if devices.technology != "cmo" or family != OPT_FAMILY or lifecycle.onchip is not None:
+            raise config_error("retention", "to remap OPT CMO sources with onchip: null", retention.to_dict())
+        if lifecycle.recovery_views is not None or lifecycle.program_verify.relaxation.model != "none":
+            raise config_error("retention", "to use unrelaxed sources without recovery views", retention.to_dict())
+        if devices.noise_scale != 1 or lifecycle.deployment.read_noise != 0:
+            raise config_error("retention", "to use nominal programming noise and zero per-MVM read noise", retention.to_dict())
+        if not set(retention.assignment_seeds) <= set(devices.assignment_seeds):
+            raise config_error("retention.assignment_seeds", "to select declared assignments", retention.assignment_seeds)
+        if not set(retention.case_labels) <= {c.label for c in lifecycle.defects.cases}:
+            raise config_error("retention.case_labels", "to select declared defect cases", retention.case_labels)
+        used = set(devices.assignment_seeds) | set(devices.selection_seeds) | {lifecycle.hwa.seed}
+        used |= {devices.endpoint_seed(s) for s in devices.assignment_seeds + devices.selection_seeds}
+        if retention.seed in used:
+            raise config_error("retention.seed", "to be disjoint from identity, programming and HWA seeds", retention.seed)
     if lifecycle.onchip and lifecycle.onchip.microbatch_size is not None:
         if family != OPT_FAMILY or lifecycle.onchip.batch_size % lifecycle.onchip.microbatch_size:
             raise config_error("onchip.microbatch_size", "to divide the OPT effective batch", lifecycle.onchip.microbatch_size)
@@ -1642,6 +2012,39 @@ def _cross_validate(lifecycle: Lifecycle) -> None:
             raise config_error("recovery_views.evaluation_lengths", "to exactly divide each evaluation token prefix", views.evaluation_lengths)
     if lifecycle.onchip and any(a.digital_adapter for a in lifecycle.onchip.arms) and family != OPT_FAMILY:
         raise config_error("onchip.arms.digital_adapter", "to be absent outside opt_mlp_suffix", family)
+    lora_arms = [arm for arm in lifecycle.hwa.arms if arm.method == "lora"]
+    lora = getattr(network, "analog_lora", None)
+    if lora is not None and (retention is not None or lifecycle.recovery_views is not None or (
+            lifecycle.onchip and any(a.digital_adapter for a in lifecycle.onchip.arms))):
+        raise config_error("network.analog_lora", "to be absent with retention, recovery views or digital adapters", lora.to_dict())
+    if lora is not None and lifecycle.deployment.scaling != "per_output_channel_absmax":
+        raise config_error("network.analog_lora", "to use per_output_channel_absmax scaling", lifecycle.deployment.scaling)
+    if any(case.target != "all" for case in lifecycle.defects.cases) and lora is None:
+        raise config_error("defects.cases.target", "to select base or adapter arrays only with network.analog_lora", "target")
+    if lora_arms:
+        task_examples = None if lifecycle.task is None else lifecycle.task.training_examples
+        if (lora is None or task_examples is None or lifecycle.hwa.objective != TASK_HWA_OBJECTIVE
+                or lifecycle.hwa.lr_schedule is not None or lifecycle.hwa.sequences_per_epoch is not None
+                or len(lora_arms) != sum(arm.trains for arm in lifecycle.hwa.arms)):
+            raise config_error("hwa.arms", "to train LoRA arms only with network.analog_lora, task.training_examples, "
+                               f"objective {TASK_HWA_OBJECTIVE!r}, no lr_schedule or streaming, and no other trained arm",
+                               [arm.arm_id for arm in lora_arms])
+    elif lifecycle.hwa.objective == TASK_HWA_OBJECTIVE:
+        raise config_error("hwa.objective", "to be the task objective only for LoRA arms", lifecycle.hwa.objective)
+    if lifecycle.onchip is not None:
+        if lifecycle.onchip.objective == SOURCE_KL and family != OPT_FAMILY:
+            raise config_error("onchip.objective", f"to be {SOURCE_KL!r} only for opt_mlp_suffix", SOURCE_KL)
+        if any(arm.write_scope == "adapter" for arm in lifecycle.onchip.arms) and lora is None:
+            raise config_error("onchip.arms.write_scope", "to learn adapters only with network.analog_lora", "adapter")
+    task = lifecycle.task
+    if task is not None:
+        if family != OPT_FAMILY:
+            raise config_error("task", f"to be absent; {family} defines no labelled task", task.to_dict())
+        if retention is not None or lifecycle.recovery_views is not None:
+            raise config_error("task", "to be absent with retention, compensation or recovery views", task.to_dict())
+    if lifecycle.question.primary_metric in TASK_PRIMARY_METRICS and task is None:
+        raise config_error("question.primary_metric", "to name a task metric only with a declared task",
+                           lifecycle.question.primary_metric)
     if lifecycle.question.primary_metric not in PRIMARY_METRICS[family]:
         raise config_error(
             "question.primary_metric",
@@ -1750,6 +2153,20 @@ def parse_lifecycle(payload: Any) -> Lifecycle:
     devices = _devices(raw["devices"])
     technology = devices.technology
     network = _network(raw["network"])
+    custom = None
+    initial = None
+    if 'initial_programming' in raw:
+        from training.initial_programming_config import InitialProgramming
+        try:
+            initial = InitialProgramming.parse(raw['initial_programming'])
+        except ValueError as error:
+            raise config_error('initial_programming', str(error), raw['initial_programming']) from error
+    if 'drift_recovery' in raw:
+        from training.drift_recovery_config import DriftRecovery
+        try:
+            custom = DriftRecovery.parse(raw['drift_recovery'])
+        except ValueError as error:
+            raise config_error('drift_recovery', str(error), raw['drift_recovery']) from error
     lifecycle = Lifecycle(
         lifecycle_id=_identifier(raw["lifecycle_id"], "lifecycle_id", _LIFECYCLE_ID),
         question=_question(raw["question"]),
@@ -1763,6 +2180,11 @@ def parse_lifecycle(payload: Any) -> Lifecycle:
         onchip=None if raw["onchip"] is None else _onchip(raw["onchip"], technology),
         transfer_tests=_transfer_tests(raw["transfer_tests"]) if "transfer_tests" in raw else None,
         recovery_views=_recovery_views(raw["recovery_views"]) if "recovery_views" in raw else None,
+        retention=_retention(raw["retention"]) if "retention" in raw else None,
+        drift_compensation=_drift_compensation(raw["drift_compensation"]) if "drift_compensation" in raw else None,
+        task=_task(raw["task"]) if "task" in raw else None,
+        drift_recovery=custom,
+        initial_programming=initial,
     )
     _cross_validate(lifecycle)
     return lifecycle
@@ -1857,6 +2279,14 @@ def _selection(raw: Any, lifecycle: Lifecycle) -> StageSelection:
         return StageSelection(kind, arm)
     if type(seed) is not int or seed not in lifecycle.devices.assignment_seeds:
         raise config_error("stage.array_seed", "to name a declared assignment seed", seed)
+    if kind in ("retention", "compensate") and (lifecycle.retention is None or seed not in lifecycle.retention.assignment_seeds):
+        raise config_error("stage", "to select a declared retention assignment", raw)
+    if kind == "compensate" and lifecycle.drift_compensation is None:
+        raise config_error("stage", "to declare drift_compensation for a compensate stage", raw)
+    if kind == 'drift_recovery' and (lifecycle.drift_recovery is None or seed not in lifecycle.drift_recovery.assignment_seeds):
+        raise config_error('stage', 'to select a declared custom-recovery assignment', raw)
+    if kind == 'initial_programming' and (lifecycle.initial_programming is None or seed not in lifecycle.initial_programming.assignment_seeds):
+        raise config_error('stage', 'to select a declared initial-programming realization', raw)
     return StageSelection(kind, arm, seed)
 
 
@@ -1903,6 +2333,10 @@ STAGE_OUTPUTS = {
     "hwa": ("hwa_source",),
     "deploy": ("deployment",),
     "onchip": ("onchip_states", "measurements"),
+    "retention": ("retention_measurements", "retention_states"),
+    "compensate": ("compensation_measurements", "compensation_states"),
+    "drift_recovery": ("drift_recovery_measurements", "drift_recovery_trajectories"),
+    "initial_programming": ("initial_programming_measurements", "initial_programming_summary", "initial_programming_state", "flowers_model"),
 }
 
 
@@ -1911,6 +2345,16 @@ def stage_selections(lifecycle: Lifecycle) -> list[StageSelection]:
 
     stages = [StageSelection("prepare"), StageSelection("devices")]
     stages += [StageSelection("hwa", arm.arm_id) for arm in lifecycle.hwa.arms]
+    if lifecycle.initial_programming is not None:
+        return stages + [StageSelection('initial_programming', arm.arm_id, seed)
+                         for arm in lifecycle.hwa.arms for seed in lifecycle.initial_programming.assignment_seeds]
+    if lifecycle.drift_recovery is not None:
+        return stages + [StageSelection('drift_recovery', arm.arm_id, seed)
+                         for arm in lifecycle.hwa.arms for seed in lifecycle.drift_recovery.assignment_seeds]
+    if lifecycle.retention is not None:
+        kind = "compensate" if lifecycle.drift_compensation is not None else "retention"
+        return stages + [StageSelection(kind, arm.arm_id, seed)
+                         for arm in lifecycle.hwa.arms for seed in lifecycle.retention.assignment_seeds]
     for kind in ("deploy", "onchip") if lifecycle.onchip is not None else ("deploy",):
         stages += [
             StageSelection(kind, arm.arm_id, seed)
@@ -1920,16 +2364,27 @@ def stage_selections(lifecycle: Lifecycle) -> list[StageSelection]:
     return stages
 
 
-def stage_inputs(selection: StageSelection) -> dict[str, Optional[tuple[str, str]]]:
-    """CLI input roles; ``None`` marks the external pinned teacher checkpoint."""
+BASE_SOURCE = ("external", "lora_base_source")
+
+
+def stage_inputs(selection: StageSelection, lifecycle: Optional["Lifecycle"] = None) -> dict[str, Optional[tuple[str, str]]]:
+    """CLI input roles; ``None`` marks the external pinned teacher checkpoint.
+
+    ``BASE_SOURCE`` marks the frozen HWA base of a LoRA arm, an external artifact pinned by the arm.
+    """
 
     inputs: dict[str, Optional[tuple[str, str]]] = {"teacher_weights": None}
     if selection.kind in ("prepare", "devices"):
         return inputs
     inputs["device_data"] = ("prepare", "feature_cache")
     inputs["device_model"] = ("devices", "device_bundle")
-    if selection.kind == "deploy":
+    if (selection.kind == "hwa" and lifecycle is not None
+            and lifecycle.hwa.arm(selection.hwa_arm).method == "lora"):
+        inputs["weights"] = BASE_SOURCE
+    if selection.kind in ("deploy", "retention", "compensate", "drift_recovery", "initial_programming"):
         inputs["weights"] = (StageSelection("hwa", selection.hwa_arm).stage_id, "hwa_source")
+        if selection.kind == "compensate":
+            inputs["device_state"] = (StageSelection("retention", selection.hwa_arm, selection.array_seed).stage_id, "retention_states")
     elif selection.kind == "onchip":
         upstream = StageSelection("deploy", selection.hwa_arm, selection.array_seed).stage_id
         inputs["device_state"] = (upstream, "deployment")
@@ -1941,6 +2396,9 @@ def provenance(lifecycle: Lifecycle, kind: str, *, hwa_arm: Optional[str] = None
 
     if kind not in ARTIFACT_SECTIONS:
         raise ValueError(f"Expected a lifecycle artifact kind. Provided value: {kind!r}.")
+    sections = ARTIFACT_SECTIONS[kind]
+    if kind == "hwa_source" and any(arm.method == "lora" for arm in lifecycle.hwa.arms):
+        sections = sections + ("task",)  # LoRA adapters train on the task's labelled examples
     record = {
         "schema": PROVENANCE_SCHEMA,
         "kind": kind,
@@ -1948,7 +2406,7 @@ def provenance(lifecycle: Lifecycle, kind: str, *, hwa_arm: Optional[str] = None
         "lifecycle_sha256": lifecycle.digest(),
         "sections": {
             name: lifecycle.section_digest(name)
-            for name in ARTIFACT_SECTIONS[kind]
+            for name in sections
             if name in lifecycle.present_sections()
         },
     }

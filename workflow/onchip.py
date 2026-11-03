@@ -209,7 +209,7 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
 
     def __init__(self, array, *, learning_rate, threshold_sigma, accumulate_updates,
                  acceptance_percent, noise_scale, max_write_attempts_per_device=None, write_noise_scale=None,
-                 write_roles=None):
+                 write_roles=None, write_mask=None):
         super().__init__(array, learning_rate=learning_rate, write_noise_scale=write_noise_scale)
         from training.reram_cmo import HALF_RANGE_US, MID_US, programming_sigma
 
@@ -229,6 +229,10 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
         # write counters: failed/stuck attempts consume the same allowance.
         self.attempt_counts = (None if max_write_attempts_per_device is None
                                else torch.zeros_like(self.first, dtype=torch.int32))
+        # Analog LoRA adapter-only learning: weights outside the mask never receive a command.
+        self.write_mask = None if write_mask is None else write_mask.detach().clone().to(torch.bool)
+        if self.write_mask is not None and self.write_mask.shape != self.first.shape:
+            raise ValueError("Expected one write-eligibility flag per logical weight.")
 
     @torch.no_grad()
     def step(self, gradient):
@@ -236,6 +240,8 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
         if self.learning_rate == 0:
             return
         eligible = None if self.write_roles is None else self.write_roles >= 0
+        if self.write_mask is not None:
+            eligible = self.write_mask if eligible is None else eligible & self.write_mask
         if self.attempt_counts is not None:
             within_cap = self.attempt_counts < self.max_write_attempts_per_device
             eligible = within_cap if eligible is None else eligible & within_cap
@@ -299,10 +305,12 @@ class ThresholdedWriteAdam(IdealizedWriteAdam):
                    if self.write_roles is not None else {})}
 
 
-def make_writer(array, lifecycle, *, write_roles=None):
+def make_writer(array, lifecycle, *, write_roles=None, write_mask=None, learning_rate=None):
     """The declared OM or CMO update law for a weight-learning arm."""
 
     onchip = lifecycle.onchip
+    if (write_mask is not None or learning_rate is not None) and onchip.update_law != "cmo_thresholded_write_adam":
+        raise ValueError("Expected a write mask or arm learning rate only for thresholded CMO learning.")
     if onchip.update_law == "om_closed_loop_pulse_adam":
         return ClosedLoopPulseAdam(
             array.port(),
@@ -320,22 +328,31 @@ def make_writer(array, lifecycle, *, write_roles=None):
                                   write_noise_scale=onchip.write_noise_scale)
     if onchip.update_law == "cmo_thresholded_write_adam":
         return ThresholdedWriteAdam(
-            array, learning_rate=onchip.learning_rate, threshold_sigma=onchip.threshold_sigma,
+            array, learning_rate=onchip.learning_rate if learning_rate is None else learning_rate,
+            threshold_sigma=onchip.threshold_sigma,
             accumulate_updates=onchip.accumulate_updates,
             acceptance_percent=lifecycle.program_verify.acceptance_percent,
             noise_scale=lifecycle.devices.noise_scale,
             max_write_attempts_per_device=onchip.max_write_attempts_per_device,
             write_noise_scale=onchip.write_noise_scale,
             write_roles=write_roles,
+            write_mask=write_mask,
         )
     raise ValueError(f"Expected an OM or CMO writer update law. Provided value: {onchip.update_law!r}.")
 
 
-def evaluations(network, array, cache, lifecycle, device) -> dict:
-    """Held apparent-state metrics, plus the named OM persistent diagnostic."""
+def evaluations(network, array, cache, lifecycle, device, *, development_only=False) -> dict:
+    """Held apparent-state metrics, plus the named OM persistent diagnostic.
+
+    ``development_only`` scores just the development cohorts (an intermediate epoch under
+    ``onchip.epoch_evaluation: development``).
+    """
 
     evaluate = family(lifecycle.network).evaluate
     q = array.read()
+    if development_only:
+        names = ["development"] + (["task_development"] if getattr(lifecycle, "task", None) is not None else [])
+        return {name: evaluate(network, cache[name], device, q=q) for name in names}
     split = lifecycle.data.evaluation
     values = {"development": evaluate(network, cache["development"], device, q=q)}
     if split == "test":
@@ -388,7 +405,19 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                                                 controller_state=controller)
         store.append_metric({"stage": "onchip_fault_rewrite", "case": label, "arm": arm.arm_id, **rewritten})
     roles = None if controller is None else controller["write_roles"]
-    writer = make_writer(array, lifecycle, write_roles=roles) if learn and direct else None
+    write_mask = None
+    if arm.write_scope == "adapter":
+        write_mask = torch.zeros_like(target, dtype=torch.bool)
+        for spec in network.layout[network.base_matrices:]:
+            write_mask[spec.offset:spec.offset + spec.size] = True
+    writer = (make_writer(array, lifecycle, write_roles=roles, write_mask=write_mask, learning_rate=arm.learning_rate)
+              if learn and direct else None)
+    # source_kl: the target is the clean deployed source itself (intended weights, deployed calibration).
+    reference = None
+    if onchip.objective == "source_kl":
+        import copy
+        reference = copy.deepcopy(network).requires_grad_(False).eval()
+        reference_target = target.detach().clone()
     tolerance = (
         array.nominal_step * onchip.tolerance_steps
         if om and onchip.update_law == "om_closed_loop_pulse_adam"
@@ -430,11 +459,14 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
             for offset in range(0, len(index), microbatch):
                 micro_index = index[offset:offset + microbatch]
                 x, t, y = network_family.batch(network, training, micro_index, device)
+                if reference is not None:
+                    with torch.no_grad():
+                        t = reference.forward_features(x, reference_target)
                 logits = network.forward_features(x, q)
                 if lifecycle.recovery_views:
                     mask = context_views.loss_mask(lifecycle, device)
                     logits, t, y = logits[:, mask], t[:, mask], y[:, mask]
-                loss = network_family.objective(logits, t, y, onchip.objective)
+                loss = network_family.objective(logits, t, y, "teacher_kl" if reference is not None else onchip.objective)
                 if not bool(torch.isfinite(loss)):
                     raise FloatingPointError("Nonfinite on-chip training objective.")
                 fraction = len(micro_index) / len(index)
@@ -486,6 +518,9 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                                      **({name: network_family.evaluate(network, cache[name], device, q=array.read())
                                          for name in context_views.extra_evaluation_names(lifecycle)
                                          if name.endswith("_development")}),
+                                     **({"task_development": network_family.evaluate(
+                                         network, cache["task_development"], device, q=array.read())}
+                                        if lifecycle.task is not None else {}),
                                      **({"writer": writer.diagnostics()}
                                         if isinstance(writer, ThresholdedWriteAdam) else {})})
                 network.train(was_training)
@@ -509,6 +544,11 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
             )
         if cmo:
             writes = array.write_counts(roles) - baseline_writes
+            if write_mask is not None:
+                cost.update(base_device_writes=int(writes[~write_mask].sum()),
+                            adapter_device_writes=int(writes[write_mask].sum()))
+                if cost["base_device_writes"]:
+                    raise RuntimeError("Adapter-only learning wrote base MLP devices.")
             cost.update(
                 touched_devices=int((writes > 0).sum()),
                 max_onchip_device_writes=int(writes.max()),
@@ -540,7 +580,8 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
             **(context_views.accounting(lifecycle, epoch) if lifecycle.recovery_views else {}),
             "cost": cost,
             **({"training_seconds": time.monotonic() - started} if lifecycle.recovery_views else {}),
-            **evaluations(network, array, cache, lifecycle, device),
+            **evaluations(network, array, cache, lifecycle, device,
+                          development_only=onchip.epoch_evaluation == "development" and epoch < onchip.epochs),
             "epoch_seconds": time.monotonic() - started,
         }
         curve.append(row)
@@ -550,7 +591,7 @@ def train_arm(*, lifecycle, arm, network, array, target, cache, store, label, de
                                  "peak_allocated_bytes": torch.cuda.max_memory_allocated(device),
                                  "peak_reserved_bytes": torch.cuda.max_memory_reserved(device)})
         print(json.dumps({"case": label, "arm": arm.arm_id, "epoch": epoch,
-                          "teacher_kl": row[lifecycle.data.evaluation]["teacher_kl"]}), flush=True)
+                          "teacher_kl": row.get(lifecycle.data.evaluation, row["development"])["teacher_kl"]}), flush=True)
     return {
         "arm": arm.arm_id,
         "weights": arm.weights,

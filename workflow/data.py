@@ -16,11 +16,12 @@ def evaluation_split(lifecycle) -> str:
 
 
 def transfer_splits(lifecycle) -> list[str]:
-    """Cache keys of the lifecycle's transfer test cohorts, scored with every evaluation."""
+    """Cache keys of the transfer test and task cohorts, scored with every evaluation."""
 
     tests = () if lifecycle.transfer_tests is None else lifecycle.transfer_tests.tests
     from workflow.context_views import extra_evaluation_names
-    return [test.cache_key for test in tests] + extra_evaluation_names(lifecycle)
+    tasks = [] if getattr(lifecycle, "task", None) is None else ["task_development", "task_test"]
+    return [test.cache_key for test in tests] + extra_evaluation_names(lifecycle) + tasks
 
 
 def build_cache(teacher, network, lifecycle, device) -> dict:

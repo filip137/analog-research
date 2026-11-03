@@ -1,0 +1,311 @@
+{
+ "hellaswag": {
+  "adapter": 0.003,
+  "all": 0.003,
+  "calibration": 0.001,
+  "candidates": {
+   "adapter": [
+    {
+     "adapter_device_writes": 750675,
+     "base_device_writes": 0,
+     "development_accuracy_norm_percent": 43.5,
+     "development_agreement": 89.7,
+     "hold_development_agreement": 87.15,
+     "issued_write_attempts": 800163,
+     "rate": 0.001,
+     "screen": "a"
+    },
+    {
+     "adapter_device_writes": 1887692,
+     "base_device_writes": 0,
+     "development_accuracy_norm_percent": 43.3,
+     "development_agreement": 90.05,
+     "hold_development_agreement": 87.15,
+     "issued_write_attempts": 2009752,
+     "rate": 0.003,
+     "screen": "b"
+    },
+    {
+     "adapter_device_writes": 2718875,
+     "base_device_writes": 0,
+     "development_accuracy_norm_percent": 41.949999999999996,
+     "development_agreement": 85.85,
+     "hold_development_agreement": 87.15,
+     "issued_write_attempts": 2892176,
+     "rate": 0.01,
+     "screen": "c"
+    }
+   ],
+   "all": [
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 40.400000000000006,
+     "development_agreement": 77.35,
+     "hold_development_agreement": 87.15,
+     "issued_write_attempts": 35445832,
+     "rate": 0.001,
+     "screen": "a"
+    },
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 41.349999999999994,
+     "development_agreement": 80.95,
+     "hold_development_agreement": 87.15,
+     "issued_write_attempts": 81748436,
+     "rate": 0.003,
+     "screen": "b"
+    },
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 32.0,
+     "development_agreement": 62.35,
+     "hold_development_agreement": 87.15,
+     "issued_write_attempts": 105373479,
+     "rate": 0.01,
+     "screen": "c"
+    }
+   ],
+   "calibration": [
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 43.9,
+     "development_agreement": 89.3,
+     "hold_development_agreement": 87.15,
+     "issued_write_attempts": 0,
+     "rate": 0.0001,
+     "screen": "a"
+    },
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 43.7,
+     "development_agreement": 89.75,
+     "hold_development_agreement": 87.15,
+     "issued_write_attempts": 0,
+     "rate": 0.0003,
+     "screen": "b"
+    },
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 43.7,
+     "development_agreement": 90.4,
+     "hold_development_agreement": 87.15,
+     "issued_write_attempts": 0,
+     "rate": 0.001,
+     "screen": "c"
+    }
+   ]
+  }
+ },
+ "piqa": {
+  "adapter": 0.001,
+  "all": 0.003,
+  "calibration": 0.0003,
+  "candidates": {
+   "adapter": [
+    {
+     "adapter_device_writes": 1201681,
+     "base_device_writes": 0,
+     "development_accuracy_norm_percent": 64.2,
+     "development_agreement": 93.33333333333333,
+     "hold_development_agreement": 92.6,
+     "issued_write_attempts": 1278045,
+     "rate": 0.001,
+     "screen": "a"
+    },
+    {
+     "adapter_device_writes": 2300837,
+     "base_device_writes": 0,
+     "development_accuracy_norm_percent": 64.33333333333333,
+     "development_agreement": 92.13333333333334,
+     "hold_development_agreement": 92.6,
+     "issued_write_attempts": 2447422,
+     "rate": 0.003,
+     "screen": "b"
+    },
+    {
+     "adapter_device_writes": 2748089,
+     "base_device_writes": 0,
+     "development_accuracy_norm_percent": 63.46666666666667,
+     "development_agreement": 88.2,
+     "hold_development_agreement": 92.6,
+     "issued_write_attempts": 2923154,
+     "rate": 0.01,
+     "screen": "c"
+    }
+   ],
+   "all": [
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 50.0,
+     "development_agreement": 67.66666666666667,
+     "hold_development_agreement": 92.6,
+     "issued_write_attempts": 27227816,
+     "rate": 0.001,
+     "screen": "a"
+    },
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 50.66666666666667,
+     "development_agreement": 67.8,
+     "hold_development_agreement": 92.6,
+     "issued_write_attempts": 48289717,
+     "rate": 0.003,
+     "screen": "b"
+    },
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 50.6,
+     "development_agreement": 66.93333333333334,
+     "hold_development_agreement": 92.6,
+     "issued_write_attempts": 83485554,
+     "rate": 0.01,
+     "screen": "c"
+    }
+   ],
+   "calibration": [
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 64.53333333333333,
+     "development_agreement": 94.46666666666667,
+     "hold_development_agreement": 92.6,
+     "issued_write_attempts": 0,
+     "rate": 0.0001,
+     "screen": "a"
+    },
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 64.66666666666666,
+     "development_agreement": 95.0,
+     "hold_development_agreement": 92.6,
+     "issued_write_attempts": 0,
+     "rate": 0.0003,
+     "screen": "b"
+    },
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 64.73333333333333,
+     "development_agreement": 94.8,
+     "hold_development_agreement": 92.6,
+     "issued_write_attempts": 0,
+     "rate": 0.001,
+     "screen": "c"
+    }
+   ]
+  }
+ },
+ "sst2": {
+  "adapter": 0.003,
+  "all": 0.003,
+  "calibration": 0.0003,
+  "candidates": {
+   "adapter": [
+    {
+     "adapter_device_writes": 1032702,
+     "base_device_writes": 0,
+     "development_accuracy_norm_percent": 93.4,
+     "development_agreement": 98.5,
+     "hold_development_agreement": 98.23333333333333,
+     "issued_write_attempts": 1099475,
+     "rate": 0.001,
+     "screen": "a"
+    },
+    {
+     "adapter_device_writes": 1886260,
+     "base_device_writes": 0,
+     "development_accuracy_norm_percent": 93.33333333333333,
+     "development_agreement": 98.56666666666666,
+     "hold_development_agreement": 98.23333333333333,
+     "issued_write_attempts": 2007482,
+     "rate": 0.003,
+     "screen": "b"
+    },
+    {
+     "adapter_device_writes": 2675076,
+     "base_device_writes": 0,
+     "development_accuracy_norm_percent": 93.43333333333334,
+     "development_agreement": 98.4,
+     "hold_development_agreement": 98.23333333333333,
+     "issued_write_attempts": 2845435,
+     "rate": 0.01,
+     "screen": "c"
+    }
+   ],
+   "all": [
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 92.83333333333333,
+     "development_agreement": 98.0,
+     "hold_development_agreement": 98.23333333333333,
+     "issued_write_attempts": 26755199,
+     "rate": 0.001,
+     "screen": "a"
+    },
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 93.4,
+     "development_agreement": 98.03333333333333,
+     "hold_development_agreement": 98.23333333333333,
+     "issued_write_attempts": 58172402,
+     "rate": 0.003,
+     "screen": "b"
+    },
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 92.53333333333333,
+     "development_agreement": 96.96666666666667,
+     "hold_development_agreement": 98.23333333333333,
+     "issued_write_attempts": 102222358,
+     "rate": 0.01,
+     "screen": "c"
+    }
+   ],
+   "calibration": [
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 92.96666666666667,
+     "development_agreement": 98.66666666666667,
+     "hold_development_agreement": 98.23333333333333,
+     "issued_write_attempts": 0,
+     "rate": 0.0001,
+     "screen": "a"
+    },
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 93.16666666666666,
+     "development_agreement": 98.73333333333333,
+     "hold_development_agreement": 98.23333333333333,
+     "issued_write_attempts": 0,
+     "rate": 0.0003,
+     "screen": "b"
+    },
+    {
+     "adapter_device_writes": null,
+     "base_device_writes": null,
+     "development_accuracy_norm_percent": 93.33333333333333,
+     "development_agreement": 98.7,
+     "hold_development_agreement": 98.23333333333333,
+     "issued_write_attempts": 0,
+     "rate": 0.001,
+     "screen": "c"
+    }
+   ]
+  }
+ }
+}

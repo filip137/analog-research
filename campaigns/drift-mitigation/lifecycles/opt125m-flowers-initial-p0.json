@@ -1,0 +1,164 @@
+{
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "lifecycle_id": "opt125m-flowers-initial-p0",
+  "question": {
+    "text": "Which initial programming scheme slows one-hour PPL growth under rescaled Flowers drift?",
+    "decision": "Development-only matched comparison; retain initial quality, growth and cost separately.",
+    "primary_metric": "perplexity",
+    "evidence_class": "exploratory_model_based"
+  },
+  "network": {
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m",
+    "analog_decoder_layers": 6
+  },
+  "data": {
+    "corpus": {
+      "name": "opt125m-synthetic-50m",
+      "sha256": "ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984"
+    },
+    "sequence_length": 256,
+    "data_seed": 20261008,
+    "hwa_sequences": 195226,
+    "recovery_sequences": 8192,
+    "development_sequences": 256,
+    "test_sequences": 0,
+    "evaluation": "development",
+    "max_examples": 0
+  },
+  "devices": {
+    "technology": "cmo",
+    "model": "aihwkit_1.1.0_reram_cmo",
+    "noise_scale": 1.0,
+    "assignment_seeds": [
+      271001,
+      271002,
+      271003,
+      271004,
+      271005
+    ],
+    "selection_seeds": [
+      211001,
+      211002
+    ],
+    "endpoint_seed_offset": 10000
+  },
+  "defects": {
+    "placement": "hierarchical_die_array",
+    "persistence": "permanent",
+    "arrays_per_die": 48,
+    "cases": [
+      {
+        "kind": "none",
+        "rate_ppm": 0,
+        "die_concentration": null,
+        "array_concentration": null
+      }
+    ]
+  },
+  "deployment": {
+    "scaling": "per_output_channel_absmax",
+    "encoding": "active_reference_pair",
+    "tile_size": 256,
+    "read_noise": 0.0,
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias"
+  },
+  "hwa": {
+    "noise_model": "additive_gaussian_weight",
+    "noise_std": 0.03,
+    "noise_scaling": "output_channel_abs_max",
+    "sequences_per_epoch": 8192,
+    "lr_schedule": {
+      "kind": "cosine_warmup_decay",
+      "total_steps": 25600,
+      "warmup_steps": 205,
+      "min_factor": 0.2
+    },
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "learning_rate": 0.005,
+    "lr_milestones": [],
+    "lr_decay": 1.0,
+    "epochs": 100,
+    "batch_size": 32,
+    "augment": false,
+    "seed": 41,
+    "selection": {
+      "every_epochs": 2,
+      "extension_epochs": 0
+    },
+    "arms": [
+      {
+        "id": "standard_hwa_model",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "corruption": null,
+        "selection_cases": [
+          {
+            "kind": "none",
+            "rate_ppm": 0,
+            "die_concentration": null,
+            "array_concentration": null
+          },
+          {
+            "kind": "random",
+            "rate_ppm": 30000,
+            "die_concentration": null,
+            "array_concentration": null
+          }
+        ],
+        "scope": "model",
+        "digital_learning_rate": 1e-05
+      }
+    ]
+  },
+  "program_verify": {
+    "method": "gaussian_endpoint",
+    "acceptance_percent": 2.0,
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "onchip": null,
+  "initial_programming": {
+    "source_sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028",
+    "model_path": "/lustre/fswork/projects/rech/umg/ucy17uy/flowers-initial-20261031/source-v1/hwa/campaigns/drift-mitigation/models/flowers-20261030.json",
+    "model_sha256": "1a39b8f206231f8bdda044ac5460c38389f8e54f675eef4dc5478eb54c7a804e",
+    "cohort_sha256": "c7a4ccb0b9fd2f4366eff2781ba8b411998f255246408d4bd5a45919ede30088",
+    "policy": "P0",
+    "assignment_seeds": [
+      271001,
+      271002,
+      271003
+    ],
+    "seed": 391030,
+    "selection_seed": 491030,
+    "validation_sequences": 64,
+    "evaluation_seconds": [
+      0.0,
+      10.0,
+      60.0,
+      300.0,
+      900.0,
+      1800.0,
+      3600.0
+    ],
+    "initial_anchor_seconds": 2.0,
+    "verify_seconds": 62.0,
+    "rewrite_anchor_seconds": 64.0,
+    "release_seconds": 300.0,
+    "immediate_release_seconds": 5.0,
+    "retry_fraction": 0.2,
+    "source_bounds": [
+      51.6,
+      154.8
+    ],
+    "destination_bounds": [
+      9.0,
+      88.2
+    ],
+    "boundary": "clip_observation",
+    "canary": false
+  }
+}

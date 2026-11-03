@@ -1,0 +1,226 @@
+{
+  "data": {
+    "corpus": {
+      "name": "opt125m-synthetic-50m",
+      "sha256": "ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984"
+    },
+    "data_seed": 20261008,
+    "development_sequences": 256,
+    "evaluation": "development",
+    "hwa_sequences": 195226,
+    "max_examples": 0,
+    "recovery_sequences": 8192,
+    "sequence_length": 256,
+    "test_sequences": 0
+  },
+  "defects": {
+    "arrays_per_die": 48,
+    "cases": [
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "none",
+        "rate_ppm": 0
+      }
+    ],
+    "persistence": "permanent",
+    "placement": "hierarchical_die_array"
+  },
+  "deployment": {
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias",
+    "encoding": "active_reference_pair",
+    "read_noise": 0.0,
+    "scaling": "per_output_channel_absmax",
+    "tile_size": 256
+  },
+  "devices": {
+    "assignment_seeds": [
+      271001,
+      271002,
+      271003,
+      271004,
+      271005
+    ],
+    "endpoint_seed_offset": 10000,
+    "model": "aihwkit_1.1.0_reram_cmo",
+    "noise_scale": 1.0,
+    "selection_seeds": [
+      211001,
+      211002
+    ],
+    "technology": "cmo"
+  },
+  "hwa": {
+    "arms": [
+      {
+        "corruption": null,
+        "digital_learning_rate": 1e-05,
+        "id": "standard_hwa_model",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "scope": "model",
+        "selection_cases": [
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "none",
+            "rate_ppm": 0
+          },
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "random",
+            "rate_ppm": 30000
+          }
+        ]
+      }
+    ],
+    "augment": false,
+    "batch_size": 32,
+    "epochs": 100,
+    "learning_rate": 0.005,
+    "lr_decay": 1.0,
+    "lr_milestones": [],
+    "lr_schedule": {
+      "kind": "cosine_warmup_decay",
+      "min_factor": 0.2,
+      "total_steps": 25600,
+      "warmup_steps": 205
+    },
+    "noise_model": "additive_gaussian_weight",
+    "noise_scaling": "output_channel_abs_max",
+    "noise_std": 0.03,
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "seed": 41,
+    "selection": {
+      "every_epochs": 2,
+      "extension_epochs": 0
+    },
+    "sequences_per_epoch": 8192
+  },
+  "lifecycle_id": "opt125m-custom-drift-recovery-small-eval",
+  "network": {
+    "analog_decoder_layers": 6,
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m"
+  },
+  "onchip": null,
+  "program_verify": {
+    "acceptance_percent": 2.0,
+    "method": "gaussian_endpoint",
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "question": {
+    "text": "Which repair policies remain effective through repeated custom-drift maintenance?",
+    "decision": "Development pilot: durability and quality versus cell-write commands.",
+    "primary_metric": "perplexity",
+    "evidence_class": "exploratory_model_based"
+  },
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "drift_recovery": {
+    "source_sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028",
+    "law": {
+      "mean_us": -2.0,
+      "spread_us": 3.0,
+      "mean_exponent": 0.23,
+      "spread_exponent": 0.11,
+      "reference_seconds": 3600.0,
+      "g_min": 9.0,
+      "g_max": 88.2
+    },
+    "persistent_fractions": [
+      0.0,
+      0.9,
+      1.0
+    ],
+    "assignment_seeds": [
+      271002
+    ],
+    "seed": 391029,
+    "selection_seed": 491029,
+    "selection_fraction": 0.1,
+    "arms": [
+      "untreated",
+      "global_calibration",
+      "channel_calibration",
+      "full_refresh",
+      "worst_refresh",
+      "random_refresh",
+      "stable_learning",
+      "random_learning",
+      "oracle_learning"
+    ],
+    "protocols": [
+      "single",
+      "repeated"
+    ],
+    "write_budgets": [
+      1.0,
+      10.0
+    ],
+    "first_intervention_seconds": 3600.0,
+    "maintenance_interval_seconds": 604800.0,
+    "horizon_seconds": 2592000.0,
+    "followup_seconds": [
+      60.0,
+      3600.0,
+      86400.0
+    ],
+    "evaluation_seconds": [
+      0.0,
+      3600.0,
+      7200.0,
+      21600.0,
+      86400.0,
+      90000.0,
+      172800.0,
+      604800.0,
+      1209600.0,
+      1814400.0,
+      2419200.0,
+      2592000.0
+    ],
+    "training_sequences": 1024,
+    "validation_sequences": 256,
+    "calibration_sequences": 32,
+    "batch_size": 32,
+    "microbatch_size": 1,
+    "max_updates": 128,
+    "passes": 4,
+    "learning_rates": [
+      0.0001,
+      0.0003,
+      0.001,
+      0.003
+    ],
+    "learning_rate": null,
+    "no_drift_control": true,
+    "canary": false,
+    "curve_validation_sequences": 64,
+    "heldout_evaluation": "final"
+  },
+  "transfer_tests": [
+    {
+      "label": "generated",
+      "corpus": {
+        "name": "wikitext2-train-synthtest",
+        "sha256": "8e73b6b43aafb92b8b52e11cdd060d573331fae410350cf2427f3eeba640e224"
+      },
+      "sequences": 384,
+      "split": "test"
+    },
+    {
+      "label": "wikitext",
+      "corpus": {
+        "name": "wikitext-2-raw-v1",
+        "sha256": "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01"
+      },
+      "sequences": 1024,
+      "split": "test"
+    }
+  ]
+}

@@ -189,8 +189,18 @@ def checked_payload(payload, expected_root, *, source_only=False, deployment_onl
                     expected[test.cache_key] = min(test.sequences, lc.data.max_examples) if lc.data.max_examples else test.sequences
                     if cohorts.get(test.cache_key, {}).get("corpus", {}).get("sha256") != test.corpus_sha256:
                         raise ValueError("Transfer cohort corpus digest mismatch")
-                if (set(cohorts) != set(expected) or any(cohorts[name]["count"] != count
-                        or cohorts[name]["sequence_length"] != lc.data.sequence_length for name, count in expected.items())):
+                tasks = {}
+                if lc.task is not None:
+                    for name, count in (("task_development", lc.task.development_examples),
+                                        ("task_test", lc.task.evaluation_examples),
+                                        *((("task_train", lc.task.training_examples),)
+                                          if lc.task.training_examples is not None else ())):
+                        tasks[name] = min(count, lc.data.max_examples) if lc.data.max_examples else count
+                        if cohorts.get(name, {}).get("source", {}).get("sha256") != lc.task.choices_sha256:
+                            raise ValueError("Task cohort file digest mismatch")
+                if (set(cohorts) != set(expected) | set(tasks) or any(cohorts[name]["count"] != count
+                        or cohorts[name]["sequence_length"] != lc.data.sequence_length for name, count in expected.items())
+                        or any(cohorts[name]["count"] != count for name, count in tasks.items())):
                     raise ValueError("Prepared cohort coverage differs from the lifecycle")
                 if metrics["corpus"]["sha256"] != lc.data.corpus_sha256:
                     raise ValueError("Prepared training corpus digest mismatch")
@@ -230,6 +240,10 @@ def checked_payload(payload, expected_root, *, source_only=False, deployment_onl
                             raise ValueError("Missing declared deployment evaluation domain")
                         if lc.network.family == "opt_mlp_suffix" and scores[split].get("sequences") != sizes[split]:
                             raise ValueError("Deployment evaluation cohort size mismatch")
+                    if lc.task is not None and any(
+                            not isinstance(scores.get(name, {}).get("accuracy_norm_percent"), (int, float))
+                            for name in ("task_development", "task_test")):
+                        raise ValueError("Missing declared task evaluation")
         else:
             if lc.onchip is None or text_sha(files["measurements.json"]) != kinds["measurements"]["sha256"]:
                 raise ValueError("On-chip measurements are missing or changed")
@@ -284,7 +298,7 @@ def checked_payload(payload, expected_root, *, source_only=False, deployment_onl
         if results[stage_id]["metrics"]["stage"] != selection.to_dict():
             raise ValueError("Unexpected native stage selection")
         inputs = unique(manifests[stage_id]["inputs"], "role", "input role")
-        expected_inputs = stage_inputs(selection)
+        expected_inputs = stage_inputs(selection, lc)
         if set(inputs) - {"staged_source_snapshot"} != set(expected_inputs):
             raise ValueError("Native input-role coverage mismatch")
         for role, upstream in expected_inputs.items():

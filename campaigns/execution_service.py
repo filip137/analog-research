@@ -1689,6 +1689,18 @@ def main(argv=None):
     storage_parser.add_argument("roots", nargs="+", type=Path)
     register = commands.add_parser("register")
     register.add_argument("manifest", type=Path)
+    register.add_argument("--thread", default=os.environ.get("CODEX_THREAD_ID"),
+                          help="Originating Codex chat for completion results (defaults to CODEX_THREAD_ID)")
+    completion = commands.add_parser("notify-on-completion")
+    completion.add_argument("campaign_id")
+    completion.add_argument("--thread", default=os.environ.get("CODEX_THREAD_ID"))
+    completion.add_argument("--job", action="append", dest="job_ids")
+    completion.add_argument("--result", action="append", type=Path, default=[])
+    completion.add_argument("--include-existing", action="store_true")
+    acknowledgement = commands.add_parser("ack-completion")
+    acknowledgement.add_argument("event_id")
+    acknowledgement.add_argument("--thread", default=os.environ.get("CODEX_THREAD_ID"))
+    acknowledgement.add_argument("--summary", required=True)
     prepare = commands.add_parser("prepare")
     prepare.add_argument("job", type=Path)
     amendment = commands.add_parser("amend")
@@ -1733,16 +1745,43 @@ def main(argv=None):
                       "incidents": [dict(row) for row in db.execute("SELECT * FROM campaign_incidents")]}
             if db.execute("SELECT 1 FROM sqlite_master WHERE name='campaign_escalations'").fetchone():
                 output["escalations"] = [dict(row) for row in db.execute("SELECT * FROM campaign_escalations")]
+            for table in ("campaign_completion_watches", "campaign_completion_deliveries"):
+                if db.execute("SELECT 1 FROM sqlite_master WHERE name=?", (table,)).fetchone():
+                    output[table] = [dict(row) for row in db.execute(f"SELECT * FROM {table}")]
         status_file = root / "service-status.json"
         output["service"] = json.loads(status_file.read_text()) if status_file.exists() else None
         print(json.dumps(output, indent=2)); return
     module = load_queue(args.scripts)
     cfg = module.load_config(args.queue_config)
     scheduler = scheduler_type(module)(cfg)
+    from campaigns.completion_notifications import CompletionNotifier
+    notifier = CompletionNotifier(scheduler.campaigns, cfg.get("completion_notifications"), args.queue_config)
+    if args.command == "notify-on-completion":
+        if not args.thread:
+            parser.error("--thread or CODEX_THREAD_ID is required for completion delivery")
+        print(notifier.register(args.campaign_id, args.thread, args.job_ids, args.result,
+                                include_existing=args.include_existing)); return
+    if args.command == "ack-completion":
+        if not args.thread:
+            parser.error("--thread or CODEX_THREAD_ID is required for acknowledgement")
+        if os.environ.get("CODEX_THREAD_ID") and args.thread != os.environ["CODEX_THREAD_ID"]:
+            parser.error("acknowledgement thread must match the current Codex chat")
+        print(canonical(notifier.acknowledge(args.event_id, args.thread, args.summary))); return
     if args.command == "prepare":
         print(canonical(prepare_job(module, scheduler, json.loads(args.job.read_text())))); return
     if args.command == "register":
-        print(scheduler.campaigns.register(json.loads(args.manifest.read_text()))); return
+        manifest = json.loads(args.manifest.read_text())
+        print(scheduler.campaigns.register(manifest))
+        if notifier.settings["enabled"]:
+            if args.thread:
+                try:
+                    watch_id = notifier.register(manifest["id"], args.thread)
+                    print(f"Completion chat registered: {watch_id}", file=sys.stderr)
+                except ValueError as exc:
+                    print(f"Completion chat registration needs attention: {exc}", file=sys.stderr)
+            else:
+                print("Completion chat not registered: pass --thread with the originating chat UUID", file=sys.stderr)
+        return
     if args.command == "amend":
         amendment = json.loads(args.amendment.read_text())
         for move in amendment.get("relocations", []) + amendment.get("prepared_placements", []):
@@ -1786,6 +1825,11 @@ def main(argv=None):
                 investigator.cycle()
                 ordinary_recovery.cycle()
             escalator.cycle()
+            try:
+                notifier.cycle()
+            except Exception as exc:
+                # Chat delivery must never take down experiment supervision.
+                scheduler.store.event(None, "completion_notification_error", {"error": str(exc)[:1000]})
             notify_systemd("WATCHDOG=1")
             if args.command == "once":
                 break

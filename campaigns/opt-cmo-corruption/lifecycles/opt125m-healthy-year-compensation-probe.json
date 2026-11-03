@@ -1,0 +1,159 @@
+{
+  "data": {
+    "corpus": {
+      "name": "opt125m-synthetic-50m",
+      "sha256": "ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984"
+    },
+    "data_seed": 20261008,
+    "development_sequences": 8,
+    "evaluation": "development",
+    "hwa_sequences": 8,
+    "max_examples": 8,
+    "recovery_sequences": 8,
+    "sequence_length": 256,
+    "test_sequences": 0
+  },
+  "defects": {
+    "arrays_per_die": 48,
+    "cases": [
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "none",
+        "rate_ppm": 0
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 30000
+      }
+    ],
+    "persistence": "permanent",
+    "placement": "hierarchical_die_array"
+  },
+  "deployment": {
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias",
+    "encoding": "active_reference_pair",
+    "read_noise": 0.0,
+    "scaling": "per_output_channel_absmax",
+    "tile_size": 256
+  },
+  "devices": {
+    "assignment_seeds": [
+      271001,
+      271002,
+      271003,
+      271004,
+      271005
+    ],
+    "endpoint_seed_offset": 10000,
+    "model": "aihwkit_1.1.0_reram_cmo",
+    "noise_scale": 1.0,
+    "selection_seeds": [
+      211001,
+      211002
+    ],
+    "technology": "cmo"
+  },
+  "drift_compensation": {
+    "calibration_sequences": 8,
+    "gain_bounds": [
+      0.1,
+      10.0
+    ],
+    "methods": [
+      "global",
+      "tile_global",
+      "row",
+      "column",
+      "row_column",
+      "global_shift",
+      "global_moments"
+    ],
+    "row_column_iterations": 10
+  },
+  "hwa": {
+    "arms": [
+      {
+        "id": "digital",
+        "method": "none"
+      }
+    ],
+    "augment": false,
+    "batch_size": 32,
+    "epochs": 1,
+    "learning_rate": 0.005,
+    "lr_decay": 1.0,
+    "lr_milestones": [],
+    "noise_model": "additive_gaussian_weight",
+    "noise_scaling": "output_channel_abs_max",
+    "noise_std": 0.03,
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "seed": 41,
+    "selection": {
+      "every_epochs": 2,
+      "extension_epochs": 0
+    }
+  },
+  "lifecycle_id": "opt125m-healthy-year-compensation-probe",
+  "network": {
+    "analog_decoder_layers": 1,
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m"
+  },
+  "onchip": null,
+  "program_verify": {
+    "acceptance_percent": 2.0,
+    "method": "gaussian_endpoint",
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "question": {
+    "decision": "Descriptive one-assignment, healthy-array model extrapolation. campaigns/pilots/20261014-healthy-one-year.md",
+    "evidence_class": "exploratory_model_based",
+    "primary_metric": "teacher_kl",
+    "text": "Readiness probe: healthy PCM/CMO one-year retention and digital compensation."
+  },
+  "retention": {
+    "assignment_seeds": [
+      271002
+    ],
+    "case_labels": [
+      "nominal"
+    ],
+    "models": [
+      "reram_cmo",
+      "pcm"
+    ],
+    "read_noise": false,
+    "seconds": [
+      31536000
+    ],
+    "seed": 391013
+  },
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "transfer_tests": [
+    {
+      "corpus": {
+        "name": "wikitext-2-raw-v1",
+        "sha256": "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01"
+      },
+      "label": "wikitext",
+      "sequences": 8,
+      "split": "test"
+    },
+    {
+      "corpus": {
+        "name": "wikitext2-train-synthtest",
+        "sha256": "8e73b6b43aafb92b8b52e11cdd060d573331fae410350cf2427f3eeba640e224"
+      },
+      "label": "generated",
+      "sequences": 8,
+      "split": "test"
+    }
+  ]
+}

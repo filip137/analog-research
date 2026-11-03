@@ -56,6 +56,9 @@ labs/mnist_pytorch/
 *.csv
 *.pkl
 
+# Small source table for the October 2026 HWA meeting note
+!docs/meeting_2026_10_22_ppl.csv
+
 # External/vendor code
 labs/Equilibrium-Propagation/
 

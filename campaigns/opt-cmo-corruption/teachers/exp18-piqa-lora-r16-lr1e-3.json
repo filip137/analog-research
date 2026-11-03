@@ -1,0 +1,45 @@
+{
+  "experiment_id": "opt_task_teacher.v1",
+  "schema_version": 1,
+  "teacher_id": "exp18-piqa-lora-r16-lr1e-3",
+  "model": "facebook/opt-125m",
+  "task": {
+    "name": "piqa",
+    "choices": {
+      "name": "piqa-opt125m-v1",
+      "sha256": "767bfbf120e57370296b3db4ff53132da7c005ffba151e9b070c179219d849a0"
+    },
+    "decision": "acc_norm",
+    "development_examples": 1500
+  },
+  "lora": {
+    "rank": 16,
+    "alpha": 32.0,
+    "targets": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "out_proj",
+      "fc1",
+      "fc2"
+    ]
+  },
+  "training": {
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "warmup_fraction": 0.06,
+    "epochs": 4,
+    "batch_examples": 32,
+    "micro_examples": 8,
+    "max_grad_norm": 1.0,
+    "score": "sum",
+    "seed": 61,
+    "development_every_steps": 229,
+    "max_examples": 0
+  },
+  "execution": {
+    "device": "cuda",
+    "cpu_threads": 4,
+    "disable_cudnn": false
+  }
+}

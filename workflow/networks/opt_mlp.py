@@ -37,6 +37,9 @@ from workflow.lifecycle import SCALINGS
 
 SPLITS = ("hwa", "training", "development", "test")
 SUMMARY_METRICS = ("teacher_kl", "perplexity")
+# Labelled multiple-choice cohorts of a declared ``task`` (workflow.tasks).
+TASK_SPLITS = ("task_development", "task_test")
+TASK_SUMMARY_METRICS = ("accuracy_norm_percent", "accuracy_percent", "choice_kl", "teacher_kl")
 PRESENTATIONS = "sequence_presentations"
 CORPUS_SCHEMA = "crossbar_lifecycle.token_corpus.v1"
 CORPUS_SPLITS = ("train", "validation", "test")
@@ -186,6 +189,7 @@ class OptMlpSuffix(nn.Module):
         tile_size: int = 512,
         scaling: str = "per_layer_absmax",
         scope: str = "analog",
+        analog_lora=None,
     ):
         super().__init__()
         depth = len(teacher.layers)
@@ -217,6 +221,24 @@ class OptMlpSuffix(nn.Module):
                     values.append(weight.flatten() / scale)
                 biases.append(nn.Parameter(module.bias.detach().clone()))
                 offset += weight.numel()
+        # Analog LoRA: A (rank x in) and B (out x rank) of every base matrix follow the base matrices
+        # in the layout, so programming, faults and rewrites treat them as arrays. They start at zero
+        # (an exact no-op) with unit channel scales; adapter training sets both.
+        self.base_matrices = len(self.layout)
+        self.adapters, self.adapter_scale = {}, 0.0
+        if analog_lora is not None:
+            self.adapter_scale = analog_lora.alpha / analog_lora.rank
+            for k, spec in enumerate(list(self.layout)):
+                outputs, inputs = spec.shape
+                pair = []
+                for suffix, shape in (("lora_a", (analog_lora.rank, inputs)), ("lora_b", (outputs, analog_lora.rank))):
+                    self.layout.append(MatrixSpec(f"{spec.name}.{suffix}", shape, offset, shape[0] * shape[1], 1.0))
+                    values.append(torch.zeros(shape[0] * shape[1], device=teacher.embed_tokens.weight.device))
+                    if scaling == "per_output_channel_absmax":
+                        rows.append(torch.ones(shape[0], device=teacher.embed_tokens.weight.device))
+                    pair.append(len(self.layout) - 1)
+                    offset += shape[0] * shape[1]
+                self.adapters[k] = tuple(pair)
         self.q = nn.Parameter(torch.cat(values))
         self.register_buffer("scales", torch.tensor([x.scale for x in self.layout], device=self.q.device))
         if rows:
@@ -225,7 +247,7 @@ class OptMlpSuffix(nn.Module):
             self.channel_offsets = [0]
             for spec in self.layout:
                 self.channel_offsets.append(self.channel_offsets[-1] + spec.shape[0])
-        self.output_gains = nn.Parameter(torch.ones(len(self.layout), device=self.q.device))
+        self.output_gains = nn.Parameter(torch.ones(self.base_matrices, device=self.q.device))
         self.mlp_biases = nn.ParameterList(biases)
         self.mlp_norms = nn.ModuleList(
             copy.deepcopy(teacher.layers[i].final_layer_norm) for i in range(self.start, depth)
@@ -242,6 +264,7 @@ class OptMlpSuffix(nn.Module):
         self.enable_digital(False)
         self.lora = None
         self.lora_multiplier = 0.0
+        self.drift_compensation = None
 
     def enable_lora(self, config, seed=0):
         """Digital corrections to the analog MLPs, in logical weight units.
@@ -317,9 +340,30 @@ class OptMlpSuffix(nn.Module):
 
     def _matrix(self, x, index, q):
         spec = self.layout[index]
-        matrix = q[spec.offset : spec.offset + spec.size].reshape(spec.shape)
         flat = x.reshape(-1, spec.shape[1])
-        if self.read_noise:
+        if self.drift_compensation is not None and (self.read_noise or self.lora is not None or self.adapters):
+            raise ValueError("Drift calibration requires held readouts without per-MVM noise or LoRA.")
+        logical = self._logical(flat, index, q)
+        if self.adapters:
+            # The analog adapter path x -> A -> B, digitized between the two arrays and scaled by alpha/r.
+            a, b = self.adapters[index]
+            logical = logical + self._logical(self._logical(flat, a, q), b, q) * self.adapter_scale
+        if self.lora is not None:
+            adapter = self.lora[index]
+            logical = logical + ((flat @ adapter["a"].T) @ adapter["b"].T) * self.lora_multiplier
+        result = logical * self.output_gains[index] + self.mlp_biases[index]
+        if self.drift_compensation is not None:
+            result = self.drift_compensation.after_bias(result, index)
+        return result.reshape(*x.shape[:-1], spec.shape[0])
+
+    def _logical(self, flat, index, q):
+        """One analog matrix's product in logical weight units (held state ``q``, digital output scale)."""
+
+        spec = self.layout[index]
+        matrix = q[spec.offset : spec.offset + spec.size].reshape(spec.shape)
+        if self.drift_compensation is not None:
+            product = self.drift_compensation.mvm(flat, index, matrix)
+        elif self.read_noise:
             columns = []
             for output in range(0, spec.shape[0], self.tile_size):
                 accum = None
@@ -341,12 +385,7 @@ class OptMlpSuffix(nn.Module):
             scale = self.channel_scales[self.channel_offsets[index] : self.channel_offsets[index + 1]]
         else:
             scale = self.scales[index]
-        logical = product * scale
-        if self.lora is not None:
-            adapter = self.lora[index]
-            logical = logical + ((flat @ adapter["a"].T) @ adapter["b"].T) * self.lora_multiplier
-        result = logical * self.output_gains[index] + self.mlp_biases[index]
-        return result.reshape(*x.shape[:-1], spec.shape[0])
+        return product * scale
 
     def forward_features(self, hidden, q=None):
         """Student logits at the scored positions from the frozen prefix state.
@@ -374,6 +413,41 @@ class OptMlpSuffix(nn.Module):
 
     def forward(self, tokens, q=None):
         return self.forward_features(self.features(tokens), q)
+
+    @torch.no_grad()
+    def analog_input(self, tokens):
+        """Residual stream entering the first analog decoder layer, as in ``forward_features``."""
+
+        hidden = self.features(tokens)
+        if self.digital is None:
+            return hidden
+        hidden = self.digital.embed(hidden.tokens)
+        for i in range(self.start):
+            hidden = self.digital.layers[i](hidden)
+        return hidden
+
+    def mlp_branch(self, k, hidden, q):
+        """Analog MLP k split for output calibration, from ``analog_input`` onwards.
+
+        Returns the residual stream after attention, the digitized fc2 output
+        before its digital bias, and that bias; ``residual + (z + bias)`` is the
+        operation order of ``forward_features``.
+        """
+
+        if self.lora is not None or self.adapters or self.read_noise:
+            raise ValueError("Output calibration expects the plain held-readout student.")
+        if self.drift_compensation is not None:
+            raise ValueError("Output calibration and matrix drift compensation are separate methods.")
+        digital = self.teacher if self.digital is None else self.digital
+        hidden = digital.layers[self.start + k].attention(hidden)
+        y = self._matrix(self.mlp_norms[k](hidden), 2 * k, q)
+        spec = self.layout[2 * k + 1]
+        flat = F.relu(y).reshape(-1, spec.shape[1])
+        z = self._logical(flat, 2 * k + 1, q) * self.output_gains[2 * k + 1]
+        return hidden, z.reshape(*hidden.shape[:-1], spec.shape[0]), self.mlp_biases[2 * k + 1]
+
+    def head(self, hidden):
+        return (self.teacher if self.digital is None else self.digital).logits(hidden[:, :-1])
 
     def mapping_receipt(self):
         tiles = []
@@ -411,19 +485,24 @@ class OptMlpSuffix(nn.Module):
 
 
 def pinned_digest(network) -> str:
-    return PINNED[network.model]["sha256"]
+    """The declared fine-tuned teacher's digest, otherwise the pinned checkpoint's."""
+
+    teacher = getattr(network, "teacher", None)
+    return PINNED[network.model]["sha256"] if teacher is None else teacher.sha256
 
 
 def load_teacher(path, network, device):
-    """Load the pinned Hugging Face ``pytorch_model.bin`` as an FP32 decoder."""
+    """Load the pinned (or declared fine-tuned) ``pytorch_model.bin`` as an FP32 decoder."""
 
     path = Path(path)
     digest = sha256_file(path)
     pinned = PINNED[network.model]
-    if digest != pinned["sha256"]:
+    if digest != pinned_digest(network):
+        source = (f"revision {pinned['revision']}" if getattr(network, "teacher", None) is None
+                  else f"fine-tuned teacher {network.teacher.name!r}")
         raise ValueError(
-            f"Expected {network.model} pytorch_model.bin at revision {pinned['revision']} "
-            f"(SHA-256 {pinned['sha256']}). Provided value: {path} with SHA-256 {digest}."
+            f"Expected {network.model} pytorch_model.bin of {source} "
+            f"(SHA-256 {pinned_digest(network)}). Provided value: {path} with SHA-256 {digest}."
         )
     state = torch.load(path, map_location="cpu", weights_only=True)
     teacher = from_hugging_face(state, pinned["config"]).to(device)
@@ -437,7 +516,8 @@ def build_network(teacher, lifecycle, hwa_arm=None) -> OptMlpSuffix:
     deployment = lifecycle.deployment
     scope = "analog" if hwa_arm is None else lifecycle.hwa.arm(hwa_arm).scope
     return OptMlpSuffix(
-        teacher, lifecycle.network.analog_decoder_layers, deployment.tile_size, deployment.scaling, scope
+        teacher, lifecycle.network.analog_decoder_layers, deployment.tile_size, deployment.scaling, scope,
+        getattr(lifecycle.network, "analog_lora", None),
     )
 
 
@@ -536,7 +616,57 @@ def build_cache(teacher, network, lifecycle, device) -> dict:
         cache[transfer_split(test)] = cohort
     from workflow import context_views
     context_views.build(cache, corpus, lifecycle)
+    if getattr(lifecycle, "task", None) is not None:
+        _build_task_cohorts(cache, lifecycle, teacher.config.max_positions)
     return cache
+
+
+def task_path(task) -> Path:
+    """Task files live beside the pinned token corpora (``EBL_CORPUS_ROOT``)."""
+
+    root = os.environ.get("EBL_CORPUS_ROOT")
+    if not root:
+        raise ValueError("Expected EBL_CORPUS_ROOT to name the directory of pinned token corpora.")
+    return Path(root) / f"{task.choices_name}.pt"
+
+
+def load_task(task, model: str) -> tuple[dict, Path]:
+    """The pinned choice-task file of a lifecycle ``task`` section."""
+
+    from workflow import tasks
+
+    path = task_path(task)
+    digest = sha256_file(path)
+    if digest != task.choices_sha256:
+        raise ValueError(
+            f"Expected task file {task.choices_name!r} with SHA-256 {task.choices_sha256}. "
+            f"Provided value: {path} with SHA-256 {digest}."
+        )
+    document = load(path)
+    tasks.check_task(document, model)
+    if document["task"] != task.name:
+        raise ValueError(f"Expected a {task.name} task file. Provided value: {document['task']!r}.")
+    return document, path
+
+
+def _task_counts(lifecycle) -> dict:
+    task, cap = lifecycle.task, lifecycle.data.max_examples
+    counts = {"task_development": task.development_examples, "task_test": task.evaluation_examples}
+    if task.training_examples is not None:
+        counts["task_train"] = task.training_examples
+    return {name: min(count, cap) if cap else count for name, count in counts.items()}
+
+
+def _build_task_cohorts(cache, lifecycle, max_positions) -> None:
+    from workflow import tasks
+
+    task = lifecycle.task
+    document, path = load_task(task, lifecycle.network.model)
+    for name, count in _task_counts(lifecycle).items():
+        cohort = tasks.cohort(document, name.removeprefix("task_"), count, max_positions)
+        cohort["choices"]["decision"] = task.decision
+        cohort["cohort"]["source"] = {"name": task.choices_name, "sha256": task.choices_sha256, "path": str(path)}
+        cache[name] = cohort
 
 
 def transfer_tests(lifecycle) -> tuple:
@@ -563,6 +693,15 @@ def check_cache(cache: dict, lifecycle) -> None:
             )
         if cache[name]["cohort"]["corpus"]["sha256"] != test.corpus_sha256:
             raise ValueError(f"Expected the {name} cohort to come from its declared corpus.")
+    task = getattr(lifecycle, "task", None)
+    for name, count in (_task_counts(lifecycle).items() if task is not None else ()):
+        value = cache.get(name, {})
+        if (value.get("cohort", {}).get("count") != count
+                or value["cohort"].get("source", {}).get("sha256") != task.choices_sha256
+                or value["choices"].get("decision") != task.decision):
+            raise ValueError(f"Expected the {name} cohort to hold {count} examples of the declared task file.")
+    if task is None and any(name in cache for name in TASK_SPLITS + ("task_train",)):
+        raise ValueError("Unexpected task cohorts in a lifecycle without a task.")
     if cache["corpus"]["sha256"] != data.corpus_sha256:
         raise ValueError("Expected the cache to come from the lifecycle corpus.")
     from workflow import context_views
@@ -572,13 +711,15 @@ def check_cache(cache: dict, lifecycle) -> None:
 def _splits(cache: dict) -> tuple:
     return SPLITS + tuple(sorted(name for name in cache
                                 if name.startswith("transfer_") or (name.startswith("context") and name != "context")
-                                or name == "recovery_context"))
+                                or name == "recovery_context" or name in TASK_SPLITS or name == "task_train"))
 
 
 def to_device(cache: dict, device) -> dict:
+    """Move token cohorts once; task rows stay on the CPU and are padded per batch."""
+
     moved = dict(cache)
     for name in _splits(cache):
-        if name in cache:
+        if name in cache and "tokens" in cache[name]:
             moved[name] = {**cache[name], "tokens": cache[name]["tokens"].to(device)}
     return moved
 
@@ -625,45 +766,128 @@ def hwa_batch(inputs: dict, index, generator, network, teacher, lifecycle):
     return batch(network, inputs, index, inputs["tokens"].device)
 
 
+def _score_batch(score, out, teacher, labels):
+    if not bool(torch.isfinite(out).all()):
+        raise FloatingPointError("Nonfinite network scores.")
+    flat = out.flatten(0, 1)
+    score["kl"] += float(F.kl_div(flat.log_softmax(1), teacher.flatten(0, 1).softmax(1), reduction="sum"))
+    score["ce"] += float(F.cross_entropy(flat, labels.flatten(), reduction="sum"))
+    p = out.argmax(-1)
+    score["predictions"].append(p.cpu())
+    score["correct"] += int((p == labels).sum())
+    score["agreement"] += int((p == teacher.argmax(-1)).sum())
+    score["scored"] += labels.numel()
+
+
+def _new_score():
+    return dict(kl=0., ce=0., correct=0, agreement=0, scored=0, predictions=[])
+
+
+def _finish_score(score, sequences):
+    n = score["scored"]
+    return {"sequences": sequences, "scored_tokens": n, "teacher_kl": score["kl"] / n,
+            "cross_entropy": score["ce"] / n, "perplexity": math.exp(score["ce"] / n),
+            "next_token_accuracy_percent": 100 * score["correct"] / n,
+            "teacher_agreement_percent": 100 * score["agreement"] / n,
+            "prediction_sha256": tensor_hash(torch.cat(score["predictions"]))}
+
+
 @torch.no_grad()
 def evaluate(network, split: dict, device, *, q=None, batch_size=EVALUATION_BATCH, read_seed=50001) -> dict:
-    """Token-weighted metrics of the student (held state ``q``) against the teacher."""
+    """Token-weighted metrics of the student (held state ``q``) against the teacher.
 
+    A task cohort (``choices``) instead reports multiple-choice metrics through
+    the same prefix, teacher and held-state forward.
+    """
+
+    if "choices" in split:
+        return _evaluate_choices(network, split, device, q=q, read_seed=read_seed)
     old_rng = network.read_generator.get_state()
     network.read_generator.manual_seed(read_seed)
     network.eval()
-    kl = ce = 0.0
-    scored = correct = agreement = 0
-    predictions = []
+    score = _new_score()
     try:
         for begin in range(0, len(split["tokens"]), batch_size):
             tokens = split["tokens"][begin : begin + batch_size].to(device)
             hidden = network.features(tokens)
             teacher = network.teacher_logits(hidden)
             out = network.forward_features(hidden, q)
-            if not bool(torch.isfinite(out).all()):
-                raise FloatingPointError("Nonfinite network scores.")
-            labels = tokens[:, 1:]
-            flat = out.flatten(0, 1)
-            kl += float(F.kl_div(flat.log_softmax(1), teacher.flatten(0, 1).softmax(1), reduction="sum"))
-            ce += float(F.cross_entropy(flat, labels.flatten(), reduction="sum"))
-            p = out.argmax(-1)
-            predictions.append(p.cpu())
-            correct += int((p == labels).sum())
-            agreement += int((p == teacher.argmax(-1)).sum())
-            scored += labels.numel()
+            _score_batch(score, out, teacher, tokens[:, 1:])
     finally:
         network.read_generator.set_state(old_rng)
-    return {
-        "sequences": len(split["tokens"]),
-        "scored_tokens": scored,
-        "teacher_kl": kl / scored,
-        "cross_entropy": ce / scored,
-        "perplexity": math.exp(ce / scored),
-        "next_token_accuracy_percent": 100 * correct / scored,
-        "teacher_agreement_percent": 100 * agreement / scored,
-        "prediction_sha256": tensor_hash(torch.cat(predictions)),
-    }
+    return _finish_score(score, len(split["tokens"]))
+
+
+@torch.no_grad()
+def _evaluate_choices(network, split: dict, device, *, q, read_seed) -> dict:
+    from workflow import tasks
+
+    choices = split["choices"]
+    rows = len(choices["offsets"]) - 1
+    student = torch.zeros(rows, dtype=torch.float64)
+    teacher = torch.zeros(rows, dtype=torch.float64)
+    token_kl, scored = 0.0, 0
+    old_rng = network.read_generator.get_state()
+    network.read_generator.manual_seed(read_seed)
+    network.eval()
+    try:
+        for index in tasks.batches(choices):
+            batch = tasks.padded(choices, index)
+            tokens = batch["tokens"].to(device)
+            hidden = network.features(tokens)
+            reference = network.teacher_logits(hidden)
+            out = network.forward_features(hidden, q)
+            if not bool(torch.isfinite(out).all()):
+                raise FloatingPointError("Nonfinite network scores.")
+            mask = tasks.scored_mask(batch, device)
+            student_log_probs, student_targets = tasks.continuation_log_probs(out, tokens, mask)
+            teacher_log_probs, teacher_targets = tasks.continuation_log_probs(reference, tokens, mask)
+            token_kl += float(F.kl_div(student_log_probs, teacher_log_probs, log_target=True, reduction="sum"))
+            scored += int(mask.sum())
+            student[index] = tasks.row_sums(student_targets, mask).cpu()
+            teacher[index] = tasks.row_sums(teacher_targets, mask).cpu()
+    finally:
+        network.read_generator.set_state(old_rng)
+    return tasks.finish(student, teacher, choices, token_kl=token_kl, scored=scored, decision=choices["decision"])
+
+
+@torch.no_grad()
+def teacher_task_metrics(network, split: dict, device) -> dict:
+    """The digital teacher's own task accuracy: the ceiling of every deployed row."""
+
+    from workflow import tasks
+
+    choices = split["choices"]
+    teacher = torch.zeros(len(choices["offsets"]) - 1, dtype=torch.float64)
+    for index in tasks.batches(choices):
+        batch = tasks.padded(choices, index)
+        tokens = batch["tokens"].to(device)
+        reference = network.teacher_logits(network.features(tokens))
+        mask = tasks.scored_mask(batch, device)
+        teacher[index] = tasks.row_sums(tasks.continuation_log_probs(reference, tokens, mask)[1], mask).cpu()
+    return tasks.teacher_finish(teacher, choices, decision=choices["decision"])
+
+
+@torch.no_grad()
+def evaluate_compensations(network, split, device, *, q, corrections, batch_size=EVALUATION_BATCH):
+    """Identical held-state evaluations sharing only teacher computation per batch."""
+    if network.read_noise:
+        raise ValueError("Shared compensation evaluation requires zero per-MVM noise.")
+    old = network.drift_compensation
+    network.eval()
+    scores = {name: _new_score() for name in corrections}
+    try:
+        for begin in range(0, len(split["tokens"]), batch_size):
+            tokens = split["tokens"][begin:begin+batch_size].to(device)
+            hidden = network.features(tokens)
+            teacher = network.teacher_logits(hidden)
+            for name, correction in corrections.items():
+                network.drift_compensation = correction
+                out = network.forward_features(hidden, q)
+                _score_batch(scores[name], out, teacher, tokens[:, 1:])
+    finally:
+        network.drift_compensation = old
+    return {name: _finish_score(score, len(split["tokens"])) for name, score in scores.items()}
 
 
 @torch.no_grad()
@@ -693,7 +917,18 @@ def prepare_report(teacher, network, cache: dict, lifecycle, device) -> dict:
         raise RuntimeError(
             f"The clean digital suffix does not reproduce the teacher: KL {digital['teacher_kl']:.3g}."
         )
-    return {"digital": digital, "teacher": teacher_metrics(network, cache[split], device), "corpus": cache["corpus"]}
+    report = {"digital": digital, "teacher": teacher_metrics(network, cache[split], device), "corpus": cache["corpus"]}
+    if getattr(lifecycle, "task", None) is not None:
+        report["task"] = {}
+        for name in TASK_SPLITS:
+            clean = evaluate(network, cache[name], device)
+            if not (clean["teacher_kl"] <= REPRODUCTION_KL and clean["choice_kl"] <= REPRODUCTION_KL):
+                raise RuntimeError(
+                    f"The clean digital suffix does not reproduce the teacher on {name}: "
+                    f"token KL {clean['teacher_kl']:.3g}, choice KL {clean['choice_kl']:.3g}."
+                )
+            report["task"][name] = {"digital": clean, "teacher": teacher_task_metrics(network, cache[name], device)}
+    return report
 
 
 def deployment_summary(clean: dict, initial: dict) -> dict:

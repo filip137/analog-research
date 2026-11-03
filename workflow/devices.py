@@ -282,9 +282,17 @@ def hidden_faults(array):
 
 
 def fault_group(name: str) -> str:
-    """The module owning an analog matrix, e.g. ``decoder.layers.11`` for its fc1 and fc2."""
+    """The module owning an analog matrix, e.g. ``decoder.layers.11`` for its fc1 and fc2.
+
+    Analog LoRA matrices (``...fc1.lora_a``, ``...fc1.lora_b``) form their own group per adapted
+    matrix, so adding adapters never changes a base group's arrays, rates or fault stream.
+    """
 
     return name.rsplit(".", 1)[0]
+
+
+def adapter_matrix(name: str) -> bool:
+    return name.endswith((".lora_a", ".lora_b"))
 
 
 def physical_arrays(layout, tile_size, devices_per_weight=2):
@@ -334,13 +342,18 @@ def _allocate(rng, total, sizes, weights):
 def hierarchical_faults(layout, tile_size, arrays_per_die, case, assignment_seed, namespace):
     """Permanent stuck devices of one assignment and defect case (see the module docstring)."""
 
-    mu = case.rate
+    target = getattr(case, "target", "all")
+    adapters = any(adapter_matrix(m.name) for m in layout)
     by_matrix = {m.name: (np.zeros(2 * m.size, dtype=bool), np.zeros(2 * m.size, dtype=np.float32)) for m in layout}
     arrays = physical_arrays(layout, tile_size)
     groups, receipt_groups = {}, []
     for array in arrays:
         groups.setdefault(fault_group(array["matrix"]), []).append(array)
     for group, members in groups.items():
+        # A targeted case leaves the other subset healthy; each group keeps its own stream, so a
+        # targeted subset fails exactly as it does in the matching untargeted case.
+        adapter = adapter_matrix(members[0]["matrix"])
+        mu = case.rate if target == "all" or (target == "adapter") == adapter else 0.0
         seed = binding_seed(assignment_seed, namespace, f"{group}/faults")
         die_rng, array_rng, count_rng, device_rng, value_rng = (
             np.random.default_rng(child) for child in np.random.SeedSequence(seed).spawn(5)
@@ -372,6 +385,7 @@ def hierarchical_faults(layout, tile_size, arrays_per_die, case, assignment_seed
         receipt_groups.append(
             {
                 "group": group,
+                **({"adapter": adapter, "rate": mu} if adapters else {}),
                 "devices": int(sizes.sum()),
                 "failed_devices": total,
                 "dies": [
@@ -401,7 +415,8 @@ def hierarchical_faults(layout, tile_size, arrays_per_die, case, assignment_seed
     fractions = [a["failed_devices"] / a["devices"] for g in receipt_groups for a in g["arrays"]]
     receipt = {
         "kind": case.kind,
-        "requested_rate": mu,
+        "requested_rate": case.rate,
+        **({"target": target} if adapters else {}),
         "die_concentration": case.die_concentration,
         "array_concentration": case.array_concentration,
         "arrays_per_die": arrays_per_die,
@@ -411,6 +426,8 @@ def hierarchical_faults(layout, tile_size, arrays_per_die, case, assignment_seed
         "failed_active": sum(int(mask[0].sum()) for mask, _ in matrices.values()),
         "failed_reference": sum(int(mask[1].sum()) for mask, _ in matrices.values()),
         "failed_devices": sum(g["failed_devices"] for g in receipt_groups),
+        **({"failed_adapter_devices": sum(g["failed_devices"] for g in receipt_groups if g["adapter"])}
+           if adapters else {}),
         "array_fault_fraction": {
             "mean": float(np.mean(fractions)),
             "std": float(np.std(fractions)),

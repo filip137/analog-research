@@ -322,3 +322,200 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
             "passes": fit["epochs_run"] * per_epoch / examples,
         }
     return {"model": best["model"], "fit": fit}
+
+
+# --- analog LoRA adapters on a frozen HWA base (method: lora) -------------------------------
+
+LORA_MICRO_EXAMPLES = 8
+
+
+def load_base(network, source_model: dict) -> None:
+    """Copy a whole-model HWA source into an adapter network; the adapters keep their state."""
+
+    state = {key: value.detach().clone() for key, value in network.state_dict().items()}
+    count = network.base_matrices
+    base_size = sum(spec.size for spec in network.layout[:count])
+    base_rows = network.channel_offsets[count]
+    if set(source_model) != set(state):
+        raise ValueError("Expected a base source with exactly the adapter network's parameters.")
+    for key, value in source_model.items():
+        value = value.to(state[key].device)
+        if key == "q" and value.numel() == base_size:
+            state[key][:base_size] = value
+        elif key == "scales" and value.numel() == count:
+            state[key][:count] = value
+        elif key == "channel_scales" and value.numel() == base_rows:
+            state[key][:base_rows] = value
+        elif value.shape == state[key].shape:
+            state[key] = value.clone()
+        else:
+            raise ValueError(f"Expected base source tensor {key!r} to match the base network.")
+    network.load_state_dict(state)
+
+
+def lora_lr_factor(step: int, warmup: int, total: int) -> float:
+    """Linear warm-up then cosine decay to zero; one-based update numbers."""
+
+    if warmup and step <= warmup:
+        return step / warmup
+    return 0.5 * (1 + math.cos(math.pi * (step - warmup) / max(total - warmup, 1)))
+
+
+def train_lora(*, lifecycle, arm, network, base, base_receipt, cache, device_bundle, store, device) -> dict:
+    """Train analog LoRA adapters on a frozen HWA base under the declared weight noise.
+
+    Only the adapter masters (logical units) train. Each step maps them to normalized targets
+    with their current output-channel abs-max as the digital scale, adds the CMO HWA noise to
+    every analog weight (base and adapters, straight-through) and minimizes the task's
+    multiple-choice cross entropy over per-token mean continuation log-likelihoods. Checkpoints
+    are selected by the mean development decision accuracy over the arm's selection cases on
+    the selection arrays after real P&V of base and adapters. Test data are never used.
+    """
+
+    from torch import nn
+    from workflow import tasks
+
+    hwa, task = lifecycle.hwa, lifecycle.task
+    if network.scaling != "per_output_channel_absmax" or not network.adapters:
+        raise ValueError("Expected analog adapters with per-output-channel scaling.")
+    network_family = family(lifecycle.network)
+    populations = device_bundle.get("populations")
+    load_base(network, base["model"])
+    initial = clone_cpu(network.state_dict())
+    count = network.base_matrices
+    base_size = sum(spec.size for spec in network.layout[:count])
+    first_row = network.channel_offsets[count]
+    network.enable_calibration(False)
+    network.enable_digital(False)
+    network.q.requires_grad_(False)
+    generator = torch.Generator().manual_seed(hwa.seed)
+    masters = []
+    for k in range(count):
+        a, b = (network.layout[i] for i in network.adapters[k])
+        inputs = a.shape[1]
+        init = torch.empty(a.shape).uniform_(-inputs ** -0.5, inputs ** -0.5, generator=generator)
+        masters += [nn.Parameter(init.to(device)), nn.Parameter(torch.zeros(b.shape, device=device))]
+
+    def targets(update_scales=True):
+        values, scales = [], []
+        for master in masters:
+            scale = master.detach().abs().amax(1).clamp_min(1e-12)
+            values.append((master / scale[:, None]).flatten())
+            scales.append(scale)
+        if update_scales:
+            with torch.no_grad():
+                network.channel_scales[first_row:] = torch.cat(scales)
+        return torch.cat([network.q.detach()[:base_size], torch.cat(values)])
+
+    choices = cache["task_train"]["choices"]
+    k, labels = choices["k"], choices["labels"]
+    examples = len(labels)
+    metric = "accuracy_norm_percent" if task.decision == "acc_norm" else "accuracy_percent"
+    sample = endpoint_sampler(lifecycle, arm, device_bundle, device, layout=network.layout)
+    optimizer = torch.optim.Adam(masters, lr=arm.learning_rate)
+    steps_per_epoch = math.ceil(examples / hwa.batch_size)
+    total = hwa.epochs * steps_per_epoch
+    warmup = round(arm.warmup_fraction * total)
+    prefix = network.prefix_hash()
+    best, history, rejected, step, started = None, [], None, 0, time.monotonic()
+
+    def select(epoch):
+        nonlocal best
+        with torch.no_grad():
+            network.q.copy_(targets())
+        target = network.q.detach()
+        rows = []
+        for case in arm.selection_cases:
+            values = []
+            for seed in lifecycle.devices.selection_seeds:
+                array = program_verify.fresh(lifecycle, network.layout, seed, case, populations, device)
+                program_verify.program(array, target, lifecycle)
+                values.append(network_family.evaluate(network, cache["task_development"], device, q=array.read()))
+            rows.append({"case": case.label, **{m: sum(v[m] for v in values) / len(values)
+                                                 for m in (metric, "choice_kl", "teacher_kl")}})
+        score = sum(row[metric] for row in rows) / len(rows)
+        clean = network_family.evaluate(network, cache["task_development"], device)
+        item = {"epoch": epoch, "global_step": step, "score": score, "cases": rows,
+                "clean_development": {m: clean[m] for m in (metric, "choice_kl")},
+                "elapsed_seconds": time.monotonic() - started}
+        history.append(item)
+        store.append_metric({"stage": "lora_selection", "arm": arm.arm_id, **item})
+        print(json.dumps({"arm": arm.arm_id, "epoch": epoch, metric: score}), flush=True)
+        if best is None or score > best["score"]:
+            best = {"epoch": epoch, "score": score, "model": clone_cpu(network.state_dict())}
+
+    select(0)
+    for epoch in range(1, hwa.epochs + 1):
+        order = torch.randperm(examples, generator=torch.Generator().manual_seed(lifecycle.data.data_seed + epoch))
+        network.train()
+        for batch, begin in enumerate(range(0, examples, hwa.batch_size)):
+            index = order[begin:begin + hwa.batch_size]
+            for group in optimizer.param_groups:
+                group["lr"] = arm.learning_rate * lora_lr_factor(step + 1, warmup, total)
+            optimizer.zero_grad(set_to_none=True)
+            value = 0.0
+            for offset in range(0, len(index), LORA_MICRO_EXAMPLES):
+                micro = index[offset:offset + LORA_MICRO_EXAMPLES]
+                q = sample(targets(), "open", 0.0)
+                rows = (micro[:, None] * k + torch.arange(k)[None, :]).flatten()
+                padded = tasks.padded(choices, rows)
+                tokens = padded["tokens"].to(device)
+                logits = network.forward_features(network.features(tokens), q)
+                mask = tasks.scored_mask(padded, device)
+                sums = tasks.row_sums(tasks.continuation_log_probs(logits, tokens, mask)[1], mask)
+                sums = sums / (padded["lengths"] - padded["context_lengths"]).to(device)
+                loss = tasks.choice_loss(sums, labels[micro].to(device), k) * (len(micro) / len(index))
+                if not bool(torch.isfinite(loss)):
+                    rejected = {"epoch": epoch, "batch": batch, "reason": "nonfinite LoRA objective"}
+                    break
+                loss.backward()
+                value += float(loss.detach())
+            if rejected:
+                break
+            optimizer.step()
+            step += 1
+            if batch % 100 == 0:
+                store.append_metric({"stage": "lora", "arm": arm.arm_id, "epoch": epoch, "batch": batch,
+                                     "global_step": step, "loss": value,
+                                     "learning_rate": optimizer.param_groups[0]["lr"]})
+        if rejected:
+            break
+        if epoch % hwa.selection_every == 0 or epoch == hwa.epochs:
+            select(epoch)
+    if network.prefix_hash() != prefix:
+        raise RuntimeError("LoRA training changed the frozen digital prefix.")
+    final = network.state_dict()
+    unchanged = all(torch.equal(final[key].cpu(), value) for key, value in initial.items()
+                    if key not in ("q", "channel_scales")) and torch.equal(
+        final["q"][:base_size].cpu(), initial["q"][:base_size]) and torch.equal(
+        final["channel_scales"][:first_row].cpu(), initial["channel_scales"][:first_row])
+    if not unchanged:
+        raise RuntimeError("LoRA training changed the frozen base.")
+    if best is None:
+        raise FloatingPointError(f"LoRA arm {arm.arm_id!r} produced no selection checkpoint.")
+    adapter_weights = sum(m.numel() for m in masters)
+    fit = {
+        "kind": "lora",
+        "method": arm.method,
+        "noise_strength": arm.noise_strength,
+        "status": "rejected_nonfinite" if rejected else "complete",
+        "rejection": rejected,
+        "selected_epoch": best["epoch"],
+        "development_score": best["score"],
+        "selection_metric": metric,
+        "selection": f"maximum mean development {metric} over selection cases and selection arrays after P&V "
+                     "(ties: earlier); test data never used",
+        "epochs_run": hwa.epochs if not rejected else epoch,
+        "maximum_epochs": hwa.epochs,
+        "convergence_review_required": bool(rejected) or best["epoch"] >= 0.8 * hwa.epochs,
+        "history": history,
+        "base_source": base_receipt,
+        "base_unchanged": True,
+        "adapters": {"rank": lifecycle.network.analog_lora.rank, "alpha": lifecycle.network.analog_lora.alpha,
+                     "matrices": 2 * count, "weights": adapter_weights, "learning_rate": arm.learning_rate,
+                     "warmup_fraction": arm.warmup_fraction, "warmup_steps": warmup, "steps": step,
+                     "planned_steps": total, "micro_examples": LORA_MICRO_EXAMPLES,
+                     "schedule": "linear warm-up then cosine decay to zero",
+                     "objective": lifecycle.hwa.objective, "training_examples": examples},
+    }
+    return {"model": best["model"], "fit": fit}

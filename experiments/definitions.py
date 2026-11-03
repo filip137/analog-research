@@ -190,9 +190,37 @@ CROSSBAR_LIFECYCLE_V1 = ExperimentDefinition(
 )
 
 
+def parse_opt_task_teacher(payload: Mapping[str, Any]) -> Any:
+    from workflow.teacher_lora import parse_config
+
+    return parse_config(payload)
+
+
+def resolve_opt_task_teacher(document: Any, mode: RunMode) -> Any:
+    from workflow.teacher_lora import resolve_config
+
+    return resolve_config(document, mode)
+
+
+OPT_TASK_TEACHER_V1 = ExperimentDefinition(
+    experiment_id="opt_task_teacher.v1",
+    schema_version=1,
+    description=(
+        "Digital task-fine-tuned OPT-125M teacher: LoRA trained with "
+        "multiple-choice cross entropy on a pinned labelled task, selected on "
+        "development data and merged into an FP32 checkpoint for lifecycles."
+    ),
+    supported_modes=(RunMode.TRAIN,),
+    parser=parse_opt_task_teacher,
+    resolver=resolve_opt_task_teacher,
+    combinations=(),
+)
+
+
 EXPERIMENT_REGISTRY: Dict[str, ExperimentDefinition] = {
     CIFAR10_CROSSBAR_V1.experiment_id: CIFAR10_CROSSBAR_V1,
     CROSSBAR_LIFECYCLE_V1.experiment_id: CROSSBAR_LIFECYCLE_V1,
+    OPT_TASK_TEACHER_V1.experiment_id: OPT_TASK_TEACHER_V1,
     'cifar_om_closed_loop_lr.v1': ExperimentDefinition(
         experiment_id='cifar_om_closed_loop_lr.v1',
         schema_version=1,

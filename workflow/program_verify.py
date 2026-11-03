@@ -24,8 +24,6 @@ read noise (see ``docs/reram_cmo_device.md``).
 
 from __future__ import annotations
 
-import math
-
 import torch
 
 from experiments.cifar_crossbar.devices import make_plant, prepare_population
@@ -35,12 +33,13 @@ from experiments.cifar_crossbar.model import tensor_hash
 from experiments.cifar_crossbar.open_loop_updates import apply_pulse_counts, nominal_reset_counts
 from experiments.cifar_crossbar.sweep_devices import binding_seed
 from training import reram_cmo as cmo
+from training.inference_retention import PCM_READ_TIME, PCM_T0, pcm_coefficients, pcm_snapshot
 from workflow import devices as device_stage
 from workflow.lifecycle import FAILURE_KINDS
 
 G_MAX = 25.0
-DRIFT_T0 = 20.0
-READ_TIME = 2.5e-7
+DRIFT_T0 = PCM_T0
+READ_TIME = PCM_READ_TIME
 
 
 def pcm_drift(programmed, relative, generator, seconds):
@@ -50,18 +49,10 @@ def pcm_drift(programmed, relative, generator, seconds):
     coefficients. Equations match ``experiments.cifar_crossbar.pcm_reference``.
     """
 
-    def normal(value):
-        return torch.randn(value.shape, device=value.device, generator=generator)
-
-    r = relative.abs().clamp_min(1e-7)
-    mu = (-0.0155 * r.log() + 0.0244).clamp(0.049, 0.1)
-    sd = (-0.0125 * r.log() - 0.0059).clamp(0.008, 0.045)
-    nu = (mu + sd * normal(r)).abs()
-    t = seconds + DRIFT_T0
-    drift = programmed * (t / DRIFT_T0) ** (-nu)
-    qs = (0.0088 / (programmed.abs() / G_MAX).pow(0.65).clamp_min(1e-3)).clamp_max(0.2)
-    scale = qs * math.sqrt(math.log((t + READ_TIME) / (2 * READ_TIME)))
-    return (drift + drift.abs() * scale * normal(drift)).clamp_min(0)
+    # Keep this programming-event API and its random stream unchanged. A time
+    # sweep calls pcm_coefficients once and reuses it across pcm_snapshot calls.
+    nu = pcm_coefficients(relative, generator, g_max=1.0)
+    return pcm_snapshot(programmed, nu, generator, seconds, g_max=G_MAX)
 
 
 def tile_compensation(initial, current, layout, tile_size):

@@ -1,5 +1,13 @@
 # Research questions and campaigns
 
+- [HWA and programming for reliable inference under drift](../../on-chip-learning/campaigns/drift-mitigation/README.md):
+  current shared priority. Qualify the device model and compare strong HWA,
+  mapping, P&V and maintenance schemes before further learning comparisons.
+
+- [OPT drift dispersion and on-chip recovery](opt-drift-recovery/README.md):
+  whether large drift dispersion requires analog updates beyond calibration,
+  refresh and digital-only recovery, paired with the DRN campaign.
+
 - [Crossbar HWA and array-specific recovery on CIFAR](cifar-crossbar-hwa-recovery/README.md):
   dense CIFAR-10 and ResNet-32 CIFAR-10/100, OM and PCM, with imported results,
   source provenance, reproducible reports and a separate migration audit.

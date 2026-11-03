@@ -8,7 +8,7 @@ digital calibration and rewriting, and report the physical write cost.
 - [Development-triggered LR follow-up](experiments/exp-010-lr-followup.md)
 - [Recovery across HWA sources and fault rates](experiments/exp-013-recovery-regimes.md): three assignments, two/four/uncapped attempts and a frozen short recovery recipe.
 - [Completed recovery context-length comparison](experiments/exp-014-context-length.md): 64–1,024 tokens, matched data and optimizer updates, with two/four/uncapped device-write budgets; [confirmed context-256 result](results/exp-014.md).
-- [Partner rewrite at 3% random faults](results/exp-016.md): verified fault detection and healthy-partner programming outperform the tested on-chip recovery arms; the [broader rates/kinds comparison](experiments/exp-016-pair-rewrite.md) remains deferred.
+- [Partner rewrite](results/exp-016.md): verified fault detection and healthy-partner programming outperform the tested on-chip recovery arms. It closes 93–95.5% of std3's fault KL for random 3% and for gmin/gmax at 1–6% (std3, three arrays). **On-chip learning on top of the rewrite removes up to about a third of the remaining gmin/gmax WikiText KL at 4–6%** (array 271002, no calibration control yet); training the verified partner instead of the stuck active device changes this by under 2% of the residual. [Experiment note](experiments/exp-016-pair-rewrite.md); cdt3/std9 kinds and other random rates remain deferred.
 - [Predecessor: completed four-arm HWA comparison](../001-hwa-robustness/results/exp-007.md)
 - [Training through the verified partner](experiments/exp-017-partner-training.md): std3, three arrays, healthy and 3% faults; fixed recipe versus rewrite alone and original-active training.
 
