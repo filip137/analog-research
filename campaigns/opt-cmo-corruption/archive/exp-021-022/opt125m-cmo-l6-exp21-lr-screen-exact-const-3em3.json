@@ -1,0 +1,201 @@
+{
+  "data": {
+    "corpus": {
+      "name": "opt125m-synthetic-50m",
+      "sha256": "ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984"
+    },
+    "data_seed": 20261008,
+    "development_sequences": 256,
+    "evaluation": "development",
+    "hwa_sequences": 195226,
+    "max_examples": 0,
+    "recovery_sequences": 8192,
+    "sequence_length": 256,
+    "test_sequences": 0
+  },
+  "defects": {
+    "arrays_per_die": 48,
+    "cases": [
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "none",
+        "rate_ppm": 0
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 10000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 20000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 30000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 40000
+      },
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 50000
+      }
+    ],
+    "persistence": "permanent",
+    "placement": "hierarchical_die_array"
+  },
+  "deployment": {
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias",
+    "encoding": "active_reference_pair",
+    "read_noise": 0.0,
+    "scaling": "per_output_channel_absmax",
+    "tile_size": 256
+  },
+  "devices": {
+    "assignment_seeds": [
+      271001,
+      271002,
+      271003,
+      271004,
+      271005
+    ],
+    "endpoint_seed_offset": 10000,
+    "model": "aihwkit_1.1.0_reram_cmo",
+    "noise_scale": 1.0,
+    "selection_seeds": [
+      211001,
+      211002
+    ],
+    "technology": "cmo"
+  },
+  "hwa": {
+    "arms": [
+      {
+        "corruption": null,
+        "digital_learning_rate": 1e-05,
+        "id": "standard_hwa_model",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "scope": "model",
+        "selection_cases": [
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "none",
+            "rate_ppm": 0
+          },
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "random",
+            "rate_ppm": 30000
+          }
+        ]
+      }
+    ],
+    "augment": false,
+    "batch_size": 32,
+    "epochs": 100,
+    "learning_rate": 0.005,
+    "lr_decay": 1.0,
+    "lr_milestones": [],
+    "lr_schedule": {
+      "kind": "cosine_warmup_decay",
+      "min_factor": 0.2,
+      "total_steps": 25600,
+      "warmup_steps": 205
+    },
+    "noise_model": "additive_gaussian_weight",
+    "noise_scaling": "output_channel_abs_max",
+    "noise_std": 0.03,
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "seed": 41,
+    "selection": {
+      "every_epochs": 2,
+      "extension_epochs": 0
+    },
+    "sequences_per_epoch": 8192
+  },
+  "lifecycle_id": "opt125m-cmo-l6-exp21-lr-screen-exact-const-3em3",
+  "network": {
+    "analog_decoder_layers": 6,
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m"
+  },
+  "onchip": {
+    "arms": [
+      {
+        "calibration": false,
+        "id": "none",
+        "weights": "hold"
+      },
+      {
+        "calibration": false,
+        "id": "onchip_weights",
+        "weights": "learn"
+      }
+    ],
+    "batch_size": 32,
+    "calibration_learning_rate": 0.0,
+    "case_labels": [
+      "nominal",
+      "random_30000ppm"
+    ],
+    "development_every_steps": 64,
+    "epochs": 1,
+    "learning_rate": 0.003,
+    "objective": "teacher_kl",
+    "seed": 53,
+    "training_cohort": "recovery",
+    "update_law": "cmo_idealized_write_adam",
+    "write_noise_scale": 0.0
+  },
+  "program_verify": {
+    "acceptance_percent": 2.0,
+    "method": "gaussian_endpoint",
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "question": {
+    "decision": "Development-only LR/schedule screen with a frozen selection rule; held-out domains reported after selection. No automatic follow-up. campaigns/opt-cmo-corruption/series/002-onchip-recovery/experiments/exp-021-onchip-lr-screen.md",
+    "evidence_class": "exploratory_model_based",
+    "primary_metric": "teacher_kl",
+    "text": "Which on-chip learning rate and schedule recover std3 array 271002 without degrading its healthy state?"
+  },
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "transfer_tests": [
+    {
+      "corpus": {
+        "name": "wikitext-2-raw-v1",
+        "sha256": "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01"
+      },
+      "label": "wikitext",
+      "sequences": 1024,
+      "split": "test"
+    },
+    {
+      "corpus": {
+        "name": "wikitext2-train-synthtest",
+        "sha256": "8e73b6b43aafb92b8b52e11cdd060d573331fae410350cf2427f3eeba640e224"
+      },
+      "label": "generated",
+      "sequences": 384,
+      "split": "test"
+    }
+  ]
+}
