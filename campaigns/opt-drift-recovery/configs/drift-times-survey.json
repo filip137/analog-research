@@ -1,0 +1,41 @@
+{
+  "experiment_id": "opt_cmo_drn_hwa.v1",
+  "schema_version": 1,
+  "stage": "retention",
+  "device": "cuda:0",
+  "cpu_threads": 10,
+  "deployment": {
+    "assignment_seed": 271002,
+    "fault_kind": "none",
+    "fault_rate": 0.0
+  },
+  "retention": {
+    "seconds": [
+      3600.0,
+      21600.0,
+      86400.0,
+      604800.0,
+      2592000.0,
+      31536000.0
+    ],
+    "seed": 391028,
+    "hwa_sha256": "dfb9f22fa6a922952aeddd2f1c8f29b4a40e129fe0d2296f8343decbc309bcb9",
+    "power_law": {
+      "mean_us": -2.0,
+      "sigmas_us": [
+        0.0,
+        0.5,
+        1.0,
+        2.0,
+        3.0,
+        6.0,
+        12.0
+      ],
+      "mean_exponent": 0.23,
+      "spread_exponent": 0.11,
+      "reference_seconds": 3600.0,
+      "development_sequences": 64,
+      "first_read_policy": "clamp_programmed"
+    }
+  }
+}

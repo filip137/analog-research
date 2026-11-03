@@ -1,0 +1,76 @@
+{
+  "experiment_id": "opt_cmo_drn_hwa.v1",
+  "schema_version": 1,
+  "stage": "drift_recovery",
+  "device": "cuda:0",
+  "cpu_threads": 10,
+  "deployment": {
+    "assignment_seed": 271002,
+    "fault_kind": "none",
+    "fault_rate": 0.0
+  },
+  "drift_recovery": {
+    "source_sha256": "dfb9f22fa6a922952aeddd2f1c8f29b4a40e129fe0d2296f8343decbc309bcb9",
+    "law": {
+      "mean_us": -2.0,
+      "spread_us": 3.0,
+      "mean_exponent": 0.23,
+      "spread_exponent": 0.11,
+      "reference_seconds": 3600.0,
+      "g_min": 9.0,
+      "g_max": 88.2
+    },
+    "persistent_fractions": [
+      0.9
+    ],
+    "assignment_seeds": [
+      271002
+    ],
+    "seed": 391029,
+    "selection_seed": 491029,
+    "selection_fraction": 0.1,
+    "arms": [
+      "full_refresh",
+      "stable_learning",
+      "random_learning"
+    ],
+    "protocols": [
+      "repeated"
+    ],
+    "write_budgets": [
+      1.0
+    ],
+    "first_intervention_seconds": 3600.0,
+    "maintenance_interval_seconds": 604800.0,
+    "horizon_seconds": 612000.0,
+    "followup_seconds": [
+      60.0
+    ],
+    "evaluation_seconds": [
+      0.0,
+      3600.0,
+      612000.0
+    ],
+    "training_sequences": 32,
+    "validation_sequences": 2,
+    "calibration_sequences": 2,
+    "batch_size": 32,
+    "microbatch_size": 1,
+    "max_updates": 1,
+    "passes": 4,
+    "learning_rates": [
+      0.0003
+    ],
+    "learning_rate": null,
+    "no_drift_control": false,
+    "canary": true,
+    "curve_validation_sequences": 1,
+    "heldout_evaluation": "final",
+    "execution": {
+      "phase": "prepare",
+      "key": "",
+      "prepared_run": null,
+      "screen_runs": []
+    }
+  }
+}
