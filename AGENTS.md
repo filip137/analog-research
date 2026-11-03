@@ -49,7 +49,14 @@ drift.
   reported separately and never pooled.
 
 **Settings the user fixed on 3 November 2026:**
-- **Network:** OPT-125M.
+- **Network:** OPT-125M. The last six decoder MLPs (blocks 7–12) are analog, as
+  usual, on the std3 HWA source.
+- **Crossbar qualification:**
+  - t = 0 (release) is the end of deployment P&V;
+  - teacher KL is measured on WikiText-2;
+  - it runs on the local RTX 3090;
+  - the 10 ReRAM points come first, and the PCM points wait for their open
+    settings.
 - **Endpoint:** teacher KL averaged over the first 24 h. 30 d and 1 yr are
   labelled extrapolations.
 - **Methods:** each method runs on its own. Nothing is stacked on calibration or
