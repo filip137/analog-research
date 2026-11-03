@@ -1,0 +1,81 @@
+{
+  "experiment_id": "opt_cmo_drn_hwa.v1",
+  "schema_version": 1,
+  "stage": "recover",
+  "model": "facebook/opt-125m",
+  "analog_layers": 6,
+  "initialization": "full_span_quad.v1",
+  "device": "cuda:0",
+  "cpu_threads": 1,
+  "teacher_sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9",
+  "source_sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028",
+  "solver": {
+    "settling_iterations": 4,
+    "gradient_iterations": 4,
+    "voltage_amp": 5.0,
+    "current_amp": 0.1,
+    "input_gain": 100.0,
+    "token_chunk_size": 256,
+    "activation_checkpointing": true
+  },
+  "data": {
+    "corpus": "opt125m-synthetic-50m",
+    "sha256": "ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984",
+    "sequences": 195226,
+    "development_sequences": 256,
+    "sequence_length": 256,
+    "seed": 20261008,
+    "mapping_sequences": 1
+  },
+  "training": {
+    "arm": "std3",
+    "epochs": 5,
+    "max_updates": 0,
+    "effective_batch": 32,
+    "microbatch": 1,
+    "conductance_lr": 0.0003,
+    "calibration_lr": 0.0003,
+    "digital_lr": 1e-05,
+    "recipe": "A",
+    "warmup_updates": 245,
+    "schedule": "cosine",
+    "minimum_lr_factor": 0.2,
+    "seed": 41,
+    "max_wall_seconds": 60,
+    "checkpoint_every": 512,
+    "retention": "best_latest_final"
+  },
+  "selection": {
+    "every_updates": 512,
+    "assignment_seeds": [
+      211001,
+      211002
+    ],
+    "fault_kinds": [
+      "none",
+      "random"
+    ],
+    "random_rate": 0.03
+  },
+  "deployment": {
+    "assignment_seed": 271002,
+    "fault_kind": "random",
+    "fault_rate": 0.06
+  },
+  "recovery": {
+    "arm": "learning",
+    "updates": 32,
+    "learning_rate": 0.0003,
+    "threshold_sigma": 2.0,
+    "max_write_attempts": null,
+    "calibration_updates": 200,
+    "calibration_lr": 0.0001,
+    "checkpoint_every": 4,
+    "write_noise_factor": 1.0,
+    "development_every": 128,
+    "retain_final_optimizer": false,
+    "conductance_floor": "none",
+    "update_rule": "bounded_thresholded_adam",
+    "target_bounds": "gmin_gmax"
+  }
+}

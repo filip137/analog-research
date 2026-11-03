@@ -67,6 +67,7 @@ class TrainRequest:
     device_model: Optional[Path] = None
     teacher_weights: Optional[Path] = None
     deployment: Optional[Path] = None
+    device_state: Optional[Path] = None
 
 
 @dataclass(frozen=True)
@@ -218,6 +219,8 @@ def build_parser() -> argparse.ArgumentParser:
             "recovery backends"
         ),
     )
+    train.add_argument("--device-state", type=Path,
+                       help="explicit saved CMO DRN physical state for matched recovery")
 
     linspace = commands.add_parser(
         "linspace",
@@ -477,6 +480,7 @@ def _definition_payload(definition: ExperimentDefinition) -> dict:
 def _protocol_payload(
     definitions: Sequence[ExperimentDefinition],
 ) -> dict:
+    opt_drn_only = len(definitions) == 1 and definitions[0].experiment_id == "opt_cmo_drn_hwa.v1"
     reset_only = (
         len(definitions) == 1
         and definitions[0].experiment_id
@@ -544,9 +548,9 @@ def _protocol_payload(
             },
             "resume": {
                 "weights": not reset_only,
-                "base_weights": not reset_only,
+                "base_weights": not reset_only and not opt_drn_only,
                 "full_training_state": True,
-                "legacy_checkpoint_import": not reset_only,
+                "legacy_checkpoint_import": not reset_only and not opt_drn_only,
                 "campaign_stage_reuse": True,
             },
             "campaign": {
@@ -575,16 +579,16 @@ def _protocol_payload(
                         "--teacher-weights",
                     ]
                     if reset_only
-                    else ["--config", "--output-dir"]
+                    else ["--config", "--output-dir", *(["--teacher-weights"] if opt_drn_only else [])]
                 ),
                 "exclusive_input_options": (
                     ["--resume"]
                     if reset_only
-                    else ["--weights", "--base-weights", "--resume"]
+                    else (["--weights", "--resume"] if opt_drn_only else ["--weights", "--base-weights", "--resume"])
                 ),
                 "optional_input_options": (
-                    []
-                    if reset_only
+                    (["--device-state"] if opt_drn_only else [])
+                    if reset_only or opt_drn_only
                     else [
                         "--device-data",
                         *(
@@ -617,11 +621,11 @@ def _protocol_payload(
                     "--config",
                     "--output-dir",
                     "--weights",
-                    *(["--teacher-weights"] if reset_only else []),
+                    *(["--teacher-weights"] if reset_only or opt_drn_only else []),
                 ],
                 "optional_input_options": (
                     []
-                    if reset_only
+                    if reset_only or opt_drn_only
                     else [
                         "--teacher-weights",
                         *(
@@ -640,7 +644,7 @@ def _protocol_payload(
                 "required_options": ["--config", "--output-dir"],
             },
             "checkpoint import-legacy": {
-                "available": True,
+                "available": not opt_drn_only,
                 "required_options": [
                     "--config",
                     "--source",
@@ -778,7 +782,9 @@ def _handler_result(handler: Handler, request: Any) -> int:
 
 
 def _default_train_handler(request: TrainRequest) -> Optional[int]:
-    if request.definition.experiment_id == "small_drn.v1":
+    if request.definition.experiment_id == "opt_cmo_drn_hwa.v1":
+        from experiments.opt_cmo_drn.runtime import run_train
+    elif request.definition.experiment_id == "small_drn.v1":
         from experiments.small_network.runtime import run_train
     elif request.definition.experiment_id == "mnist_relu.v1":
         from experiments.mnist_relu.runtime import run_train
@@ -813,7 +819,9 @@ def _default_linspace_handler(request: LinspaceRequest) -> Optional[int]:
 
 
 def _default_validate_handler(request: ValidateRequest) -> Optional[int]:
-    if request.definition.experiment_id == "small_drn.v1":
+    if request.definition.experiment_id == "opt_cmo_drn_hwa.v1":
+        from experiments.opt_cmo_drn.runtime import run_validate
+    elif request.definition.experiment_id == "small_drn.v1":
         from experiments.small_network.runtime import run_validate
     elif request.definition.experiment_id == "mnist_relu.v1":
         from experiments.mnist_relu.runtime import run_validate
@@ -951,6 +959,7 @@ def _dispatch(
             device_model=args.device_model,
             teacher_weights=args.teacher_weights,
             deployment=args.deployment,
+            device_state=args.device_state,
         )
         return _handler_result(
             _require_handler(handlers.train, "train"),

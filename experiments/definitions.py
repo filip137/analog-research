@@ -69,6 +69,10 @@ from experiments.reram_program_verify.raw_active_cell_config import (
     parse_raw_active_cell_program_verify_config,
     resolve_raw_active_cell_program_verify_spec,
 )
+from experiments.opt_cmo_drn.config import (
+    parse_config as parse_opt_cmo_drn_config,
+    resolve_config as resolve_opt_cmo_drn_config,
+)
 
 
 _SMALL_DRN_COMBINATIONS: Tuple[ValidatedCombination, ...] = (
@@ -845,7 +849,17 @@ MNIST_RELU_DRN_RESET_FACTORIAL_V1 = ExperimentDefinition(
 
 
 # This dictionary is the complete registration mechanism.
+OPT_CMO_DRN_HWA_V1 = ExperimentDefinition(
+    experiment_id="opt_cmo_drn_hwa.v1",
+    schema_version=1,
+    description="CMO-initialized OPT-125M with six coupled perfect-diode DRNs, whole-model HWA and matched physical recovery.",
+    supported_modes=(RunMode.TRAIN, RunMode.VALIDATE),
+    parser=parse_opt_cmo_drn_config,
+    resolver=resolve_opt_cmo_drn_config,
+)
+
 EXPERIMENT_REGISTRY: Dict[str, ExperimentDefinition] = {
+    OPT_CMO_DRN_HWA_V1.experiment_id: OPT_CMO_DRN_HWA_V1,
     SMALL_DRN_V1.experiment_id: SMALL_DRN_V1,
     MNIST_RELU_V1.experiment_id: MNIST_RELU_V1,
     MNIST_RELU_DRN_KD_V1.experiment_id: MNIST_RELU_DRN_KD_V1,
