@@ -6,7 +6,7 @@ import torch
 from experiments.artifacts import sha256_file
 from experiments.opt_cmo_drn import runtime, drift_recovery
 from experiments.opt_cmo_drn.config import Config, Solver, Data, Deployment, parse_config
-from training.drift_recovery_config import DriftRecovery
+from methods.maintenance.config import DriftRecovery
 from test_opt_cmo_drn import tiny_model, cpu_threads
 
 

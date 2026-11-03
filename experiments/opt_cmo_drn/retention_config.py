@@ -1,8 +1,8 @@
 """Strict, inference-only scalar drift settings."""
 from dataclasses import dataclass
 import math
-from training.output_calibration import METHODS
-from training.power_law_drift import PowerLaw
+from methods.calibration.output import METHODS
+from hardware.drift.power_law import PowerLaw
 
 
 def _increasing(values, positive):

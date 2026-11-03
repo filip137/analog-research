@@ -3,7 +3,8 @@ import torch
 from experiments.opt_cmo_drn import runtime
 from experiments.opt_cmo_drn.data import pinned_load, load_corpus, TRANSFER_TESTS
 from experiments.opt_cmo_drn.faults import state_hash
-from training.drift_recovery import run as run_recovery, token_cohorts
+from ebl.runtime.shared_recovery import run as run_recovery
+from methods.maintenance.recovery import token_cohorts
 
 
 class DrnAdapter:

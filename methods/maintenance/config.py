@@ -1,7 +1,7 @@
 """Strict scientific settings shared by the two native recovery stages."""
 from dataclasses import asdict, dataclass, fields
 import math
-from training.drift_law import DriftLaw
+from hardware.drift.config import DriftLaw
 
 ARMS = ('untreated', 'global_calibration', 'channel_calibration', 'full_refresh',
         'worst_refresh', 'random_refresh', 'stable_learning', 'random_learning', 'oracle_learning')

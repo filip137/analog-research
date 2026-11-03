@@ -69,3 +69,6 @@ Raw outputs retain their existing ignored [results paths](results/README.md).
 The [documentation index](docs/README.md) separates shared contracts and implementation
 references from migrated study narratives and frozen historical indexes. The
 human-owned [current-state synthesis](docs/current_state.md) is preserved.
+
+Shared drift/calibration/recovery ownership and its byte-identical HWA mirror
+contract are documented in [shared native architecture](docs/shared-native-architecture.md).

@@ -2,8 +2,8 @@
 import math
 import pytest
 import torch
-from training.power_law_drift import PowerLaw, snapshot, aggregate_statistics
-from training.drift_evaluation import reference_cache, evaluate
+from hardware.drift.power_law import PowerLaw, snapshot, aggregate_statistics
+from methods.evaluation import reference_cache, evaluate
 
 
 def spec(**kwargs):

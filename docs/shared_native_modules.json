@@ -1,0 +1,23 @@
+{
+  "schema": "shared_native_modules.v1",
+  "authority": "hwa",
+  "consumer": "drn",
+  "reason": "Independent checkouts retain byte-identical native drift and calibration kernels. No cross-worktree imports.",
+  "modules": [
+    "core/artifacts.py",
+    "core/logit_cache.py",
+    "ebl/execution/recovery_shards.py",
+    "ebl/runtime/shared_recovery.py",
+    "hardware/drift/config.py",
+    "hardware/drift/power_law.py",
+    "hardware/drift/writable.py",
+    "methods/calibration/output.py",
+    "methods/evaluation.py",
+    "methods/maintenance/cache.py",
+    "methods/maintenance/config.py",
+    "methods/maintenance/recovery.py",
+    "methods/maintenance/report.py",
+    "methods/maintenance/selection.py",
+    "methods/optimizers/masked.py"
+  ]
+}

@@ -176,7 +176,7 @@ exact step: Y ← c·Y + √(1 − c²)·z,   c = (τ_prev/τ_next)^κ
 - **Devices and writes:** each of the four physical devices per weight drifts
   independently. A full rewrite draws a fresh CMO endpoint, restarts τ and
   draws a fresh Y (R1). A persistent per-device share f of Y (`rho` in
-  `training/writable_drift.py`) is a declared sensitivity; the default is
+  `hardware/drift/writable.py`) is a declared sensitivity; the default is
   f = 0.
 - **Loading and clipping:** drift enters the loaded network through the solved
   DRN, so it does not act as an additive weight error. Clipping at the 9 µS
@@ -197,7 +197,7 @@ exact step: Y ← c·Y + √(1 − c²)·z,   c = (τ_prev/τ_next)^κ
   stay on the analysis side, except in labelled oracle arms.
 
 **Implementation status:**
-- `training/power_law_drift.py` and `training/writable_drift.py` implement
+- `hardware/drift/power_law.py` and `hardware/drift/writable.py` implement
   only κ = 0.
 - `writable_drift.py` writes exact endpoints, without the CMO draw.
 - Add both before any multi-age, rewrite or learning run under the standard

@@ -1,15 +1,10 @@
-"""Custom additive drift with persistent identities and writable cell clocks.
-
-Mirrored verbatim in the DRN worktree. This is a synthetic model, not a CMO
-programming fit. A programming command is an exact endpoint operation, not a
-pulse. Times are seconds; conductances are microSiemens.
-"""
+"""hardware.drift.writable — extracted native implementation; formats and numerical order preserved."""
+from __future__ import annotations
 from dataclasses import asdict
 import hashlib
 import math
-
 import torch
-from training.drift_law import DriftLaw
+from hardware.drift.config import DriftLaw
 
 
 def stream_seed(seed, name):
@@ -132,93 +127,3 @@ class WritableDrift:
         if bool((obj.last_write > obj.clock).any()) or not bool(torch.isfinite(obj.value()).all()):
             raise ValueError('Invalid serialized cell clock/state.')
         return obj
-
-
-def _smallest(score, eligible, count):
-    ids = torch.nonzero(eligible.flatten(), as_tuple=False).flatten()
-    if len(ids) < count:
-        raise ValueError(f'Only {len(ids)} uncensored cells for a requested mask of {count}.')
-    # Stable ties preserve physical index order (including the no-drift control).
-    return ids[torch.argsort(score.flatten()[ids], stable=True)[:count]]
-
-
-def select_masks(cells, groups, roles, fraction, seed):
-    """10% of *all* cells per MLP, with observable-pool matched controls.
-
-    groups and roles are physical-cell tensors with integer labels supplied by
-    the architecture. Random and oracle masks match the estimated mask's counts
-    in every MLP x rail-role x initial-conductance-decile stratum.
-    """
-    scores, eligible = zip(*(c.observed_stability() for c in cells))
-    sizes = [c.target.numel() for c in cells]
-    device = cells[0].target.device
-    score = torch.cat([v.flatten() for v in scores])
-    pool = torch.cat([v.flatten() for v in eligible])
-    group = torch.cat([v.flatten().to(device) for v in groups])
-    role = torch.cat([v.flatten().to(device) for v in roles])
-    decile = torch.cat([((c.target.flatten()-c.law.g_min)/(c.law.g_max-c.law.g_min)*10)
-                        .long().clamp(0, 9) for c in cells])
-    z = torch.cat([c.persistent.flatten().abs() for c in cells])
-    chosen = torch.zeros_like(pool)
-    for g in group.unique():
-        in_group = group == g
-        k = max(1, int(int(in_group.sum()) * fraction))
-        chosen[_smallest(score, pool & in_group, k)] = True
-    random_mask, oracle = torch.zeros_like(pool), torch.zeros_like(pool)
-    strata = group.to(torch.int64)*1000 + role.to(torch.int64)*10 + decile
-    rng = torch.Generator(device=device).manual_seed(seed)
-    for stratum in strata[chosen].unique(sorted=True):
-        available = pool & (strata == stratum)
-        k = int((chosen & (strata == stratum)).sum())
-        ids = torch.nonzero(available, as_tuple=False).flatten()
-        random_mask[ids[torch.randperm(len(ids), generator=rng, device=device)[:k]]] = True
-        oracle[_smallest(z, available, k)] = True
-    def split_indices(mask):
-        return [torch.nonzero(v, as_tuple=False).flatten() for v in mask.split(sizes)]
-    return {'stable': split_indices(chosen), 'random': split_indices(random_mask),
-            'oracle': split_indices(oracle)}, {
-                'physical_devices': sum(sizes), 'selected_devices': int(chosen.sum()),
-                'eligible_devices': int(pool.sum()), 'excluded_devices': int((~pool).sum()),
-                'selection_reads': sum(sizes), 'matched_strata': 'MLP/physical-role/target-decile'}
-
-
-class MaskedAdam:
-    """Optimize selected normalized physical values; issue only masked commands."""
-
-    def __init__(self, cells, indices, learning_rate, budget):
-        self.cells, self.indices = cells, indices
-        self.parameters = [torch.nn.Parameter((c.value().flatten()[idx]-c.law.g_min)
-                          /(c.law.g_max-c.law.g_min)) for c, idx in zip(cells, indices)]
-        self.optimizer = torch.optim.Adam(self.parameters, lr=learning_rate)
-        self.budget, self.spent = int(budget), 0
-        self.changed = 0
-        self.per_update = sum(idx.numel() for idx in indices)
-        if self.per_update == 0:
-            raise ValueError('Learning requires a nonempty physical mask.')
-
-    def view(self):
-        result = []
-        for c, idx, p in zip(self.cells, self.indices, self.parameters):
-            physical = c.law.g_min + (c.law.g_max-c.law.g_min)*p
-            result.append(c.value().flatten().index_copy(0, idx, physical).reshape(c.target.shape))
-        return result
-
-    def can_step(self):
-        return self.spent + self.per_update <= self.budget
-
-    def step(self):
-        if not self.can_step():
-            raise RuntimeError('Physical-write budget would be exceeded.')
-        if any(p.grad is not None and not bool(torch.isfinite(p.grad).all()) for p in self.parameters):
-            raise FloatingPointError('Nonfinite physical gradient.')
-        if not any(p.grad is not None for p in self.parameters):
-            raise RuntimeError('No gradient reached the selected physical cells.')
-        self.optimizer.step()
-        with torch.no_grad():
-            for c, idx, p in zip(self.cells, self.indices, self.parameters):
-                p.clamp_(0, 1)
-                endpoint = c.law.g_min+(c.law.g_max-c.law.g_min)*p
-                self.changed += int((endpoint != c.value().flatten()[idx]).sum())
-                c.write(idx, endpoint)
-        self.spent += self.per_update
-        self.optimizer.zero_grad(set_to_none=True)

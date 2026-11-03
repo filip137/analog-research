@@ -10,8 +10,8 @@ from experiments.opt_cmo_drn.data import pinned_load, load_corpus, blocks
 from experiments.opt_cmo_drn.devices import NAMESPACE
 from experiments.opt_cmo_drn.faults import binding_seed, state_hash, tensor_hash
 from training import reram_cmo as cmo
-from training.power_law_drift import snapshot, aggregate_statistics
-from training.drift_evaluation import reference_cache, evaluate
+from hardware.drift.power_law import snapshot, aggregate_statistics
+from methods.evaluation import reference_cache, evaluate
 
 
 @torch.no_grad()

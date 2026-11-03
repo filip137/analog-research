@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from experiments.artifacts import content_hash, sha256_file
+from core.artifacts import content_hash, sha256_file
 
 
 def screens(settings):
@@ -72,7 +72,7 @@ def select_learning_rate(settings, prepared, screen_runs):
 
 if __name__ == '__main__':
     import sys
-    from training.drift_recovery_config import DriftRecovery
+    from methods.maintenance.config import DriftRecovery
     settings = DriftRecovery.parse(json.loads(Path(sys.argv[1]).read_text())['drift_recovery'])
     result = {'screens': screens(settings), 'trajectories': []}
     for t in trajectories(settings):

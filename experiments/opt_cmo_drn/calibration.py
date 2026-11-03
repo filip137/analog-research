@@ -17,7 +17,7 @@ from experiments.opt_cmo_drn.data import cohorts, pinned_load
 from experiments.opt_cmo_drn.faults import state_hash, tensor_hash
 from experiments.opt_cmo_drn.retention import held_view
 from training import output_calibration as oc
-from training.drift_evaluation import evaluate
+from methods.evaluation import evaluate
 
 
 def plain(value):

@@ -123,7 +123,7 @@ def _parse(cls,raw,path):
         default=getattr(defaults,key)
         if cls is Config and key=='drift_recovery':
             if value is not None:
-                from training.drift_recovery_config import DriftRecovery
+                from methods.maintenance.config import DriftRecovery
                 try: value=DriftRecovery.parse(value)
                 except ValueError as error: raise ConfigError(str(error)) from error
         elif cls is Config and key=='retention':
