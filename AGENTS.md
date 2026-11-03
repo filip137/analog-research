@@ -176,3 +176,7 @@ provide navigation only. `docs/current_simulations.md` and
 Keep historical records as provenance without their old update requirements.
 Do not edit human `docs/current_state.md` without explicit permission, or read/edit
 `docs/my_notes.md` unless asked. Keep small records versioned and large artifacts ignored.
+Each experiment or pilot works on its own `drn/<id>` branch and worktree, commits at
+the loop's [git checkpoints](.agents/skills/experiment-loop/SKILL.md#git-checkpoints),
+and is merged into `refactor/training-core` and pushed at launch and at closeout. No
+changed file is left uncommitted at the end of a turn.

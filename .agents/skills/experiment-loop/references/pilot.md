@@ -1,6 +1,6 @@
 # Pilot: <bounded question>
 
-State: planned. Authorization: <assigned scope; planning alone does not launch>.
+State: planned. Branch: `drn/<id>`. Authorization: <assigned scope; planning alone does not launch>.
 
 ## Question and decision
 What do we want to learn; which decision follows? Expected outcome and alternatives.

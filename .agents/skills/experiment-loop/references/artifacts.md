@@ -95,7 +95,8 @@ Bound cases, epochs/replays and runtime; define failure and stopping handling.
 Name the existing results root before execution and the expected campaign result note.
 
 ## Execution and monitoring handoff
-Codifier fills this before delegating: exact cases/coverage, source/config identities,
+Codifier fills this before delegating: branch, launch commit and pinned checkout,
+exact cases/coverage, source/config identities,
 commands, target/handles, logs, remote/local paths, expected progress/cadence, last
 observation, next check, monitoring owner, deadline/remaining budget, permitted mechanical
 pause/resume, inspect/sync/collect/validate commands and escalation destination.
@@ -108,7 +109,9 @@ cancelled, superseded, imported. Imported means historical prose/evidence has be
 linked, not that new compute or local validation happened. A ready plan must have its
 scientific choices resolved; ready itself does not authorize a new task. Planned and
 blocked files are useful specifications, not executable promises. Missing implementation
-alone does not block a scientifically ready assignment to the Codifier.
+alone does not block a scientifically ready assignment to the Codifier. A terminal
+state also requires the closing [git checkpoint](../SKILL.md#git-checkpoints): branch
+merged into the trunk and pushed, worktrees removed.
 
 Result template:
 
