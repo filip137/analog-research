@@ -69,9 +69,11 @@ drift.
   - Reads are exact. Controllers still see only reads, never Y, κ or other
     hidden draws, except in labelled oracle arms.
   - Report the fraction of devices at the 5 µS and 150 µS bounds at every age.
-- **Regime knobs:** ρ*, the D2D share f, the CMO spread scale c_p and the
-  amplitude spread σ_a, plus three PCM-like points. The levels are in
-  `drift-family.md`, and exp-001 freezes them.
+- **Programming error:** the measured 2% CMO fit (c_p = 1) at every write. This
+  is fixed for the first screen, because drift should overshadow it.
+- **Regime knobs:** ρ*, the D2D share f and the amplitude spread σ_a, plus three
+  PCM-like points, for 13 points in all. The levels are in `drift-family.md`,
+  and exp-001 freezes them.
 - **Writes:** every write is a device reset (RESET+SET), as in R1.
   - A reset draws a fresh CMO endpoint, restarts τ and draws a fresh C2C drift
     path.
