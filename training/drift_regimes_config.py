@@ -63,7 +63,8 @@ class DriftRegimes:
         for key in ('source_sha256', 'evaluation_corpus_sha256', 'cohort_sha256'):
             _hash(value[key], key)
         for key in ('evaluation_corpus', 'regime'):
-            if not isinstance(value[key], str) or not value[key] or not value[key].replace('-', '').replace('_', '').isalnum():
+            if (not isinstance(value[key], str) or not value[key]
+                    or not value[key].replace('-', '').replace('_', '').replace('.', '').isalnum()):
                 raise ValueError(f'Invalid {key}.')
         law = value['law']
         if not isinstance(law, dict) or set(law) != {f.name for f in fields(ReramFamily)}:
