@@ -54,7 +54,7 @@ drift.
 - **Crossbar qualification:**
   - t = 0 (release) is the end of deployment P&V;
   - teacher KL is measured on WikiText-2;
-  - it runs on the local RTX 3090;
+  - it runs on the Jean Zay V100 dev queue;
   - the 10 ReRAM points come first, and the PCM points wait for their open
     settings.
 - **Endpoint:** teacher KL averaged over the first 24 h. 30 d and 1 yr are
