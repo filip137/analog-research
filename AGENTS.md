@@ -1,9 +1,11 @@
-# AGENTS — Tiki-Taka/LoRA integration
+# AGENTS — DRN worktree (Tiki-Taka/LoRA integration)
 
 ## Worktree scope
 
-These instructions apply to the `codex/tiki-taka-lora-integration` worktree.
-Its primary research question is:
+These instructions apply to the DRN worktree. In the workspace it is `drn/`,
+called `lora/` until 3 November 2026. Its trunk is `refactor/training-core`, which
+contains the earlier `codex/tiki-taka-lora-integration`. Its primary research
+question is:
 
 > Under which measured-device conditions does hardware-aware (HWA) training
 > underperform, and does the remaining performance gap require additional
@@ -17,6 +19,13 @@ on-chip training is needed; require a predeclared matched comparison.
 
 Keep unrelated repository maintenance and unrelated experiment families out
 of this worktree.
+
+Since 30 October 2026 the priority is drift. The order is a device model first,
+then HWA and program-and-verify, then maintenance, and only then on-chip
+learning. The drift records are owned by the shared study in the workspace,
+[`../on-chip-learning/`](../on-chip-learning/README.md), which is outside this
+repository and lists the active campaigns. DRN code and native runs stay in
+this tree. The standard device model is defined under [Drift](#drift).
 
 ## Mandatory DRN apparent-state forwards
 
@@ -71,6 +80,12 @@ of this worktree.
   CUDA launcher and heartbeat/receipt writer for reviewed production studies.
   It invokes the public CLI for every arm; it is not an alternative numerical
   execution surface.
+- `experiments/lifecycle/`: the run lifecycle shared by workflow-managed
+  families. `train_phase` holds global-best selection, the epoch loop with its
+  checkpoints, and terminal completion or failure.
+- `experiments/opt_cmo_drn/`: CMO-initialized OPT-125M with six coupled
+  perfect-diode MLPs. It covers devices, faults, retention and drift,
+  calibration, recovery and ZO attention.
 - `experiments/mnist_relu_drn/`: strict teacher-to-perfect-diode-DRN mapping,
   HWA, measured-device deployment, training, validation, and provenance.
 - `experiments/mnist_relu_drn_reset/`: measured pulse-zero/RESET
@@ -135,6 +150,60 @@ of this worktree.
   [`docs/synapse_data.md`](docs/synapse_data.md).
 - Do not silently replace the measured dataset, alter its preprocessing, or
   mix device cohorts between arms.
+
+## Drift
+
+The user set the standard device model for the OPT CMO DRN
+(`experiments/opt_cmo_drn/`) on 3 November 2026. The CMO deployment is
+followed by the power-law drift the user supplied on 28 October
+([specification](../on-chip-learning/campaigns/drift/power-law-model.md)). One
+knob sets the temporal correlation
+([25-h evidence](../on-chip-learning/campaigns/drift-mitigation/series/001-device-model/results/retention-25h-correlation-20261103/README.md)).
+Results under this model are model-based, not measured-device claims.
+
+```text
+G_p   = CMO endpoint draw (Falcone 2 % fit) for the target, clamped once into 9–88.2 µS
+u     = τ / 1 h,   τ = seconds since the device's latest write (no programming-to-read delay)
+G(τ)  = clip(G_p + m·u^α + s·u^β·Y(τ), 9, 88.2)
+Corr(Y(τ1), Y(τ2)) = (τ1/τ2)^κ  for τ1 ≤ τ2,   κ = ln ρ* / ln(5 min / 25 h)
+exact step: Y ← c·Y + √(1 − c²)·z,   c = (τ_prev/τ_next)^κ
+```
+
+- **Nominal values:** m = −2 µS, s = 3 µS, α = 0.23, β = 0.11 and
+  ρ* = Corr(Y(5 min), Y(25 h)) = 0.335 (κ ≈ 0.19), as measured on the 25-h data.
+  A sweep of s, the exponents or ρ* is declared in the experiment note, with
+  values in µS.
+- **Devices and writes:** each of the four physical devices per weight drifts
+  independently. A full rewrite draws a fresh CMO endpoint, restarts τ and
+  draws a fresh Y (R1). A persistent per-device share f of Y (`rho` in
+  `training/writable_drift.py`) is a declared sensitivity; the default is
+  f = 0.
+- **Loading and clipping:** drift enters the loaded network through the solved
+  DRN, so it does not act as an additive weight error. Clipping at the 9 µS
+  floor was the main DRN loss mechanism in the 29 October calibration. Report
+  clipping at both bounds with every result.
+- **What κ affects:** at every age the marginal is the power law, whatever κ
+  is, so single-age results do not depend on ρ*. Anything that reads at one age
+  and acts at another does. ρ* = 1 (κ = 0, ε fixed for a whole write episode)
+  is the model of the runs before 3 November and is now a labelled sensitivity
+  case.
+- **Refinements:** read noise is folded into s. Separate read noise,
+  conductance-binned coefficients, heavy tails, a programming-to-read delay and
+  ages past 25 h are declared refinements or labelled extrapolations.
+- **Named alternatives:** the flowers fit, PCM laws, other observation bounds
+  and ideal programming (G0 = target). Label results under these as such and
+  never pool them with the standard model.
+- **Information:** controllers observe only read conductances. Hidden draws
+  stay on the analysis side, except in labelled oracle arms.
+
+**Implementation status:**
+- `training/power_law_drift.py` and `training/writable_drift.py` implement
+  only κ = 0.
+- `writable_drift.py` writes exact endpoints, without the CMO draw.
+- Add both before any multi-age, rewrite or learning run under the standard
+  model. Keep κ = 0 replays of earlier runs bit-exact, and declare ρ* in each
+  config.
+- Both modules are mirrored verbatim in `hwa/`; change the two copies together.
 
 ## Initialization
 
