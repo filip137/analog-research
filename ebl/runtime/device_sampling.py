@@ -6,7 +6,7 @@ import subprocess
 from core.tensor_identity import state_hash
 from core.serialization import load
 from core.seeds import binding_seed
-from hardware.arrays import ROOT
+from core.paths import REPO_ROOT as ROOT
 
 
 def native_sample(*, kind, size, seed, policy, variation, output: Path) -> dict:
