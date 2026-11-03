@@ -1,102 +1,60 @@
-> Workflow migration (2026-09-25): the [question-led policy](../docs/experiment_workflow.md)
-> supersedes the legacy planning/global-manifest requirements below. Existing study
-> formats remain supported; new pilots use one note and native run bundles.
+# Raw LoRA/HWA results
 
-# Raw LoRA/HWA Results
+Raw results remain in their existing ignored directories. Scientific questions,
+specifications, measurements and interpretations live in the
+[question-led campaigns](../campaigns/README.md), following the
+[execution policy](../docs/experiment_workflow.md).
 
-The repository-root `results/` directory is the canonical home for new raw
-LoRA and hardware-aware experiment output in this worktree. Raw contents are
-local and ignored by Git; this guide is the only file in the tree intended
-for Git.
+## Ownership and new output
 
-Use one stable, kebab-case study ID for a scientific comparison. New studies
-are prepared from a tracked plan under [`studies/`](../studies/README.md):
+Choose one explicit, stable results root for each new comparison and record it in
+the owning experiment or pilot note before execution. Keep raw paths stable when
+promoting a pilot into a campaign. Related training, deployment, validation and
+analysis roots may belong to the same comparison; list each root in its result note.
 
-```bash
-python -m ebl study prepare --plan studies/<study-id>.json
-```
+A native invocation creates its own exclusive run directory, for example:
 
-The materialized directory has this shape:
+    python -m ebl train --config examples/small_drn/base.json --output-dir results/<comparison-id>/runs/<arm>
 
-```text
-results/<study-id>/
-  study.json
-  README.md
-  runs/<arm>/<ebl-run-id>/
-  analysis/
-  deployment/                 # optional, when the study uses it
-```
+Keep config.resolved.json, manifest.json, status.json, result.json, metrics,
+artifacts and checkpoints together. Never select inputs by searching for the newest
+checkpoint, overwrite an old run, or count a retry as an independent replicate.
 
-- `runs/` contains native `python -m ebl` run directories.
-- Optional `deployment/` contains device-programming or deployment outputs
-  when used.
-- `analysis/summary.json` is the machine-readable coverage and terminal-metric
-  index.
-- `analysis/report.md` is the human-readable study report. It begins as a
-  coverage report and gains the reviewed scientific closeout after
-  finalization.
-- `analysis/review.json` contains the human-authored scientific decision, and
-  `analysis/final.json` binds that decision to the finalized study artifacts.
-- Other files under `analysis/` contain aggregate JSON, tables, and plots.
-- `study.json` and the study-local `README.md` retain the initial hypothesis
-  and frozen plan inside the raw result directory.
+Small pilots can use native run bundles directly. Optional legacy prepared studies
+retain study.json, runs/ and analysis/; deployment/ is optional. Historical JSON
+plans and existing public CLI contracts remain supported. The CLI can inspect
+explicit bundles without changing the science; full artifact verification is a
+separate check from metadata inspection and expected-case reconciliation.
 
-For prepared workflow studies, `study.json`, `runs/`, and `analysis/` are the
-required control structure; `deployment/` remains optional. Older manual
-result directories retain their existing layouts.
+## Analysis and interpretation
 
-## Launch example
+Keep large generated tables, plots, logs and replay outputs in the owning raw root.
+Keep the compact question, measurements, source links, interpretation, limitations
+and next decision in the tracked campaign result or pilot note. An existing
+analysis/report.md remains historical evidence; new conclusions belong in the
+campaign record, without rewriting the raw report.
 
-Pass an arm-specific parent to the public CLI. The runtime creates a new
-exclusive run directory below it:
+For historical imports, state which sources exist locally, which metadata was
+checked, the date and scope of any original verification, and unresolved coverage.
+A recorded complete process does not prove complete study coverage; a stored running
+marker does not prove a live job. Keep failed and partial attempts.
 
-```bash
-python -m ebl train \
-  --config examples/small_drn/base.json \
-  --output-dir results/<study-id>/runs/<arm>
-```
+The generated campaign ledgers provide navigation. docs/current_simulations.md and
+docs/experimental_manifest.md are frozen historical snapshots: do not refresh or
+append them. No new manually maintained global run-status index replaces them.
 
-Never reuse an existing native run directory. Keep the native files
-(`config.resolved.json`, `manifest.json`, `metrics.jsonl`, `result.json`,
-`status.json`, artifacts, and checkpoints) together.
+## Existing locations and availability
 
-Summarize and validate result coverage without loading checkpoints:
+The migration leaves every raw directory in place, including launcher sidecars and
+standalone analysis folders. Each is linked by its scientific owner; workflow-pilot
+evidence remains with the existing pilot. Shared results/.launchers contains
+cohort-B reproduction, policy-evaluation and LoRA launch receipts, not extra runs.
+The two root-level RESET-bias launcher logs belong to the initialization campaign.
 
-```bash
-python -m ebl study summarize --study-dir results/<study-id>
-```
+Earlier evidence under labs/cases remains there and is linked by the endpoint-model
+campaign. Historical references to absent local roots remain labelled unavailable;
+a source’s recorded completion is not fresh local validation.
 
-After scientific review, `python -m ebl study finalize` writes
-`analysis/final.json`, completes `analysis/report.md`, and adds a concise
-linked interpretation to `docs/experimental_manifest.md`. See the complete
-[`experiment workflow`](../docs/experiment_workflow.md).
-
-Everything below `results/` except this README is ignored by Git. Links from
-tracked Markdown into a study folder are therefore local links: they resolve
-only in a workspace where that ignored study root has been retained or
-restored.
-
-## Experiment indexes
-
-- The `Active` block in
-  [`docs/current_simulations.md`](../docs/current_simulations.md) is refreshed
-  automatically from running native statuses below `results/`. Its paused,
-  analyzing, and queued sections remain human-maintained.
-- [`docs/experimental_manifest.md`](../docs/experimental_manifest.md) is the
-  concise index of concluded studies and links to their full local reports.
-
-The automatic refresh is informational and best-effort. Maintain the
-human-owned status and synthesis sections manually; use `study finalize` for
-workflow-managed concluded-study entries. None of these documents approves,
-validates, or blocks a run.
-
-## Existing raw results
-
-Existing exploratory studies remain at their original locations:
-
-- `labs/cases/passive_layerwise_lora_physical_test/`
-- `labs/cases/perfect_diode_hwa_lora_comparison/`
-- `labs/cases/mnist_perfect_diode_hwa_lora_comparison/`
-
-They are indexed in the experimental manifest but are not moved into
-`results/`.
+Only this README is tracked inside results/. Campaign evidence links therefore
+resolve only in workspaces where the corresponding ignored artifacts are retained
+or restored. Do not add raw payloads to Git to make those links work online.

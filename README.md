@@ -37,33 +37,35 @@ status, then records command-specific metrics, results, artifacts, logs, or
 checkpoints as the work proceeds. See
 [`docs/experiment_runtime.md`](docs/experiment_runtime.md) for the extension
 boundaries, checkpoint rules, worktree workflow, and campaign protocol.
-New multi-run studies follow the lightweight
-[`experiment workflow`](docs/experiment_workflow.md): a tracked plan freezes
-the initial hypothesis and exact configs, native runs retain the existing
-bundle contract, and reviewed finalization records the interpretation in the
-study-local report and experimental manifest.
+Research follows the [question-led workflow](docs/experiment_workflow.md):
+small pilots use one evolving note, while sustained comparisons live in
+[scientific campaigns](campaigns/README.md). Native bundles retain exact
+execution identities; campaign result notes record observations, interpretation,
+limitations and the next decision.
 The cohort-A measured ReRAM projection and bounded-learning-rate workflow is
 documented in
-[`docs/measured_cohort_a_training.md`](docs/measured_cohort_a_training.md),
+[cohort-A training record](campaigns/measured-cohort-adaptation/series/001-transfer-and-write-policies/experiments/exp-001-cohort-a.md#source-measured_cohort_a_training-measured-cohort-a-reram-training),
 with held-out cohort-B deployment and fine-tuning in
-[`docs/measured_cohort_b_finetuning.md`](docs/measured_cohort_b_finetuning.md),
+[cohort-B transfer record](campaigns/measured-cohort-adaptation/series/001-transfer-and-write-policies/experiments/exp-002-cohort-b-transfer.md#source-measured_cohort_b_finetuning-measured-cohort-b-deployment-and-fine-tuning),
 and physical low-rank recovery in
-[`docs/measured_cohort_b_lora_recovery.md`](docs/measured_cohort_b_lora_recovery.md).
+[measured low-rank recovery record](campaigns/measured-cohort-adaptation/series/002-low-rank-recovery/experiments/exp-005-cohort-b-lora.md#source-measured_cohort_b_lora_recovery-measured-cohort-b-memristor-lora-recovery).
 The matched single-pulse and Tiki-Taka continuation of a saved RESET-relative
 IBM OM deployment is specified in
-[`docs/ibm_om_reset_relative_on_chip_recovery.md`](docs/ibm_om_reset_relative_on_chip_recovery.md).
+[matched pulse-recovery experiment](campaigns/ibm-om-deployment-recovery/series/002-reset-relative/experiments/exp-005-pulse-recovery.md#source-ibm_om_reset_relative_on_chip_recovery-reset-relative-deployed-array-pulse-recovery).
 The fixed p90/p95/p99 follow-up for direct deployed-array pulses is specified
-in [`docs/ibm_om_reset_relative_direct_gradient_thresholds.md`](docs/ibm_om_reset_relative_direct_gradient_thresholds.md).
+in [gradient-threshold experiment](campaigns/ibm-om-deployment-recovery/series/002-reset-relative/experiments/exp-006-gradient-thresholds.md#source-ibm_om_reset_relative_direct_gradient_thresholds-reset-relative-direct-gradient-thresholding).
 The IBM OM device integration (assignment, topology, characterization,
 mapping, programming and readback layers, each selected from the config) is
 described in [`docs/ibm_om_layers.md`](docs/ibm_om_layers.md).
 
-## LoRA/HWA result tracking
+## LoRA/HWA research records
 
-New raw LoRA/HWA outputs live under [`results/`](results/README.md). The
-[current-simulation ledger](docs/current_simulations.md) automatically lists
-running native runs while retaining human-maintained paused and queued work.
-The [experimental manifest](docs/experimental_manifest.md) gives a concise
-linked interpretation for each concluded study. Full closeouts remain in the
-study-local `analysis/report.md`, while the broad research synthesis lives in
-[`docs/current_state.md`](docs/current_state.md).
+The [five scientific campaigns](campaigns/README.md) organize initialization and
+representation, measured-cohort adaptation, endpoint-model HWA/recovery, IBM OM
+programming, and IBM OM deployment/recovery. Start there for scientific conclusions
+and links to the underlying evidence.
+
+Raw outputs retain their existing ignored [results paths](results/README.md).
+The [documentation index](docs/README.md) separates shared contracts and implementation
+references from migrated study narratives and frozen historical indexes. The
+human-owned [current-state synthesis](docs/current_state.md) is preserved.

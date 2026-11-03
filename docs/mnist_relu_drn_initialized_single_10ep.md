@@ -1,114 +1,35 @@
 # Teacher-initialized single-conductance ReRAM MNIST fine-tuning (10 epochs)
 
-This exploratory control measures the original one-conductance-per-physical-
-edge student after ReLU-teacher programming and exactly ten epochs of
-measured-trace KL fine-tuning. It uses the registered
-`mnist_relu_drn_kd.v1` experiment.
+This study narrative has moved into the question-led campaigns. Use the following records for the historical specification, local evidence reconciliation and scientific interpretation.
 
-## Controlled setup
+- [Ten-epoch teacher-initialized single-conductance control](../campaigns/initialization-and-representation/series/002-teacher-and-representation/experiments/exp-007-single-ten-epoch.md) — [results and interpretation](../campaigns/initialization-and-representation/series/002-teacher-and-representation/results/exp-007-single-ten-epoch.md)
 
-- Teacher: the same frozen bias-free `784 -> 50 -> 10` ReLU checkpoint used by
-  the initialized differential run.
-- Student: bias-free dual-rail `[1568, 100, 20]` DRN with one independently
-  assigned measured cohort-A conductance per physical edge.
-- Mapping: lift each signed teacher matrix into non-negative dual rails, search
-  the same non-clipping layer-scale grid, map every target to the assigned
-  device's affine trace range, and fit one positive readout gain on the same
-  1,024-example calibration subset.
-- Programming: begin each device at raw pulse-zero RESET, perform exactly one
-  global-nearest teacher-target write, then project fine-tuning targets onto
-  that assigned raw trace.
-- Fine-tuning: pure `KL(teacher || student)`, seed 42, batch size 16,
-  calibrated one-conductance learning rates `[2.1e-10, 5.7e-13]`, and exactly
-  10 epochs.
-- Circuit scaling: model-local logical indexing, `voltage_amp = 4`, and
-  `current_amp = 0.25`.
+## Legacy section links
 
-The differential arm uses twice these learning rates because its effective
-weight update is the difference of two branch updates. Thus the declared rates
-are gradient-equivalent in the ideal-device limit.
+<a id="teacher-initialized-single-conductance-reram-mnist-fine-tuning-10-epochs"></a>
 
-## Interpretation boundary
+[teacher initialized single conductance reram mnist fine tuning 10 epochs](../campaigns/initialization-and-representation/series/002-teacher-and-representation/experiments/exp-007-single-ten-epoch.md#source-mnist_relu_drn_initialized_single_10ep-teacher-initialized-single-conductance-reram-mnist-fine-tuning-10-epochs)
 
-This is the explicit ten-epoch replay of the measured one-conductance arm in
-the earlier 20-epoch KD study. It is a matched control for the initialized
-`G+ - G-` run in teacher, data, seed, solver, objective, calibration, device
-cohort, amplification, and minibatch budget. The architecture-appropriate
-initial mappings differ: one conductance uses its device-local affine trace
-range, while a differential pair uses the two traces' shared reachable window.
+<a id="controlled-setup"></a>
 
-## Entry points
+[controlled setup](../campaigns/initialization-and-representation/series/002-teacher-and-representation/experiments/exp-007-single-ten-epoch.md#source-mnist_relu_drn_initialized_single_10ep-controlled-setup)
 
-- Config: `examples/mnist_relu_drn/measured_raw_single_finetune_10ep.json`
-- Campaign: `campaigns/manifests/mnist_relu_drn_initialized_single_10ep.json`
-- Raw output:
-  `results/mnist-single-reram-initialized-finetune-10ep-20260817-v1/`
+<a id="interpretation-boundary"></a>
 
-## Result
+[interpretation boundary](../campaigns/initialization-and-representation/series/002-teacher-and-representation/results/exp-007-single-ten-epoch.md#source-mnist_relu_drn_initialized_single_10ep-interpretation-boundary)
 
-The campaign completed from clean source commit
-`c507dd9d13825721aa4e25c05f2303302c2a050c`. Both stages exited zero, the
-training stream contains one initialization record followed by exactly ten
-completed epochs, and no non-finite value or error marker was present.
+<a id="entry-points"></a>
 
-The nominal teacher-map search selected scale fractions `[1.0, 0.125]`, with
-calibration KL `0.00970462` and gain `0.630957` before measured programming.
-After projection onto independently assigned device-local affine ranges, the
-calibration KL became `2.24954` and the fitted gain hit its lower grid boundary
-at `0.001`. The programming step therefore destroyed the useful direction of
-the nominal teacher scores; this was not merely a uniform attenuation that a
-positive gain could undo.
+[entry points](../campaigns/initialization-and-representation/series/002-teacher-and-representation/experiments/exp-007-single-ten-epoch.md#source-mnist_relu_drn_initialized_single_10ep-entry-points)
 
-| Evaluation point | KL | Accuracy | Teacher agreement |
-| --- | ---: | ---: | ---: |
-| mapped initialization, validation | 2.242688 | 8.10% | 8.12% |
-| selected epoch 10, validation | 2.242688 | 8.16% | 8.16% |
-| selected checkpoint, held-out test | 2.246097 | 7.98% | 7.81% |
+<a id="result"></a>
 
-The selected validation KL improved by only `1.23e-7` in absolute terms, a
-relative recovery of `5.48e-8`; the declared 10% recovery gate failed. The
-output-layer aggregate conductance statistics did not change, while the hidden
-layer's mean conductance shifted by only `1.95e-11 S`. The clipped-small
-readout gain also scales the KL gradient reaching the circuit, and almost all
-shadow updates remained below the raw-trace projection resolution. Ten more
-epochs in the earlier study did not alter that conclusion.
+[result](../campaigns/initialization-and-representation/series/002-teacher-and-representation/results/exp-007-single-ten-epoch.md#source-mnist_relu_drn_initialized_single_10ep-result)
 
-Training took `182.01 s`, and fresh-process evaluation of all 10,000 held-out
-examples took `1.42 s`. The teacher itself reached `97.36%` test accuracy.
+<a id="matched-differential-comparison"></a>
 
-## Matched differential comparison
+[matched differential comparison](../campaigns/initialization-and-representation/series/002-teacher-and-representation/results/exp-007-single-ten-epoch.md#source-mnist_relu_drn_initialized_single_10ep-matched-differential-comparison)
 
-| Evaluation | One conductance | `G+ - G-` pair |
-| --- | ---: | ---: |
-| initial validation accuracy | 8.10% | 89.12% |
-| initial validation KL | 2.242688 | 0.231839 |
-| selected validation accuracy | 8.16% | 97.42% |
-| selected validation KL | 2.242688 | 0.0138965 |
-| test accuracy | 7.98% | 97.48% |
-| test agreement | 7.81% | 98.76% |
-| test KL | 2.246097 | 0.0140905 |
+<a id="artifact-integrity"></a>
 
-The differential pair gains `89.50` percentage points of test accuracy and
-reduces test KL by `99.37%`. Both arms use the same teacher, data, seed,
-amplification, objective, solver, calibration set, minibatch count, and
-gradient-equivalent learning rates. Their architecture-appropriate mapping is
-the material distinction: per-device affine floors remain as unrelated terms
-in the one-conductance dual rails, whereas the pair's shared reachable window
-allows a local common component to cancel in `G+ - G-`.
-
-This does not mean that one-conductance DRNs cannot learn. The corrected
-from-RESET paired-MSE controls reached about `93.9%`; it means this particular
-ReLU-to-independent-affine-device programming scheme destroys the teacher
-signal and then locks KL fine-tuning near the uniform-output solution.
-
-## Artifact integrity
-
-Fresh validation reproduced model-local stages
-`[(0, 1, 1, 1), (1, 2, 4, 0.0625)]`, teacher and device-source hashes, and the
-two stable keys `base.dense_weight.0` and `base.dense_weight.1`. The selected
-weights SHA-256 is
-`1096560c3ce5d06b299948d9264caf32c6ea9d9e1dbfe8b6ba47a416047a5bfd`;
-the exact epoch-10 resume SHA-256 is
-`d90785dc326d5f78283b7e4df6b5ae25e6366277d18f9773c32223cbe857f806`.
-The complete initialization and first-ten trajectory exactly match the earlier
-20-epoch measured one-conductance run.
+[artifact integrity](../campaigns/initialization-and-representation/series/002-teacher-and-representation/results/exp-007-single-ten-epoch.md#source-mnist_relu_drn_initialized_single_10ep-artifact-integrity)
