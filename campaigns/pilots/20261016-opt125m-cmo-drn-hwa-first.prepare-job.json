@@ -1,0 +1,65 @@
+{
+  "id": "opt-cmo-drn-first-prepare-readiness-v1",
+  "project_dir": "/home/filip/analog-research/lora",
+  "handoff": "campaigns/pilots/20261016-opt125m-cmo-drn-hwa-first.md",
+  "authorization": "User requested implementation of thread 01a140d3-3043-7f63-b0f3-b7930a7c56f5, including optimizer selection and clean/std3 five-pass runs on trex, fifi, loulou and riri. Source staging awaits explicit approval following automatic review rejection; do not submit until staging is approved and verified.",
+  "peak_memory_mib": 28000,
+  "headroom_mib": 2800,
+  "expected_seconds": 900,
+  "budget_seconds": 900,
+  "stale_seconds": 600,
+  "startup_grace_seconds": 300,
+  "retry_safe": false,
+  "recovery": true,
+  "placements": {
+    "loulou": {
+      "workdir": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v5",
+      "run_dir": "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v1",
+      "gpu_models": [
+        "RTX 5090"
+      ],
+      "env": {
+        "EBL_CORPUS_ROOT": "/home/filip/analog-research/opt-cmo-exp1/inputs/corpora",
+        "OPT_DRN_RUN_ID": "run",
+        "OPT_DRN_SOURCE_SNAPSHOT": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v5/source-snapshot.json",
+        "CUBLAS_WORKSPACE_CONFIG": ":4096:8"
+      },
+      "argv": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "ebl",
+        "train",
+        "--config",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v5/examples/opt_cmo_drn/prepare_readiness.json",
+        "--teacher-weights",
+        "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "--weights",
+        "/home/filip/analog-research/opt-cmo-exp1/inputs/exp1g-frozen-sources/std3/20261011T013506.097920Z-d4e9bdc7-e50b689b/checkpoints/source.pt",
+        "--output-dir",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v1"
+      ],
+      "validate_argv": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "ebl",
+        "runs",
+        "inspect",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v1/run",
+        "--verify-artifacts",
+        "--require-complete"
+      ],
+      "status_file": "run/status.json",
+      "metrics_file": "run/metrics.jsonl",
+      "prepared_files": [
+        {
+          "path": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v5/source-snapshot.json",
+          "sha256": "4640350d8c18f62593340e2a9c5dfcce72b7ed2fc3dbae70d1a7241cd0843d32"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v5/examples/opt_cmo_drn/prepare_readiness.json",
+          "sha256": "21829d2689f2f4facc72c30ed8036cd41b395bbf509d62c0e317e8791e31d238"
+        }
+      ]
+    }
+  }
+}

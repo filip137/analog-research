@@ -1,0 +1,80 @@
+{
+  "id": "opt-cmo-drn-first-rewrite-readiness-v1",
+  "project_dir": "/home/filip/analog-research/lora",
+  "handoff": "campaigns/pilots/20261016-opt125m-cmo-drn-hwa-first.md",
+  "authorization": "User explicitly approved transfers of this experiment code/configs and required checkpoints to /home/filip/analog-research/opt-cmo-drn-first-v1/ on loulou, trex, fifi and riri, and said these transfers should always be approved. Full HWA and physical recovery execution remains assigned; this readiness job consumes the existing24GPUh tuning allowance. No new budget.",
+  "peak_memory_mib": 20480,
+  "headroom_mib": 2048,
+  "expected_seconds": 30,
+  "budget_seconds": 120,
+  "stale_seconds": 180,
+  "startup_grace_seconds": 90,
+  "retry_safe": false,
+  "recovery": false,
+  "placements": {
+    "fifi": {
+      "workdir": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9",
+      "run_dir": "/home/filip/analog-research/opt-cmo-drn-first-v1/results/rewrite-readiness-v1",
+      "gpu_models": [
+        "RTX 5090"
+      ],
+      "env": {
+        "EBL_CORPUS_ROOT": "/home/filip/analog-research/opt-cmo-exp1/inputs/corpora",
+        "OPT_DRN_RUN_ID": "run",
+        "OPT_DRN_SOURCE_SNAPSHOT": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/source-snapshot.json",
+        "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+        "OPT_DRN_MEMORY_LIMIT_MIB": "20480"
+      },
+      "argv": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "ebl",
+        "train",
+        "--config",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/plans/readiness/rewrite_readiness.json",
+        "--teacher-weights",
+        "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "--weights",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/results/hwa-selection-readiness-v1/run/checkpoints/final.pt",
+        "--output-dir",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/results/rewrite-readiness-v1",
+        "--device-state",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/results/deploy-readiness-v1/run/checkpoints/deployed.pt"
+      ],
+      "validate_argv": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "ebl",
+        "runs",
+        "inspect",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/results/rewrite-readiness-v1/run",
+        "--verify-artifacts",
+        "--require-complete"
+      ],
+      "status_file": "run/status.json",
+      "metrics_file": "run/metrics.jsonl",
+      "prepared_files": [
+        {
+          "path": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/source-snapshot.json",
+          "sha256": "8e538a8c8f32e62e8874365b4fa9d8c01a544556d2dd089380dd916d559f3a46"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-drn-first-v1/plans/readiness/rewrite_readiness.json",
+          "sha256": "d0153d239e1418704225c28cf6a8f0a5fafdec01fe5331b306cea19637846faa"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-drn-first-v1/results/hwa-selection-readiness-v1/run/checkpoints/final.pt",
+          "sha256": "a7fef0d90a9ca3d70d1801e6fc4f6b85a5e4ea163ebd890e68d3fbafdddbab2a"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+          "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-drn-first-v1/results/deploy-readiness-v1/run/checkpoints/deployed.pt",
+          "sha256": "54e847ec3330af181860a0ceada0a43346ffbd36f953b7637f4209d157dab3ea"
+        }
+      ]
+    }
+  }
+}

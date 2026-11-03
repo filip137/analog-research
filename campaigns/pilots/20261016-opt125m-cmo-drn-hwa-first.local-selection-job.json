@@ -1,0 +1,70 @@
+{
+  "id": "opt-cmo-drn-local-selection-v1",
+  "project_dir": "/home/filip/analog-research/lora",
+  "handoff": "campaigns/pilots/20261016-opt125m-cmo-drn-hwa-first.md",
+  "authorization": "Assigned full HWA/recovery execution; this bounded local readiness check consumes the existing 20-minute RTX3090 envelope. No source export; root owns fixes.",
+  "peak_memory_mib": 20480,
+  "headroom_mib": 2048,
+  "expected_seconds": 90,
+  "budget_seconds": 300,
+  "stale_seconds": 300,
+  "startup_grace_seconds": 90,
+  "retry_safe": false,
+  "recovery": false,
+  "placements": {
+    "local": {
+      "workdir": "/home/filip/analog-research/lora/results/opt125m-cmo-drn-hwa-first-v1/source-readiness-v8",
+      "run_dir": "/home/filip/analog-research/lora/results/opt125m-cmo-drn-hwa-first-v1/local-selection-readiness-v1",
+      "gpu_models": [
+        "RTX 3090"
+      ],
+      "env": {
+        "EBL_CORPUS_ROOT": "/home/filip/analog-research/opt-cmo-exp1/inputs/corpora",
+        "OPT_DRN_RUN_ID": "run",
+        "OPT_DRN_SOURCE_SNAPSHOT": "/home/filip/analog-research/lora/results/opt125m-cmo-drn-hwa-first-v1/source-readiness-v8/source-snapshot.json",
+        "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+        "OPT_DRN_MEMORY_LIMIT_MIB": "20480"
+      },
+      "argv": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "ebl",
+        "train",
+        "--config",
+        "/home/filip/analog-research/lora/results/opt125m-cmo-drn-hwa-first-v1/source-readiness-v8/examples/opt_cmo_drn/hwa_selection_readiness.json",
+        "--teacher-weights",
+        "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "--weights",
+        "/home/filip/analog-research/lora/results/opt125m-cmo-drn-hwa-first-v1/local-prepare-readiness-v2/run/checkpoints/mapped.pt",
+        "--output-dir",
+        "/home/filip/analog-research/lora/results/opt125m-cmo-drn-hwa-first-v1/local-selection-readiness-v1"
+      ],
+      "validate_argv": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "ebl",
+        "runs",
+        "inspect",
+        "/home/filip/analog-research/lora/results/opt125m-cmo-drn-hwa-first-v1/local-selection-readiness-v1/run",
+        "--verify-artifacts",
+        "--require-complete"
+      ],
+      "status_file": "run/status.json",
+      "metrics_file": "run/metrics.jsonl",
+      "prepared_files": [
+        {
+          "path": "/home/filip/analog-research/lora/results/opt125m-cmo-drn-hwa-first-v1/source-readiness-v8/source-snapshot.json",
+          "sha256": "1a5ebcded75fef8b8c0d5390c647ef60a301cb379e21013af856c4b18ae4ac59"
+        },
+        {
+          "path": "/home/filip/analog-research/lora/results/opt125m-cmo-drn-hwa-first-v1/source-readiness-v8/examples/opt_cmo_drn/hwa_selection_readiness.json",
+          "sha256": "61dc0b872347ac174411554a17eaee2e9df60368f683f154cd0b41c7f600207c"
+        },
+        {
+          "path": "/home/filip/analog-research/lora/results/opt125m-cmo-drn-hwa-first-v1/local-prepare-readiness-v2/run/checkpoints/mapped.pt",
+          "sha256": "5ab69be92c6eb17dff5c46d299066727cd8a96a7515dd49b9fd4c003fedf951a"
+        }
+      ]
+    }
+  }
+}

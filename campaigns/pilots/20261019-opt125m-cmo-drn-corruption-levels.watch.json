@@ -1,0 +1,327 @@
+{
+  "version": 1,
+  "project_dir": "/home/filip/analog-research/lora",
+  "state_dir": "/tmp/filip-opt125m-cmo-drn-rates-jz-v1/watch-state",
+  "lock_dir": "/tmp/filip-opt125m-cmo-drn-rates-jz-v1/watch-locks",
+  "poll_seconds": 300,
+  "agent": {
+    "command": [
+      "/home/filip/.local/bin/codex"
+    ],
+    "model": "gpt-6-astra",
+    "effort": "medium",
+    "timeout_seconds": 300,
+    "max_per_day": 12,
+    "max_per_incident": 2,
+    "cooldown_seconds": 900
+  },
+  "targets": {
+    "jean-zay": {
+      "probe_command": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "workflow.slurm_recovery_watch"
+      ]
+    }
+  },
+  "runs": [
+    {
+      "target": "jean-zay",
+      "handoff": "campaigns/pilots/20261019-opt125m-cmo-drn-corruption-levels.md",
+      "authorization": "User authorized the five new random-fault levels (1,2,4,5,6%) with both fixed-LR laws on Jean Zay V100 dev and explicitly approved source/checkpoint transfers. Keep 2048 updates, batch 32, microbatch 1, source/physics/LRs, unlimited writes, same-array holds, and full held-out validation. At most 60 GPU-hours and 200 GiB remote/100 GiB local; one gated immutable manifest, no duplicate parents. Diagnose operational failures under the Jean Zay submission gate; collect and interpret final bundles without expanding science.",
+      "windows": [
+        {
+          "start": "2026-10-19T12:06:31.761636+00:00",
+          "end": "2026-10-21T12:06:31.761636+00:00"
+        }
+      ],
+      "pid_file": "worker.pid",
+      "command_contains": "opt125m-cmo-drn-rates-v1",
+      "completion_files": [
+        "complete.json"
+      ],
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 900,
+      "gpu_count": 1,
+      "min_free_mib": 8192,
+      "remote_manifest": "/lustre/fswork/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/source-v2/launch/manifest.json",
+      "id": "drn-rates-canary-v2",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/retry-v2/canary",
+      "canary": true
+    },
+    {
+      "target": "jean-zay",
+      "handoff": "campaigns/pilots/20261019-opt125m-cmo-drn-corruption-levels.md",
+      "authorization": "User authorized the five new random-fault levels (1,2,4,5,6%) with both fixed-LR laws on Jean Zay V100 dev and explicitly approved source/checkpoint transfers. Keep 2048 updates, batch 32, microbatch 1, source/physics/LRs, unlimited writes, same-array holds, and full held-out validation. At most 60 GPU-hours and 200 GiB remote/100 GiB local; one gated immutable manifest, no duplicate parents. Diagnose operational failures under the Jean Zay submission gate; collect and interpret final bundles without expanding science.",
+      "windows": [
+        {
+          "start": "2026-10-19T12:06:31.761636+00:00",
+          "end": "2026-10-21T12:06:31.761636+00:00"
+        }
+      ],
+      "pid_file": "worker.pid",
+      "command_contains": "opt125m-cmo-drn-rates-v1",
+      "completion_files": [
+        "state.json"
+      ],
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 900,
+      "gpu_count": 1,
+      "min_free_mib": 8192,
+      "remote_manifest": "/lustre/fswork/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/source-v2/launch/manifest.json",
+      "id": "drn-rates-random01-noiseless",
+      "case_index": 0,
+      "case_id": "random01-noiseless",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/retry-v2/cases/random01-noiseless"
+    },
+    {
+      "target": "jean-zay",
+      "handoff": "campaigns/pilots/20261019-opt125m-cmo-drn-corruption-levels.md",
+      "authorization": "User authorized the five new random-fault levels (1,2,4,5,6%) with both fixed-LR laws on Jean Zay V100 dev and explicitly approved source/checkpoint transfers. Keep 2048 updates, batch 32, microbatch 1, source/physics/LRs, unlimited writes, same-array holds, and full held-out validation. At most 60 GPU-hours and 200 GiB remote/100 GiB local; one gated immutable manifest, no duplicate parents. Diagnose operational failures under the Jean Zay submission gate; collect and interpret final bundles without expanding science.",
+      "windows": [
+        {
+          "start": "2026-10-19T12:06:31.761636+00:00",
+          "end": "2026-10-21T12:06:31.761636+00:00"
+        }
+      ],
+      "pid_file": "worker.pid",
+      "command_contains": "opt125m-cmo-drn-rates-v1",
+      "completion_files": [
+        "state.json"
+      ],
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 900,
+      "gpu_count": 1,
+      "min_free_mib": 8192,
+      "remote_manifest": "/lustre/fswork/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/source-v2/launch/manifest.json",
+      "id": "drn-rates-random01-noisy",
+      "case_index": 1,
+      "case_id": "random01-noisy",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/retry-v2/cases/random01-noisy"
+    },
+    {
+      "target": "jean-zay",
+      "handoff": "campaigns/pilots/20261019-opt125m-cmo-drn-corruption-levels.md",
+      "authorization": "User authorized the five new random-fault levels (1,2,4,5,6%) with both fixed-LR laws on Jean Zay V100 dev and explicitly approved source/checkpoint transfers. Keep 2048 updates, batch 32, microbatch 1, source/physics/LRs, unlimited writes, same-array holds, and full held-out validation. At most 60 GPU-hours and 200 GiB remote/100 GiB local; one gated immutable manifest, no duplicate parents. Diagnose operational failures under the Jean Zay submission gate; collect and interpret final bundles without expanding science.",
+      "windows": [
+        {
+          "start": "2026-10-19T12:06:31.761636+00:00",
+          "end": "2026-10-21T12:06:31.761636+00:00"
+        }
+      ],
+      "pid_file": "worker.pid",
+      "command_contains": "opt125m-cmo-drn-rates-v1",
+      "completion_files": [
+        "state.json"
+      ],
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 900,
+      "gpu_count": 1,
+      "min_free_mib": 8192,
+      "remote_manifest": "/lustre/fswork/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/source-v2/launch/manifest.json",
+      "id": "drn-rates-random02-noiseless",
+      "case_index": 2,
+      "case_id": "random02-noiseless",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/retry-v2/cases/random02-noiseless"
+    },
+    {
+      "target": "jean-zay",
+      "handoff": "campaigns/pilots/20261019-opt125m-cmo-drn-corruption-levels.md",
+      "authorization": "User authorized the five new random-fault levels (1,2,4,5,6%) with both fixed-LR laws on Jean Zay V100 dev and explicitly approved source/checkpoint transfers. Keep 2048 updates, batch 32, microbatch 1, source/physics/LRs, unlimited writes, same-array holds, and full held-out validation. At most 60 GPU-hours and 200 GiB remote/100 GiB local; one gated immutable manifest, no duplicate parents. Diagnose operational failures under the Jean Zay submission gate; collect and interpret final bundles without expanding science.",
+      "windows": [
+        {
+          "start": "2026-10-19T12:06:31.761636+00:00",
+          "end": "2026-10-21T12:06:31.761636+00:00"
+        }
+      ],
+      "pid_file": "worker.pid",
+      "command_contains": "opt125m-cmo-drn-rates-v1",
+      "completion_files": [
+        "state.json"
+      ],
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 900,
+      "gpu_count": 1,
+      "min_free_mib": 8192,
+      "remote_manifest": "/lustre/fswork/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/source-v2/launch/manifest.json",
+      "id": "drn-rates-random02-noisy",
+      "case_index": 3,
+      "case_id": "random02-noisy",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/retry-v2/cases/random02-noisy"
+    },
+    {
+      "target": "jean-zay",
+      "handoff": "campaigns/pilots/20261019-opt125m-cmo-drn-corruption-levels.md",
+      "authorization": "User authorized the five new random-fault levels (1,2,4,5,6%) with both fixed-LR laws on Jean Zay V100 dev and explicitly approved source/checkpoint transfers. Keep 2048 updates, batch 32, microbatch 1, source/physics/LRs, unlimited writes, same-array holds, and full held-out validation. At most 60 GPU-hours and 200 GiB remote/100 GiB local; one gated immutable manifest, no duplicate parents. Diagnose operational failures under the Jean Zay submission gate; collect and interpret final bundles without expanding science.",
+      "windows": [
+        {
+          "start": "2026-10-19T12:06:31.761636+00:00",
+          "end": "2026-10-21T12:06:31.761636+00:00"
+        }
+      ],
+      "pid_file": "worker.pid",
+      "command_contains": "opt125m-cmo-drn-rates-v1",
+      "completion_files": [
+        "state.json"
+      ],
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 900,
+      "gpu_count": 1,
+      "min_free_mib": 8192,
+      "remote_manifest": "/lustre/fswork/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/source-v2/launch/manifest.json",
+      "id": "drn-rates-random04-noiseless",
+      "case_index": 4,
+      "case_id": "random04-noiseless",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/retry-v2/cases/random04-noiseless"
+    },
+    {
+      "target": "jean-zay",
+      "handoff": "campaigns/pilots/20261019-opt125m-cmo-drn-corruption-levels.md",
+      "authorization": "User authorized the five new random-fault levels (1,2,4,5,6%) with both fixed-LR laws on Jean Zay V100 dev and explicitly approved source/checkpoint transfers. Keep 2048 updates, batch 32, microbatch 1, source/physics/LRs, unlimited writes, same-array holds, and full held-out validation. At most 60 GPU-hours and 200 GiB remote/100 GiB local; one gated immutable manifest, no duplicate parents. Diagnose operational failures under the Jean Zay submission gate; collect and interpret final bundles without expanding science.",
+      "windows": [
+        {
+          "start": "2026-10-19T12:06:31.761636+00:00",
+          "end": "2026-10-21T12:06:31.761636+00:00"
+        }
+      ],
+      "pid_file": "worker.pid",
+      "command_contains": "opt125m-cmo-drn-rates-v1",
+      "completion_files": [
+        "state.json"
+      ],
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 900,
+      "gpu_count": 1,
+      "min_free_mib": 8192,
+      "remote_manifest": "/lustre/fswork/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/source-v2/launch/manifest.json",
+      "id": "drn-rates-random04-noisy",
+      "case_index": 5,
+      "case_id": "random04-noisy",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/retry-v2/cases/random04-noisy"
+    },
+    {
+      "target": "jean-zay",
+      "handoff": "campaigns/pilots/20261019-opt125m-cmo-drn-corruption-levels.md",
+      "authorization": "User authorized the five new random-fault levels (1,2,4,5,6%) with both fixed-LR laws on Jean Zay V100 dev and explicitly approved source/checkpoint transfers. Keep 2048 updates, batch 32, microbatch 1, source/physics/LRs, unlimited writes, same-array holds, and full held-out validation. At most 60 GPU-hours and 200 GiB remote/100 GiB local; one gated immutable manifest, no duplicate parents. Diagnose operational failures under the Jean Zay submission gate; collect and interpret final bundles without expanding science.",
+      "windows": [
+        {
+          "start": "2026-10-19T12:06:31.761636+00:00",
+          "end": "2026-10-21T12:06:31.761636+00:00"
+        }
+      ],
+      "pid_file": "worker.pid",
+      "command_contains": "opt125m-cmo-drn-rates-v1",
+      "completion_files": [
+        "state.json"
+      ],
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 900,
+      "gpu_count": 1,
+      "min_free_mib": 8192,
+      "remote_manifest": "/lustre/fswork/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/source-v2/launch/manifest.json",
+      "id": "drn-rates-random05-noiseless",
+      "case_index": 6,
+      "case_id": "random05-noiseless",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/retry-v2/cases/random05-noiseless"
+    },
+    {
+      "target": "jean-zay",
+      "handoff": "campaigns/pilots/20261019-opt125m-cmo-drn-corruption-levels.md",
+      "authorization": "User authorized the five new random-fault levels (1,2,4,5,6%) with both fixed-LR laws on Jean Zay V100 dev and explicitly approved source/checkpoint transfers. Keep 2048 updates, batch 32, microbatch 1, source/physics/LRs, unlimited writes, same-array holds, and full held-out validation. At most 60 GPU-hours and 200 GiB remote/100 GiB local; one gated immutable manifest, no duplicate parents. Diagnose operational failures under the Jean Zay submission gate; collect and interpret final bundles without expanding science.",
+      "windows": [
+        {
+          "start": "2026-10-19T12:06:31.761636+00:00",
+          "end": "2026-10-21T12:06:31.761636+00:00"
+        }
+      ],
+      "pid_file": "worker.pid",
+      "command_contains": "opt125m-cmo-drn-rates-v1",
+      "completion_files": [
+        "state.json"
+      ],
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 900,
+      "gpu_count": 1,
+      "min_free_mib": 8192,
+      "remote_manifest": "/lustre/fswork/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/source-v2/launch/manifest.json",
+      "id": "drn-rates-random05-noisy",
+      "case_index": 7,
+      "case_id": "random05-noisy",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/retry-v2/cases/random05-noisy"
+    },
+    {
+      "target": "jean-zay",
+      "handoff": "campaigns/pilots/20261019-opt125m-cmo-drn-corruption-levels.md",
+      "authorization": "User authorized the five new random-fault levels (1,2,4,5,6%) with both fixed-LR laws on Jean Zay V100 dev and explicitly approved source/checkpoint transfers. Keep 2048 updates, batch 32, microbatch 1, source/physics/LRs, unlimited writes, same-array holds, and full held-out validation. At most 60 GPU-hours and 200 GiB remote/100 GiB local; one gated immutable manifest, no duplicate parents. Diagnose operational failures under the Jean Zay submission gate; collect and interpret final bundles without expanding science.",
+      "windows": [
+        {
+          "start": "2026-10-19T12:06:31.761636+00:00",
+          "end": "2026-10-21T12:06:31.761636+00:00"
+        }
+      ],
+      "pid_file": "worker.pid",
+      "command_contains": "opt125m-cmo-drn-rates-v1",
+      "completion_files": [
+        "state.json"
+      ],
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 900,
+      "gpu_count": 1,
+      "min_free_mib": 8192,
+      "remote_manifest": "/lustre/fswork/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/source-v2/launch/manifest.json",
+      "id": "drn-rates-random06-noiseless",
+      "case_index": 8,
+      "case_id": "random06-noiseless",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/retry-v2/cases/random06-noiseless"
+    },
+    {
+      "target": "jean-zay",
+      "handoff": "campaigns/pilots/20261019-opt125m-cmo-drn-corruption-levels.md",
+      "authorization": "User authorized the five new random-fault levels (1,2,4,5,6%) with both fixed-LR laws on Jean Zay V100 dev and explicitly approved source/checkpoint transfers. Keep 2048 updates, batch 32, microbatch 1, source/physics/LRs, unlimited writes, same-array holds, and full held-out validation. At most 60 GPU-hours and 200 GiB remote/100 GiB local; one gated immutable manifest, no duplicate parents. Diagnose operational failures under the Jean Zay submission gate; collect and interpret final bundles without expanding science.",
+      "windows": [
+        {
+          "start": "2026-10-19T12:06:31.761636+00:00",
+          "end": "2026-10-21T12:06:31.761636+00:00"
+        }
+      ],
+      "pid_file": "worker.pid",
+      "command_contains": "opt125m-cmo-drn-rates-v1",
+      "completion_files": [
+        "state.json"
+      ],
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 900,
+      "gpu_count": 1,
+      "min_free_mib": 8192,
+      "remote_manifest": "/lustre/fswork/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/source-v2/launch/manifest.json",
+      "id": "drn-rates-random06-noisy",
+      "case_index": 9,
+      "case_id": "random06-noisy",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/retry-v2/cases/random06-noisy"
+    },
+    {
+      "target": "jean-zay",
+      "handoff": "campaigns/pilots/20261019-opt125m-cmo-drn-corruption-levels.md",
+      "authorization": "User authorized the five new random-fault levels (1,2,4,5,6%) with both fixed-LR laws on Jean Zay V100 dev and explicitly approved source/checkpoint transfers. Keep 2048 updates, batch 32, microbatch 1, source/physics/LRs, unlimited writes, same-array holds, and full held-out validation. At most 60 GPU-hours and 200 GiB remote/100 GiB local; one gated immutable manifest, no duplicate parents. Diagnose operational failures under the Jean Zay submission gate; collect and interpret final bundles without expanding science.",
+      "windows": [
+        {
+          "start": "2026-10-19T12:06:31.761636+00:00",
+          "end": "2026-10-21T12:06:31.761636+00:00"
+        }
+      ],
+      "pid_file": "worker.pid",
+      "command_contains": "opt125m-cmo-drn-rates-v1",
+      "completion_files": [
+        "summary.json"
+      ],
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 900,
+      "gpu_count": 0,
+      "min_free_mib": 8192,
+      "remote_manifest": "/lustre/fswork/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/source-v2/launch/manifest.json",
+      "id": "drn-rates-controller",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt125m-cmo-drn-rates-v1/retry-v2",
+      "controller": true
+    }
+  ]
+}

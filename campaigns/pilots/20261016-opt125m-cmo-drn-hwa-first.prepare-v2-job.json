@@ -1,0 +1,248 @@
+{
+  "id": "opt-cmo-drn-first-prepare-readiness-v2",
+  "project_dir": "/home/filip/analog-research/lora",
+  "handoff": "campaigns/pilots/20261016-opt125m-cmo-drn-hwa-first.md",
+  "authorization": "User explicitly approved transfers of this experiment code/configs and required checkpoints to /home/filip/analog-research/opt-cmo-drn-first-v1/ on loulou, trex, fifi and riri, and said these transfers should always be approved. Full HWA and physical recovery execution remains assigned; this readiness job consumes the existing24GPUh tuning allowance. No new budget.",
+  "peak_memory_mib": 20480,
+  "headroom_mib": 2048,
+  "expected_seconds": 30,
+  "budget_seconds": 300,
+  "stale_seconds": 240,
+  "startup_grace_seconds": 120,
+  "retry_safe": false,
+  "recovery": false,
+  "placements": {
+    "loulou": {
+      "workdir": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9",
+      "run_dir": "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v2",
+      "gpu_models": [
+        "RTX 5090"
+      ],
+      "env": {
+        "EBL_CORPUS_ROOT": "/home/filip/analog-research/opt-cmo-exp1/inputs/corpora",
+        "OPT_DRN_RUN_ID": "run",
+        "OPT_DRN_SOURCE_SNAPSHOT": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/source-snapshot.json",
+        "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+        "OPT_DRN_MEMORY_LIMIT_MIB": "20480"
+      },
+      "argv": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "ebl",
+        "train",
+        "--config",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/examples/opt_cmo_drn/prepare_local_readiness.json",
+        "--teacher-weights",
+        "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "--weights",
+        "/home/filip/analog-research/opt-cmo-exp1/inputs/exp1g-frozen-sources/std3/20261011T013506.097920Z-d4e9bdc7-e50b689b/checkpoints/source.pt",
+        "--output-dir",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v2"
+      ],
+      "validate_argv": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "ebl",
+        "runs",
+        "inspect",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v2/run",
+        "--verify-artifacts",
+        "--require-complete"
+      ],
+      "status_file": "run/status.json",
+      "metrics_file": "run/metrics.jsonl",
+      "prepared_files": [
+        {
+          "path": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/source-snapshot.json",
+          "sha256": "8e538a8c8f32e62e8874365b4fa9d8c01a544556d2dd089380dd916d559f3a46"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/examples/opt_cmo_drn/prepare_local_readiness.json",
+          "sha256": "4e1d6f18ab868c330ec0437b27bcc89e3821a089840acf3d82df2dd015f88980"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+          "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/exp1g-frozen-sources/std3/20261011T013506.097920Z-d4e9bdc7-e50b689b/checkpoints/source.pt",
+          "sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028"
+        }
+      ]
+    },
+    "riri": {
+      "workdir": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9",
+      "run_dir": "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v2",
+      "gpu_models": [
+        "RTX 5090"
+      ],
+      "env": {
+        "EBL_CORPUS_ROOT": "/home/filip/analog-research/opt-cmo-exp1/inputs/corpora",
+        "OPT_DRN_RUN_ID": "run",
+        "OPT_DRN_SOURCE_SNAPSHOT": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/source-snapshot.json",
+        "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+        "OPT_DRN_MEMORY_LIMIT_MIB": "20480"
+      },
+      "argv": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "ebl",
+        "train",
+        "--config",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/examples/opt_cmo_drn/prepare_local_readiness.json",
+        "--teacher-weights",
+        "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "--weights",
+        "/home/filip/analog-research/opt-cmo-exp1/inputs/exp1g-frozen-sources/std3/20261011T013506.097920Z-d4e9bdc7-e50b689b/checkpoints/source.pt",
+        "--output-dir",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v2"
+      ],
+      "validate_argv": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "ebl",
+        "runs",
+        "inspect",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v2/run",
+        "--verify-artifacts",
+        "--require-complete"
+      ],
+      "status_file": "run/status.json",
+      "metrics_file": "run/metrics.jsonl",
+      "prepared_files": [
+        {
+          "path": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/source-snapshot.json",
+          "sha256": "8e538a8c8f32e62e8874365b4fa9d8c01a544556d2dd089380dd916d559f3a46"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/examples/opt_cmo_drn/prepare_local_readiness.json",
+          "sha256": "4e1d6f18ab868c330ec0437b27bcc89e3821a089840acf3d82df2dd015f88980"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+          "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/exp1g-frozen-sources/std3/20261011T013506.097920Z-d4e9bdc7-e50b689b/checkpoints/source.pt",
+          "sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028"
+        }
+      ]
+    },
+    "trex": {
+      "workdir": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9",
+      "run_dir": "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v2",
+      "gpu_models": [
+        "RTX 5090"
+      ],
+      "env": {
+        "EBL_CORPUS_ROOT": "/home/filip/analog-research/opt-cmo-exp1/inputs/corpora",
+        "OPT_DRN_RUN_ID": "run",
+        "OPT_DRN_SOURCE_SNAPSHOT": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/source-snapshot.json",
+        "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+        "OPT_DRN_MEMORY_LIMIT_MIB": "20480"
+      },
+      "argv": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "ebl",
+        "train",
+        "--config",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/examples/opt_cmo_drn/prepare_local_readiness.json",
+        "--teacher-weights",
+        "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "--weights",
+        "/home/filip/analog-research/opt-cmo-exp1/inputs/exp1g-frozen-sources/std3/20261011T013506.097920Z-d4e9bdc7-e50b689b/checkpoints/source.pt",
+        "--output-dir",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v2"
+      ],
+      "validate_argv": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "ebl",
+        "runs",
+        "inspect",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v2/run",
+        "--verify-artifacts",
+        "--require-complete"
+      ],
+      "status_file": "run/status.json",
+      "metrics_file": "run/metrics.jsonl",
+      "prepared_files": [
+        {
+          "path": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/source-snapshot.json",
+          "sha256": "8e538a8c8f32e62e8874365b4fa9d8c01a544556d2dd089380dd916d559f3a46"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/examples/opt_cmo_drn/prepare_local_readiness.json",
+          "sha256": "4e1d6f18ab868c330ec0437b27bcc89e3821a089840acf3d82df2dd015f88980"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+          "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/exp1g-frozen-sources/std3/20261011T013506.097920Z-d4e9bdc7-e50b689b/checkpoints/source.pt",
+          "sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028"
+        }
+      ]
+    },
+    "fifi": {
+      "workdir": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9",
+      "run_dir": "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v2",
+      "gpu_models": [
+        "RTX 5090"
+      ],
+      "env": {
+        "EBL_CORPUS_ROOT": "/home/filip/analog-research/opt-cmo-exp1/inputs/corpora",
+        "OPT_DRN_RUN_ID": "run",
+        "OPT_DRN_SOURCE_SNAPSHOT": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/source-snapshot.json",
+        "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+        "OPT_DRN_MEMORY_LIMIT_MIB": "20480"
+      },
+      "argv": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "ebl",
+        "train",
+        "--config",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/examples/opt_cmo_drn/prepare_local_readiness.json",
+        "--teacher-weights",
+        "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+        "--weights",
+        "/home/filip/analog-research/opt-cmo-exp1/inputs/exp1g-frozen-sources/std3/20261011T013506.097920Z-d4e9bdc7-e50b689b/checkpoints/source.pt",
+        "--output-dir",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v2"
+      ],
+      "validate_argv": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-m",
+        "ebl",
+        "runs",
+        "inspect",
+        "/home/filip/analog-research/opt-cmo-drn-first-v1/results/prepare-readiness-v2/run",
+        "--verify-artifacts",
+        "--require-complete"
+      ],
+      "status_file": "run/status.json",
+      "metrics_file": "run/metrics.jsonl",
+      "prepared_files": [
+        {
+          "path": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/source-snapshot.json",
+          "sha256": "8e538a8c8f32e62e8874365b4fa9d8c01a544556d2dd089380dd916d559f3a46"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-drn-first-v1/source-readiness-v9/examples/opt_cmo_drn/prepare_local_readiness.json",
+          "sha256": "4e1d6f18ab868c330ec0437b27bcc89e3821a089840acf3d82df2dd015f88980"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin",
+          "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9"
+        },
+        {
+          "path": "/home/filip/analog-research/opt-cmo-exp1/inputs/exp1g-frozen-sources/std3/20261011T013506.097920Z-d4e9bdc7-e50b689b/checkpoints/source.pt",
+          "sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028"
+        }
+      ]
+    }
+  }
+}
