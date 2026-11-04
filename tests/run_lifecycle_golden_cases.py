@@ -65,6 +65,28 @@ _VOLATILE_KEYS = frozenset(
 )
 
 
+def assert_cpu_bundle_same(expected, actual, path="root"):
+    """Exact CPU replay excluding only the inactive global CUDA RNG snapshot.
+
+    Historical CPU runs captured ambient CUDA generators on their host. This
+    explicitly narrower check does not claim CUDA continuation parity. Device,
+    method, loader, CPU, NumPy and Python random states remain compared exactly.
+    """
+    assert not torch.cuda.is_available(), "CPU-only replay requires CUDA hidden."
+    def visit(value, location=(), *, live=False):
+        if isinstance(value, dict):
+            if len(location) >= 3 and location[-1] == "rng_state" and location[-3] == "checkpoints":
+                assert set(value) == {"python", "numpy", "torch_cpu", "torch_cuda"}
+                if live:
+                    assert value["torch_cuda"] == [], "A live CUDA generator cannot be excluded."
+                return {k: v for k, v in value.items() if k != "torch_cuda"}
+            return {k: visit(v, (*location, k), live=live) for k, v in value.items()}
+        if isinstance(value, (tuple, list)):
+            return type(value)(visit(v, (*location, i), live=live) for i, v in enumerate(value))
+        return value
+    assert_same(visit(expected), visit(actual, live=True), path)
+
+
 def inputs_available() -> bool:
     return DEVICE_DATA.is_file() and MNIST_ROOT.is_dir()
 
@@ -891,6 +913,11 @@ def run_isolated(name: str) -> Any:
                 f"case {name} failed ({completed.returncode}):\n"
                 f"{completed.stderr[-4000:]}"
             )
+        if os.environ.get("EBL_GOLDEN_RECORD_DIR"):
+            import shutil
+            saved = Path(os.environ["EBL_GOLDEN_RECORD_DIR"]) / (name + ".pt")
+            saved.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(output, saved)
         return torch.load(output, weights_only=False)
 
 

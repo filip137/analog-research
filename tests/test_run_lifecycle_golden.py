@@ -11,6 +11,11 @@ for all cases at twelve jobs), so it is opt-in::
     EBL_RUN_LIFECYCLE_GOLDENS=1 pytest tests/test_run_lifecycle_golden.py
     EBL_RUN_LIFECYCLE_GOLDENS=1 pytest tests/test_run_lifecycle_golden.py -k teacher
 
+Set ``EBL_GOLDEN_CPU_ONLY=1`` with CUDA hidden to compare all CPU state while
+excluding the inactive global CUDA RNG snapshot captured on the golden host.
+This does not validate CUDA continuation. ``EBL_GOLDEN_RECORD_DIR`` retains
+individual replay records for inspection without recomputation.
+
 Only the selected cases run; each runs in its own single-threaded
 interpreter and the selected cases run in parallel (``EBL_GOLDEN_JOBS``,
 default 6).  ``python tests/run_lifecycle_golden_cases.py verify CASE...``
@@ -78,7 +83,8 @@ def test_run_bundle_golden_is_bit_exact(name: str, replayed: dict[str, object]) 
     if isinstance(actual, Exception):
         raise actual
     expected = torch.load(path, weights_only=False)
-    cases.assert_same(expected, actual, path=name)
+    compare = cases.assert_cpu_bundle_same if os.environ.get("EBL_GOLDEN_CPU_ONLY") == "1" else cases.assert_same
+    compare(expected, actual, path=name)
 
 
 def test_run_lifecycle_golden_registry_matches_captured_cases() -> None:
@@ -88,3 +94,22 @@ def test_run_lifecycle_golden_registry_matches_captured_cases() -> None:
     assert meta["cases"] == sorted(cases.all_cases())
     missing = [name for name in meta["cases"] if not cases.golden_path(name).is_file()]
     assert not missing, f"missing goldens: {missing}"
+
+
+def test_cpu_replay_excludes_only_inactive_cuda_snapshot(monkeypatch):
+    import copy
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    expected = {"first": {"checkpoints": {"resume.pt": {"rng_state": {
+        "python": 1, "numpy": 2, "torch_cpu": torch.tensor([3]), "torch_cuda": [torch.tensor([4])],
+    }, "optimizer_state": {"step": 7}}}}}
+    actual = copy.deepcopy(expected)
+    state = actual["first"]["checkpoints"]["resume.pt"]
+    state["rng_state"]["torch_cuda"] = []
+    cases.assert_cpu_bundle_same(expected, actual)
+    state["rng_state"]["torch_cpu"] += 1
+    with pytest.raises(AssertionError):
+        cases.assert_cpu_bundle_same(expected, actual)
+    state["rng_state"]["torch_cpu"] -= 1
+    state["rng_state"]["torch_cuda"] = [torch.tensor([4])]
+    with pytest.raises(AssertionError, match="live CUDA"):
+        cases.assert_cpu_bundle_same(expected, actual)

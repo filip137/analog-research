@@ -22,7 +22,7 @@ Planning checks: 28 focused tests passed; 119 declared golden fixtures present; 
 
 ## Current handoff
 
-Implementation committed through `89b6134`. Coordinator owns the remaining CPU lifecycle replay (pytest PID 1587796, four workers, log `lifecycle-replay.log` in the evidence root). Full replay started 12:21 UTC; budget remains two hours per attempt. Device/teacher fixtures are the existing local inputs. Cases are advancing through measured and RESET continuations. Next: inspect replay results, resolve any differences, then integrate and push the tested cutover. No research launch, GPU work or scientific conclusion is authorized.
+Implementation committed through `d266d38`; explicit CPU replay support is the next checkpoint. Coordinator owns the second lifecycle replay (four single-thread CPU workers; `lifecycle-cpu-replay.log`, records under `lifecycle-cpu-records/` in the evidence root). The first attempt completed in 733.48 s. It exposed ambient CUDA RNG snapshots in the goldens and seven cases launched before the data import fix. Next: compare all saved CPU records, resolve remaining differences, then integrate and push. No research launch or GPU work is authorized.
 
 ## Extraction checkpoint
 
@@ -43,7 +43,7 @@ All commands set `CUDA_VISIBLE_DEVICES=''`; ordinary CPU tests use `OMP_NUM_THRE
 
 - `python -B -m pytest tests -q -p no:cacheprovider`: **1505 passed, 49 skipped**, 78.66 s (`full-cpu-tests-final.log`). Includes the available native CPU characterization replays. The opt-in lifecycle cases run separately; unavailable CUDA/artifact-dependent checks are not claimed passed.
 - `python -B -m pytest labs/tests -q -p no:cacheprovider`: **50 passed, 1 skipped**, 5.40 s (`lab-tests.log`).
-- `EBL_RUN_LIFECYCLE_GOLDENS=1 EBL_GOLDEN_JOBS=4 python -B -m pytest tests/test_run_lifecycle_golden.py -q`: running (`lifecycle-replay.log`). Each case uses one CPU thread.
+- `EBL_RUN_LIFECYCLE_GOLDENS=1 EBL_GOLDEN_CPU_ONLY=1 EBL_GOLDEN_JOBS=4 EBL_GOLDEN_RECORD_DIR=<evidence>/lifecycle-cpu-records python -B -m pytest tests/test_run_lifecycle_golden.py -q -p no:cacheprovider`: second attempt running (`lifecycle-cpu-replay.log`). Each case uses one CPU thread. Strict default comparison is unchanged; explicit CPU-only comparison excludes only the absent global CUDA RNG snapshot, asserts CUDA is unavailable, and compares all other saved random, optimizer, device, loader and solver state exactly. GPU RNG continuation is untested. Two focused comparator/registry tests passed; saved base, base-resume, digital-LoRA, HWA and three KD records already match.
 - All **573** normalized example/mode configs, **8** OPT forward/gradient/capture/state traces and **15** shared source files match the baseline. Shared bytes also match the current HWA checkout. Examples, historical study plans and existing golden fixture bytes are unchanged.
 - A wheel built without dependency downloads installs under `/tmp/drn-wheel-installed`. From `/tmp` with Python isolated mode it passes parser discovery, a tiny perfect-diode training/bundle integrity smoke, resource discovery and real external OM sampling. Every imported project module resolves inside the installation. The wheel contains the new network data and Slurm resource, and no retired Python packages (`wheel-build.log`, `installed-smoke.log`).
 
@@ -56,3 +56,10 @@ Five separate parser processes on the same CPU/environment: median startup **1.3
 A single-thread tiny physical OPT forward, 2×4 tokens, 20 warmups then five blocks of 100 forwards: median **4.090 → 4.231 ms** (`workload-benchmark.json`). This does not establish a kernel speedup; the modest increase is reported as measured on this host alongside concurrent CPU replay. No GPU performance claim.
 
 Raw evidence totals about 5 MiB plus temporary lifecycle replay outputs. Validation and engineering time are not experiment throughput; token usage is unavailable. No new study result is inferred from this architecture work.
+
+
+Validation recipes (`drn_baseline.py`, `drn_import_bench.py`, `drn_workload_bench.py`,
+`drn_install_smoke.py`) are retained in the raw evidence root. Their recorded paths
+refer to checkouts at validation time; reproducing the baseline after integration
+requires a separate checkout of the baseline SHA. Existing golden fixture bytes
+remain the authoritative numerical references.
