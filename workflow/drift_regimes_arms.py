@@ -56,11 +56,54 @@ def adaptation_cohort(lifecycle, settings):
     return tokens
 
 
+class Prefix:
+    """Cached frozen prefixes: the student's residual stream entering the first analog layer
+    (its own digital copy for a whole-model student) and the teacher's prefix state."""
+
+    def __init__(self, student, teacher):
+        self.student, self.teacher = student, teacher
+
+    def __len__(self):
+        return len(self.student)
+
+    def __getitem__(self, index):
+        return Prefix(self.student[index], self.teacher[index])
+
+    def split(self, size):
+        return [Prefix(a, b) for a, b in zip(self.student.split(size), self.teacher.split(size))]
+
+    @property
+    def tokens(self):
+        return self.student.shape[0] * self.student.shape[1]
+
+    @property
+    def sequence_length(self):
+        return self.student.shape[1]
+
+
 @torch.no_grad()
 def prefix_states(network, tokens, device, batch=16):
-    if network.digital is not None:
-        raise ValueError('Drift-regimes arms expect the analog-scope OPT student.')
-    return torch.cat([network.features(tokens[i:i + batch].to(device)) for i in range(0, len(tokens), batch)])
+    student, teacher = [], []
+    for i in range(0, len(tokens), batch):
+        chunk = tokens[i:i + batch].to(device)
+        student.append(network.analog_input(chunk))
+        features = network.features(chunk)
+        teacher.append(features.teacher_hidden if isinstance(features, opt_mlp.StudentInput) else features)
+    return Prefix(torch.cat(student), torch.cat(teacher))
+
+
+def _digital(network):
+    return network.teacher if network.digital is None else network.digital
+
+
+def suffix_logits(network, hidden, q):
+    """``forward_features`` from the cached analog input (same operation order)."""
+    digital = _digital(network)
+    for k, i in enumerate(range(network.start, len(network.teacher.layers))):
+        hidden = digital.layers[i].attention(hidden)
+        y = network._matrix(network.mlp_norms[k](hidden), 2 * k, q)
+        hidden = hidden + network._matrix(F.relu(y), 2 * k + 1, q)
+    return digital.logits(hidden[:, :-1])
 
 
 def _identity(network, index, device):
@@ -73,7 +116,7 @@ def _identity(network, index, device):
 def _matrix_input(network, hidden, q, index):
     """Input of analog matrix ``index`` in ``forward_features`` order, with the active corrections."""
     for k in range(index // 2 + 1):
-        hidden = network.teacher.layers[network.start + k].attention(hidden)
+        hidden = _digital(network).layers[network.start + k].attention(hidden)
         x = network.mlp_norms[k](hidden)
         if 2 * k == index:
             return x
@@ -94,7 +137,7 @@ def fit_calibration(network, q, probe, batch=8):
         for index in range(network.base_matrices):
             sums = None
             for chunk in probe.split(batch):
-                x = _matrix_input(network, chunk, q, index)
+                x = _matrix_input(network, chunk.student, q, index)
                 current = network._matrix(x, index, q).flatten(0, -2).double()
                 reference = network._matrix(x, index, network.q.detach()).flatten(0, -2).double()
                 part = torch.stack((current.sum(0), reference.sum(0), current.square().sum(0),
@@ -127,11 +170,11 @@ def train_digital(network, parameters, q, hidden, *, steps, batch, learning_rate
     network.train()
     with torch.enable_grad():
         for _ in range(steps):
-            index = torch.randint(0, len(hidden), (batch,), generator=generator).to(hidden.device)
+            index = torch.randint(0, len(hidden), (batch,), generator=generator).to(hidden.student.device)
             states = hidden[index]
             with torch.no_grad():
-                teacher = network.teacher_logits(states).flatten(0, 1).log_softmax(-1)
-            student = network.forward_features(states, q).flatten(0, 1).log_softmax(-1)
+                teacher = network.teacher_logits(states.teacher).flatten(0, 1).log_softmax(-1)
+            student = suffix_logits(network, states.student, q).flatten(0, 1).log_softmax(-1)
             loss = (teacher.exp() * (teacher - student)).sum(-1).mean()
             if not bool(torch.isfinite(loss)):
                 raise FloatingPointError('Nonfinite digital adaptation loss.')
@@ -228,7 +271,7 @@ class Arm:
             record['selection_reads'] = reads
             if self.method == 'calibration':
                 self.correction = fit_calibration(self.network, q, self.probe)
-                tokens = self.probe.shape[0] * self.probe.shape[1]
+                tokens = self.probe.tokens
                 self.cost['probe_tokens'] += tokens
                 record['probe_tokens'] = tokens
             else:
@@ -242,7 +285,7 @@ class Arm:
                 presentations = a['steps'] * a['batch']
                 self.cost['optimizer_steps'] += a['steps']
                 self.cost['adaptation_sequence_presentations'] += presentations
-                self.cost['adaptation_tokens'] += presentations * self.hidden.shape[1]
+                self.cost['adaptation_tokens'] += presentations * self.hidden.sequence_length
                 record.update(trace, optimizer_steps=a['steps'])
         self.cost['events'] += 1
         record['wall_seconds'] = time.monotonic() - started

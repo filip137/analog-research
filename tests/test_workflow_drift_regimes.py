@@ -231,3 +231,24 @@ def test_native_stage_runs_paired_maintenance_arms(cmo_inputs, tmp_path):
     assert {k: v['final_physical_sha256'] for k, v in again['arms'].items()} == \
            {k: v['final_physical_sha256'] for k, v in arms.items()}
     assert {k: v['mean_teacher_kl'] for k, v in again['arms'].items()} == {k: v['mean_teacher_kl'] for k, v in arms.items()}
+
+
+@pytest.mark.parametrize('scope', ['analog', 'model'])
+def test_cached_suffix_matches_the_network_forward(scope):
+    from workflow.networks.opt_mlp import OptConfig, OptDecoder, OptMlpSuffix
+    from workflow.drift_regimes_arms import prefix_states, suffix_logits, fit_calibration
+    torch.manual_seed(0)
+    teacher = OptDecoder(OptConfig(50, 16, 3, 2, 32, 16)).eval()
+    network = OptMlpSuffix(teacher, 2, scope=scope).eval()
+    tokens = torch.randint(0, 50, (3, 8))
+    q = network.q.detach() * (1 + .05 * torch.randn_like(network.q))
+    cache = prefix_states(network, tokens, 'cpu', batch=2)
+    with torch.no_grad():
+        expected = network.forward_features(network.features(tokens), q)
+        assert torch.allclose(suffix_logits(network, cache.student, q), expected, atol=1e-5)
+        assert torch.allclose(network.teacher_logits(cache.teacher), network.teacher_logits(network.features(tokens)))
+        # Calibration of the clean weights is the identity.
+        correction = fit_calibration(network, network.q.detach(), cache)
+        for m in correction.matrices:
+            assert torch.allclose(m.affine_gain, torch.ones_like(m.affine_gain), atol=1e-4)
+            assert torch.allclose(m.shift, torch.zeros_like(m.shift), atol=1e-4)
