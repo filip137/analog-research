@@ -2365,7 +2365,8 @@ STAGE_OUTPUTS = {
     "compensate": ("compensation_measurements", "compensation_states"),
     "drift_recovery": ("drift_recovery_measurements", "drift_recovery_trajectories"),
     "initial_programming": ("initial_programming_measurements", "initial_programming_summary", "initial_programming_state", "flowers_model"),
-    "drift_regimes": ("drift_regimes_measurements", "drift_regimes_summary", "drift_regimes_references"),
+    "drift_regimes": ("drift_regimes_measurements", "drift_regimes_summary", "drift_regimes_references",
+                      "drift_regimes_events"),
 }
 
 

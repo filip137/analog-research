@@ -1,10 +1,12 @@
-"""Native drift-regimes stage: optimal-threshold P&V deployment and untreated aging.
+"""Native drift-regimes stage: optimal-threshold P&V deployment, then every maintenance arm.
 
 One trajectory per (HWA arm, realization) of one regime point. Every physical
 device of the six analog MLPs (active and reference) is a ``ReramDriftCells``
 device. Deployment programs every device (attempt 1) and verifies it by P&V;
-release (t = 0) is the end of deployment P&V. Teacher KL is evaluated on a
-pinned cohort of the declared evaluation corpus at each age after release.
+release (t = 0) is the end of deployment P&V. Each maintenance arm
+(``workflow.drift_regimes_arms``) restarts from the released state, so arms
+are paired. Teacher KL is evaluated on a pinned cohort of the declared
+evaluation corpus at each age after release, before any event at that age.
 """
 from dataclasses import replace
 import hashlib
@@ -20,6 +22,7 @@ from training.drift_family import ReramDriftCells, program_verify
 from training.drift_recovery import tensor_hash
 from workflow.drift_recovery import CrossbarAdapter
 from workflow.initial_programming import teacher_ppl
+from workflow import drift_regimes_arms as arms
 from workflow.networks import opt_mlp
 
 ACTIVE, REFERENCE = 0, 1
@@ -79,11 +82,11 @@ def run(stage):
     original_hash = adapter.source_hash()
     law = cfg.family
     realization = stage.selection.array_seed
-    identity = {'regime': cfg.regime, 'arm': cfg.arm, 'realization': realization,
+    identity = {'regime': cfg.regime, 'realization': realization,
                 'hwa_arm': stage.selection.hwa_arm, 'source_sha256': cfg.source_sha256,
                 'cohort_sha256': cfg.cohort_sha256, 'evaluation_corpus': cfg.evaluation_corpus,
                 'law': dict(cfg.law), 'kappa': law.kappa, 'canary': cfg.canary}
-    stage.store.append_metric({'phase': 'drift_regimes_start', **identity})
+    stage.store.append_metric({'phase': 'drift_regimes_start', **identity, 'arms': [a['label'] for a in cfg.arms]})
 
     targets, _, _, names = adapter.physical_layout()
     if not torch.allclose(adapter.bind(targets), stage.network.q, atol=3e-7, rtol=1e-6):
@@ -112,49 +115,88 @@ def run(stage):
             'deployment_wall_seconds': time.monotonic() - started}
     cost['resets_per_device'] = cost['deployment_reset_attempts'] / ndevices
     stage.store.append_metric({'phase': 'deployed', **identity, **cost})
-    replay = cells[0].state_dict()
+    released = [c.state_dict() for c in cells]
+    horizon_live = cells[0].value(release + cfg.evaluation_seconds[-1])
+    del cells
 
     references = {'clean_hwa': opt_mlp.evaluate(stage.network, {'tokens': tokens}, stage.device),
                   'teacher': teacher_ppl(stage.network, tokens, stage.device)}
     atomic_write_json(stage.run_dir / 'drift_regimes_references.json', references)
-    rows = []
-    for age in cfg.evaluation_seconds:
-        started = time.monotonic()
-        clock = release + age
-        physical = [c.advance(clock) for c in cells]
-        q = adapter.bind(physical)
-        metrics = opt_mlp.evaluate(stage.network, {'tokens': tokens}, stage.device, q=q)
-        if not all(math.isfinite(metrics[k]) for k in ('cross_entropy', 'perplexity', 'teacher_kl')):
-            raise FloatingPointError('Nonfinite drift-regimes metrics.')
-        row = {**identity, 'seconds': age, 'clock_seconds': clock, 'release_seconds': release,
-               'physical_devices': ndevices, 'physical_sha256': physical_hash(physical),
-               'metrics': metrics, 'q_rmse': float((q - stage.network.q).square().mean().sqrt()),
-               'bounds': bound_report(cells, physical),
-               'evaluation_wall_seconds': time.monotonic() - started}
-        rows.append(row)
-        atomic_write_json(stage.run_dir / 'drift_regimes_measurements.json', rows)
-        stage.store.append_metric({'phase': 'snapshot', **identity, 'seconds': age, **metrics})
+    hidden = probe = None
+    if cfg.adaptation is not None:
+        adaptation_tokens = arms.adaptation_cohort(lc, cfg.adaptation)
+        hidden = arms.prefix_states(stage.network, adaptation_tokens, stage.device)
+        probe = hidden[:cfg.adaptation['probe_sequences']]
+    for p in stage.network.parameters():
+        p.requires_grad_(False)
+    weights = endpoint_weights(cfg.evaluation_seconds)
+    rows, summaries, events = [], {}, []
+    for spec in cfg.arms:
+        arm_started = time.monotonic()
+        cells = [ReramDriftCells.restore(state, device=stage.device) for state in released]
+        controller = arms.Arm(spec, stage.network, cfg.adaptation, hidden, probe, realization, cfg.verify_seconds)
+        arm_id = {**identity, 'arm': spec['label'], 'method': spec['method']}
+        arm_rows = []
+        try:
+            for age, evaluate, index in arms.timeline(cfg.evaluation_seconds, spec.get('events', ())):
+                clock = release + age
+                if not evaluate:
+                    record = controller.event(index, age, clock, cells, adapter.bind)
+                    events.append({**arm_id, **record})
+                    stage.store.append_metric({'phase': 'event', **arm_id, **record})
+                    continue
+                started = time.monotonic()
+                physical = [c.advance(clock) for c in cells]
+                q = adapter.bind(physical)
+                controller.context()
+                metrics = opt_mlp.evaluate(stage.network, {'tokens': tokens}, stage.device, q=q)
+                stage.network.drift_compensation = None
+                if not arms.finite(metrics):
+                    raise FloatingPointError('Nonfinite drift-regimes metrics.')
+                row = {**arm_id, 'seconds': age, 'clock_seconds': clock, 'release_seconds': release,
+                       'physical_devices': ndevices, 'physical_sha256': physical_hash(physical),
+                       'metrics': metrics, 'q_rmse': float((q - stage.network.q).square().mean().sqrt()),
+                       'bounds': bound_report(cells, physical),
+                       'evaluation_wall_seconds': time.monotonic() - started}
+                arm_rows.append(row)
+                atomic_write_json(stage.run_dir / 'drift_regimes_measurements.json', rows + arm_rows)
+                stage.store.append_metric({'phase': 'snapshot', **arm_id, 'seconds': age, **metrics})
+        finally:
+            controller.close()
+        rows.extend(arm_rows)
+        kl = np.asarray([r['metrics']['teacher_kl'] for r in arm_rows])
+        summaries[spec['label']] = {
+            **arm_id, 'settings': {k: list(v) if isinstance(v, tuple) else v for k, v in spec.items()},
+            'cost': controller.cost, 'release_teacher_kl': float(kl[0]), 'final_teacher_kl': float(kl[-1]),
+            'mean_teacher_kl': float(weights @ kl), 'final_physical_sha256': arm_rows[-1]['physical_sha256'],
+            'arm_wall_seconds': time.monotonic() - arm_started}
+        atomic_write_json(stage.run_dir / 'drift_regimes_events.json', events)
+        del cells
 
-    restored = ReramDriftCells.restore(replay, device=stage.device)
+    # Query-order independence of the released state: one jump equals the evaluation path.
+    jump = ReramDriftCells.restore(released[0], device=stage.device)
+    path = ReramDriftCells.restore(released[0], device=stage.device)
     for age in cfg.evaluation_seconds:
-        restored.advance(release + age)
-    if not torch.equal(restored.value(), physical[0]):
+        path.advance(release + age)
+    if not (torch.equal(jump.advance(release + cfg.evaluation_seconds[-1]), path.value())
+            and torch.equal(path.value(), horizon_live)):
         raise ValueError('Drift-regimes replay from the release state is not exact.')
     if adapter.source_hash() != original_hash:
         raise ValueError('Frozen model changed during drift-regimes aging.')
-    kl = np.asarray([r['metrics']['teacher_kl'] for r in rows])
-    weights = endpoint_weights(cfg.evaluation_seconds)
-    report = {**identity, 'references': references, 'cost': cost,
-              'release_teacher_kl': float(kl[0]), 'final_teacher_kl': float(kl[-1]),
-              'mean_teacher_kl': float(weights @ kl),
+    first = summaries[cfg.arms[0]['label']]
+    report = {**identity, 'references': references, 'cost': cost, 'arms': summaries,
+              'release_teacher_kl': first['release_teacher_kl'], 'final_teacher_kl': first['final_teacher_kl'],
+              'mean_teacher_kl': first['mean_teacher_kl'], 'final_physical_sha256': first['final_physical_sha256'],
               'horizon_seconds': cfg.evaluation_seconds[-1],
-              'final_physical_sha256': rows[-1]['physical_sha256'],
-              'source_unchanged': True, 'replay_exact': True, 'snapshots': len(rows), 'trajectories': 1}
+              'source_unchanged': True, 'replay_exact': True, 'snapshots': len(rows),
+              'arm_count': len(cfg.arms), 'trajectories': 1}
     report_path = stage.run_dir / 'drift_regimes_summary.json'
     atomic_write_json(report_path, report)
+    atomic_write_json(stage.run_dir / 'drift_regimes_events.json', events)
     return report, [('drift_regimes_measurements', stage.run_dir / 'drift_regimes_measurements.json'),
                     ('drift_regimes_summary', report_path),
-                    ('drift_regimes_references', stage.run_dir / 'drift_regimes_references.json')]
+                    ('drift_regimes_references', stage.run_dir / 'drift_regimes_references.json'),
+                    ('drift_regimes_events', stage.run_dir / 'drift_regimes_events.json')]
 
 
 def flat_rows(rows, run_dir):

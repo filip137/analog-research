@@ -82,7 +82,8 @@ def summary(lifecycle) -> dict:
            if lifecycle.initial_programming is not None else {}),
         **({'drift_regimes': lifecycle.drift_regimes.to_dict(),
             'drift_regimes_trajectories': len(hwa.arms)*len(lifecycle.drift_regimes.assignment_seeds),
-            'drift_regimes_snapshots': len(hwa.arms)*len(lifecycle.drift_regimes.assignment_seeds)*len(lifecycle.drift_regimes.evaluation_seconds),
+            'drift_regimes_arms': [a['label'] for a in lifecycle.drift_regimes.arms],
+            'drift_regimes_snapshots': len(hwa.arms)*len(lifecycle.drift_regimes.assignment_seeds)*len(lifecycle.drift_regimes.arms)*len(lifecycle.drift_regimes.evaluation_seconds),
             'drift_regimes_physical_devices': 2*lifecycle.network.analog_weights,
             # ReramDriftCells: ~44 B/device at f = 0, ~52 B with a persistent share; held in device memory.
             'drift_regimes_device_state_gb': round(2*lifecycle.network.analog_weights*52/1e9, 2)}

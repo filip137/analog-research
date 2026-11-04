@@ -101,3 +101,133 @@ def test_lifecycle_rejects_other_branches_and_windows(cmo_inputs):
                                   assignment_seeds=lc.devices.assignment_seeds[:1]).to_dict()
     with pytest.raises(ValueError, match='window'):
         parse_lifecycle(doc)
+
+
+def test_legacy_single_arm_files_parse_to_the_untreated_arm():
+    raw = config().to_dict()
+    del raw['arms'], raw['adaptation']
+    raw['arm'] = 'A0'
+    parsed = DriftRegimes.parse(raw)
+    assert parsed.arms == ({'label': 'A0', 'method': 'none'},) and parsed.adaptation is None
+    assert parsed == config()
+
+
+ADAPT = {'corpus': 'synthetic', 'corpus_sha256': 'b' * 64, 'split': 'train', 'sequences': 4,
+         'cohort_sha256': 'd' * 64, 'seed': 5, 'probe_sequences': 2, 'steps': 3, 'batch': 2}
+
+
+@pytest.mark.parametrize('arm', [
+    {'label': 'A1', 'method': 'calibration'},                                          # missing events
+    {'label': 'A1', 'method': 'calibration', 'events': [900, 900]},                    # repeated event
+    {'label': 'A1', 'method': 'calibration', 'events': [86400]},                       # not inside the horizon
+    {'label': 'A4', 'method': 'lora', 'events': [900], 'rank': 0, 'learning_rate': 1e-3},
+    {'label': 'A9', 'method': 'rewrite', 'events': [900], 'fraction': 1.5, 'attempts': 4, 'threshold': .7},
+    {'label': 'A9', 'method': 'rewrite', 'events': [900], 'fraction': .1, 'attempts': 1, 'threshold': .7},
+    {'label': 'A9', 'method': 'rewrite', 'events': [900], 'fraction': .1, 'attempts': 4, 'threshold': None},
+    {'label': 'A0', 'method': 'none', 'events': [900]},
+    {'label': 'A12', 'method': 'magic'},
+])
+def test_arm_settings_fail_closed(arm):
+    raw = config().to_dict()
+    raw['arms'] = [arm]
+    raw['adaptation'] = ADAPT
+    with pytest.raises(ValueError):
+        DriftRegimes.parse(raw)
+
+
+def test_digital_arms_require_adaptation_and_labels_are_unique():
+    raw = config().to_dict()
+    raw['arms'] = [{'label': 'A2', 'method': 'layernorm', 'events': [900], 'learning_rate': 1e-3}]
+    with pytest.raises(ValueError, match='adaptation'):
+        DriftRegimes.parse(raw)
+    raw['adaptation'] = ADAPT
+    assert DriftRegimes.parse(raw).event_ages == (900.,)
+    raw['arms'] = [{'label': 'A0', 'method': 'none'}, {'label': 'A0', 'method': 'none'}]
+    with pytest.raises(ValueError, match='unique'):
+        DriftRegimes.parse(raw)
+
+
+def test_timeline_evaluates_before_a_coincident_event():
+    from workflow.drift_regimes_arms import timeline
+    assert timeline((0., 60., 900.), (60., 300.)) == [(0., True, None), (60., True, None), (60., False, 0),
+                                                       (300., False, 1), (900., True, None)]
+
+
+def _stage_inputs(cmo_inputs, tmp_path):
+    teacher, digest = cmo_inputs
+    lc = small(**{'onchip': None, 'defects.cases': [case_doc()], 'data.corpus': {'name': 'synthetic', 'sha256': digest},
+                  'data.sequence_length': 9, 'data.max_examples': 4, 'hwa.arms': [{'id': 'digital', 'method': 'none'}]})
+    results = {}
+    for selection in stage_selections(lc):
+        if selection.kind != 'deploy':
+            results[selection.stage_id] = run_stage(lc, selection, results, teacher, tmp_path / 'parents')
+    directory, result = results['hwa__digital']
+    source = directory / next(a['path'] for a in result['artifacts'] if a['kind'] == 'hwa_source')
+    corpus = torch.load(Path(os.environ['EBL_CORPUS_ROOT']) / 'synthetic.pt', weights_only=False)
+    tokens = corpus['splits']['validation'][:18].reshape(2, 9).contiguous()
+    train = corpus['splits']['train']
+    blocks = train[:len(train) // 9 * 9].reshape(-1, 9)
+    order = torch.randperm(len(blocks), generator=torch.Generator().manual_seed(5))
+    adaptation = {**ADAPT, 'corpus_sha256': digest, 'cohort_sha256': tensor_hash(blocks[order[:4]].contiguous())}
+    base = config(source_sha256=sha256_file(source), evaluation_corpus_sha256=digest,
+                  cohort_sha256=tensor_hash(tokens), assignment_seeds=(271001,), evaluation_sequences=2,
+                  evaluation_seconds=(0., 60., 900., 3600.), canary=True)
+    return lc, results, teacher, base, adaptation
+
+
+def _run(lc, cfg, results, teacher, path):
+    doc = lc.to_dict()
+    doc['drift_regimes'] = cfg.to_dict()
+    custom = parse_lifecycle(doc)
+    directory, result = run_stage(custom, StageSelection('drift_regimes', 'digital', 271001), results, teacher, path)
+    return directory, result['metrics']
+
+
+def test_native_stage_runs_paired_maintenance_arms(cmo_inputs, tmp_path):
+    lc, results, teacher, base, adaptation = _stage_inputs(cmo_inputs, tmp_path)
+    arm_list = (
+        {'label': 'A0', 'method': 'none'},
+        {'label': 'A1', 'method': 'calibration', 'events': (60., 900.)},
+        {'label': 'A2', 'method': 'layernorm', 'events': (60.,), 'learning_rate': 1e-3},
+        {'label': 'A5', 'method': 'lora', 'events': (60., 900.), 'rank': 2, 'learning_rate': 1e-3},
+        {'label': 'A8', 'method': 'rewrite', 'events': (900.,), 'fraction': 1., 'attempts': 1, 'threshold': None},
+        {'label': 'A9', 'method': 'rewrite', 'events': (60., 900.), 'fraction': .1, 'attempts': 4,
+         'threshold': .7051477},
+    )
+    cfg = DriftRegimes.parse(replace(base, arms=arm_list, adaptation=adaptation).to_dict())
+    directory, metrics = _run(lc, cfg, results, teacher, tmp_path / 'arms')
+    _, single = _run(lc, base, results, teacher, tmp_path / 'single')
+    arms = metrics['arms']
+    assert list(arms) == [a['label'] for a in arm_list]
+    assert metrics['source_unchanged'] and metrics['replay_exact']
+    # The untreated arm is the qualification trajectory, bit for bit.
+    assert arms['A0']['final_physical_sha256'] == single['final_physical_sha256']
+    assert arms['A0']['mean_teacher_kl'] == single['mean_teacher_kl']
+    rows = json.loads((directory / 'drift_regimes_measurements.json').read_text())
+    assert len(rows) == len(arm_list) * 4
+    by = {(r['arm'], r['seconds']): r for r in rows}
+    # Every arm starts from the same released state; ages up to the first event are shared.
+    for label in arms:
+        assert by[(label, 0.)]['physical_sha256'] == by[('A0', 0.)]['physical_sha256']
+        assert by[(label, 60.)]['metrics']['teacher_kl'] == by[('A0', 60.)]['metrics']['teacher_kl']
+    # Digital and calibration arms never write; rewrite arms do.
+    for label in ('A1', 'A2', 'A5'):
+        assert arms[label]['cost']['reset_attempts'] == 0
+        assert by[(label, 3600.)]['physical_sha256'] == by[('A0', 3600.)]['physical_sha256']
+    n = metrics['cost']['physical_devices']
+    assert arms['A8']['cost']['reset_attempts'] == n and arms['A8']['cost']['verify_reads'] == 0
+    a9 = arms['A9']['cost']
+    assert 0 < a9['selected_devices'] < n / 2 and a9['selection_reads'] == 2 * n
+    assert a9['selected_devices'] <= a9['reset_attempts'] <= 4 * a9['selected_devices']
+    assert by[('A9', 3600.)]['physical_sha256'] != by[('A0', 3600.)]['physical_sha256']
+    assert arms['A5']['cost']['optimizer_steps'] == 6 and arms['A5']['cost']['digital_parameters'] > 0
+    assert arms['A1']['cost']['probe_tokens'] == 2 * 2 * 9
+    # Calibration acts on the evaluation without changing devices.
+    assert by[('A1', 3600.)]['metrics']['teacher_kl'] != by[('A0', 3600.)]['metrics']['teacher_kl']
+    events = json.loads((directory / 'drift_regimes_events.json').read_text())
+    assert [(e['arm'], e['event']) for e in events] == [
+        ('A1', 0), ('A1', 1), ('A2', 0), ('A5', 0), ('A5', 1), ('A8', 0), ('A9', 0), ('A9', 1)]
+    _, again = _run(lc, cfg, results, teacher, tmp_path / 'again')
+    assert {k: v['final_physical_sha256'] for k, v in again['arms'].items()} == \
+           {k: v['final_physical_sha256'] for k, v in arms.items()}
+    assert {k: v['mean_teacher_kl'] for k, v in again['arms'].items()} == {k: v['mean_teacher_kl'] for k, v in arms.items()}
