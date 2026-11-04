@@ -5,7 +5,7 @@ Usage: python campaigns/drift-regimes/launch/make_screen_manifest.py <run> <grou
 
 Units (lifecycles) are packed greedily, longest first, into <groups> groups by
 an estimated V100 time; each group is one dev-queue job running its units in
-turn. Estimates (seconds): 210 setup per unit, 40 evaluation per arm, 60 per
+turn. Estimates (seconds): 210 setup per unit, 40 evaluation per arm, 35 per
 digital training event, 30 per full reset pass (times the expected resets per
 device at N) and 6 per selective-rewrite event. Run-1 measurements refine the
 run-2 estimates.
@@ -17,7 +17,7 @@ import sys
 from make_manifest import JZ, ROOT
 
 RESETS = {1: 1.0, 2: 1.35, 4: 1.76, 8: 2.6}
-SECONDS = {'setup': 210, 'evaluation': 40, 'training': 60, 'reset_pass': 30, 'selective': 6}
+SECONDS = {'setup': 210, 'evaluation': 40, 'training': 35, 'reset_pass': 30, 'selective': 6}  # training: V100 canary, 32.5 s
 
 
 def estimate(doc):
