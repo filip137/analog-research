@@ -60,13 +60,13 @@ def build_plan(config,teacher,source,output,python,worktree):
     return manifest
 
 
-def main():
+def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config',required=True,type=Path)
     for name in ('teacher-weights','source','output'):parser.add_argument('--'+name,required=True,type=Path)
     parser.add_argument('--python',type=Path,default=Path(sys.executable))
     parser.add_argument('--worktree',type=Path,default=Path(__file__).resolve().parents[1])
-    args=parser.parse_args()
+    args=parser.parse_args(argv)
     manifest=build_plan(json.loads(args.config.read_text()),args.teacher_weights,args.source,args.output,args.python,args.worktree)
     print(json.dumps({'manifest':str(args.output/'campaign.json'),'stages':len(manifest['stages'])}))
 

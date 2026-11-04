@@ -31,3 +31,6 @@ exclude = [
   "labs.shfiles*",
 ]
 namespaces = true
+
+[tool.setuptools.package-data]
+"ebl.lifecycle" = ["*.slurm"]

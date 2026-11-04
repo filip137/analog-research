@@ -34,73 +34,10 @@ from methods.core.sgd import Backprop
 from methods.sign_sgd import SignSGD
 
 
-def paired_scores(output: torch.Tensor) -> torch.Tensor:
-    if output.ndim != 2 or output.shape[1] % 2:
-        raise ValueError(
-            "Expected DRN output to have shape (batch, 2 * classes). "
-            f"Provided value: {tuple(output.shape)!r}."
-        )
-    return output[:, 0::2] - output[:, 1::2]
+from networks.resistive.mnist import paired_scores, build_student_network
 
 
-class TeacherKLDivergence(Function):
-    """Pure KL(teacher || student) over calibrated paired DRN scores."""
-
-    def __init__(self, output_layer, *, gain: float = 1.0) -> None:
-        self._layer = output_layer
-        self._num_classes = int(output_layer.shape[0]) // 2
-        self._gain = float(gain)
-        self._teacher_logits: torch.Tensor | None = None
-        self._labels: torch.Tensor | None = None
-        Function.__init__(self, [output_layer], [])
-
-    @property
-    def gain(self) -> float:
-        return self._gain
-
-    @gain.setter
-    def gain(self, value: float) -> None:
-        numeric = float(value)
-        if not math.isfinite(numeric) or numeric <= 0.0:
-            raise ValueError(
-                "Expected fixed readout gain to be positive and finite. "
-                f"Provided value: {value!r}."
-            )
-        self._gain = numeric
-
-    def set_teacher(self, logits: torch.Tensor, labels: torch.Tensor) -> None:
-        if logits.ndim != 2 or logits.shape[1] != self._num_classes:
-            raise ValueError(
-                "Expected teacher logits with shape "
-                f"(batch, {self._num_classes}). "
-                f"Provided value: {tuple(logits.shape)!r}."
-            )
-        self._teacher_logits = logits.detach()
-        self._labels = labels.detach().to(device=logits.device, dtype=torch.long)
-
-    def set_target(self, targets: Any) -> None:
-        """Engine target hook: ``targets`` carries ``logits`` and ``labels``."""
-
-        self.set_teacher(targets.logits, targets.labels)
-
-    def student_logits(self) -> torch.Tensor:
-        return paired_scores(self._layer.state) * self._gain
-
-    def eval(self) -> torch.Tensor:
-        if self._teacher_logits is None:
-            raise RuntimeError("Expected teacher logits before evaluating KL.")
-        teacher_log_prob = F.log_softmax(self._teacher_logits, dim=1)
-        teacher_prob = teacher_log_prob.exp()
-        student_log_prob = F.log_softmax(self.student_logits(), dim=1)
-        return (teacher_prob * (teacher_log_prob - student_log_prob)).sum(dim=1)
-
-    def error_fn(self) -> torch.Tensor:
-        if self._labels is None:
-            raise RuntimeError("Expected labels before evaluating error.")
-        return self.student_logits().argmax(dim=1).ne(self._labels)
-
-    def _get_output(self) -> torch.Tensor:
-        return self.student_logits()
+from methods.objectives import TeacherKLDivergence
 
 
 @dataclass(frozen=True)
@@ -115,81 +52,10 @@ class StudentStack:
     device: torch.device
 
 
-@dataclass(frozen=True)
-class BoundedDrnTeacher:
-    """Frozen equilibrium teacher loaded from stable named DRN weights."""
-
-    stack: StudentStack
-    checkpoint_metadata: dict[str, Any]
-
-    def logits(self, inputs: torch.Tensor) -> torch.Tensor:
-        with torch.no_grad():
-            self.stack.network.set_input(
-                inputs.to(self.stack.device, dtype=torch.float32),
-                reset=True,
-            )
-            self.stack.minimizer.compute_equilibrium()
-            return paired_scores(
-                self.stack.bundle.energy.layers()[-1].state
-            ).detach()
-
-    def copy_named_weights_to(self, catalog: ParameterCatalog) -> None:
-        source = self.stack.bundle.catalog
-        expected = tuple(binding.key for binding in catalog.trainable)
-        provided = tuple(binding.key for binding in source.trainable)
-        if provided != expected:
-            raise ValueError(
-                "Expected bounded DRN teacher and student to expose the "
-                "same stable trainable parameter keys. Provided value: "
-                f"teacher={provided!r}, student={expected!r}."
-            )
-        with torch.no_grad():
-            for key in expected:
-                teacher_state = source.by_key[key].state
-                student_state = catalog.by_key[key].state
-                if teacher_state.shape != student_state.shape:
-                    raise ValueError(
-                        "Expected bounded DRN teacher and student parameter "
-                        f"{key!r} to have the same shape. Provided value: "
-                        f"teacher={tuple(teacher_state.shape)!r}, "
-                        f"student={tuple(student_state.shape)!r}."
-                    )
-                student_state.copy_(teacher_state.to(student_state))
+from networks.teachers.drn import BoundedDrnTeacher
 
 
-def _minimizer(energy, *, iterations: int, mode: str, overrelaxation: float):
-    settings = MinimizerSettings(
-        rel_tol=1e-5,
-        vn_tol=1e-6,
-        use_polish=False,
-        max_newton_iters=32,
-        z_thresh=1e10,
-        exp_clip=1e5,
-        dynamic_polish=False,
-        overrelaxation_reject_steps=False,
-        overrelaxation_reject_max_tries=3,
-        overrelaxation_reject_shrink=0.5,
-        overrelaxation_reject_eps=0.0,
-    )
-    return CustomQuadraticMinimizer(
-        fn=energy,
-        free_layers=list(energy.layers()[1:]),
-        num_iterations=iterations,
-        mode=mode,
-        non_linearity="perfect_diode",
-        quadratic_diode_param={},
-        exponential_diode_param={},
-        voltage_amp=energy._voltage_amp,
-        current_amp=energy._current_amp,
-        hard_sigmoid_param={},
-        iv_data=None,
-        iv_data_path=None,
-        double_diode_updater=None,
-        adaptive_equilibrium=False,
-        overrelaxation_factor=overrelaxation,
-        single_diode_updater=None,
-        minimizer_settings=settings,
-    )
+from networks.resistive.mnist import _minimizer
 
 
 def _logical_optimizer(
@@ -279,46 +145,7 @@ def build_student_stack(
     device_data_path=None,
     enable_measured: bool = True,
 ) -> StudentStack:
-    device = torch.device(spec.runtime.device)
-    if device.type == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError(
-            "Expected config.runtime.device='cuda' to have an available CUDA "
-            "device. Provided value: torch.cuda.is_available() is false."
-        )
-    differential = (0, 1) if spec.model.encoding == "differential" else ()
-    bundle = build_deep_resistive_energy(
-        layer_shapes=[(item,) for item in spec.model.dims],
-        weight_gains=[1.0, 1.0],
-        input_gain=spec.model.input_gain,
-        non_linearity=spec.model.non_linearity,
-        exponential_diode_param=dict(spec.model.exponential_diode_param),
-        quadratic_diode_param=dict(spec.model.quadratic_diode_param),
-        hard_sigmoid_param=dict(spec.model.hard_sigmoid_param),
-        voltage_amp=spec.model.voltage_amp,
-        current_amp=spec.model.current_amp,
-        weight_min=spec.model.conductance_min,
-        weight_max=spec.model.conductance_max,
-        differential_dense_edges=differential,
-        include_biases=spec.model.include_biases,
-        legacy_process_index_amplification=(
-            getattr(spec.model, "amplification_indexing", "logical")
-            == "legacy_process_global"
-        ),
-    )
-    bundle.energy.set_device(device)
-    network = Network(bundle.energy)
-    inference = _minimizer(
-        bundle.energy,
-        iterations=spec.solver.inference_iterations,
-        mode=spec.solver.mode,
-        overrelaxation=spec.solver.overrelaxation_factor,
-    )
-    training = _minimizer(
-        bundle.energy,
-        iterations=spec.solver.training_iterations,
-        mode=spec.solver.mode,
-        overrelaxation=spec.solver.overrelaxation_factor,
-    )
+    bundle, network, inference, training, device = build_student_network(spec.model, spec.solver, spec.runtime.device)
     cost = TeacherKLDivergence(bundle.energy.layers()[-1])
     differentiator = Backprop(
         bundle.energy.params(),
@@ -386,408 +213,34 @@ def build_student_stack(
     )
 
 
-def signed_dual_rail_lift(
-    weight: torch.Tensor,
-    *,
-    target_layout: str,
-) -> torch.Tensor:
-    """Lift one signed logical matrix into the physical dual-rail topology."""
-
-    if weight.ndim != 2 or target_layout not in {"halves", "paired"}:
-        raise ValueError(
-            "Expected a rank-2 weight and target_layout 'halves' or 'paired'. "
-            f"Provided value: shape={tuple(weight.shape)!r}, "
-            f"target_layout={target_layout!r}."
-        )
-    inputs, outputs = weight.shape
-    result = weight.new_zeros((2 * inputs, 2 * outputs))
-    positive = weight.clamp_min(0.0)
-    negative = (-weight).clamp_min(0.0)
-    plus_columns = (
-        torch.arange(outputs, device=weight.device)
-        if target_layout == "halves"
-        else torch.arange(outputs, device=weight.device) * 2
-    )
-    minus_columns = (
-        plus_columns + outputs
-        if target_layout == "halves"
-        else plus_columns + 1
-    )
-    result[:inputs, plus_columns] = positive
-    result[:inputs, minus_columns] = negative
-    result[inputs:, plus_columns] = negative
-    result[inputs:, minus_columns] = positive
-    return result
+from networks.resistive.mnist import signed_dual_rail_lift
 
 
-def signed_differential_lift(
-    weight: torch.Tensor,
-    *,
-    target_layout: str,
-) -> torch.Tensor:
-    """Return the signed effective matrix implemented by a G+/G- pair."""
-
-    positive_lift = signed_dual_rail_lift(
-        weight,
-        target_layout=target_layout,
-    )
-    negative_lift = signed_dual_rail_lift(
-        -weight,
-        target_layout=target_layout,
-    )
-    return 0.5 * (positive_lift - negative_lift)
+from networks.resistive.mnist import signed_differential_lift
 
 
-def collapse_clamped_dual_rail_input(
-    conductance_plus: torch.Tensor,
-    conductance_minus: torch.Tensor,
-) -> torch.Tensor:
-    """Collapse an eight-device signed input block into four rail edges.
-
-    The source rows must use the repository's ``[x, -x]`` halves layout.
-    At a clamped input boundary, the negative port of the positive source rail
-    is the negative source rail, and conversely.  Regrouping branches that see
-    the same voltage gives the ordinary dual-rail conductance tensor returned
-    here.  It preserves the post-layer energy and KCL on the antipodal input
-    subspace.  It does not identify source-side currents of independent
-    dynamic rails and therefore must not be applied to an interior edge.
-    """
-
-    valid = (
-        isinstance(conductance_plus, torch.Tensor)
-        and isinstance(conductance_minus, torch.Tensor)
-        and conductance_plus.ndim == 2
-        and conductance_minus.ndim == 2
-        and conductance_plus.shape == conductance_minus.shape
-        and conductance_plus.shape[0] % 2 == 0
-        and conductance_plus.device == conductance_minus.device
-        and conductance_plus.dtype == conductance_minus.dtype
-        and bool(torch.isfinite(conductance_plus).all())
-        and bool(torch.isfinite(conductance_minus).all())
-        and bool((conductance_plus >= 0.0).all())
-        and bool((conductance_minus >= 0.0).all())
-    )
-    if not valid:
-        plus_shape = (
-            tuple(conductance_plus.shape)
-            if isinstance(conductance_plus, torch.Tensor)
-            else None
-        )
-        minus_shape = (
-            tuple(conductance_minus.shape)
-            if isinstance(conductance_minus, torch.Tensor)
-            else None
-        )
-        raise ValueError(
-            "Expected finite non-negative rank-2 G+/G- tensors with "
-            "identical dtype, device, shape, and an even source dimension. "
-            "Provided value: "
-            f"plus_shape={plus_shape!r}, minus_shape={minus_shape!r}."
-        )
-
-    logical_inputs = conductance_plus.shape[0] // 2
-    plus_source = slice(0, logical_inputs)
-    minus_source = slice(logical_inputs, 2 * logical_inputs)
-    effective_plus_source = (
-        conductance_plus[plus_source]
-        + conductance_minus[minus_source]
-    )
-    effective_minus_source = (
-        conductance_minus[plus_source]
-        + conductance_plus[minus_source]
-    )
-    return torch.cat(
-        (effective_plus_source, effective_minus_source),
-        dim=0,
-    )
+from networks.resistive.mnist import collapse_clamped_dual_rail_input
 
 
-def _normalized(weight: torch.Tensor) -> torch.Tensor:
-    maximum = weight.detach().abs().max()
-    if float(maximum.item()) == 0.0:
-        raise ValueError("Expected teacher matrix to contain a non-zero weight.")
-    return weight.detach() / maximum
+from networks.resistive.mnist import _normalized
 
 
-def mapped_conductances(
-    teacher_weights: tuple[torch.Tensor, torch.Tensor],
-    *,
-    encoding: str,
-    scale_fractions: tuple[float, float],
-    conductance_min: float,
-    conductance_max: float,
-    range_placement: str = "lower",
-) -> tuple[tuple[torch.Tensor, ...], dict[str, Any]]:
-    targets: list[torch.Tensor] = []
-    layers = []
-    layouts = ("halves", "paired")
-    for layer_index, (teacher_weight, fraction, layout) in enumerate(
-        zip(teacher_weights, scale_fractions, layouts)
-    ):
-        logical = _normalized(teacher_weight)
-        if encoding == "single":
-            lifted = signed_dual_rail_lift(logical, target_layout=layout)
-            peak = float(lifted.max().item())
-            largest_scale = (conductance_max - conductance_min) / peak
-            scale = fraction * largest_scale
-            if range_placement == "lower":
-                baseline = conductance_min
-            elif range_placement == "centered":
-                baseline = conductance_min + 0.5 * (
-                    conductance_max - conductance_min - scale * peak
-                )
-            else:
-                raise ValueError(
-                    "Expected range_placement to be 'lower' or 'centered'. "
-                    f"Provided value: {range_placement!r}."
-                )
-            layer_targets = (baseline + scale * lifted,)
-        elif encoding == "differential":
-            if range_placement != "lower":
-                raise ValueError(
-                    "Expected differential mapping range_placement to equal "
-                    f"'lower'. Provided value: {range_placement!r}."
-                )
-            lifted = signed_differential_lift(logical, target_layout=layout)
-            peak = float(lifted.abs().max().item())
-            largest_scale = (conductance_max - conductance_min) / peak
-            scale = fraction * largest_scale
-            layer_targets = (
-                conductance_min + scale * lifted.clamp_min(0.0),
-                conductance_min + scale * (-lifted).clamp_min(0.0),
-            )
-        else:
-            raise ValueError(
-                "Expected encoding to be 'single' or 'differential'. "
-                f"Provided value: {encoding!r}."
-            )
-        targets.extend(layer_targets)
-        layers.append(
-            {
-                "layer": layer_index,
-                "target_layout": layout,
-                "teacher_absmax": float(teacher_weight.abs().max().item()),
-                "scale_fraction": fraction,
-                "largest_nonclipping_scale_s": largest_scale,
-                "selected_scale_s": scale,
-                "range_placement": range_placement,
-                "selected_baseline_s": (
-                    baseline if encoding == "single" else conductance_min
-                ),
-            }
-        )
-    return tuple(targets), {"encoding": encoding, "layers": layers}
+from networks.resistive.mnist import mapped_conductances
 
 
-def apply_targets(catalog: ParameterCatalog, targets: tuple[torch.Tensor, ...]) -> None:
-    if len(catalog.trainable) != len(targets):
-        raise ValueError(
-            "Expected one mapped conductance target per trainable tensor. "
-            f"Provided value: bindings={len(catalog.trainable)}, targets={len(targets)}."
-        )
-    with torch.no_grad():
-        for binding, target in zip(catalog.trainable, targets):
-            binding.state.copy_(target.to(device=binding.state.device, dtype=binding.state.dtype))
+from networks.resistive.mnist import apply_targets
 
 
-def fit_positive_logit_gain(
-    raw_scores: torch.Tensor,
-    teacher_logits: torch.Tensor,
-    *,
-    gain_min: float,
-    gain_max: float,
-    steps: int,
-) -> dict[str, Any]:
-    scores = raw_scores.detach().to(torch.float64)
-    teacher = teacher_logits.detach().to(torch.float64)
-    teacher_log_prob = F.log_softmax(teacher, dim=1)
-    teacher_prob = teacher_log_prob.exp()
-
-    def kl(gain: torch.Tensor) -> torch.Tensor:
-        student_log_prob = F.log_softmax(scores * gain, dim=1)
-        return (teacher_prob * (teacher_log_prob - student_log_prob)).sum(dim=1).mean()
-
-    gains = torch.logspace(
-        math.log10(gain_min),
-        math.log10(gain_max),
-        steps,
-        dtype=torch.float64,
-        device=scores.device,
-    )
-    values = torch.stack([kl(gain) for gain in gains])
-    index = int(values.argmin().item())
-    selected = float(gains[index].item())
-    return {
-        "gain": selected,
-        "raw_kl": float(kl(torch.tensor(1.0, device=scores.device)).item()),
-        "calibrated_kl": float(values[index].item()),
-        "score_rms": float(torch.sqrt(scores.square().mean()).item()),
-        "teacher_logit_rms": float(torch.sqrt(teacher.square().mean()).item()),
-        "gain_at_grid_boundary": index in {0, steps - 1},
-    }
+from methods.calibration.mnist import fit_positive_logit_gain
 
 
-def collect_calibration(
-    stack: StudentStack,
-    teacher: BiasFreeReluTeacher | BoundedDrnTeacher,
-    loader: Iterable,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Settled raw output scores and teacher logits, without a cost target."""
-
-    output_layer = stack.bundle.energy.layers()[-1]
-    probe = PerBatchProbe(
-        "calibration",
-        lambda event: (
-            paired_scores(output_layer.state).detach(),
-            event.batch.targets.logits.detach(),
-        ),
-    )
-    with torch.no_grad():
-        result = evaluate(
-            EvaluationComponents(stack.network, None, stack.minimizer),
-            teacher_batches(loader, teacher, stack.device),
-            probes=(probe,),
-        )
-    pieces = result.probe_value(probe.name)
-    return (
-        torch.cat([scores for scores, _logits in pieces]),
-        torch.cat([logits for _scores, logits in pieces]),
-    )
+from methods.calibration.mnist import collect_calibration
 
 
-def select_mapping_and_gain(
-    stack: StudentStack,
-    teacher: BiasFreeReluTeacher,
-    loader: Iterable,
-    spec: StudentTrainSpec,
-    *,
-    measured_candidate_projector: MeasuredCohortAOptimizer | None = None,
-) -> tuple[dict[str, Any], tuple[torch.Tensor, ...]]:
-    teacher_weights = tuple(item.detach() for item in teacher.parameters())
-    candidates = []
-    selected_targets = None
-    selected_key = None
-    fraction_pairs = (
-        spec.mapping.scale_fraction_pairs
-        if spec.mapping.scale_fraction_pairs is not None
-        else product(spec.mapping.scale_fractions, repeat=2)
-    )
-    for fractions in fraction_pairs:
-        targets, mapping = mapped_conductances(
-            teacher_weights,
-            encoding=spec.model.encoding,
-            scale_fractions=(float(fractions[0]), float(fractions[1])),
-            conductance_min=spec.model.conductance_min,
-            conductance_max=spec.model.conductance_max,
-            range_placement=spec.mapping.range_placement,
-        )
-        apply_targets(stack.bundle.catalog, targets)
-        raw, teacher_logits = collect_calibration(stack, teacher, loader)
-        nominal_calibration = fit_positive_logit_gain(
-            raw,
-            teacher_logits,
-            gain_min=spec.mapping.logit_gain_min,
-            gain_max=spec.mapping.logit_gain_max,
-            steps=spec.mapping.logit_gain_steps,
-        )
-        calibration = nominal_calibration
-        if measured_candidate_projector is not None:
-            projected = measured_candidate_projector.preview_reset_targets()
-            with torch.no_grad():
-                for binding in stack.bundle.catalog.trainable:
-                    binding.state.copy_(projected[binding.key])
-            raw, teacher_logits = collect_calibration(stack, teacher, loader)
-            calibration = fit_positive_logit_gain(
-                raw,
-                teacher_logits,
-                gain_min=spec.mapping.logit_gain_min,
-                gain_max=spec.mapping.logit_gain_max,
-                steps=spec.mapping.logit_gain_steps,
-            )
-        record = {
-            "scale_fractions": list(fractions),
-            "mapping": mapping,
-            "calibration": calibration,
-        }
-        if measured_candidate_projector is not None:
-            record.update(
-                {
-                    "selection_domain": "measured_projected",
-                    "nominal_calibration": nominal_calibration,
-                }
-            )
-        candidates.append(record)
-        key = (calibration["calibrated_kl"], fractions)
-        if selected_key is None or key < selected_key:
-            selected_key = key
-            selected_targets = tuple(target.detach().clone() for target in targets)
-    if selected_targets is None or selected_key is None:
-        raise RuntimeError("Expected at least one mapping candidate.")
-    selected_index = min(
-        range(len(candidates)),
-        key=lambda index: (
-            candidates[index]["calibration"]["calibrated_kl"],
-            tuple(candidates[index]["scale_fractions"]),
-        ),
-    )
-    apply_targets(stack.bundle.catalog, selected_targets)
-    return {
-        "search_examples": spec.mapping.calibration_examples,
-        "selection_domain": (
-            "measured_projected"
-            if measured_candidate_projector is not None
-            else "nominal"
-        ),
-        "candidates": candidates,
-        "selected_index": selected_index,
-        "selected": candidates[selected_index],
-    }, selected_targets
+from methods.calibration.mnist import select_mapping_and_gain
 
 
-def conductance_statistics(catalog: ParameterCatalog, *, encoding: str) -> dict[str, Any]:
-    result: dict[str, Any] = {"encoding": encoding, "parameters": {}}
-    for binding in catalog.trainable:
-        state = binding.state.detach().to(torch.float64)
-        raw_lower = binding.parameter.min_cond
-        raw_upper = binding.parameter.max_cond
-        lower = None if raw_lower is None else float(raw_lower)
-        upper = None if raw_upper is None else float(raw_upper)
-        result["parameters"][binding.key] = {
-            "role": binding.role,
-            "minimum_s": float(state.min().item()),
-            "maximum_s": float(state.max().item()),
-            "mean_s": float(state.mean().item()),
-            "rms_s": float(torch.sqrt(state.square().mean()).item()),
-            "lower_bound_fraction": (
-                None
-                if lower is None
-                else float((state <= lower).to(torch.float64).mean().item())
-            ),
-            "upper_bound_fraction": (
-                None
-                if upper is None
-                else float((state >= upper).to(torch.float64).mean().item())
-            ),
-        }
-    if encoding == "differential":
-        dense = tuple(
-            binding
-            for binding in catalog.trainable
-            if isinstance(binding.parameter, DenseWeight)
-        )
-        pairs = list(zip(dense[0::2], dense[1::2]))
-        result["differential_layers"] = []
-        for plus, minus in pairs:
-            difference = plus.state.detach().to(torch.float64) - minus.state.detach().to(torch.float64)
-            total = plus.state.detach().to(torch.float64) + minus.state.detach().to(torch.float64)
-            result["differential_layers"].append(
-                {
-                    "difference_rms_s": float(torch.sqrt(difference.square().mean()).item()),
-                    "sum_mean_s": float(total.mean().item()),
-                    "sum_rms_s": float(torch.sqrt(total.square().mean()).item()),
-                }
-            )
-    return result
+from networks.resistive.mnist import conductance_statistics
 
 
 __all__ = [

@@ -1066,10 +1066,7 @@ def _population_from_deployment(
     *,
     config: Any,
 ) -> Any:
-    from methods.ibm_om.api import (
-        IbmReramArrayPopulation,
-        _population_fingerprint,
-    )
+    from hardware.ibm_om.population import IbmReramArrayPopulation, _population_fingerprint
 
     scalars = deployment.get("population_scalars")
     tensors = deployment.get("population")
@@ -1172,7 +1169,7 @@ def _reset_commissioning_from_deployment(
 ) -> Any | None:
     """Restore only the observed RESET commissioning state from a sidecar."""
 
-    from methods.ibm_om.api import IbmReramResetCommissioning
+    from methods.ibm_om.characterization import IbmReramResetCommissioning
 
     raw = deployment.get("reset_commissioning")
     if config.target_mapping != "shared_reset_relative_quad":
@@ -1306,11 +1303,8 @@ def validate_deployment_contract(
 ) -> tuple[dict[str, torch.Tensor], Any, dict[str, Any]]:
     """Validate the saved sidecar and replay its pure target mapper."""
 
-    from methods.ibm_om.api import (
-        IbmReramHwaConfig,
-        map_ibm_reram_array_targets,
-        validate_ibm_reram_target_mapping_preflight,
-    )
+    from methods.ibm_om.spec import IbmReramHwaConfig
+    from methods.ibm_om.mappings import map_ibm_reram_array_targets, validate_ibm_reram_target_mapping_preflight
 
     if not isinstance(deployment, Mapping):
         raise ValueError("Expected deployment sidecar to contain an object.")

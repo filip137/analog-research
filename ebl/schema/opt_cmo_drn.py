@@ -11,82 +11,22 @@ TEACHER_SHA256='2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9
 SOURCE_SHA256='86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028'
 
 
-@dataclass(frozen=True)
-class Solver:
-    settling_iterations: int=4
-    gradient_iterations: int=4
-    voltage_amp: float=5.0
-    current_amp: float=0.1
-    input_gain: float=100.0
-    token_chunk_size: int=256
-    activation_checkpointing: bool=True
+from networks.config.opt import Solver
 
 
-@dataclass(frozen=True)
-class Data:
-    corpus: str='opt125m-synthetic-50m'
-    sha256: str='ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984'
-    sequences: int=195226
-    development_sequences: int=256
-    sequence_length: int=256
-    seed: int=20261008
-    mapping_sequences: int=1
+from networks.config.opt import Data
 
 
-@dataclass(frozen=True)
-class Training:
-    arm: str='std3'
-    epochs: int=5
-    max_updates: int=0
-    effective_batch: int=32
-    microbatch: int=1
-    conductance_lr: float=0.0003
-    calibration_lr: float=0.0003
-    digital_lr: float=0.00001
-    recipe: str='A'
-    warmup_updates: int=245
-    schedule: str='cosine'
-    minimum_lr_factor: float=0.2
-    seed: int=41
-    max_wall_seconds: int=864000
-    checkpoint_every: int=512
-    retention: str='best_latest_final'
+from methods.config.opt import Training
 
 
-@dataclass(frozen=True)
-class Selection:
-    every_updates: int=512
-    assignment_seeds: tuple=(211001,211002)
-    fault_kinds: tuple=('none','random')
-    random_rate: float=0.03
+from methods.config.opt import Selection
 
 
-@dataclass(frozen=True)
-class Deployment:
-    assignment_seed: int=271002
-    fault_kind: str='random'
-    fault_rate: float=0.03
+from hardware.deployment_config import Deployment
 
 
-@dataclass(frozen=True)
-class Recovery:
-    arm: str='learning'
-    updates: int=2048
-    learning_rate: float=0.003
-    threshold_sigma: float=2.0
-    max_write_attempts: int | None=4
-    calibration_updates: int=200
-    calibration_lr: float=0.0001
-    checkpoint_every: int=128
-    write_noise_factor: float=1.0
-    development_every: int=0
-    retain_final_optimizer: bool=True
-    conductance_floor: str='none'
-    update_rule: str='thresholded_adam'
-    target_bounds: str='none'
-    lr_schedule: str='constant'
-    warmup_updates: int=0
-    extends_updates: int=0
+from methods.config.opt import Recovery
 
 
 @dataclass(frozen=True)

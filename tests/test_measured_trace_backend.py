@@ -311,8 +311,8 @@ def test_cohort_a_reset_then_target_initialization_is_one_exact_write(
     report = optimizer.initialize_from_reset_targets()
 
     key = "base.dense_weight.0"
-    table = optimizer._tables[key]
-    source = optimizer._source_curves[key]
+    table = optimizer._plant.tables[key]
+    source = optimizer._plant.source_curves[key]
     curves = (
         table.alpha[:, None] * source[table.source_left]
         + (1.0 - table.alpha[:, None]) * source[table.source_right]
@@ -325,7 +325,7 @@ def test_cohort_a_reset_then_target_initialization_is_one_exact_write(
         expected_pulses[:, None],
     ).squeeze(1)
     assert torch.equal(
-        optimizer._pulse_indices[key].to(torch.long),
+        optimizer._plant.pulse_indices[key].to(torch.long),
         expected_pulses,
     )
     assert torch.equal(weight.state.reshape(-1), expected_values)
@@ -419,7 +419,7 @@ def test_dual_rail_pairwise_mapping_cancels_each_complementary_baseline(
     nominal_state = weight.state.detach().clone()
     preview = optimizer.preview_reset_targets()
     assert optimizer.initialized is False
-    assert optimizer._pulse_indices == {}
+    assert optimizer._plant.pulse_indices == {}
     torch.testing.assert_close(weight.state, nominal_state)
 
     _nominal, _clipped, targets, details = (
@@ -678,7 +678,7 @@ def test_measured_lora_freezes_deployed_base_and_resets_every_factor(
 
     report = optimizer.initialize_from_base_and_reset_adapters()
 
-    assert tuple(optimizer._tables) == (
+    assert tuple(optimizer._plant.tables) == (
         "base.dense_weight.0",
         "base.dense_weight.1",
         "adapter.input_factor.0",
@@ -692,14 +692,14 @@ def test_measured_lora_freezes_deployed_base_and_resets_every_factor(
     }
     for binding in catalog.trainable:
         key = binding.key
-        table = optimizer._tables[key]
-        source = optimizer._source_curves[key]
+        table = optimizer._plant.tables[key]
+        source = optimizer._plant.source_curves[key]
         expected = (
             table.alpha * source[table.source_left, 4]
             + (1.0 - table.alpha) * source[table.source_right, 4]
         ).reshape(binding.state.shape)
         assert torch.equal(binding.state, expected)
-        assert torch.all(optimizer._pulse_indices[key] == 4)
+        assert torch.all(optimizer._plant.pulse_indices[key] == 4)
         assert (
             optimizer.programming_report["parameters"][key]["initial_write"][
                 "kind"
@@ -750,8 +750,8 @@ def test_measured_lora_resume_preserves_the_next_physical_write(
     for binding in catalog.trainable:
         key = binding.key
         assert torch.equal(
-            restored._pulse_indices[key],
-            optimizer._pulse_indices[key],
+            restored._plant.pulse_indices[key],
+            optimizer._plant.pulse_indices[key],
         )
         assert torch.equal(restored._shadows[key], optimizer._shadows[key])
         gradient = torch.linspace(
@@ -795,8 +795,8 @@ def test_measured_optimizer_uses_exact_global_nearest_and_resumes(
     weight.state.grad = (shadow_before - target).reshape(weight.state.shape)
     optimizer.step()
 
-    table = optimizer._tables["base.dense_weight.0"]
-    source = optimizer._source_curves["base.dense_weight.0"]
+    table = optimizer._plant.tables["base.dense_weight.0"]
+    source = optimizer._plant.source_curves["base.dense_weight.0"]
     curves = (
         table.alpha[:, None] * source[table.source_left]
         + (1.0 - table.alpha[:, None]) * source[table.source_right]
@@ -804,7 +804,7 @@ def test_measured_optimizer_uses_exact_global_nearest_and_resumes(
     expected_pulses = (curves - target[:, None]).abs().argmin(dim=1)
     expected_values = curves.gather(1, expected_pulses[:, None]).squeeze(1)
     assert torch.equal(
-        optimizer._pulse_indices["base.dense_weight.0"].to(torch.long),
+        optimizer._plant.pulse_indices["base.dense_weight.0"].to(torch.long),
         expected_pulses,
     )
     assert torch.allclose(weight.state.reshape(-1), expected_values)
@@ -819,8 +819,8 @@ def test_measured_optimizer_uses_exact_global_nearest_and_resumes(
     restored.load_state_dict(checkpoint)
     assert restored.learning_rates() == optimizer.learning_rates()
     assert torch.equal(
-        restored._pulse_indices["base.dense_weight.0"],
-        optimizer._pulse_indices["base.dense_weight.0"],
+        restored._plant.pulse_indices["base.dense_weight.0"],
+        optimizer._plant.pulse_indices["base.dense_weight.0"],
     )
     assert torch.equal(
         restored._shadows["base.dense_weight.0"],
@@ -878,8 +878,8 @@ def test_cohort_b_deploys_loaded_targets_on_disjoint_curves_and_resumes(
         optimizer._dataset.active_trace_names
     )
 
-    table = optimizer._tables["base.dense_weight.0"]
-    source = optimizer._source_curves["base.dense_weight.0"]
+    table = optimizer._plant.tables["base.dense_weight.0"]
+    source = optimizer._plant.source_curves["base.dense_weight.0"]
     curves = (
         table.alpha[:, None] * source[table.source_left]
         + (1.0 - table.alpha[:, None]) * source[table.source_right]
@@ -887,7 +887,7 @@ def test_cohort_b_deploys_loaded_targets_on_disjoint_curves_and_resumes(
     expected_pulses = (curves - target.reshape(-1, 1)).abs().argmin(dim=1)
     expected_values = curves.gather(1, expected_pulses[:, None]).squeeze(1)
     assert torch.equal(
-        optimizer._pulse_indices["base.dense_weight.0"].to(torch.long),
+        optimizer._plant.pulse_indices["base.dense_weight.0"].to(torch.long),
         expected_pulses,
     )
     assert torch.allclose(weight.state.reshape(-1), expected_values)

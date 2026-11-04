@@ -546,13 +546,13 @@ def probe(manifest_path):
             'complete_evidence': (root / 'summary.json').exists()}
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('worker', 'canary-submit', 'advance', 'release', 'supervise', 'probe', 'commands'))
     parser.add_argument('--manifest', type=Path, required=True)
     parser.add_argument('--mode', choices=('canary', 'production'), default='production')
     parser.add_argument('--index', type=int)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     m = read(args.manifest)
     if args.action == 'worker':
         worker(args.manifest, args.mode, task_index(os.environ, args.index))

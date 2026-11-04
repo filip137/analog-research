@@ -48,7 +48,6 @@ from networks.resistive.ibm_om.readback import (
 from methods.ibm_om.sampling import (
     _artifact,
     sample_om_array_population,
-    sample_om_array_population_external,
 )
 from methods.ibm_om.spec import IbmReramHwaConfig, backfill_config_dict
 
@@ -66,6 +65,7 @@ class IbmReramHwaParameterModifier:
         conductance_max: float,
         population_path: Path | None = None,
         population_receipt_path: Path | None = None,
+        population_sampler=None,
     ) -> None:
         self._bindings = tuple(bindings)
         if not self._bindings:
@@ -111,6 +111,8 @@ class IbmReramHwaParameterModifier:
                 corruption_policy=config.corruption_policy,
             )
         else:
+            if population_sampler is None:
+                raise ValueError("External population sampling must be supplied by execution.")
             raw_sampler = os.environ.get("EBL_AIHWKIT_PYTHON")
             if not raw_sampler:
                 raise RuntimeError(
@@ -119,7 +121,7 @@ class IbmReramHwaParameterModifier:
                 )
             assert population_receipt_path is not None
             self._population, self._population_sampling_receipt = (
-                sample_om_array_population_external(
+                population_sampler(
                     self._bindings,
                     assignment_seed=config.assignment_seed,
                     corruption_policy=config.corruption_policy,
@@ -562,6 +564,7 @@ def build_ibm_reram_hwa_modifier(
     conductance_max: float,
     population_path: Path | None = None,
     population_receipt_path: Path | None = None,
+    population_sampler=None,
 ) -> IbmReramHwaParameterModifier:
     return IbmReramHwaParameterModifier(
         bindings,
@@ -571,4 +574,5 @@ def build_ibm_reram_hwa_modifier(
         conductance_max=conductance_max,
         population_path=population_path,
         population_receipt_path=population_receipt_path,
+        population_sampler=population_sampler,
     )

@@ -914,10 +914,8 @@ def _run_authoritative_preflight(
     from networks.data.mnist import build_mnist_loaders
     from ebl.schema.base import to_plain_data
     from methods.checkpoint import atomic_torch_save, load_named_weights
-    from methods.ibm_om.api import (
-        IbmReramHwaConfig,
-        build_ibm_reram_hwa_modifier,
-    )
+    from methods.ibm_om.spec import IbmReramHwaConfig
+    from ebl.runtime.device_sampling import build_ibm_reram_hwa_modifier
 
     config_path = (CONFIG_ROOT / "exact_bounds_hwa.json").resolve()
     _definition, spec = resolve_experiment_config(config_path, "train")
@@ -1071,7 +1069,7 @@ def _run_authoritative_preflight(
         "study_id": STUDY_ID,
         "created_at": _utc_now(),
         "authoritative_entry_point": (
-            "methods.ibm_om.api."
+            "methods.ibm_om.modifier."
             "IbmReramHwaParameterModifier.preflight_target_mapping"
         ),
         "inputs": {
@@ -1723,7 +1721,7 @@ def _validate_preflight_report(report: Mapping[str, Any]) -> tuple[str, str, str
         or report.get("study_id") != STUDY_ID
         or report.get("authoritative_entry_point")
         != (
-            "methods.ibm_om.api."
+            "methods.ibm_om.modifier."
             "IbmReramHwaParameterModifier.preflight_target_mapping"
         )
     ):
@@ -2368,7 +2366,7 @@ def _validate_population_artifact(
     *,
     role: str,
 ) -> dict[str, Any]:
-    from methods.ibm_om.api import load_om_array_population
+    from hardware.ibm_om.population import load_om_array_population
 
     prefix = run_dir / "artifacts" / f"ibm_om_population.{role}"
     population_path = Path(f"{prefix}.npz")

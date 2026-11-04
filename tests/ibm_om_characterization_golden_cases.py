@@ -32,7 +32,7 @@ TESTS = Path(__file__).resolve().parent
 if str(TESTS) not in sys.path:
     sys.path.insert(0, str(TESTS))
 
-from ibm_om_golden_cases import assert_same, environment  # noqa: E402
+from ibm_om_golden_cases import assert_same as _assert_same, environment  # noqa: E402
 from methods.ibm_reram_program_verify import (  # noqa: E402
     ControllerSettings,
     IbmReramPlant,
@@ -286,6 +286,29 @@ def _strip(value: Any) -> Any:
     return value
 
 
+def _source_normalized_record(value):
+    """Compare all SQLite rows while excluding embedded source identities.
+
+    The raw-active database embeds sampler receipts, so relocation changes its
+    whole-file hash. Live artifact integrity is checked before comparison.
+    Existing golden files are retained unchanged.
+    """
+    import copy
+    result = copy.deepcopy(value)
+    if not isinstance(result, dict) or "trajectories.sqlite3" not in result:
+        return result
+    database = result["trajectories.sqlite3"]
+    for row in database.get("metadata", {}).get("rows", []):
+        row[1] = json.dumps(_strip(json.loads(row[1])), sort_keys=True)
+    if "integrity_report.json" in result:
+        result["integrity_report.json"].pop("database_sha256", None)
+    return result
+
+
+def assert_same(expected, actual, path="root"):
+    _assert_same(_source_normalized_record(expected), _source_normalized_record(actual), path)
+
+
 def _array_record(array: np.ndarray) -> tuple[str, list[int], Any]:
     """Exact array fingerprint: small arrays verbatim, large ones by digest."""
 
@@ -319,6 +342,10 @@ def _artifacts(run: Path) -> dict[str, Any]:
                 out[path.name] = {key: _array_record(payload[key]) for key in payload.files}
         elif path.suffix == ".md":
             out[path.name] = path.read_text()
+    integrity = out.get("integrity_report.json", {})
+    if "database_sha256" in integrity:
+        database = run / "artifacts" / "trajectories.sqlite3"
+        assert hashlib.sha256(database.read_bytes()).hexdigest() == integrity["database_sha256"]
     return out
 
 

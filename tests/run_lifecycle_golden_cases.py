@@ -762,7 +762,8 @@ def _fake_om_sampler(kind: str) -> None:
         return sampled, receipt
 
     modifier.sample_om_array_population = population
-    modifier.sample_om_array_population_external = external
+    import ebl.runtime.device_sampling as execution_sampling
+    execution_sampling.sample_om_array_population_external = external
     os.environ["EBL_AIHWKIT_PYTHON"] = "/synthetic/aihwkit-python"
 
 

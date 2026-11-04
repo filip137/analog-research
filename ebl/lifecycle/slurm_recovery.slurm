@@ -13,4 +13,4 @@ export PYTHONUNBUFFERED=1 OPT_DRN_RUN_ID=run
 export EBL_CORPUS_ROOT=/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/inputs/corpora
 export OPT_DRN_SOURCE_SNAPSHOT="$PWD/source-snapshot.json"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
-srun --ntasks=1 python -m ebl.lifecycle.slurm_recovery worker --manifest "$1" --mode "$2"
+srun --ntasks=1 python -m ebl lifecycle slurm-recovery worker --manifest "$1" --mode "$2"

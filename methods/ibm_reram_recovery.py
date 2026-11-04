@@ -24,7 +24,6 @@ from methods.ibm_om.programming.controller import (
 )
 from methods.ibm_om.sampling import (
     _artifact as load_ibm_reram_hwa_artifact,
-    sample_om_array_population_layout_external,
 )
 from methods.ibm_reram_program_verify import (
     ControllerSettings,
@@ -80,31 +79,6 @@ def _result_cost(result: ProgramVerifyResult) -> dict[str, int]:
     }
 
 
-def sample_physical_fast_population(
-    bindings: Sequence[ParameterBinding],
-    *,
-    assignment_seed: int,
-    aihwkit_python: Path,
-    population_path: Path,
-    receipt_path: Path,
-) -> tuple[IbmReramArrayPopulation, dict[str, Any]]:
-    """Sample two repaired OM fast rails for every slow conductance."""
-
-    selected = tuple(bindings)
-    keys = tuple(f"fast_pair.{binding.key}" for binding in selected)
-    shapes = tuple(
-        (2 * int(binding.state.shape[0]), int(binding.state.shape[1]))
-        for binding in selected
-    )
-    return sample_om_array_population_layout_external(
-        keys,
-        shapes,
-        assignment_seed=assignment_seed,
-        corruption_policy="counterfactual_repaired",
-        aihwkit_python=aihwkit_python,
-        population_path=population_path,
-        receipt_path=receipt_path,
-    )
 
 
 class _RecoveryLedger:

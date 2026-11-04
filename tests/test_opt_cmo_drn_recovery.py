@@ -123,7 +123,7 @@ def test_matched_controls_and_exact_recovery_resume(tmp_path,monkeypatch,cap,noi
     import ebl.runtime.opt_cmo_drn.runtime as runtime
     import ebl.runtime.opt_cmo_drn.recovery as recovery
     from ebl.runtime.store import sha256_file
-    from ebl.lifecycle.__main__ import collect
+    from ebl.lifecycle.plan import collect
     model,teacher=tiny_model()
     teacher_path=tmp_path/'teacher.pt';torch.save({},teacher_path)
     config=replace(Config(),stage='deploy',teacher_sha256=sha256_file(teacher_path),

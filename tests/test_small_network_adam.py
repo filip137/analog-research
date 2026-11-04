@@ -19,7 +19,7 @@ from methods.ibm_om_fp32_bounds import (
     IbmOmFp32BoundsOptimizer,
     effective_controller_bounds,
 )
-from methods.ibm_om.api import IbmReramArrayPopulation
+from hardware.ibm_om.population import IbmReramArrayPopulation
 
 
 ROOT = Path(__file__).resolve().parents[1]

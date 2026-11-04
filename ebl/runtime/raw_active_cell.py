@@ -29,14 +29,12 @@ from ebl.schema.raw_active_cell import (
 )
 from experiments.reram_program_verify.storage import TrajectoryStore
 from ebl.schema.base import to_plain_data
-from methods.ibm_om.api import (
-    IBM_OM_RAW_ACTIVE_A_MIN,
-    IBM_OM_RAW_ACTIVE_SCALE,
-    IbmReramArrayPopulation,
-    sample_om_array_population_layout,
-    sample_om_array_population_layout_external,
-    save_om_array_population,
-)
+from hardware.ibm_om.constants import IBM_OM_RAW_ACTIVE_A_MIN
+from hardware.ibm_om.constants import IBM_OM_RAW_ACTIVE_SCALE
+from hardware.ibm_om.population import IbmReramArrayPopulation
+from methods.ibm_om.sampling import sample_om_array_population_layout
+from ebl.runtime.device_sampling import sample_om_array_population_layout_external
+from hardware.ibm_om.population import save_om_array_population
 from methods.ibm_reram_program_verify import (
     ConditioningResult,
     ControllerSettings,

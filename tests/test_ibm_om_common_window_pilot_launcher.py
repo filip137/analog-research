@@ -140,7 +140,7 @@ def _preflight_report() -> dict[str, object]:
         "schema_version": 1,
         "study_id": STUDY_ID,
         "authoritative_entry_point": (
-            "methods.ibm_om.api."
+            "methods.ibm_om.modifier."
             "IbmReramHwaParameterModifier.preflight_target_mapping"
         ),
         "inputs": {

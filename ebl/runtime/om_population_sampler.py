@@ -12,14 +12,10 @@ from typing import Any
 import torch
 
 from ebl.runtime.store import atomic_write_json, sha256_file
-import methods.ibm_om.sampling as population_module
-from methods.ibm_om.api import (
-    _ARRAY_SAMPLING_RECEIPT_SCHEMA,
-    _ARRAY_SAMPLING_RECEIPT_SCHEMA_VERSION,
-    _REQUIRED_AIHWKIT_VERSION,
-    _sample_om_array_population_layout,
-    save_om_array_population,
-)
+import hardware.ibm_om.sampling as population_module
+from hardware.ibm_om.constants import _ARRAY_SAMPLING_RECEIPT_SCHEMA, _ARRAY_SAMPLING_RECEIPT_SCHEMA_VERSION, _REQUIRED_AIHWKIT_VERSION
+from methods.ibm_om.sampling import _sample_om_array_population_layout
+from hardware.ibm_om.population import save_om_array_population
 from methods.ibm_reram_program_verify import OM_PRESET
 
 

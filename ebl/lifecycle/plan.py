@@ -89,7 +89,7 @@ def collect(paths):
     return {'schema':'opt_cmo_drn.collection.v1','runs':rows,'complete':bool(rows) and all(r['coverage']=='complete' for r in rows)}
 
 
-def main():
+def main(argv=None):
     parser=argparse.ArgumentParser()
     sub=parser.add_subparsers(dest='command',required=True)
     p=sub.add_parser('plan');p.add_argument('config',type=Path)
@@ -98,7 +98,7 @@ def main():
     p.add_argument('--python',type=Path,default=Path(sys.executable))
     p.add_argument('--worktree',type=Path,default=Path(__file__).resolve().parents[1])
     p=sub.add_parser('collect');p.add_argument('runs',nargs='+',type=Path);p.add_argument('--output',type=Path,required=True)
-    args=parser.parse_args()
+    args=parser.parse_args(argv)
     if args.command=='plan':
         build_plan(json.loads(args.config.read_text()),args.teacher_weights,args.source,args.output,args.python,args.worktree,args.reuse)
         print(args.output/'campaign.json')

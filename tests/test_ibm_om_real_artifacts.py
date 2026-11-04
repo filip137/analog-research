@@ -24,7 +24,7 @@ from methods.ibm_om.spec import (
     backfill_config_dict,
     backfill_weight_modifier_metadata,
 )
-from methods.ibm_om.api import IbmReramHwaParameterModifier
+from methods.ibm_om.modifier import IbmReramHwaParameterModifier
 
 
 ROOT = Path(__file__).resolve().parents[1]

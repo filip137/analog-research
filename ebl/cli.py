@@ -303,6 +303,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="whether the source contains full-model or base-only weights",
     )
 
+    from ebl.lifecycle.cli import COMMANDS
+    lifecycle = commands.add_parser("lifecycle", help="plan, collect and schedule native runs")
+    lifecycle.add_argument("action", choices=tuple(COMMANDS))
+    lifecycle.add_argument("arguments", nargs=argparse.REMAINDER)
+
     campaign = commands.add_parser(
         "campaign",
         help="run a strict cross-worktree experiment campaign",
@@ -934,6 +939,10 @@ def _dispatch(
     stdout: TextIO,
     stderr: TextIO,
 ) -> int:
+    if args.command_name == "lifecycle":
+        from ebl.lifecycle.cli import run
+        return run(args.action, args.arguments, stdout=stdout, stderr=stderr)
+
     if args.command_name == "describe":
         return _describe(
             args.experiment_id,

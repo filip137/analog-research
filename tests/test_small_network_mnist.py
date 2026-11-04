@@ -9,8 +9,8 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from ebl.registry import RunMode, get_definition
 from ebl.schema.base import ConfigError
-import ebl.runtime.small_network.components as components
-from ebl.runtime.small_network.components import build_data
+import networks.data.small as components
+from networks.data.small import build_data
 from ebl.schema.small_network import parse_small_drn_config
 
 

@@ -29,6 +29,7 @@ import torch
 
 from networks.resistive.builders import ParameterBinding, ParameterCatalog
 from networks.variable.parameter import DenseWeight
+from hardware.devices.trace_bank import MeasuredTraceBank
 
 
 _STATE_VERSION = 4
@@ -503,8 +504,9 @@ class MeasuredTraceOptimizer:
         self._raw_projection_cache_report = (
             self._resolve_raw_projection_cache()
         )
-        self._source_curves: dict[str, torch.Tensor] = {}
-        self._tables: dict[str, _ProjectionTable] = {}
+        self._plant = MeasuredTraceBank(self._config.curve_preprocessing)
+        self._plant.source_curves: dict[str, torch.Tensor] = {}
+        self._plant.tables: dict[str, _ProjectionTable] = {}
         self._build_projection_tables()
         self._shadows: dict[str, torch.Tensor] = {}
         self._last_programmed_shadows: dict[str, torch.Tensor] = {}
@@ -523,7 +525,7 @@ class MeasuredTraceOptimizer:
                     )
                 )
                 self._probabilistic_write_generators[binding.key] = generator
-        self._pulse_indices: dict[str, torch.Tensor] = {}
+        self._plant.pulse_indices: dict[str, torch.Tensor] = {}
         self._accumulators: dict[str, dict[str, torch.Tensor]] = {}
         self._initialization_reports: dict[str, dict[str, Any]] = {}
         self._initialized = False
@@ -617,7 +619,7 @@ class MeasuredTraceOptimizer:
             ),
             "assignment_sha256_by_parameter": {
                 key: table.assignment_sha256
-                for key, table in sorted(self._tables.items())
+                for key, table in sorted(self._plant.tables.items())
             },
         }
 
@@ -649,45 +651,8 @@ class MeasuredTraceOptimizer:
     def learning_rates(self) -> tuple[float, ...]:
         return tuple(float(group["lr"]) for group in self.param_groups)
 
-    def _curve_ranges(
-        self,
-        key: str,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return the calibrated minimum and maximum of every virtual cell."""
-
-        table = self._tables[key]
-        if table.sorted_values is not None:
-            return table.sorted_values[:, 0], table.sorted_values[:, -1]
-        source = self._source_curves[key]
-        if self._config.curve_preprocessing == "isotonic_nonincreasing":
-            maximum = (
-                table.alpha * source[table.source_left, 0]
-                + (1.0 - table.alpha) * source[table.source_right, 0]
-            )
-            minimum = (
-                table.alpha * source[table.source_left, -1]
-                + (1.0 - table.alpha) * source[table.source_right, -1]
-            )
-            return minimum, maximum
-
-        count = table.alpha.numel()
-        minimum = torch.empty(
-            count,
-            dtype=table.alpha.dtype,
-            device=table.alpha.device,
-        )
-        maximum = torch.empty_like(minimum)
-        for start in range(0, count, _CACHE_CHUNK_CELLS):
-            stop = min(count, start + _CACHE_CHUNK_CELLS)
-            weights = table.alpha[start:stop, None]
-            mixed = (
-                weights * source[table.source_left[start:stop]]
-                + (1.0 - weights)
-                * source[table.source_right[start:stop]]
-            )
-            minimum[start:stop] = mixed.amin(dim=1)
-            maximum[start:stop] = mixed.amax(dim=1)
-        return minimum, maximum
+    def _curve_ranges(self, key):
+        return self._plant.curve_ranges(key)
 
     def _mapped_initial_targets(
         self,
@@ -1009,8 +974,8 @@ class MeasuredTraceOptimizer:
                 "Provided value: optimizer is already initialized."
             )
         for binding in self._bindings:
-            table = self._tables[binding.key]
-            source = self._source_curves[binding.key]
+            table = self._plant.tables[binding.key]
+            source = self._plant.source_curves[binding.key]
             pulse = self._config.initial_pulse_index
             realized = (
                 table.alpha * source[table.source_left, pulse]
@@ -1020,7 +985,7 @@ class MeasuredTraceOptimizer:
                 binding.state.copy_(realized)
             self._shadows[binding.key] = realized.detach().clone()
             self._initialize_programming_state(binding.key, realized)
-            self._pulse_indices[binding.key] = torch.full(
+            self._plant.pulse_indices[binding.key] = torch.full(
                 (realized.numel(),),
                 pulse,
                 dtype=torch.int16,
@@ -1101,8 +1066,8 @@ class MeasuredTraceOptimizer:
             )
             for binding in self._bindings:
                 key = binding.key
-                table = self._tables[key]
-                source = self._source_curves[key]
+                table = self._plant.tables[key]
+                source = self._plant.source_curves[key]
                 pulse = self._config.initial_pulse_index
                 reset = (
                     table.alpha * source[table.source_left, pulse]
@@ -1115,7 +1080,7 @@ class MeasuredTraceOptimizer:
                 binding.state.copy_(realized.reshape(binding.state.shape))
                 self._shadows[key] = target.clone()
                 self._initialize_programming_state(key, target)
-                self._pulse_indices[key] = pulses.to(torch.int16)
+                self._plant.pulse_indices[key] = pulses.to(torch.int16)
                 self._accumulators[key] = self._empty_accumulators(
                     realized.device
                 )
@@ -1211,7 +1176,7 @@ class MeasuredTraceOptimizer:
                 binding.state.copy_(realized_shaped)
                 self._shadows[key] = target.clone()
                 self._initialize_programming_state(key, target)
-                self._pulse_indices[key] = pulses.to(torch.int16)
+                self._plant.pulse_indices[key] = pulses.to(torch.int16)
                 self._accumulators[key] = self._empty_accumulators(
                     realized.device
                 )
@@ -1349,7 +1314,7 @@ class MeasuredTraceOptimizer:
                     pulses = torch.where(
                         eligible,
                         projected_pulses,
-                        self._pulse_indices[key],
+                        self._plant.pulse_indices[key],
                     )
                     last_programmed.copy_(
                         torch.where(eligible, targets, last_programmed)
@@ -1365,7 +1330,7 @@ class MeasuredTraceOptimizer:
                     programming_eligible=eligible,
                     write_probability=write_probability,
                 )
-                self._pulse_indices[key] = pulses.to(torch.int16)
+                self._plant.pulse_indices[key] = pulses.to(torch.int16)
         self._step_count += 1
         return result
 
@@ -1380,7 +1345,7 @@ class MeasuredTraceOptimizer:
             "active_cohort_trace_names": self._dataset.active_trace_names,
             "assignment_sha256_by_parameter": {
                 key: table.assignment_sha256
-                for key, table in self._tables.items()
+                for key, table in self._plant.tables.items()
             },
             "optimizer": self._optimizer.state_dict(),
             "initialized": self._initialized,
@@ -1403,7 +1368,7 @@ class MeasuredTraceOptimizer:
             },
             "pulse_indices": {
                 key: value.detach().cpu().clone()
-                for key, value in self._pulse_indices.items()
+                for key, value in self._plant.pulse_indices.items()
             },
             "accumulators": {
                 key: {
@@ -1494,7 +1459,7 @@ class MeasuredTraceOptimizer:
             and dict(state_dict["assignment_sha256_by_parameter"])
             == {
                 key: table.assignment_sha256
-                for key, table in self._tables.items()
+                for key, table in self._plant.tables.items()
             }
         )
         if not identity:
@@ -1751,7 +1716,7 @@ class MeasuredTraceOptimizer:
         self._last_programmed_shadows = last_programmed_shadows
         self._programming_threshold_s = programming_thresholds
         self._probabilistic_write_scale_s = probability_scales
-        self._pulse_indices = pulses
+        self._plant.pulse_indices = pulses
         self._accumulators = accumulators
         self._initialization_reports = (
             {
@@ -1851,196 +1816,16 @@ class MeasuredTraceOptimizer:
                     f"source_range={(source_min, source_max)!r}."
                 )
 
-    def _build_projection_tables(self) -> None:
-        for binding in self._projection_bindings:
-            device = binding.state.device
-            dtype = binding.state.dtype
-            source = torch.as_tensor(
-                self._dataset.conductance_s,
-                device=device,
-                dtype=dtype,
-            )
-            self._source_curves[binding.key] = source
-            count = binding.state.numel()
-            generator = np.random.default_rng(
-                _assignment_seed(
-                    self._config.assignment_seed,
-                    binding.key,
-                    self._config.cohort,
-                )
-            )
-            left_np = generator.integers(
-                0,
-                source.shape[0],
-                size=count,
-                dtype=np.int32,
-            )
-            right_np = generator.integers(
-                0,
-                source.shape[0] - 1,
-                size=count,
-                dtype=np.int32,
-            )
-            right_np += right_np >= left_np
-            alpha_np = generator.random(count, dtype=np.float32)
-            left = torch.from_numpy(left_np).to(device=device, dtype=torch.long)
-            right = torch.from_numpy(right_np).to(device=device, dtype=torch.long)
-            alpha = torch.from_numpy(alpha_np).to(device=device, dtype=dtype)
-            sorted_values = None
-            sorted_pulses = None
-            if (
-                self._config.curve_preprocessing == "raw"
-                and self._raw_projection_cache_report["mode"] == "cached"
-            ):
-                length = self._config.expected_trace_length
-                sorted_values = torch.empty(
-                    (count, length), device=device, dtype=dtype
-                )
-                sorted_pulses = torch.empty(
-                    (count, length), device=device, dtype=torch.int16
-                )
-                for start in range(0, count, _CACHE_CHUNK_CELLS):
-                    stop = min(count, start + _CACHE_CHUNK_CELLS)
-                    weights = alpha[start:stop, None]
-                    mixed = (
-                        weights * source[left[start:stop]]
-                        + (1.0 - weights) * source[right[start:stop]]
-                    )
-                    values, order = torch.sort(mixed, dim=1, stable=True)
-                    sorted_values[start:stop].copy_(values)
-                    sorted_pulses[start:stop].copy_(order.to(torch.int16))
-            self._tables[binding.key] = _ProjectionTable(
-                key=binding.key,
-                shape=tuple(binding.state.shape),
-                source_left=left,
-                source_right=right,
-                alpha=alpha,
-                assignment_sha256=_assignment_digest(
-                    left_np,
-                    right_np,
-                    alpha_np,
-                ),
-                sorted_values=sorted_values,
-                sorted_pulses=sorted_pulses,
-            )
+    def _build_projection_tables(self):
+        layout = [(b.key, tuple(b.state.shape), b.state.device, b.state.dtype) for b in self._projection_bindings]
+        self._plant.assign(layout, self._dataset.conductance_s,
+                           assignment_seed=self._config.assignment_seed,
+                           cohort=self._config.cohort,
+                           expected_trace_length=self._config.expected_trace_length,
+                           cache_mode=self._raw_projection_cache_report["mode"])
 
-    def _project(
-        self,
-        key: str,
-        targets: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        table = self._tables[key]
-        if table.sorted_values is not None:
-            values = table.sorted_values
-            pulse_table = table.sorted_pulses
-            if pulse_table is None:  # pragma: no cover - constructed together
-                raise AssertionError("raw pulse table is missing")
-            position = torch.searchsorted(
-                values,
-                targets.contiguous().unsqueeze(1),
-                right=False,
-            ).squeeze(1)
-            low = (position - 1).clamp(0, values.shape[1] - 1)
-            high = position.clamp(0, values.shape[1] - 1)
-            low_value = values.gather(1, low[:, None]).squeeze(1)
-            high_value = values.gather(1, high[:, None]).squeeze(1)
-            low_pulse = pulse_table.gather(1, low[:, None]).squeeze(1)
-            high_pulse = pulse_table.gather(1, high[:, None]).squeeze(1)
-            low_distance = (targets - low_value).abs()
-            high_distance = (targets - high_value).abs()
-            choose_high = (high_distance < low_distance) | (
-                (high_distance == low_distance) & (high_pulse < low_pulse)
-            )
-            return (
-                torch.where(choose_high, high_value, low_value),
-                torch.where(choose_high, high_pulse, low_pulse),
-            )
-
-        if self._config.curve_preprocessing == "raw":
-            source = self._source_curves[key]
-            realized = torch.empty_like(targets)
-            pulses = torch.empty(
-                targets.shape,
-                dtype=torch.int16,
-                device=targets.device,
-            )
-            for start in range(0, targets.numel(), _CACHE_CHUNK_CELLS):
-                stop = min(targets.numel(), start + _CACHE_CHUNK_CELLS)
-                weights = table.alpha[start:stop, None]
-                mixed = (
-                    weights * source[table.source_left[start:stop]]
-                    + (1.0 - weights)
-                    * source[table.source_right[start:stop]]
-                )
-                # torch.argmin returns the first occurrence, implementing the
-                # protocol's lower-pulse tie break exactly.
-                selected = (
-                    mixed - targets[start:stop, None]
-                ).abs().argmin(dim=1)
-                realized[start:stop] = mixed.gather(
-                    1,
-                    selected[:, None],
-                ).squeeze(1)
-                pulses[start:stop] = selected.to(torch.int16)
-            return realized, pulses
-
-        source = self._source_curves[key]
-        low = torch.zeros_like(table.source_left)
-        high = torch.full_like(low, source.shape[1])
-        for _ in range((source.shape[1] + 1).bit_length()):
-            middle = torch.div(low + high, 2, rounding_mode="floor")
-            active = low < high
-            safe_middle = middle.clamp(max=source.shape[1] - 1)
-            middle_value = (
-                table.alpha * source[table.source_left, safe_middle]
-                + (1.0 - table.alpha)
-                * source[table.source_right, safe_middle]
-            )
-            move_right = active & (middle_value > targets)
-            high = torch.where(active & ~move_right, middle, high)
-            low = torch.where(move_right, middle + 1, low)
-        later = low.clamp(max=source.shape[1] - 1)
-        earlier = (low - 1).clamp(min=0, max=source.shape[1] - 1)
-
-        def mixed_at(pulse: torch.Tensor) -> torch.Tensor:
-            return (
-                table.alpha * source[table.source_left, pulse]
-                + (1.0 - table.alpha) * source[table.source_right, pulse]
-            )
-
-        earlier_value = mixed_at(earlier)
-        later_value = mixed_at(later)
-        # Equality goes to the smaller (earlier) physical pulse index.
-        choose_earlier = (targets - earlier_value).abs() <= (
-            targets - later_value
-        ).abs()
-        selected_value = torch.where(choose_earlier, earlier_value, later_value)
-        # PAVA creates exact plateaus. Resolve those ties to the lowest pulse
-        # index by finding the first point whose descending value is <= the
-        # already selected value.
-        plateau_low = torch.zeros_like(table.source_left)
-        plateau_high = torch.full_like(plateau_low, source.shape[1])
-        for _ in range((source.shape[1] + 1).bit_length()):
-            middle = torch.div(
-                plateau_low + plateau_high,
-                2,
-                rounding_mode="floor",
-            )
-            active = plateau_low < plateau_high
-            middle_value = mixed_at(middle.clamp(max=source.shape[1] - 1))
-            move_right = active & (middle_value > selected_value)
-            plateau_high = torch.where(
-                active & ~move_right,
-                middle,
-                plateau_high,
-            )
-            plateau_low = torch.where(
-                move_right,
-                middle + 1,
-                plateau_low,
-            )
-        selected_pulse = plateau_low.clamp(max=source.shape[1] - 1)
-        return selected_value, selected_pulse.to(torch.int16)
+    def _project(self, key, targets):
+        return self._plant.project(key, targets)
 
     def _resolve_raw_projection_cache(self) -> dict[str, Any]:
         cells = sum(
@@ -2115,7 +1900,7 @@ class MeasuredTraceOptimizer:
         error = (shadow - realized).to(torch.float64)
         jump = (
             pulses.to(torch.int32)
-            - self._pulse_indices[key].to(torch.int32)
+            - self._plant.pulse_indices[key].to(torch.int32)
         ).abs().to(torch.float64)
         proposal = (shadow - previous_shadow).to(torch.float64)
         applied = (realized - previous_realized).to(torch.float64)
@@ -2160,7 +1945,7 @@ class MeasuredTraceOptimizer:
         accumulator["element_updates"].add_(float(realized.numel()))
 
     def _binding_report(self, key: str) -> dict[str, Any]:
-        table = self._tables[key]
+        table = self._plant.tables[key]
         if not self._initialized:
             return {
                 "shape": list(table.shape),
@@ -2423,18 +2208,8 @@ class MeasuredCohortAOnePulseDownOptimizer(MeasuredCohortAOptimizer):
         )
         return result
 
-    def _values_at_pulses(
-        self,
-        key: str,
-        pulses: torch.Tensor,
-    ) -> torch.Tensor:
-        table = self._tables[key]
-        source = self._source_curves[key]
-        indices = pulses.to(torch.long)
-        return (
-            table.alpha * source[table.source_left, indices]
-            + (1.0 - table.alpha) * source[table.source_right, indices]
-        )
+    def _values_at_pulses(self, key, pulses):
+        return self._plant.values_at_pulses(key, pulses)
 
     @staticmethod
     def _monotonic_tolerance(
@@ -2508,7 +2283,7 @@ class MeasuredCohortAOnePulseDownOptimizer(MeasuredCohortAOptimizer):
 
                 key = binding.key
                 previous = binding.state.detach().reshape(-1).clone()
-                previous_pulses = self._pulse_indices[key].to(torch.long)
+                previous_pulses = self._plant.pulse_indices[key].to(torch.long)
                 indexed_previous = self._values_at_pulses(
                     key,
                     previous_pulses,
@@ -2596,7 +2371,7 @@ class MeasuredCohortAOnePulseDownOptimizer(MeasuredCohortAOptimizer):
                         ),
                     )
                 )
-                self._pulse_indices[key] = pulses.to(torch.int16)
+                self._plant.pulse_indices[key] = pulses.to(torch.int16)
         self._step_count += 1
         return None
 
@@ -2614,7 +2389,7 @@ class MeasuredCohortAOnePulseDownOptimizer(MeasuredCohortAOptimizer):
                 else float(accumulator[name].item()) / count
             )
 
-        pulses = self._pulse_indices[key].to(torch.long)
+        pulses = self._plant.pulse_indices[key].to(torch.long)
         down_request_fraction = fraction("down_request_count")
         negative_fraction = fraction("negative_gradient_hold_count")
         zero_fraction = fraction("zero_gradient_hold_count")
@@ -2703,7 +2478,7 @@ class MeasuredCohortAOnePulseDownOptimizer(MeasuredCohortAOptimizer):
                     )
                 expected = self._values_at_pulses(
                     key,
-                    self._pulse_indices[key].to(torch.long),
+                    self._plant.pulse_indices[key].to(torch.long),
                 ).reshape(binding.state.shape)
                 tolerance = self._monotonic_tolerance(
                     binding.state,
@@ -2831,7 +2606,7 @@ class MeasuredCohortBLoRAOptimizer(MeasuredTraceOptimizer):
                 self._frozen_base_reports[key] = {
                     "kind": "loaded_target_global_nearest_frozen",
                     "shape": list(binding.state.shape),
-                    "assignment_sha256": self._tables[key].assignment_sha256,
+                    "assignment_sha256": self._plant.tables[key].assignment_sha256,
                     "target_clipped_fraction": float(
                         clipped.to(torch.float64).mean().item()
                     ),
@@ -2870,8 +2645,8 @@ class MeasuredCohortBLoRAOptimizer(MeasuredTraceOptimizer):
             pulse = self._config.initial_pulse_index
             for binding in self._bindings:
                 key = binding.key
-                table = self._tables[key]
-                source = self._source_curves[key]
+                table = self._plant.tables[key]
+                source = self._plant.source_curves[key]
                 realized = (
                     table.alpha * source[table.source_left, pulse]
                     + (1.0 - table.alpha)
@@ -2880,7 +2655,7 @@ class MeasuredCohortBLoRAOptimizer(MeasuredTraceOptimizer):
                 binding.state.copy_(realized)
                 self._shadows[key] = realized.detach().clone()
                 self._initialize_programming_state(key, realized)
-                self._pulse_indices[key] = torch.full(
+                self._plant.pulse_indices[key] = torch.full(
                     (realized.numel(),),
                     pulse,
                     dtype=torch.int16,

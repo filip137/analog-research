@@ -12,23 +12,14 @@ import torch
 from experiments.reram_program_verify.hwa_model import CONDITION_KEY
 from networks.resistive.builders import ParameterBinding
 from networks.variable.parameter import DenseWeight
-from methods.ibm_om.api import (
-    IBM_RERAM_ENDPOINT_APPLICATION_POLICY,
-    IBM_OM_RAW_ACTIVE_A_MIN,
-    IBM_OM_RAW_ACTIVE_D90,
-    IBM_OM_RAW_ACTIVE_SCALE,
-    IBM_OM_RAW_ACTIVE_TOLERANCE,
-    IbmReramArrayPopulation,
-    IbmReramHwaConfig,
-    IbmReramHwaParameterModifier,
-    _RawActiveArrayPlant,
-    commission_ibm_reram_reset_relative_baselines,
-    load_om_array_population,
-    map_ibm_reram_array_targets,
-    sample_om_array_population,
-    save_om_array_population,
-    validate_ibm_reram_target_mapping_preflight,
-)
+from hardware.ibm_om.constants import IBM_RERAM_ENDPOINT_APPLICATION_POLICY, IBM_OM_RAW_ACTIVE_A_MIN, IBM_OM_RAW_ACTIVE_D90, IBM_OM_RAW_ACTIVE_SCALE, IBM_OM_RAW_ACTIVE_TOLERANCE
+from hardware.ibm_om.population import IbmReramArrayPopulation, load_om_array_population, save_om_array_population
+from methods.ibm_om.spec import IbmReramHwaConfig
+from methods.ibm_om.modifier import IbmReramHwaParameterModifier
+from hardware.ibm_om.plants import _RawActiveArrayPlant
+from methods.ibm_om.characterization import commission_ibm_reram_reset_relative_baselines
+from methods.ibm_om.mappings import map_ibm_reram_array_targets, validate_ibm_reram_target_mapping_preflight
+from methods.ibm_om.sampling import sample_om_array_population
 from methods.ibm_om.spec import EXPLICIT_LAYER_FIELDS
 import methods.ibm_om.mappings.raw_active as raw_active
 from methods.ibm_om.mappings import run_mapping
@@ -1073,7 +1064,7 @@ def test_repaired_assignment_changes_only_published_corrupt_sites(
         }
 
     monkeypatch.setattr(
-        "methods.ibm_om.sampling._sample_tile_hidden",
+        "hardware.ibm_om.sampling._sample_tile_hidden",
         sample_hidden,
     )
     published = sample_om_array_population(
@@ -2037,7 +2028,7 @@ def test_om_array_population_npz_round_trip_and_fingerprint_gate(
         }
 
     monkeypatch.setattr(
-        "methods.ibm_om.sampling._sample_tile_hidden",
+        "hardware.ibm_om.sampling._sample_tile_hidden",
         sample_hidden,
     )
     population = sample_om_array_population(

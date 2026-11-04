@@ -1,0 +1,70 @@
+{
+  "(False, False, False)": {
+    "gradients": "cb6a38e5c9583324587ffe21bc40f8e8a043dd30596a8c6349d3ee04b27a3792",
+    "logits": "5bf11290555b86a1409256bcb19c9e99745cdb4a374b5492656a5232c212d516",
+    "projected": "c6044c4308a6da74ede83cc24471d42863ae5f806f5aeb14eb5c8f7840c34c42",
+    "state": "d1173da8cdaf4b0d0beefee804b011f3ba5ad7e756e8a840bd8f9f77b7bce4dc",
+    "view": "770f41c37d68f3cccaaf2f170feb039e4ce43c47f5f862132ff39d9fbb91e03d"
+  },
+  "(False, False, True)": {
+    "captures": "8db563a87f628fa81fb3af748757354d2ce6236b66cf8112dd337bf80d31b4ab",
+    "gradients": "beb901f26f4e1be881130f94085cf703cc02351f14aae145b3c56283bb0c3299",
+    "groups": "c82756c570e325616db57efab4ba34d35c90d548cba7ec972ab6ec1c3d6accf9",
+    "held": "62d9e776447b9af0e89f900329d2b6c1d4b7d42636c18d3b84d28d6d8fb04a82",
+    "logits": "1f3b6b2f4a787bb2983b82797a79597b0c9a5f0c7f8a2858479df1dbee5e1f8c",
+    "names": "29cdc7ad45955f8ec44303f85d7b8b3a8d12cdda65cae31ca7a64a7f01c32d52",
+    "roles": "f9c71a25a870bca8b8360c6457a0b6cfbce8a8899f2d5a26cb688a7e3a17a8eb",
+    "state": "d1173da8cdaf4b0d0beefee804b011f3ba5ad7e756e8a840bd8f9f77b7bce4dc"
+  },
+  "(False, True, False)": {
+    "gradients": "1b88286cbf17aa9485c2049152f945abefe6cd7ce6e48bd70520679bf1e60dbd",
+    "logits": "6d597c316266b881b7dd42dc521769462275fe3bae77ae8c891ad5f5410ae059",
+    "projected": "c6044c4308a6da74ede83cc24471d42863ae5f806f5aeb14eb5c8f7840c34c42",
+    "state": "d1173da8cdaf4b0d0beefee804b011f3ba5ad7e756e8a840bd8f9f77b7bce4dc",
+    "view": "770f41c37d68f3cccaaf2f170feb039e4ce43c47f5f862132ff39d9fbb91e03d"
+  },
+  "(False, True, True)": {
+    "captures": "676369f91ca315b0f5aa8b83e192c72d5a225dd15c743586668ad4053fc45d26",
+    "gradients": "6c8c862b20760357f464a7d2b7cb793ef4238f22a7a7c51abd3637ff14da9c14",
+    "groups": "c82756c570e325616db57efab4ba34d35c90d548cba7ec972ab6ec1c3d6accf9",
+    "held": "62d9e776447b9af0e89f900329d2b6c1d4b7d42636c18d3b84d28d6d8fb04a82",
+    "logits": "8f594904b64760366dabfbde5462e76b32b323841de57f4f96f0dfb9d4d7914f",
+    "names": "29cdc7ad45955f8ec44303f85d7b8b3a8d12cdda65cae31ca7a64a7f01c32d52",
+    "roles": "f9c71a25a870bca8b8360c6457a0b6cfbce8a8899f2d5a26cb688a7e3a17a8eb",
+    "state": "d1173da8cdaf4b0d0beefee804b011f3ba5ad7e756e8a840bd8f9f77b7bce4dc"
+  },
+  "(True, False, False)": {
+    "gradients": "cb6a38e5c9583324587ffe21bc40f8e8a043dd30596a8c6349d3ee04b27a3792",
+    "logits": "5bf11290555b86a1409256bcb19c9e99745cdb4a374b5492656a5232c212d516",
+    "projected": "c6044c4308a6da74ede83cc24471d42863ae5f806f5aeb14eb5c8f7840c34c42",
+    "state": "d1173da8cdaf4b0d0beefee804b011f3ba5ad7e756e8a840bd8f9f77b7bce4dc",
+    "view": "770f41c37d68f3cccaaf2f170feb039e4ce43c47f5f862132ff39d9fbb91e03d"
+  },
+  "(True, False, True)": {
+    "captures": "8db563a87f628fa81fb3af748757354d2ce6236b66cf8112dd337bf80d31b4ab",
+    "gradients": "beb901f26f4e1be881130f94085cf703cc02351f14aae145b3c56283bb0c3299",
+    "groups": "c82756c570e325616db57efab4ba34d35c90d548cba7ec972ab6ec1c3d6accf9",
+    "held": "62d9e776447b9af0e89f900329d2b6c1d4b7d42636c18d3b84d28d6d8fb04a82",
+    "logits": "1f3b6b2f4a787bb2983b82797a79597b0c9a5f0c7f8a2858479df1dbee5e1f8c",
+    "names": "29cdc7ad45955f8ec44303f85d7b8b3a8d12cdda65cae31ca7a64a7f01c32d52",
+    "roles": "f9c71a25a870bca8b8360c6457a0b6cfbce8a8899f2d5a26cb688a7e3a17a8eb",
+    "state": "d1173da8cdaf4b0d0beefee804b011f3ba5ad7e756e8a840bd8f9f77b7bce4dc"
+  },
+  "(True, True, False)": {
+    "gradients": "1b88286cbf17aa9485c2049152f945abefe6cd7ce6e48bd70520679bf1e60dbd",
+    "logits": "6d597c316266b881b7dd42dc521769462275fe3bae77ae8c891ad5f5410ae059",
+    "projected": "c6044c4308a6da74ede83cc24471d42863ae5f806f5aeb14eb5c8f7840c34c42",
+    "state": "d1173da8cdaf4b0d0beefee804b011f3ba5ad7e756e8a840bd8f9f77b7bce4dc",
+    "view": "770f41c37d68f3cccaaf2f170feb039e4ce43c47f5f862132ff39d9fbb91e03d"
+  },
+  "(True, True, True)": {
+    "captures": "676369f91ca315b0f5aa8b83e192c72d5a225dd15c743586668ad4053fc45d26",
+    "gradients": "6c8c862b20760357f464a7d2b7cb793ef4238f22a7a7c51abd3637ff14da9c14",
+    "groups": "c82756c570e325616db57efab4ba34d35c90d548cba7ec972ab6ec1c3d6accf9",
+    "held": "62d9e776447b9af0e89f900329d2b6c1d4b7d42636c18d3b84d28d6d8fb04a82",
+    "logits": "8f594904b64760366dabfbde5462e76b32b323841de57f4f96f0dfb9d4d7914f",
+    "names": "29cdc7ad45955f8ec44303f85d7b8b3a8d12cdda65cae31ca7a64a7f01c32d52",
+    "roles": "f9c71a25a870bca8b8360c6457a0b6cfbce8a8899f2d5a26cb688a7e3a17a8eb",
+    "state": "d1173da8cdaf4b0d0beefee804b011f3ba5ad7e756e8a840bd8f9f77b7bce4dc"
+  }
+}

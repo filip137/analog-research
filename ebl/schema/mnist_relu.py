@@ -60,29 +60,13 @@ class RuntimeSettings:
     dtype: str
 
 
-@dataclass(frozen=True)
-class DataSettings:
-    batch_size: int
-    validation_points: int
-    num_points: int | None
-    shuffle: bool
+from networks.config.mnist_teacher import DataSettings
 
 
-@dataclass(frozen=True)
-class ModelSettings:
-    dims: tuple[int, int, int]
-    bias: bool
+from networks.config.mnist_teacher import ModelSettings
 
 
-@dataclass(frozen=True)
-class TeacherTrainSettings:
-    num_epochs: int
-    learning_rate: float
-    weight_decay: float
-    log_every: int
-    max_batches: int | None
-    max_validation_batches: int | None
-    minimum_validation_accuracy: float
+from methods.config.mnist_teacher import TeacherTrainSettings
 
 
 @dataclass(frozen=True)

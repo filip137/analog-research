@@ -502,10 +502,8 @@ def _run_authoritative_preflight(
     from networks.data.mnist import build_mnist_loaders
     from ebl.schema.base import to_plain_data
     from methods.checkpoint import atomic_torch_save
-    from methods.ibm_om.api import (
-        IbmReramHwaConfig,
-        build_ibm_reram_hwa_modifier,
-    )
+    from methods.ibm_om.spec import IbmReramHwaConfig
+    from ebl.runtime.device_sampling import build_ibm_reram_hwa_modifier
 
     config_path = (CONFIG_ROOT / "exact_bounds_hwa.json").resolve()
     _definition, spec = resolve_experiment_config(config_path, "train")
@@ -690,7 +688,7 @@ def _run_authoritative_preflight(
         "study_id": STUDY_ID,
         "created_at": _utc_now(),
         "authoritative_entry_point": (
-            "methods.ibm_om.api."
+            "methods.ibm_om.modifier."
             "IbmReramHwaParameterModifier.preflight_target_mapping"
         ),
         "checkpoint_metadata_schema": checkpoint_metadata.get("schema"),
@@ -828,10 +826,8 @@ def _validate_authoritative_mapping_report(
     *,
     expected_population_fingerprint: str | None = None,
 ) -> str:
-    from methods.ibm_om.api import (
-        IBM_RERAM_ENDPOINT_APPLICATION_POLICY,
-        validate_ibm_reram_target_mapping_preflight,
-    )
+    from hardware.ibm_om.constants import IBM_RERAM_ENDPOINT_APPLICATION_POLICY
+    from methods.ibm_om.mappings import validate_ibm_reram_target_mapping_preflight
 
     if IBM_RERAM_ENDPOINT_APPLICATION_POLICY != ENDPOINT_APPLICATION_POLICY:
         raise RuntimeError(
@@ -1095,7 +1091,7 @@ def _validate_preflight_report(report: Mapping[str, Any]) -> str:
         or report.get("study_id") != STUDY_ID
         or report.get("authoritative_entry_point")
         != (
-            "methods.ibm_om.api."
+            "methods.ibm_om.modifier."
             "IbmReramHwaParameterModifier.preflight_target_mapping"
         )
     ):
@@ -1368,7 +1364,7 @@ def _validate_population_fingerprints(
     expected_population_fingerprint: str,
     expected_fallback_indices_sha256: str,
 ) -> dict[str, Any]:
-    from methods.ibm_om.api import load_om_array_population
+    from hardware.ibm_om.population import load_om_array_population
 
     records: dict[str, Any] = {}
     for arm, roles in POPULATION_ROLES.items():
@@ -1622,7 +1618,7 @@ def main(argv: list[str] | None = None) -> int:
         "preflight": {
             "required_before_native_launch": True,
             "authoritative_entry_point": (
-                "methods.ibm_om.api."
+                "methods.ibm_om.modifier."
                 "IbmReramHwaParameterModifier.preflight_target_mapping"
             ),
             "maximum_empty_quads": MAXIMUM_EMPTY_QUADS,

@@ -47,10 +47,8 @@ from methods.checkpoint import (
 )
 from methods.core.engine import ExperimentComponents, GradientsReadyEvent, train_epoch
 from methods.core.guards import FiniteGradientGuard
-from methods.ibm_reram_recovery import (
-    IbmOmDeployedRecovery,
-    sample_physical_fast_population,
-)
+from methods.ibm_reram_recovery import IbmOmDeployedRecovery
+from ebl.runtime.fast_population import sample_physical_fast_population
 
 from .runtime import (
     TeacherAgreementProbe,

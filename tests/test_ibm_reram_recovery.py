@@ -13,7 +13,7 @@ from ebl.runtime.mnist_relu_drn.ibm_om_deployed_recovery import (
 )
 from networks.resistive.builders import ParameterBinding
 from networks.variable.parameter import DenseWeight
-from methods.ibm_om.api import IbmReramArrayPopulation
+from hardware.ibm_om.population import IbmReramArrayPopulation
 from methods.ibm_reram_recovery import IbmOmDeployedRecovery
 from methods.ttv2_buffered_reference import buffered_transfer_update
 

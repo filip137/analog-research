@@ -52,111 +52,37 @@ class RuntimeSettings:
     dtype: str
 
 
-@dataclass(frozen=True)
-class DataSettings:
-    dataset: str
-    batch_size: int
-    num_points: Optional[int]
-    validation_points: Optional[int]
-    shuffle: bool
+from networks.config.small import DataSettings
 
 
-@dataclass(frozen=True)
-class NonLinearitySettings:
-    type: str
-    quadratic_diode_param: Mapping[str, Union[int, float]]
-    exponential_diode_param: Mapping[str, Union[int, float]]
-    hard_sigmoid_param: Mapping[str, Union[int, float]]
-    iv_data_path: Optional[str]
+from networks.config.small import NonLinearitySettings
 
 
-@dataclass(frozen=True)
-class ComponentSettings:
-    """A named extension and its recursively immutable parameter object."""
-
-    type: str
-    parameters: Mapping[str, Any]
+from core.components import ComponentSettings
 
 
-@dataclass(frozen=True)
-class ModelSettings:
-    dims: Tuple[int, ...]
-    input_gain: float
-    weight_gains: Tuple[float, ...]
-    weight_min: float
-    weight_max: float
-    weight_init_mode: str
-    include_biases: bool
-    voltage_amp: float
-    current_amp: float
-    non_linearity: NonLinearitySettings
-    adapter: ComponentSettings
+from networks.config.small import ModelSettings
 
 
-@dataclass(frozen=True)
-class UpdaterSettings:
-    double_diode: Optional[str]
-    single_diode: Optional[str]
+from networks.config.small import UpdaterSettings
 
 
-@dataclass(frozen=True)
-class ToleranceSettings:
-    relative: float
-    voltage: float
-    residual_current: Optional[float]
+from networks.config.small import ToleranceSettings
 
 
-@dataclass(frozen=True)
-class PolishSettings:
-    enabled: bool
-    dynamic: bool
-    max_newton_iterations: int
-    z_threshold: float
-    exponential_clip: float
+from networks.config.small import PolishSettings
 
 
-@dataclass(frozen=True)
-class AndersonSettings:
-    memory: int
-    omega: float
-    tolerance_floor: float
-    regularization: float
+from networks.config.small import AndersonSettings
 
 
-@dataclass(frozen=True)
-class OverrelaxationSettings:
-    factor: float
-    reject_steps: bool
-    reject_max_tries: int
-    reject_shrink: float
-    reject_epsilon: float
+from networks.config.small import OverrelaxationSettings
 
 
-@dataclass(frozen=True)
-class ExperimentalExponentialSettings:
-    damping: float
-    newton_max_steps: int
-    progressive_tolerance: bool
-    tolerance_start: float
-    tolerance_end: float
-    tolerance_switch_high: float
-    tolerance_switch_low: float
+from networks.config.small import ExperimentalExponentialSettings
 
 
-@dataclass(frozen=True)
-class SolverSettings:
-    inference_iterations: int
-    training_iterations: int
-    minimizer_impl: str
-    minimizer_mode: str
-    adaptive_equilibrium: bool
-    random_initialization: bool
-    updaters: UpdaterSettings
-    tolerances: ToleranceSettings
-    polish: PolishSettings
-    anderson: AndersonSettings
-    overrelaxation: OverrelaxationSettings
-    experimental_exponential: ExperimentalExponentialSettings
+from networks.config.small import SolverSettings
 
 
 @dataclass(frozen=True)
@@ -167,19 +93,7 @@ class CommonSettings:
     solver: SolverSettings
 
 
-@dataclass(frozen=True)
-class TrainSettings:
-    num_epochs: int
-    algorithm: str
-    learning_rates: Tuple[float, ...]
-    bias_learning_rates: Tuple[float, ...]
-    nudging: float
-    log_every: int
-    max_batches: Optional[int]
-    max_validation_batches: Optional[int]
-    weight_modifier: ComponentSettings
-    update_backend: ComponentSettings
-    learning_rate_selection: ComponentSettings
+from methods.config.small import TrainSettings
 
 
 @dataclass(frozen=True)

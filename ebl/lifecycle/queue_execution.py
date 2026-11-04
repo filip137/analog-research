@@ -331,7 +331,9 @@ class Execution:
             spec.update(id=self.s['job_prefix']+name,expected_seconds=j['expected_seconds'],budget_seconds=j['budget_seconds'],
                         stale_seconds=2700,startup_grace_seconds=300,recovery=True,retry_safe=False,
                         priority=j.get('priority',0))
-            spec['completion']={'argv':[sys.executable,'-m',self.s.get('completion_module','ebl.lifecycle.queue_execution'),
+            completion = (['-m', self.s['completion_module']] if self.s.get('completion_module')
+                          else ['-m', 'ebl', 'lifecycle', 'queue'])
+            spec['completion']={'argv':[sys.executable,*completion,
                                        'complete','--settings',str(self.settings_path)],
                                 'workdir':self.s['controller_dir'],'timeout_seconds':1800,'retry_safe':True}
             spec['placements']={}

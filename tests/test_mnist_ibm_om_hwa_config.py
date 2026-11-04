@@ -23,7 +23,7 @@ from ebl.runtime.mnist_relu_drn.runtime import (
 )
 from ebl.schema.base import ConfigError, RunMode
 from ebl.lifecycle.study import load_study_plan
-from methods.ibm_om.api import IbmReramHwaParameterModifier
+from methods.ibm_om.modifier import IbmReramHwaParameterModifier
 from methods.core.modifier import SplitParameterModifier
 
 

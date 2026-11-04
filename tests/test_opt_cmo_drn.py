@@ -266,7 +266,7 @@ def test_tiny_native_lifecycle_and_collection(tmp_path,monkeypatch):
     import ebl.runtime.opt_cmo_drn.runtime as runtime
     from ebl.runtime.store import sha256_file
     from ebl.schema.opt_cmo_drn import Data,Selection
-    from ebl.lifecycle.__main__ import collect
+    from ebl.lifecycle.plan import collect
     _,teacher=tiny_model()
     teacher_path=tmp_path/'teacher.pt';torch.save({},teacher_path)
     payload=source_payload(teacher);payload['context']={'teacher_sha256':sha256_file(teacher_path)}
@@ -307,7 +307,7 @@ def test_tiny_native_lifecycle_and_collection(tmp_path,monkeypatch):
     expected=torch.load(runs[-1]/'checkpoints/final.pt',weights_only=True)['model']
     assert all(torch.equal(actual[k],v) for k,v in expected.items())
     assert collect([resumed])['complete']
-    from ebl.lifecycle.__main__ import build_plan
+    from ebl.lifecycle.plan import build_plan
     from dataclasses import asdict
     import sys
     plan=build_plan(asdict(config),teacher_path,source_path,tmp_path/'plan',sys.executable,Path.cwd(),prepared)

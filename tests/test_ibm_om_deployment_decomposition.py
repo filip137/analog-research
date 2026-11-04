@@ -11,14 +11,11 @@ import torch
 import ebl.runtime.mnist_relu_drn.ibm_om_deployment_decomposition as decomposition
 from networks.resistive.builders import ParameterBinding
 from networks.variable.parameter import DenseWeight
-from methods.ibm_om.api import (
-    IBM_RERAM_ENDPOINT_APPLICATION_POLICY,
-    IbmReramArrayPopulation,
-    IbmReramHwaConfig,
-    _population_fingerprint,
-    commission_ibm_reram_reset_relative_baselines,
-    map_ibm_reram_array_targets,
-)
+from hardware.ibm_om.constants import IBM_RERAM_ENDPOINT_APPLICATION_POLICY
+from hardware.ibm_om.population import IbmReramArrayPopulation, _population_fingerprint
+from methods.ibm_om.spec import IbmReramHwaConfig
+from methods.ibm_om.characterization import commission_ibm_reram_reset_relative_baselines
+from methods.ibm_om.mappings import map_ibm_reram_array_targets
 
 
 def _dense_binding(

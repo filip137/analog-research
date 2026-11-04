@@ -36,7 +36,7 @@ def test_native_drn_power_law(tmp_path,monkeypatch):
     assert len(rows)==9 and rows[0]['perplexity_ratio']==1
     assert all(r['replay_exact'] and r['cost']['retention_device_writes']==0 for r in rows)
     assert all(r['physical_devices']==4*r['logical_weights'] for r in rows)
-    from ebl.lifecycle.__main__ import collect
+    from ebl.lifecycle.plan import collect
     assert collect([run])['complete']
 
 

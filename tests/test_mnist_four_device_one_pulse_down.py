@@ -233,7 +233,7 @@ def test_one_pulse_down_moves_only_requested_cells_by_one_and_resumes(
     weight, optimizer = _optimizer(path)
     key = "base.dense_weight.0"
 
-    initial_pulses = optimizer._pulse_indices[key].to(torch.long).clone()
+    initial_pulses = optimizer._plant.pulse_indices[key].to(torch.long).clone()
     initial = weight.state.detach().clone()
     gradient = torch.tensor(
         [1.0, -1.0, 0.0, 2.0] * 4,
@@ -244,7 +244,7 @@ def test_one_pulse_down_moves_only_requested_cells_by_one_and_resumes(
 
     expected_applied = (gradient.reshape(-1) > 0.0) & (initial_pulses < 4)
     assert torch.equal(
-        optimizer._pulse_indices[key].to(torch.long),
+        optimizer._plant.pulse_indices[key].to(torch.long),
         initial_pulses + expected_applied.to(torch.long),
     )
     assert bool((weight.state <= initial).all())
@@ -293,7 +293,7 @@ def test_one_pulse_down_saturates_at_last_pulse_without_increase(
         assert bool((weight.state <= previous).all())
         previous = weight.state.detach().clone()
 
-    assert bool((optimizer._pulse_indices[key] == 4).all())
+    assert bool((optimizer._plant.pulse_indices[key] == 4).all())
     saturated = weight.state.detach().clone()
     weight.state.grad = torch.ones_like(weight.state)
     optimizer.step()
@@ -312,7 +312,7 @@ def test_one_pulse_down_uses_strict_per_parameter_gradient_threshold(
     key = "base.dense_weight.0"
     threshold = 0.5
     weight, optimizer = _optimizer(path, {key: threshold})
-    initial_pulses = optimizer._pulse_indices[key].to(torch.long).clone()
+    initial_pulses = optimizer._plant.pulse_indices[key].to(torch.long).clone()
     gradient = torch.tensor(
         [1.0, 0.5, 0.5001, 0.1, -1.0, 2.0, 0.0, 0.49] * 2,
         dtype=weight.state.dtype,
@@ -323,7 +323,7 @@ def test_one_pulse_down_uses_strict_per_parameter_gradient_threshold(
     eligible = gradient.reshape(-1) > threshold
     expected_applied = eligible & (initial_pulses < 4)
     assert torch.equal(
-        optimizer._pulse_indices[key].to(torch.long),
+        optimizer._plant.pulse_indices[key].to(torch.long),
         initial_pulses + expected_applied.to(torch.long),
     )
     report = optimizer.programming_report

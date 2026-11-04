@@ -19,10 +19,7 @@ import torch
 
 from networks.resistive.builders import ParameterBinding, ParameterCatalog
 from networks.variable.parameter import DenseWeight
-from methods.ibm_om.api import (
-    IbmReramArrayPopulation,
-    load_om_array_population,
-)
+from hardware.ibm_om.population import IbmReramArrayPopulation, load_om_array_population
 
 
 _STATE_SCHEMA = "ibm-om.fp32-cell-bounds-optimizer"

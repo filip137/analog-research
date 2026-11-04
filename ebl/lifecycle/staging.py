@@ -18,7 +18,7 @@ def snapshot(output,extra_files=()):
     if output.exists() and any(output.iterdir()):
         raise ValueError('Expected a new, empty snapshot destination.')
     for name in ('ebl.cli','ebl.runtime.opt_cmo_drn.runtime','ebl.runtime.opt_cmo_drn.recovery',
-                 'ebl.lifecycle.study','ebl.lifecycle.__main__','ebl.lifecycle.tuning','ebl.lifecycle.recovery'):
+                 'ebl.lifecycle.study','ebl.lifecycle.plan','ebl.lifecycle.tuning','ebl.lifecycle.recovery'):
         importlib.import_module(name)
     files=set()
     for module in tuple(sys.modules.values()):
@@ -45,11 +45,11 @@ def snapshot(output,extra_files=()):
     return receipt
 
 
-def main():
+def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--config',type=Path,action='append',default=[])
-    args=parser.parse_args()
+    args=parser.parse_args(argv)
     receipt=snapshot(args.output,args.config)
     print(json.dumps({'files':len(receipt['files']),'bytes':receipt['bytes'],'path':str(args.output.resolve())},indent=2))
 

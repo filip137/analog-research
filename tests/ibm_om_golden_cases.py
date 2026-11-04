@@ -96,7 +96,16 @@ OM_WRITE_NOISE_STD = 1.4113
 
 
 def _hwa():
-    return importlib.import_module("methods.ibm_om.api")
+    from types import SimpleNamespace
+    from hardware.ibm_om.constants import IBM_OM_RAW_ACTIVE_A_MIN
+    from hardware.ibm_om.population import IbmReramArrayPopulation
+    from methods.ibm_om.spec import IbmReramHwaConfig
+    from methods.ibm_om.modifier import IbmReramHwaParameterModifier
+    from hardware.ibm_om.plants import IbmReramPulsePlant
+    from hardware.ibm_om.plants import _RawActiveArrayPlant
+    from methods.ibm_om.mappings import map_ibm_reram_array_targets
+    from methods.ibm_om.mappings import validate_ibm_reram_target_mapping_preflight
+    return SimpleNamespace(IBM_OM_RAW_ACTIVE_A_MIN=IBM_OM_RAW_ACTIVE_A_MIN, IbmReramArrayPopulation=IbmReramArrayPopulation, IbmReramHwaConfig=IbmReramHwaConfig, IbmReramHwaParameterModifier=IbmReramHwaParameterModifier, IbmReramPulsePlant=IbmReramPulsePlant, _RawActiveArrayPlant=_RawActiveArrayPlant, map_ibm_reram_array_targets=map_ibm_reram_array_targets, validate_ibm_reram_target_mapping_preflight=validate_ibm_reram_target_mapping_preflight)
 
 
 @contextlib.contextmanager

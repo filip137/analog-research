@@ -1,0 +1,6 @@
+{
+  "baseline_commit": "a238498c7856609ca04448dcfa324c6d79e15660",
+  "purpose": "Exact relocation regression; existing scientific goldens remain unchanged.",
+  "raw_trace_sha256": "a25bf0d5297d43834db927be8bc94740376714b7096935cb1bbb7c5fd04d10b3",
+  "torch": "2.5.1+cu121"
+}

@@ -50,11 +50,9 @@ from methods.measured_trace import (
     MeasuredTraceOptimizer,
 )
 from methods.ibm_om.spec import backfill_weight_modifier_metadata
-from methods.ibm_om.api import (
-    IbmReramHwaConfig,
-    IbmReramHwaParameterModifier,
-    build_ibm_reram_hwa_modifier,
-)
+from methods.ibm_om.spec import IbmReramHwaConfig
+from methods.ibm_om.modifier import IbmReramHwaParameterModifier
+from ebl.runtime.device_sampling import build_ibm_reram_hwa_modifier
 from methods.core.engine import (
     EvaluationComponents,
     ExperimentComponents,

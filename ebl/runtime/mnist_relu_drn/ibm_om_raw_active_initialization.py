@@ -192,14 +192,10 @@ def derive_raw_active_checkpoint(
     from ebl.runtime.mnist_relu_drn.runtime import _load_teacher
     from networks.data.mnist import build_mnist_loaders
     from ebl.schema.base import RunMode
-    from methods.ibm_om.api import (
-        IBM_OM_RAW_ACTIVE_COORDINATE_VERSION,
-        IBM_OM_RAW_ACTIVE_D90,
-        _raw_active_structural_cell_mask,
-        load_om_array_population,
-        map_ibm_reram_array_targets,
-        validate_ibm_reram_target_mapping_preflight,
-    )
+    from hardware.ibm_om.constants import IBM_OM_RAW_ACTIVE_COORDINATE_VERSION, IBM_OM_RAW_ACTIVE_D90
+    from methods.ibm_om.mappings.raw_active import _raw_active_structural_cell_mask
+    from hardware.ibm_om.population import load_om_array_population
+    from methods.ibm_om.mappings import map_ibm_reram_array_targets, validate_ibm_reram_target_mapping_preflight
 
     source = source_path.expanduser().resolve()
     config = config_path.expanduser().resolve()
