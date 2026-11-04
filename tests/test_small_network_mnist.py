@@ -7,11 +7,11 @@ import pytest
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from experiments import RunMode, get_definition
-from experiments.schema import ConfigError
-from experiments.small_network import components
-from experiments.small_network.components import build_data
-from experiments.small_network.config import parse_small_drn_config
+from ebl.registry import RunMode, get_definition
+from ebl.schema.base import ConfigError
+import ebl.runtime.small_network.components as components
+from ebl.runtime.small_network.components import build_data
+from ebl.schema.small_network import parse_small_drn_config
 
 
 EXAMPLE_PATH = Path("examples/small_drn/mnist_perfect_diode.json")

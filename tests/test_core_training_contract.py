@@ -4,15 +4,15 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from training.core.engine import (
+from methods.core.engine import (
     AfterUpdateEvent, BeforeUpdateEvent, EvaluationComponents, ExperimentComponents,
     FreePhaseEvent, GradientsReadyEvent, train_epoch,
 )
-from training.core.guards import FiniteGradientGuard
-from training.core.optimizers import SGDOptimizer
-from training.core.sgd import AugmentedFunction, Backprop, EquilibriumProp
-from training.lab.diagnostics import BetaSize, GradientUpdateObserver
-from training.lab.epoch import Evaluator, Trainer
+from methods.core.guards import FiniteGradientGuard
+from methods.core.optimizers import SGDOptimizer
+from methods.core.sgd import AugmentedFunction, Backprop, EquilibriumProp
+from labs.training.diagnostics import BetaSize, GradientUpdateObserver
+from labs.training.epoch import Evaluator, Trainer
 
 from test_small_network_numerical_parity import (
     _build_stack, _inputs, _labels, _load_oracle, _minimizer,

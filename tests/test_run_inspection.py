@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from ebl.cli import main
-from experiments.artifacts import RunStore
-from experiments.study_workflow import inspect_run
+from ebl.runtime.store import RunStore
+from ebl.lifecycle.study import inspect_run
 
 
 def make_run(tmp_path, state="complete"):

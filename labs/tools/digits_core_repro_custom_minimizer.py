@@ -1,6 +1,6 @@
 """Validation-only coordinate-descent minimizers for the digits repro pack.
 
-This is a paper-runtime subset of labs/custom_minimizer.py.  It keeps only the
+This is a paper-runtime subset of networks/resistive/solver.py.  It keeps only the
 updaters used by the bundled digits-core jobs: single-diode exponential,
 double-diode exponential, and experimental I-V validation.  Training,
 Anderson acceleration, and exploratory nonlinearities are intentionally omitted.
@@ -14,9 +14,9 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from model.minimizer.minimizer import LayerUpdater, Minimizer
-from model.resistive.layer import NonlinearResistiveLayer
-from model.resistive.minimizer import (
+from networks.minimizer.minimizer import LayerUpdater, Minimizer
+from networks.resistive.layer import NonlinearResistiveLayer
+from networks.resistive.minimizer import (
     ExponentialDoubleDiodeUpdater,
     ExponentialSingleDiodeUpdater,
     lambertw,

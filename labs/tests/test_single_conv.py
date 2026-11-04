@@ -5,11 +5,11 @@ from labs.custom_classes import (
     ConvResistive,
     DetailedSumSeparableFunction,
 )
-from labs.custom_minimizer import (
+from networks.resistive.solver import (
     CustomQuadraticMinimizer as QuadraticMinimizer,
     MinimizerSettings,
 )
-from model.variable.parameter import ConvWeight
+from networks.variable.parameter import ConvWeight
 
 
 def _default_quadratic_params():

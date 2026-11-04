@@ -6,19 +6,19 @@ from types import ModuleType
 import pytest
 import torch
 
-from model.function.cost import SquaredErrorPairedOutputs
-from model.resistive.builders import build_deep_resistive_energy
-from model.resistive.interaction import DenseResistive
-from model.resistive.low_rank import PassiveLowRankDenseWeight
-from model.resistive.minimizer import QuadraticMinimizer
-from model.resistive.layer import NonlinearResistiveLayer
-from model.variable.layer import LinearLayer
-from model.resistive.digital_low_rank_config import Wan2022ProgrammingConfig
-from training.device_programming import (
+from networks.function.cost import SquaredErrorPairedOutputs
+from networks.resistive.builders import build_deep_resistive_energy
+from networks.resistive.interaction import DenseResistive
+from networks.resistive.low_rank import PassiveLowRankDenseWeight
+from networks.resistive.minimizer import QuadraticMinimizer
+from networks.resistive.layer import NonlinearResistiveLayer
+from networks.variable.layer import LinearLayer
+from networks.resistive.digital_low_rank_config import Wan2022ProgrammingConfig
+from methods.device_programming import (
     program_wan2022_base_conductances,
 )
-from training.core.sgd import AugmentedFunction, EquilibriumProp
-from training.core.optimizers import build_optimizer
+from methods.core.sgd import AugmentedFunction, EquilibriumProp
+from methods.core.optimizers import build_optimizer
 
 
 _DIODE = {

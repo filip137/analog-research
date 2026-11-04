@@ -4,10 +4,11 @@ from dataclasses import asdict, replace
 from types import SimpleNamespace
 import pytest
 import torch
-from experiments.artifacts import sha256_file
-from experiments.opt_cmo_drn import runtime, retention
-from experiments.opt_cmo_drn.config import Config, Solver, Data, Deployment, parse_config
-from experiments.opt_cmo_drn.retention_config import Retention
+from ebl.runtime.store import sha256_file
+import ebl.runtime.opt_cmo_drn.runtime as runtime
+import ebl.runtime.opt_cmo_drn.retention as retention
+from ebl.schema.opt_cmo_drn import Config, Solver, Data, Deployment, parse_config
+from ebl.schema.retention import Retention
 from test_opt_cmo_drn import tiny_model, cpu_threads
 from test_power_law_drift import spec
 
@@ -35,7 +36,7 @@ def test_native_drn_power_law(tmp_path,monkeypatch):
     assert len(rows)==9 and rows[0]['perplexity_ratio']==1
     assert all(r['replay_exact'] and r['cost']['retention_device_writes']==0 for r in rows)
     assert all(r['physical_devices']==4*r['logical_weights'] for r in rows)
-    from workflow.__main__ import collect
+    from ebl.lifecycle.__main__ import collect
     assert collect([run])['complete']
 
 
@@ -51,8 +52,8 @@ def test_programming_is_unrewritten_and_held():
 
 
 def calibrated_parent(tmp_path,monkeypatch):
-    from experiments.opt_cmo_drn import calibration
-    from experiments.opt_cmo_drn.retention_config import Calibration
+    import ebl.runtime.opt_cmo_drn.calibration as calibration
+    from ebl.schema.retention import Calibration
     model,teacher=tiny_model()
     teacher_path=tmp_path/'teacher.pt';torch.save({},teacher_path)
     c=replace(Config(),stage='retention',teacher_sha256=sha256_file(teacher_path),
@@ -113,7 +114,7 @@ def test_drn_calibration_config_is_strict(field,value):
 
 
 def test_drn_decomposed_forward_is_native():
-    from training import output_calibration as oc
+    import methods.calibration.output as oc
     model,_=tiny_model()
     tokens=torch.tensor([[1,2,3,4],[4,3,2,1]])
     with torch.no_grad():

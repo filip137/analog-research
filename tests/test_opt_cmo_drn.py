@@ -1,3 +1,4 @@
+from methods.hwa.opt import hardware_view
 """Numerical and continuation contracts for the OPT DRN first study."""
 
 import copy
@@ -8,14 +9,14 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from experiments.opt_cmo_drn.config import Config, Training, parse_config
-from experiments.opt_cmo_drn.decoder import OptConfig, OptDecoder
-from experiments.opt_cmo_drn.model import SourceDecoder, reconstruct_source, OptDrn, DrnMlp
-from experiments.opt_cmo_drn.runtime import CoreStep, make_optimizer, checkpoint_payload, restore_checkpoint
-from experiments.opt_cmo_drn.devices import rewrite_plan, partner, program_rewritten
-from model.resistive.differentiable import DifferentiableDrn, DrnSettings, diode
-from training.core.engine import train_epoch
-from training.core.guards import FiniteGradientGuard
+from ebl.schema.opt_cmo_drn import Config, Training, parse_config
+from networks.opt.decoder import OptConfig, OptDecoder
+from networks.opt.drn import SourceDecoder, reconstruct_source, OptDrn, DrnMlp
+from ebl.runtime.opt_cmo_drn.runtime import CoreStep, make_optimizer, checkpoint_payload, restore_checkpoint
+from methods.programming.cmo import rewrite_plan, partner, program_rewritten
+from networks.resistive.differentiable import DifferentiableDrn, DrnSettings, diode
+from methods.core.engine import train_epoch
+from methods.core.guards import FiniteGradientGuard
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +39,7 @@ def tiny_model(checkpointing=False):
 
 
 def test_full_span_four_device_mapping_and_rail_layouts():
-    from training.reram_cmo import G_MAX_US
+    from hardware.devices.cmo import G_MAX_US
     fc1=torch.nn.Linear(3,1)
     fc2=torch.nn.Linear(1,3)
     with torch.no_grad():
@@ -59,7 +60,7 @@ def test_full_span_four_device_mapping_and_rail_layouts():
 
 
 def test_mapping_artifact_requires_full_span_initialization():
-    from experiments.opt_cmo_drn.runtime import from_mapped,weights_payload
+    from ebl.runtime.opt_cmo_drn.runtime import from_mapped,weights_payload
     model,teacher=tiny_model()
     config=Config()
     payload=weights_payload(model,config)
@@ -71,10 +72,10 @@ def test_mapping_artifact_requires_full_span_initialization():
 
 
 def test_physics_matches_existing_resistive_interaction():
-    from model.resistive.interaction import DenseResistive
-    from model.resistive.layer import NonlinearResistiveLayer
-    from model.variable.layer import LinearLayer
-    from model.variable.parameter import DenseWeight
+    from networks.resistive.interaction import DenseResistive
+    from networks.resistive.layer import NonlinearResistiveLayer
+    from networks.variable.layer import LinearLayer
+    from networks.variable.parameter import DenseWeight
     torch.manual_seed(3)
     x=torch.randn(3,2,dtype=torch.double)
     g1=torch.rand(4,6,dtype=torch.double)+.3
@@ -130,7 +131,7 @@ def test_checkpoint_recomputation_uses_identical_held_view():
     checked,_=tiny_model(True)
     checked.load_state_dict(plain.state_dict())
     tokens=torch.tensor([[1,2,3,4]])
-    view,_=plain.hardware_view(.03,torch.Generator().manual_seed(11))
+    view,_=hardware_view(plain,.03,torch.Generator().manual_seed(11))
     a=plain(tokens,view);b=checked(tokens,view)
     a.square().mean().backward();b.square().mean().backward()
     torch.testing.assert_close(a,b,rtol=0,atol=0)
@@ -142,7 +143,7 @@ def test_held_view_controls_forwards_even_when_master_changes():
     model,_=tiny_model()
     model.eval()
     tokens=torch.tensor([[1,2,3,4]])
-    view,_=model.hardware_view(.03,torch.Generator().manual_seed(11))
+    view,_=hardware_view(model,.03,torch.Generator().manual_seed(11))
     before=model(tokens,view)
     with torch.no_grad(): model.blocks[0].u1.add_(.1)
     torch.testing.assert_close(model(tokens,view),before,atol=1e-6,rtol=1e-6)
@@ -200,8 +201,8 @@ def test_strict_assigned_contract():
 def test_all_opt_examples_resolve_through_public_cli(tmp_path):
     import io
     from ebl.cli import main,CommandHandlers
-    from experiments.definitions import resolve_experiment_config
-    from experiments.schema import RunMode
+    from ebl.registry import resolve_experiment_config
+    from ebl.schema.base import RunMode
     examples=Path(__file__).resolve().parents[1]/'examples/opt_cmo_drn'
     for path in sorted(examples.glob('*.json')):
         definition,config=resolve_experiment_config(path,RunMode.TRAIN)
@@ -217,11 +218,11 @@ def test_all_opt_examples_resolve_through_public_cli(tmp_path):
 
 
 def test_pinned_device_goldens():
-    from experiments.opt_cmo_drn.faults import hierarchical_faults,MatrixSpec,FaultCase
-    from training.reram_cmo import CmoMatrix
+    from hardware.faults import hierarchical_faults,MatrixSpec,FaultCase
+    from hardware.devices.cmo import CmoMatrix
     golden=torch.load(Path(__file__).parent/'golden/opt_cmo_drn/device.pt',weights_only=True)
     layout=[MatrixSpec('decoder.layers.6.fc1',(4,6),0,24),MatrixSpec('decoder.layers.6.fc2',(6,4),24,24)]
-    faults=hierarchical_faults(layout,4,3,FaultCase('random',.25,4.,6.),77,'golden')
+    faults=hierarchical_faults(layout,4,3,FaultCase('random',.25,4.,6.),77,'golden',domains={m.name:'decoder.layers.6' for m in layout})
     assert faults['receipt']==golden['faults']['receipt']
     for name in faults['matrices']:
         for a,b in zip(faults['matrices'][name],golden['faults']['matrices'][name]): assert torch.equal(a,b)
@@ -262,10 +263,10 @@ def test_reconstruction_preserves_digital_parameters_and_gains():
 
 
 def test_tiny_native_lifecycle_and_collection(tmp_path,monkeypatch):
-    from experiments.opt_cmo_drn import runtime
-    from experiments.artifacts import sha256_file
-    from experiments.opt_cmo_drn.config import Data,Selection
-    from workflow.__main__ import collect
+    import ebl.runtime.opt_cmo_drn.runtime as runtime
+    from ebl.runtime.store import sha256_file
+    from ebl.schema.opt_cmo_drn import Data,Selection
+    from ebl.lifecycle.__main__ import collect
     _,teacher=tiny_model()
     teacher_path=tmp_path/'teacher.pt';torch.save({},teacher_path)
     payload=source_payload(teacher);payload['context']={'teacher_sha256':sha256_file(teacher_path)}
@@ -306,7 +307,7 @@ def test_tiny_native_lifecycle_and_collection(tmp_path,monkeypatch):
     expected=torch.load(runs[-1]/'checkpoints/final.pt',weights_only=True)['model']
     assert all(torch.equal(actual[k],v) for k,v in expected.items())
     assert collect([resumed])['complete']
-    from workflow.__main__ import build_plan
+    from ebl.lifecycle.__main__ import build_plan
     from dataclasses import asdict
     import sys
     plan=build_plan(asdict(config),teacher_path,source_path,tmp_path/'plan',sys.executable,Path.cwd(),prepared)
@@ -325,11 +326,11 @@ def test_hwa_projection_has_identity_coordinate_gradient():
     model,_=tiny_model()
     with torch.no_grad():
         for p in model.parameter_groups()[0]:p.fill_(-1)
-    held,count=model.hardware_view(10.0,torch.Generator().manual_seed(31))
+    held,count=hardware_view(model,10.0,torch.Generator().manual_seed(31))
     assert count>0 and all((g>=0).all() for pair in held for g in pair)
     g=model.blocks[0].conductances(held[0])[0]
     g.sum().backward()
-    from training.reram_cmo import HALF_RANGE_US,G_MAX_US
+    from hardware.devices.cmo import HALF_RANGE_US,G_MAX_US
     torch.testing.assert_close(model.blocks[0].u1.grad,torch.full_like(model.blocks[0].u1,HALF_RANGE_US/G_MAX_US))
 
 

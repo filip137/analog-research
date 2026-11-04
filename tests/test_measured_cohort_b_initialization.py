@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from experiments import RunMode, resolve_experiment_config
-from experiments.small_network.initialization import validate_training_initialization
+from ebl.registry import RunMode, resolve_experiment_config
+from ebl.runtime.small_network.initialization import validate_training_initialization
 
 
 ROOT = Path(__file__).parents[1]

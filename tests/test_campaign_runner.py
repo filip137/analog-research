@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-import campaigns.runner as runner
+import ebl.execution.runner as runner
 import pytest
-from campaigns.schema import CampaignSpec, TargetSpec
+from ebl.execution.schema import CampaignSpec, TargetSpec
 
 
 def _target(tmp_path: Path) -> dict:

@@ -29,13 +29,13 @@ import sys
 from typing import Any, Callable, Mapping, Sequence
 
 from ebl.cli import TrainRequest
-from experiments.definitions import (
+from ebl.registry import (
     parse_experiment_config,
     resolve_experiment_config,
 )
-from experiments.schema import ConfigError, RunMode
-from experiments.small_network.config import TrainSpec
-from experiments.small_network.runtime import (
+from ebl.schema.base import ConfigError, RunMode
+from ebl.schema.small_network import TrainSpec
+from ebl.runtime.small_network.runtime import (
     TrainingEpochReport,
     TrainingOutcome,
     execute_train,

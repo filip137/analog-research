@@ -15,16 +15,16 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from labs.tests.network import DeepResistiveEnergy
-from model.function.network import Network
-from model.function.cost import SquaredError, SquaredErrorPairedOutputs
-from model.variable.parameter import DenseWeight
-from labs.custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer
-from training.core.sgd import EquilibriumProp, Backprop, AugmentedFunction
-from training.lab.epoch import Trainer, Evaluator
-from training.core.engine import ExperimentComponents, EvaluationComponents
-from training.lab.statistics import add_standard_statistics
-from training.core.optimizers import SGDOptimizer
-from training.lab.monitor import Monitor
+from networks.function.network import Network
+from networks.function.cost import SquaredError, SquaredErrorPairedOutputs
+from networks.variable.parameter import DenseWeight
+from networks.resistive.solver import CustomQuadraticMinimizer as QuadraticMinimizer
+from methods.core.sgd import EquilibriumProp, Backprop, AugmentedFunction
+from labs.training.epoch import Trainer, Evaluator
+from methods.core.engine import ExperimentComponents, EvaluationComponents
+from labs.training.statistics import add_standard_statistics
+from methods.core.optimizers import SGDOptimizer
+from labs.training.monitor import Monitor
 
 
 def _load_project_datasets_module():

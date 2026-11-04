@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from training.sign_sgd import SignSGD
+from methods.sign_sgd import SignSGD
 
 
 def test_sign_sgd_uses_only_gradient_direction() -> None:

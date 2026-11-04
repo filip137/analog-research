@@ -10,9 +10,9 @@ import sys
 
 import torch
 
-from experiments.artifacts import atomic_write_json, sha256_file
-from experiments.reram_program_verify.runtime import _save_population
-from training.ibm_reram_program_verify import sample_ibm_reram_population
+from ebl.runtime.store import atomic_write_json, sha256_file
+from ebl.runtime.reram_program_verify import _save_population
+from methods.ibm_reram_program_verify import sample_ibm_reram_population
 
 
 def _parser() -> argparse.ArgumentParser:

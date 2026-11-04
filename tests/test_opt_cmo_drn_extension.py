@@ -5,9 +5,9 @@ import json
 
 import pytest
 
-from experiments.artifacts import content_hash
-from experiments.opt_cmo_drn.config import compatible_config_hashes, parse_config, resume_config_hashes
-from workflow import slurm_recovery as s
+from ebl.runtime.store import content_hash
+from ebl.schema.opt_cmo_drn import compatible_config_hashes, parse_config, resume_config_hashes
+import ebl.lifecycle.slurm_recovery as s
 
 DENSE = {'update_rule': 'direct_adam', 'target_bounds': 'gmin_gmax', 'max_write_attempts': None,
          'write_noise_factor': 0., 'learning_rate': 1e-4, 'arm': 'learning'}

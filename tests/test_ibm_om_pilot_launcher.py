@@ -14,7 +14,7 @@ from experiments.mnist_relu_drn.ibm_om_pilot_launcher import (
     _validate_prepared_study,
     _validate_training_phase_summary,
 )
-from experiments.study_workflow import prepare_study
+from ebl.lifecycle.study import prepare_study
 
 
 def _frozen_inputs(tmp_path: Path) -> tuple[Path, str, Path, str]:

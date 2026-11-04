@@ -17,7 +17,7 @@ import ibm_om_golden_cases as cases
 
 _META_PATH = cases.GOLDEN_DIR / "meta.json"
 
-# Every name imported from ``training.ibm_reram_hwa`` anywhere in the
+# Every name imported from ``methods.ibm_om.api`` anywhere in the
 # repository before the refactor, plus its ``__all__`` and the private
 # function tests monkeypatch.  The facade must keep all of them importable.
 IMPORT_SURFACE = (
@@ -88,5 +88,5 @@ def test_golden_registry_matches_captured_cases() -> None:
 
 @pytest.mark.parametrize("name", IMPORT_SURFACE)
 def test_facade_import_surface(name: str) -> None:
-    module = importlib.import_module("training.ibm_reram_hwa")
+    module = importlib.import_module("methods.ibm_om.api")
     assert hasattr(module, name), name

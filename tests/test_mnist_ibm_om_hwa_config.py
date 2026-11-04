@@ -11,9 +11,9 @@ import pytest
 import torch
 
 from ebl.cli import CommandHandlers, TrainRequest, ValidateRequest, main
-from experiments.definitions import resolve_experiment_config
-from experiments.mnist_relu_drn.components import build_student_stack
-from experiments.mnist_relu_drn.runtime import (
+from ebl.registry import resolve_experiment_config
+from ebl.runtime.mnist_relu_drn.components import build_student_stack
+from ebl.runtime.mnist_relu_drn.runtime import (
     ForwardGainModifier,
     _evaluate,
     _ibm_target_mapping_preflights,
@@ -21,10 +21,10 @@ from experiments.mnist_relu_drn.runtime import (
     _selected_payload,
     _validate_array_specific_modifier_population_parity,
 )
-from experiments.schema import ConfigError, RunMode
-from experiments.study_workflow import load_study_plan
-from training.ibm_reram_hwa import IbmReramHwaParameterModifier
-from training.core.modifier import SplitParameterModifier
+from ebl.schema.base import ConfigError, RunMode
+from ebl.lifecycle.study import load_study_plan
+from methods.ibm_om.api import IbmReramHwaParameterModifier
+from methods.core.modifier import SplitParameterModifier
 
 
 _ROOT = Path(__file__).resolve().parents[1]

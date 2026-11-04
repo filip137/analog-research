@@ -7,23 +7,23 @@ from pathlib import Path
 import pytest
 import torch
 
-from experiments.definitions import get_definition, parse_experiment_config
-from experiments.mnist_relu_drn.components import conductance_statistics
-from experiments.mnist_relu_drn_reset.components import (
+from ebl.registry import get_definition, parse_experiment_config
+from ebl.runtime.mnist_relu_drn.components import conductance_statistics
+from ebl.runtime.mnist_relu_drn_reset.components import (
     PairedSupervision,
     build_reset_student_stack,
 )
-from experiments.mnist_relu_drn_reset.learning_rate_selection import (
+from ebl.runtime.mnist_relu_drn_reset.learning_rate_selection import (
     _derive_rates,
     _parameter_topology,
 )
-from experiments.mnist_relu_drn_reset.runtime import (
+from ebl.runtime.mnist_relu_drn_reset.runtime import (
     _validate_checkpoint_metadata,
 )
-from experiments.schema import ConfigError, RunMode
-from model.function.cost import SquaredErrorPairedOutputs
-from model.resistive.interaction import DenseResistive
-from model.variable.layer import LinearLayer
+from ebl.schema.base import ConfigError, RunMode
+from networks.function.cost import SquaredErrorPairedOutputs
+from networks.resistive.interaction import DenseResistive
+from networks.variable.layer import LinearLayer
 
 
 ROOT = Path(__file__).resolve().parents[1]

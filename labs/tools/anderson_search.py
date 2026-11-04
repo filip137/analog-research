@@ -21,8 +21,8 @@ import sys
 import tempfile
 from typing import Any, Sequence
 
-from experiments.definitions import parse_experiment_config
-from experiments.schema import RunMode
+from ebl.registry import parse_experiment_config
+from ebl.schema.base import RunMode
 
 
 EXPERIMENT_ID = "small_drn.v1"

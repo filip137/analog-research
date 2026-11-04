@@ -4,13 +4,13 @@ from dataclasses import FrozenInstanceError
 import pytest
 import torch
 
-from model.variable.parameter import Bias, ConvWeight, DenseWeight, PoolWeight
-from training.add_normal import (
+from networks.variable.parameter import Bias, ConvWeight, DenseWeight, PoolWeight
+from methods.add_normal import (
     AddNormalConfig,
     AddNormalParameterModifier,
     build_add_normal_modifier,
 )
-from training.core.modifier import ParameterModifier
+from methods.core.modifier import ParameterModifier
 
 
 def _dense(

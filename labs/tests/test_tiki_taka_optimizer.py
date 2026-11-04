@@ -3,9 +3,9 @@ import copy
 import pytest
 import torch
 
-from model.variable.parameter import Bias, DenseWeight, PoolWeight
-from training.core.optimizers import SGDOptimizer, build_optimizer
-from training.tiki_taka import TikiTakaConfig, TikiTakaOptimizer, parse_update_pipeline
+from networks.variable.parameter import Bias, DenseWeight, PoolWeight
+from methods.core.optimizers import SGDOptimizer, build_optimizer
+from methods.tiki_taka import TikiTakaConfig, TikiTakaOptimizer, parse_update_pipeline
 
 
 class _ParameterFunction:

@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from experiments.definitions import parse_experiment_config
-from experiments.mnist_relu_drn.components import build_student_stack
-from experiments.mnist_relu_drn.runtime import (
+from ebl.registry import parse_experiment_config
+from ebl.runtime.mnist_relu_drn.components import build_student_stack
+from ebl.runtime.mnist_relu_drn.runtime import (
     _amplification_index_report,
     _differential_topology_signature,
     _validate_checkpoint_metadata,
 )
-from experiments.schema import RunMode
+from ebl.schema.base import RunMode
 
 
 ROOT = Path(__file__).resolve().parents[1]

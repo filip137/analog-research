@@ -3,9 +3,10 @@ import json
 from dataclasses import asdict, replace
 from types import SimpleNamespace
 import torch
-from experiments.artifacts import sha256_file
-from experiments.opt_cmo_drn import runtime, drift_recovery
-from experiments.opt_cmo_drn.config import Config, Solver, Data, Deployment, parse_config
+from ebl.runtime.store import sha256_file
+import ebl.runtime.opt_cmo_drn.runtime as runtime
+import ebl.runtime.opt_cmo_drn.drift_recovery as drift_recovery
+from ebl.schema.opt_cmo_drn import Config, Solver, Data, Deployment, parse_config
 from methods.maintenance.config import DriftRecovery
 from test_opt_cmo_drn import tiny_model, cpu_threads
 
@@ -55,5 +56,5 @@ def test_native_drn_repeated_recovery(tmp_path, monkeypatch):
     trajectories = json.loads((directory/'drift_recovery_trajectories.json').read_text())
     assert all(len(t['events']) == 2 and t['replay_exact'] for t in trajectories)
     assert all(e['changed_cell_commands'] > 0 for t in trajectories if 'learning' in t['trajectory'] for e in t['events'])
-    from workflow.__main__ import collect
+    from ebl.lifecycle.__main__ import collect
     assert collect([directory])['complete']

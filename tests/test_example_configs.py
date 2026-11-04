@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from experiments import RunMode, resolve_experiment_config
+from ebl.registry import RunMode, resolve_experiment_config
 
 
 ROOT = Path(__file__).resolve().parents[1]

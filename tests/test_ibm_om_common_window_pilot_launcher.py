@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from experiments.artifacts import sha256_file
+from ebl.runtime.store import sha256_file
 from experiments.mnist_relu_drn.ibm_om_common_window_pilot_launcher import (
     ASSIGNMENT_SEED,
     BOUNDED_CHECKPOINT_SHA256,
@@ -35,7 +35,7 @@ from experiments.mnist_relu_drn.ibm_om_common_window_pilot_launcher import (
     _validate_preflight_report,
     _validate_prepared_study,
 )
-from experiments.study_workflow import prepare_study
+from ebl.lifecycle.study import prepare_study
 
 
 _FINGERPRINT = "a" * 64
@@ -140,7 +140,7 @@ def _preflight_report() -> dict[str, object]:
         "schema_version": 1,
         "study_id": STUDY_ID,
         "authoritative_entry_point": (
-            "training.ibm_reram_hwa."
+            "methods.ibm_om.api."
             "IbmReramHwaParameterModifier.preflight_target_mapping"
         ),
         "inputs": {

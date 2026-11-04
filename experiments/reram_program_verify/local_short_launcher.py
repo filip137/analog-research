@@ -14,7 +14,7 @@ import sys
 import time
 from typing import Any, Mapping
 
-from experiments.artifacts import atomic_write_json, sha256_file
+from ebl.runtime.store import atomic_write_json, sha256_file
 from experiments.current_simulations import refresh_current_simulations_for_run
 
 

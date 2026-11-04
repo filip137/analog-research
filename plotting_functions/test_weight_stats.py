@@ -3,7 +3,7 @@ import sys
 import os
 sys.path.append('../../')
 
-from training.lab.statistics import WeightDistributionStat
+from labs.training.statistics import WeightDistributionStat
 import torch
 
 # Test the WeightDistributionStat class

@@ -7,8 +7,8 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from experiments.definitions import parse_experiment_config
-from experiments.mnist_relu_drn.components import (
+from ebl.registry import parse_experiment_config
+from ebl.runtime.mnist_relu_drn.components import (
     TeacherKLDivergence,
     build_student_stack,
     fit_positive_logit_gain,
@@ -16,9 +16,9 @@ from experiments.mnist_relu_drn.components import (
     signed_differential_lift,
     signed_dual_rail_lift,
 )
-from experiments.schema import RunMode
-from model.variable.layer import LinearLayer
-from training.program_verify import ProgramVerifyOptimizer
+from ebl.schema.base import RunMode
+from networks.variable.layer import LinearLayer
+from methods.program_verify import ProgramVerifyOptimizer
 
 
 ROOT = Path(__file__).resolve().parents[1]

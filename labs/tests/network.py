@@ -1,14 +1,14 @@
 from tokenize import Double
 import torch
 
-from model.function.interaction import SumSeparableFunction
-from model.resistive.layer import PoolLayer, ResistiveInputLayer, NonlinearResistiveLayer, ConvLayer
-from model.variable.layer import LinearLayer
-from model.variable.parameter import Bias, DenseWeight, ConvWeight, PoolWeight
+from networks.function.interaction import SumSeparableFunction
+from networks.resistive.layer import PoolLayer, ResistiveInputLayer, NonlinearResistiveLayer, ConvLayer
+from networks.variable.layer import LinearLayer
+from networks.variable.parameter import Bias, DenseWeight, ConvWeight, PoolWeight
 # from model.resistive.parameter import TiedDenseWeight as DenseWeight
-from model.function.interaction import ResistiveBiasInteraction
-from model.resistive.interaction import BasePoolResistive, AveragePoolResistive, MaxPoolResistive, DenseResistive, ConvResistive
-from model.function.interaction import DoubleQuadraticNonLinearInteraction, DoubleExponentialNonLinearInteraction
+from networks.function.interaction import ResistiveBiasInteraction
+from networks.resistive.interaction import BasePoolResistive, AveragePoolResistive, MaxPoolResistive, DenseResistive, ConvResistive
+from networks.function.interaction import DoubleQuadraticNonLinearInteraction, DoubleExponentialNonLinearInteraction
 POOLING_INTERACTIONS = {
     "max": MaxPoolResistive,
     "avg": AveragePoolResistive,

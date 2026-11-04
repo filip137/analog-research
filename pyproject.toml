@@ -21,9 +21,7 @@ include = [
   "ebl*",
   "experiments*",
   "labs*",
-  "model*",
-  "training*",
-  "workflow*",
+  "networks*",
 ]
 exclude = [
   "labs.MNIST_network_data*",

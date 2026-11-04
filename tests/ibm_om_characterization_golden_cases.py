@@ -33,7 +33,7 @@ if str(TESTS) not in sys.path:
     sys.path.insert(0, str(TESTS))
 
 from ibm_om_golden_cases import assert_same, environment  # noqa: E402
-from training.ibm_reram_program_verify import (  # noqa: E402
+from methods.ibm_reram_program_verify import (  # noqa: E402
     ControllerSettings,
     IbmReramPlant,
     IbmReramPopulation,

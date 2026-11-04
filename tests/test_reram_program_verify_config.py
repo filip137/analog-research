@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from ebl.cli import CharacterizeRequest, CommandHandlers, main
-from experiments.definitions import resolve_experiment_config
-from experiments.schema import ConfigError, RunMode
-from experiments.study_workflow import prepare_study, summarize_study
+from ebl.registry import resolve_experiment_config
+from ebl.schema.base import ConfigError, RunMode
+from ebl.lifecycle.study import prepare_study, summarize_study
 
 
 _ROOT = Path(__file__).resolve().parents[1]

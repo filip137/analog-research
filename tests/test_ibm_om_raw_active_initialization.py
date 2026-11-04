@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from experiments.mnist_relu_drn.ibm_om_raw_active_initialization import (
+from ebl.runtime.mnist_relu_drn.ibm_om_raw_active_initialization import (
     transform_to_raw_active_coordinate,
 )
 

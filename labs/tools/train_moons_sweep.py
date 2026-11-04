@@ -13,17 +13,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from labs.datasets import MoonsDataset  # noqa: E402
-from model.resistive.network import DeepResistiveEnergy  # noqa: E402
-from model.function.network import Network  # noqa: E402
-from labs.custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer  # noqa: E402
-from training.core.engine import ExperimentComponents  # noqa: E402
-from training.lab.epoch import Trainer  # noqa: E402
-from training.core.optimizers import SGDOptimizer  # noqa: E402
-from training.core.sgd import AugmentedFunction, EquilibriumProp  # noqa: E402
-from model.function.cost import SquaredError, SquaredErrorPairedOutputs  # noqa: E402
-from model.variable.parameter import Bias  # noqa: E402
-from training.lab.statistics import (  # noqa: E402
+from networks.data.reference import MoonsDataset  # noqa: E402
+from networks.resistive.network import DeepResistiveEnergy  # noqa: E402
+from networks.function.network import Network  # noqa: E402
+from networks.resistive.solver import CustomQuadraticMinimizer as QuadraticMinimizer  # noqa: E402
+from methods.core.engine import ExperimentComponents  # noqa: E402
+from labs.training.epoch import Trainer  # noqa: E402
+from methods.core.optimizers import SGDOptimizer  # noqa: E402
+from methods.core.sgd import AugmentedFunction, EquilibriumProp  # noqa: E402
+from networks.function.cost import SquaredError, SquaredErrorPairedOutputs  # noqa: E402
+from networks.variable.parameter import Bias  # noqa: E402
+from labs.training.statistics import (  # noqa: E402
     Counter,
     CostStat,
     EnergyStat,

@@ -8,16 +8,16 @@ import math
 import pytest
 import torch
 
-from model.resistive.builders import ParameterBinding, ParameterCatalog
-from model.resistive.device_config import (
+from networks.resistive.builders import ParameterBinding, ParameterCatalog
+from hardware.config import (
     CmoHfOxProgrammingConfig,
     IbmAfm2025PcmProgrammingConfig,
     Wan2022PhysicalProgrammingConfig,
 )
-from model.variable.parameter import DenseWeight
-from training.add_normal import AddNormalConfig, AddNormalParameterModifier
-from training.device_programming import realize_programmed_tensor
-from training.program_verify import ProgramVerifyOptimizer
+from networks.variable.parameter import DenseWeight
+from methods.add_normal import AddNormalConfig, AddNormalParameterModifier
+from methods.device_programming import realize_programmed_tensor
+from methods.program_verify import ProgramVerifyOptimizer
 
 
 def _dense(

@@ -8,10 +8,10 @@ from typing import Any
 import pytest
 import torch
 
-from experiments.small_network import learning_rate_selection as selection
-from experiments.small_network import runtime as small_runtime
-from model.variable.parameter import DenseWeight
-from training.core.engine import FreePhaseEvent, GradientsReadyEvent
+import ebl.runtime.small_network.learning_rate_selection as selection
+import ebl.runtime.small_network.runtime as small_runtime
+from networks.variable.parameter import DenseWeight
+from methods.core.engine import FreePhaseEvent, GradientsReadyEvent
 
 
 class _StateCodec:

@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from experiments.artifacts import sha256_file
+from ebl.runtime.store import sha256_file
 from experiments.reram_program_verify.hwa_model import (
     CONDITION_KEY,
     ESTIMATOR_KEY,
     build_om_hwa_device_model,
 )
-from training.ibm_reram_program_verify import PopulationStepEstimator
+from methods.ibm_reram_program_verify import PopulationStepEstimator
 
 
 def _endpoint(path: Path, *, corrupt: bool, adequate: bool = True) -> Path:

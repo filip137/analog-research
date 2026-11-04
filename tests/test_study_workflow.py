@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from ebl.cli import main
-from experiments.artifacts import RunStore
-from experiments.study_workflow import (
+from ebl.runtime.store import RunStore
+from ebl.lifecycle.study import (
     StudyWorkflowError,
     finalize_study,
     load_review,
@@ -27,7 +27,7 @@ def _write_json(path: Path, value: object) -> None:
     )
 
 
-def _plan(config: Path, *, study_id: str = "workflow-smoke-v1") -> dict:
+def _plan(config: Path, *, study_id: str = "ebl.lifecycle-smoke-v1") -> dict:
     return {
         "schema_version": 1,
         "study_id": study_id,
@@ -129,7 +129,7 @@ def test_prepare_links_native_run_and_summarizes_metadata(tmp_path: Path) -> Non
 
     run_dir = _complete_run(root, config)
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["study"]["study_id"] == "workflow-smoke-v1"
+    assert manifest["study"]["study_id"] == "ebl.lifecycle-smoke-v1"
     assert manifest["study"]["arm_id"] == "baseline"
 
     summary = summarize_study(root)
@@ -215,7 +215,7 @@ def test_finalize_records_interpretation_and_is_idempotent(tmp_path: Path) -> No
                 "one-run exploratory coverage."
             ),
             "final_interpretation": "The result supports the initial hypothesis.",
-            "limitations": "This is a one-run exploratory workflow smoke.",
+            "limitations": "This is a one-run exploratory ebl.lifecycle smoke.",
             "next_steps": ["Repeat with the real scientific configs."],
         },
     )
@@ -324,7 +324,7 @@ def test_summary_renders_an_existing_v1_final_record(tmp_path: Path) -> None:
         {
             "schema": "ebl.study.final",
             "schema_version": 1,
-            "study_id": "workflow-smoke-v1",
+            "study_id": "ebl.lifecycle-smoke-v1",
             "study_sha256": study_sha,
             "outcome": "mixed",
             "final_interpretation": "The legacy result remains mixed.",
@@ -364,7 +364,7 @@ def test_refinalizing_v1_preserves_final_and_migrated_manifest_summary(
         {
             "schema": "ebl.study.final",
             "schema_version": 1,
-            "study_id": "workflow-smoke-v1",
+            "study_id": "ebl.lifecycle-smoke-v1",
             "finalized_at": "2026-08-01T00:00:00+00:00",
             "study_sha256": study_sha,
             "review_sha256": sha256(review.read_bytes()).hexdigest(),
@@ -376,11 +376,11 @@ def test_refinalizing_v1_preserves_final_and_migrated_manifest_summary(
     )
     final_before = final_path.read_bytes()
     concise_entry = (
-        "<!-- BEGIN EBL STUDY SUMMARY workflow-smoke-v1 -->\n"
-        "### [workflow-smoke-v1](../results/workflow-smoke-v1/)\n\n"
+        "<!-- BEGIN EBL STUDY SUMMARY ebl.lifecycle-smoke-v1 -->\n"
+        "### [ebl.lifecycle-smoke-v1](../results/ebl.lifecycle-smoke-v1/)\n\n"
         "- **Outcome:** mixed\n"
         "- **Interpretation:** A preserved migration-time summary.\n"
-        "<!-- END EBL STUDY SUMMARY workflow-smoke-v1 -->"
+        "<!-- END EBL STUDY SUMMARY ebl.lifecycle-smoke-v1 -->"
     )
     manifest = tmp_path / "docs" / "experimental_manifest.md"
     manifest.parent.mkdir(exist_ok=True)
@@ -389,9 +389,9 @@ def test_refinalizing_v1_preserves_final_and_migrated_manifest_summary(
         + concise_entry
         + "\n\n<details>\n"
         "<summary>Full study record and provenance</summary>\n\n"
-        "<!-- BEGIN EBL STUDY workflow-smoke-v1 -->\n"
+        "<!-- BEGIN EBL STUDY ebl.lifecycle-smoke-v1 -->\n"
         "legacy placeholder\n"
-        "<!-- END EBL STUDY workflow-smoke-v1 -->\n\n"
+        "<!-- END EBL STUDY ebl.lifecycle-smoke-v1 -->\n\n"
         "</details>\n",
         encoding="utf-8",
     )
@@ -455,7 +455,7 @@ def test_study_prepare_is_available_from_public_cli(tmp_path: Path) -> None:
 
 
 def test_inspector_preserves_prepared_study_provenance_checks(tmp_path: Path) -> None:
-    from experiments.study_workflow import inspect_run
+    from ebl.lifecycle.study import inspect_run
     root, _, config = _prepare(tmp_path)
     run = _complete_run(root, config)
     assert inspect_run(run, verify_artifacts=True)["valid"]

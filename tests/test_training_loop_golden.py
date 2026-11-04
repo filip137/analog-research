@@ -3,7 +3,7 @@
 The goldens were captured by ``python tests/training_loop_golden_cases.py
 capture`` on the reference commit recorded in
 ``tests/golden/training_loops/meta.json``, before those loops were routed
-through ``training.core.engine``.
+through ``methods.core.engine``.
 """
 
 from __future__ import annotations

@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import torch
 
-from labs.datasets import _build_torchvision_image_loaders
+from networks.data.reference import _build_torchvision_image_loaders
 from labs.mnist_train import _load_initial_parameters
 
 

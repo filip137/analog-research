@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from experiments.definitions import resolve_experiment_config
-from experiments.mnist_relu_drn.config import _parse_weight_modifier
-from experiments.schema import ConfigError, to_plain_data
+from ebl.registry import resolve_experiment_config
+from ebl.schema.mnist_relu_drn import _parse_weight_modifier
+from ebl.schema.base import ConfigError, to_plain_data
 
 
 ROOT = Path(__file__).resolve().parents[1]

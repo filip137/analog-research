@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from workflow import slurm_recovery as s
+import ebl.lifecycle.slurm_recovery as s
 
 
 def manifest(tmp_path):
@@ -189,7 +189,7 @@ def test_batch_wrapper_resolves_source_from_manifest_even_in_slurm_spool(tmp_pat
     manifest_path=source/'launch/manifest.json';manifest_path.write_text('{}')
     spool=tmp_path/'spool';spool.mkdir()
     wrapper=spool/'slurm_script'
-    wrapper.write_text((Path(__file__).parents[1]/'workflow/slurm_recovery.slurm').read_text())
+    wrapper.write_text((Path(__file__).parents[1]/'ebl/lifecycle/slurm_recovery.slurm').read_text())
     binary=tmp_path/'bin';binary.mkdir()
     for name,body in [('nvidia-smi','exit 0'),('srun','pwd\nprintf "%s\\n" "$@"')]:
         path=binary/name;path.write_text('#!/bin/sh\n'+body+'\n');path.chmod(0o755)

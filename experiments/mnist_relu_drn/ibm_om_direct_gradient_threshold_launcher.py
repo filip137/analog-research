@@ -12,8 +12,8 @@ import subprocess
 import sys
 from typing import Any, Mapping
 
-from experiments.artifacts import atomic_write_json, sha256_file
-from experiments.study_workflow import load_study_record
+from ebl.runtime.store import atomic_write_json, sha256_file
+from ebl.lifecycle.study import load_study_record
 
 from .ibm_om_reset_relative_recovery_launcher import (
     _completed_runs,

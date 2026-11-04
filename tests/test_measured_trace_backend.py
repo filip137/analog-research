@@ -7,9 +7,9 @@ import numpy as np
 import pytest
 import torch
 
-from model.resistive.builders import ParameterBinding, ParameterCatalog
-from model.variable.parameter import DenseWeight
-from training.measured_trace import (
+from networks.resistive.builders import ParameterBinding, ParameterCatalog
+from networks.variable.parameter import DenseWeight
+from methods.measured_trace import (
     MeasuredCohortAOptimizer,
     MeasuredCohortBOptimizer,
     MeasuredCohortBLoRAOptimizer,

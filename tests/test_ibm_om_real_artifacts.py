@@ -13,18 +13,18 @@ from pathlib import Path
 import pytest
 import torch
 
-from experiments.artifacts import sha256_file
-from experiments.mnist_relu_drn.config import _parse_weight_modifier
-from experiments.schema import to_plain_data
-from model.resistive.builders import ParameterBinding
-from model.variable.parameter import DenseWeight
-from training.ibm_om.population import load_om_array_population
-from training.ibm_om.spec import (
+from ebl.runtime.store import sha256_file
+from ebl.schema.mnist_relu_drn import _parse_weight_modifier
+from ebl.schema.base import to_plain_data
+from networks.resistive.builders import ParameterBinding
+from networks.variable.parameter import DenseWeight
+from hardware.ibm_om.population import load_om_array_population
+from methods.ibm_om.spec import (
     IbmReramHwaConfig,
     backfill_config_dict,
     backfill_weight_modifier_metadata,
 )
-from training.ibm_reram_hwa import IbmReramHwaParameterModifier
+from methods.ibm_om.api import IbmReramHwaParameterModifier
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,7 +88,7 @@ def test_old_version_two_modifier_state_loads() -> None:
     state = resume["modifier_state"]["training"]
     assert state["version"] == 2
     assert state["device_model_sha256"] == sha256_file(DEVICE_MODEL)
-    import training.ibm_om.modifier as modifier_module
+    import methods.ibm_om.modifier as modifier_module
 
     original = modifier_module.sample_om_array_population
     modifier_module.sample_om_array_population = lambda *args, **kwargs: population

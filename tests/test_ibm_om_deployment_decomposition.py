@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 import torch
 
-from experiments.mnist_relu_drn import ibm_om_deployment_decomposition as decomposition
-from model.resistive.builders import ParameterBinding
-from model.variable.parameter import DenseWeight
-from training.ibm_reram_hwa import (
+import ebl.runtime.mnist_relu_drn.ibm_om_deployment_decomposition as decomposition
+from networks.resistive.builders import ParameterBinding
+from networks.variable.parameter import DenseWeight
+from methods.ibm_om.api import (
     IBM_RERAM_ENDPOINT_APPLICATION_POLICY,
     IbmReramArrayPopulation,
     IbmReramHwaConfig,

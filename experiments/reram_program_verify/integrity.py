@@ -7,7 +7,7 @@ from pathlib import Path
 import sqlite3
 from typing import Any, Mapping, Sequence
 
-from experiments.artifacts import atomic_write_json, sha256_file
+from ebl.runtime.store import atomic_write_json, sha256_file
 from experiments.reram_program_verify.storage import (
     STORAGE_SCHEMA_VERSION,
     TRAJECTORY_COLUMNS,

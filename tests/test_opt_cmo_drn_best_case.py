@@ -6,11 +6,11 @@ import math
 import pytest
 import torch
 
-from experiments.artifacts import content_hash
-from experiments.opt_cmo_drn.config import Config, Recovery, compatible_config_hashes, parse_config
-from experiments.opt_cmo_drn.physical import ConductanceArray
-from experiments.opt_cmo_drn.recovery import RecoveryStep, RecoveryWritePort
-from training.cmo_direct_adam import DirectWriteAdam
+from ebl.runtime.store import content_hash
+from ebl.schema.opt_cmo_drn import Config, Recovery, compatible_config_hashes, parse_config
+from networks.opt.physical import ConductanceArray
+from ebl.runtime.opt_cmo_drn.recovery import RecoveryStep, RecoveryWritePort
+from methods.cmo_direct_adam import DirectWriteAdam
 from tests.test_opt_cmo_drn import tiny_model
 from tests.test_opt_cmo_drn_bounded_recovery import array_at
 
@@ -86,8 +86,8 @@ def test_config_admits_warmup_cosine_only_for_dense_direct_writes_and_keeps_lega
 
 
 def test_recovery_step_builds_the_scheduled_dense_writer():
-    from experiments.opt_cmo_drn.devices import program_rewritten
-    from experiments.opt_cmo_drn.physical import CmoDrnBank
+    from methods.programming.cmo import program_rewritten
+    from networks.opt.physical import CmoDrnBank
     model, teacher = tiny_model()
     _, _, state = program_rewritten(model, 271002, 'none', 0., capture_state=True)
     config = replace(Config(), recovery=replace(Recovery(), **DENSE, lr_schedule='warmup_cosine',

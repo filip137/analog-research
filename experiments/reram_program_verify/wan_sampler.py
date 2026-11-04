@@ -10,7 +10,7 @@ import sys
 
 import torch
 
-from experiments.artifacts import atomic_write_json
+from ebl.runtime.store import atomic_write_json
 from experiments.reram_program_verify.analysis import sample_wan_reference
 
 

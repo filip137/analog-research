@@ -1,8 +1,8 @@
 from dataclasses import replace
 import pytest
 
-from experiments.opt_cmo_drn.config import Config
-from workflow.tuning import screen_configs,refinement_configs,confirmation_configs,final_configs,choose,choose_tier
+from ebl.schema.opt_cmo_drn import Config
+from ebl.lifecycle.tuning import screen_configs,refinement_configs,confirmation_configs,final_configs,choose,choose_tier
 
 
 def rows(configs):
@@ -53,7 +53,7 @@ def test_budget_includes_all_arms_selection_checkpoints_and_readiness():
 
 
 def test_same_tuning_plan_can_be_written_again(tmp_path):
-    from workflow.tuning import write_configs
+    from ebl.lifecycle.tuning import write_configs
     configs=screen_configs(Config(),'full')
     write_configs(tmp_path,configs,{'phase':'screen'})
     write_configs(tmp_path,configs,{'phase':'screen'})

@@ -1,13 +1,13 @@
 import torch
 
-from model.function.cost import SquaredError
-from model.function.network import Network
-from model.resistive.minimizer import QuadraticMinimizer
-from model.resistive.network import DeepResistiveEnergy
-from model.variable.parameter import Bias, DenseWeight
-from training.core.sgd import AugmentedFunction, EquilibriumProp
-from training.core.optimizers import build_optimizer
-from training.tiki_taka import TikiTakaOptimizer
+from networks.function.cost import SquaredError
+from networks.function.network import Network
+from networks.resistive.minimizer import QuadraticMinimizer
+from networks.resistive.network import DeepResistiveEnergy
+from networks.variable.parameter import Bias, DenseWeight
+from methods.core.sgd import AugmentedFunction, EquilibriumProp
+from methods.core.optimizers import build_optimizer
+from methods.tiki_taka import TikiTakaOptimizer
 
 
 def _build_minimizer(fn, free_layers, diode_params):

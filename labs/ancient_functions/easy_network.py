@@ -17,20 +17,20 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(LABS_ROOT) not in sys.path:
     sys.path.append(str(LABS_ROOT))
 
-from model.function.cost import SquaredErrorPairedOutputs
-from model.function.network import Network
-from custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer
-from model.function.interaction import (
+from networks.function.cost import SquaredErrorPairedOutputs
+from networks.function.network import Network
+from networks.resistive.solver import CustomQuadraticMinimizer as QuadraticMinimizer
+from networks.function.interaction import (
     BiasInteraction,
     DoubleExponentialNonLinearInteraction,
     DoubleQuadraticNonLinearInteraction,
     SumSeparableFunction,
 )
-from model.resistive.interaction import DenseResistive
-from model.resistive.layer import NonlinearResistiveLayer
-from model.variable.layer import InputLayer, LinearLayer
-from model.variable.parameter import Bias, DenseWeight
-from training.core.sgd import AugmentedFunction, Nudging
+from networks.resistive.interaction import DenseResistive
+from networks.resistive.layer import NonlinearResistiveLayer
+from networks.variable.layer import InputLayer, LinearLayer
+from networks.variable.parameter import Bias, DenseWeight
+from methods.core.sgd import AugmentedFunction, Nudging
 
 
 

@@ -6,11 +6,11 @@ from typing import Any
 
 import torch
 
-from experiments.small_network.components import build_model_stack, seed_runtime
-from experiments.small_network.config import parse_small_drn_config
-from model.resistive.minimizer import QuadraticMinimizer
-from training.core.optimizers import SGDOptimizer, build_optimizer
-from training.core.sgd import AugmentedFunction, EquilibriumProp
+from ebl.runtime.small_network.components import build_model_stack, seed_runtime
+from ebl.schema.small_network import parse_small_drn_config
+from networks.resistive.minimizer import QuadraticMinimizer
+from methods.core.optimizers import SGDOptimizer, build_optimizer
+from methods.core.sgd import AugmentedFunction, EquilibriumProp
 
 
 _ROOT = Path(__file__).parents[1]

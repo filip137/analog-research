@@ -24,13 +24,13 @@ from typing import (
     Tuple,
 )
 
-from experiments.definitions import (
+from ebl.registry import (
     get_definition,
     list_definitions,
     load_experiment_config,
     resolve_experiment_config,
 )
-from experiments.schema import (
+from ebl.schema.base import (
     ConfigError,
     ExperimentDefinition,
     RunMode,
@@ -38,7 +38,7 @@ from experiments.schema import (
 )
 
 if TYPE_CHECKING:
-    from campaigns.schema import CampaignSpec
+    from ebl.execution.schema import CampaignSpec
 
 
 class CliUsageError(ValueError):
@@ -783,13 +783,13 @@ def _handler_result(handler: Handler, request: Any) -> int:
 
 def _default_train_handler(request: TrainRequest) -> Optional[int]:
     if request.definition.experiment_id == "opt_cmo_drn_hwa.v1":
-        from experiments.opt_cmo_drn.runtime import run_train
+        from ebl.runtime.opt_cmo_drn.runtime import run_train
     elif request.definition.experiment_id == "small_drn.v1":
-        from experiments.small_network.runtime import run_train
+        from ebl.runtime.small_network.runtime import run_train
     elif request.definition.experiment_id == "mnist_relu.v1":
-        from experiments.mnist_relu.runtime import run_train
+        from ebl.runtime.mnist_relu.runtime import run_train
     elif request.definition.experiment_id == "mnist_relu_drn_kd.v1":
-        from experiments.mnist_relu_drn.runtime import run_train
+        from ebl.runtime.mnist_relu_drn.runtime import run_train
     elif request.definition.experiment_id in {
         "mnist_relu_drn_reset.v1",
         "mnist_relu_drn_reset_differential.v1",
@@ -797,7 +797,7 @@ def _default_train_handler(request: TrainRequest) -> Optional[int]:
         "mnist_relu_drn_reset_bias_legacy.v1",
         "mnist_relu_drn_reset_factorial.v1",
     }:
-        from experiments.mnist_relu_drn_reset.runtime import run_train
+        from ebl.runtime.mnist_relu_drn_reset.runtime import run_train
     else:  # pragma: no cover - registry and handler map change together
         raise ConfigError(
             "Expected train runtime dispatch for a registered experiment. "
@@ -813,20 +813,20 @@ def _default_linspace_handler(request: LinspaceRequest) -> Optional[int]:
             "Expected linspace runtime dispatch only for 'small_drn.v1'. "
             f"Provided value: {request.definition.experiment_id!r}."
         )
-    from experiments.small_network.runtime import run_linspace
+    from ebl.runtime.small_network.runtime import run_linspace
 
     return run_linspace(request)
 
 
 def _default_validate_handler(request: ValidateRequest) -> Optional[int]:
     if request.definition.experiment_id == "opt_cmo_drn_hwa.v1":
-        from experiments.opt_cmo_drn.runtime import run_validate
+        from ebl.runtime.opt_cmo_drn.runtime import run_validate
     elif request.definition.experiment_id == "small_drn.v1":
-        from experiments.small_network.runtime import run_validate
+        from ebl.runtime.small_network.runtime import run_validate
     elif request.definition.experiment_id == "mnist_relu.v1":
-        from experiments.mnist_relu.runtime import run_validate
+        from ebl.runtime.mnist_relu.runtime import run_validate
     elif request.definition.experiment_id == "mnist_relu_drn_kd.v1":
-        from experiments.mnist_relu_drn.runtime import run_validate
+        from ebl.runtime.mnist_relu_drn.runtime import run_validate
     elif request.definition.experiment_id in {
         "mnist_relu_drn_reset.v1",
         "mnist_relu_drn_reset_differential.v1",
@@ -834,7 +834,7 @@ def _default_validate_handler(request: ValidateRequest) -> Optional[int]:
         "mnist_relu_drn_reset_bias_legacy.v1",
         "mnist_relu_drn_reset_factorial.v1",
     }:
-        from experiments.mnist_relu_drn_reset.runtime import run_validate
+        from ebl.runtime.mnist_relu_drn_reset.runtime import run_validate
     else:  # pragma: no cover - registry and handler map change together
         raise ConfigError(
             "Expected validate runtime dispatch for a registered experiment. "
@@ -848,14 +848,14 @@ def _default_characterize_handler(
     request: CharacterizeRequest,
 ) -> Optional[int]:
     if request.definition.experiment_id == "ibm_reram_program_verify.v1":
-        from experiments.reram_program_verify.runtime import run_characterize
+        from ebl.runtime.reram_program_verify import run_characterize
 
         return run_characterize(request)
     if (
         request.definition.experiment_id
         == "ibm_om_raw_active_cell_program_verify.v1"
     ):
-        from experiments.reram_program_verify.raw_active_cell_runtime import (
+        from ebl.runtime.raw_active_cell import (
             run_raw_active_cell_characterize,
         )
 
@@ -876,7 +876,7 @@ def _default_checkpoint_import_legacy_handler(
             "Expected legacy checkpoint import only for 'small_drn.v1'. "
             f"Provided value: {request.definition.experiment_id!r}."
         )
-    from experiments.small_network.runtime import import_legacy_checkpoint
+    from ebl.runtime.small_network.runtime import import_legacy_checkpoint
 
     return import_legacy_checkpoint(request)
 
@@ -896,7 +896,7 @@ def _default_command_handlers() -> CommandHandlers:
 def _default_campaign_handler(request: CampaignRunRequest) -> int:
     """Lazily execute a campaign without connecting numerical handlers."""
 
-    from campaigns.runner import run_campaign
+    from ebl.execution.runner import run_campaign
 
     try:
         records = run_campaign(
@@ -1047,7 +1047,7 @@ def _dispatch(
         args.command_name == "campaign"
         and args.campaign_command == "run"
     ):
-        from campaigns.schema import load_campaign_manifest
+        from ebl.execution.schema import load_campaign_manifest
 
         try:
             spec = load_campaign_manifest(args.manifest)
@@ -1069,7 +1069,7 @@ def _dispatch(
         )
 
     if args.command_name == "runs":
-        from experiments.study_workflow import inspect_run
+        from ebl.lifecycle.study import inspect_run
 
         records = []
         for path in args.run_dirs:
@@ -1089,7 +1089,7 @@ def _dispatch(
         return 0 if all(r["valid"] and (not args.require_complete or r["process_complete"]) for r in records) else 1
 
     if args.command_name == "study":
-        from experiments.study_workflow import (
+        from ebl.lifecycle.study import (
             finalize_study,
             prepare_study,
             summarize_study,

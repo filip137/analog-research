@@ -5,7 +5,7 @@ import copy
 import pytest
 import torch
 
-from experiments.opt_cmo_drn.zo_attention import AttentionBackward, install
+from methods.zo_attention import AttentionBackward, install
 from tests.test_opt_cmo_drn import tiny_model
 
 
@@ -82,7 +82,7 @@ def test_linearized_drops_only_the_softmax_path(setup):
     layer = model.digital.layers[model.start + 1]
     x = torch.randn(2, 5, 4, generator=torch.Generator().manual_seed(9))
     grad = torch.randn(2, 5, 4, generator=torch.Generator().manual_seed(10))
-    from experiments.opt_cmo_drn.zo_attention import linearized_vjp
+    from methods.zo_attention import linearized_vjp
     # With uniform attention scores the softmax path vanishes: q = 0.
     frozen = copy.deepcopy(layer)
     frozen.self_attn.q_proj.weight.zero_()

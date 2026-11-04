@@ -23,3 +23,13 @@ Planning checks: 28 focused tests passed; 119 declared golden fixtures present; 
 ## Current handoff
 
 Implementation active; coordinator owns validation processes. Full baseline suite running before extraction. No scientific results or performance improvements claimed.
+
+## Extraction checkpoint
+
+The baseline scoped suite reported 1521 passed, 49 skipped and three pre-existing calibration import failures. An initial unscoped collection incorrectly included frozen results/source trees; its failed log is preserved, and all subsequent suites explicitly target tests/.
+
+Relocated reusable model/training and execution modules. Split pulse plants, endpoint laws, measured cohorts, neutral config/artifact utilities, held CMO arrays and recovery coordination. Hardware receives explicit fault domains. OPT native and physical forwards now share a traversal, and HWA sampling is method-owned. Fixed the stale calibration import.
+
+Validation: 131 initial extraction tests, 111 boundary/recovery tests and 65 path/training-golden tests passed. Eight independent OPT forward/gradient/state traces are bit-exact against baseline; all 573 accepted resolved example/mode configurations are identical. All 15 shared modules remain unchanged. Full post-relocation failures identified missing moved constants, missing ignored device-data staging, stale test instrumentation and relocation paths; those causes have been repaired and checked in affected suites.
+
+Remaining: domain configuration/builders, external sampling composition, lifecycle public routing, final boundaries/install/replay checks, documentation and integration.

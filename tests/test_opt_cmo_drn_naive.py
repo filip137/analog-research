@@ -7,13 +7,14 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from experiments.opt_cmo_drn.config import Config, Data, Recovery, Solver, Training, parse_config
+from ebl.schema.opt_cmo_drn import Config, Data, Recovery, Solver, Training, parse_config
 from tests.test_opt_cmo_drn import tiny_model
 
 
 def test_naive_hold_scores_raw_programming_without_writes(tmp_path, monkeypatch):
-    from experiments.opt_cmo_drn import runtime, recovery
-    from experiments.artifacts import sha256_file
+    import ebl.runtime.opt_cmo_drn.runtime as runtime
+    import ebl.runtime.opt_cmo_drn.recovery as recovery
+    from ebl.runtime.store import sha256_file
     model, teacher = tiny_model()
     teacher_path = tmp_path / 'teacher.pt';torch.save({}, teacher_path)
     config = replace(Config(), stage='deploy', teacher_sha256=sha256_file(teacher_path),

@@ -6,8 +6,8 @@ import torch
 pytest.importorskip("aihwkit")
 
 from aihwkit.simulator.rpu_base import cuda as aihwkit_cuda
-from model.variable.parameter import DenseWeight
-from training.tiki_taka import TikiTakaConfig, TikiTakaOptimizer
+from networks.variable.parameter import DenseWeight
+from methods.tiki_taka import TikiTakaConfig, TikiTakaOptimizer
 
 
 class _ParameterFunction:

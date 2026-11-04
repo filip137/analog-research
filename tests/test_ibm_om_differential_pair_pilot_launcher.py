@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 import experiments.mnist_relu_drn.ibm_om_differential_pair_pilot_launcher as launcher
-from experiments.artifacts import atomic_write_json, sha256_file
+from ebl.runtime.store import atomic_write_json, sha256_file
 from experiments.mnist_relu_drn.ibm_om_differential_pair_pilot_launcher import (
     ASSIGNMENT_SEED,
     CANONICAL_REPLAY_EXAMPLES,
@@ -65,7 +65,7 @@ from experiments.mnist_relu_drn.ibm_om_differential_pair_pilot_launcher import (
     _validate_selected_checkpoint_and_resume,
     _validate_serialized_canary_artifacts,
 )
-from experiments.study_workflow import prepare_study
+from ebl.lifecycle.study import prepare_study
 
 
 _SHA = "a" * 64
@@ -385,7 +385,7 @@ def _preflight_report() -> dict[str, object]:
         "schema_version": 1,
         "study_id": STUDY_ID,
         "authoritative_entry_point": (
-            "training.ibm_reram_hwa."
+            "methods.ibm_om.api."
             "IbmReramHwaParameterModifier.preflight_target_mapping"
         ),
         "inputs": {
@@ -564,9 +564,9 @@ def _install_canonicalization_fakes(
 ) -> dict[str, Any]:
     import torch
 
-    import experiments.mnist_relu_drn.components as components
-    import experiments.mnist_relu_drn.runtime as runtime
-    import training.checkpoint as checkpoint
+    import ebl.runtime.mnist_relu_drn.components as components
+    import ebl.runtime.mnist_relu_drn.runtime as runtime
+    import methods.checkpoint as checkpoint
 
     values = {
         key: torch.tensor([float(index), float(index) + 0.25])
@@ -703,7 +703,7 @@ def _write_post_run_fixture(
 ) -> tuple[Path, dict[str, Path]]:
     import torch
 
-    import experiments.mnist_relu_drn.ibm_om_deployment_decomposition as decomposition
+    import ebl.runtime.mnist_relu_drn.ibm_om_deployment_decomposition as decomposition
 
     study_dir = tmp_path / STUDY_ID
     run_dirs: dict[str, Path] = {}
@@ -1933,7 +1933,7 @@ def test_pulse_deployment_integrity_gates_provenance_endpoints_masks_and_counts(
     mutation: str,
     match: str,
 ) -> None:
-    import experiments.mnist_relu_drn.ibm_om_deployment_decomposition as decomposition
+    import ebl.runtime.mnist_relu_drn.ibm_om_deployment_decomposition as decomposition
 
     monkeypatch.setattr(
         decomposition,
@@ -1976,7 +1976,7 @@ def test_pulse_deployment_integrity_gates_provenance_endpoints_masks_and_counts(
 def test_pulse_deployment_integrity_accepts_the_exact_full_array_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import experiments.mnist_relu_drn.ibm_om_deployment_decomposition as decomposition
+    import ebl.runtime.mnist_relu_drn.ibm_om_deployment_decomposition as decomposition
 
     monkeypatch.setattr(
         decomposition,

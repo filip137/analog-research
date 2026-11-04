@@ -7,10 +7,10 @@ import torch
 
 from labs.tools.analyze_mnist_conductance_floor import replay
 from labs.tools.analyze_mnist_mapping_kl import paired_scores
-from model.function.network import Network
-from model.resistive.minimizer import QuadraticMinimizer
-from model.resistive.network import DeepResistiveEnergy
-from model.variable.parameter import Bias, DenseWeight
+from networks.function.network import Network
+from networks.resistive.minimizer import QuadraticMinimizer
+from networks.resistive.network import DeepResistiveEnergy
+from networks.variable.parameter import Bias, DenseWeight
 
 
 def test_floor_replay_matches_the_runtime_coordinate_updates() -> None:

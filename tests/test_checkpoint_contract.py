@@ -6,13 +6,13 @@ import numpy as np
 import pytest
 import torch
 
-from model.resistive.builders import (
+from networks.resistive.builders import (
     ParameterBinding,
     ParameterCatalog,
     build_deep_resistive_energy,
 )
-import training.checkpoint as checkpoint_module
-from training.checkpoint import (
+import methods.checkpoint as checkpoint_module
+from methods.checkpoint import (
     CheckpointError,
     EPOCH_BOUNDARY_SCHEMA,
     EPOCH_BOUNDARY_SCHEMA_VERSION,

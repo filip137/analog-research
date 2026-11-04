@@ -143,7 +143,7 @@ def substitutions(
     hash differs between identical runs; its decoded contents do not.
     """
 
-    from experiments.artifacts import sha256_file
+    from ebl.runtime.store import sha256_file
 
     mapping = {sha256_file(path): f"<sha256:{name}>" for name, path in generated.items()}
     mapping.update({root: f"<root{index}>" for index, root in enumerate(roots)})
@@ -439,7 +439,7 @@ def _fake_wan2022() -> None:
     reproducible programmed state and report, not AIHWKit itself.
     """
 
-    from experiments.small_network import deployment
+    import ebl.runtime.small_network.deployment as deployment
 
     def program_one(catalog, config):
         binding = catalog.by_key["base.dense_weight.0"]
@@ -465,10 +465,10 @@ def _fake_wan2022() -> None:
 def _base_weights(session: Session, label: str, payload: dict[str, Any]) -> Path:
     """Save the seeded base group of ``payload``'s model as named weights."""
 
-    from experiments.small_network.components import build_model_stack
-    from experiments.small_network.config import parse_small_drn_config
-    from model.resistive.builders import ParameterCatalog
-    from training.checkpoint import save_named_weights
+    from ebl.runtime.small_network.components import build_model_stack
+    from ebl.schema.small_network import parse_small_drn_config
+    from networks.resistive.builders import ParameterCatalog
+    from methods.checkpoint import save_named_weights
 
     torch.manual_seed(payload["runtime"]["seed"])
     document = parse_small_drn_config(payload)
@@ -583,7 +583,7 @@ def run_small_om_bounds() -> dict[str, Any]:
     digests by those of a placeholder file.
     """
 
-    from training import ibm_om_fp32_bounds
+    import methods.ibm_om_fp32_bounds as ibm_om_fp32_bounds
 
     payload = _small_payload(
         "mnist_om_range_uniform_optimizer_reference_20260826/adam_lr_1e3.json"
@@ -600,7 +600,7 @@ def run_small_om_bounds() -> dict[str, Any]:
     ibm_om_fp32_bounds.load_om_array_population = lambda path: population
 
     def body(session: Session) -> None:
-        from experiments.artifacts import sha256_file
+        from ebl.runtime.store import sha256_file
 
         placeholder = session.directory / "population.npz"
         placeholder.write_bytes(b"synthetic IBM OM population placeholder\n")
@@ -724,7 +724,7 @@ def _fake_om_sampler(kind: str) -> None:
 
     import hashlib
 
-    from training.ibm_om import modifier
+    import methods.ibm_om.modifier as modifier
 
     def population(bindings, *, assignment_seed, corruption_policy):
         keys = tuple(binding.key for binding in bindings)

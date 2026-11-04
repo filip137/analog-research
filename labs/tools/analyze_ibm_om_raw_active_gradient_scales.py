@@ -17,18 +17,18 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from experiments.artifacts import atomic_write_json, sha256_file
-from experiments.definitions import resolve_experiment_config
-from experiments.mnist_relu_drn.components import build_student_stack
-from experiments.mnist_relu_drn.runtime import (
+from ebl.runtime.store import atomic_write_json, sha256_file
+from ebl.registry import resolve_experiment_config
+from ebl.runtime.mnist_relu_drn.components import build_student_stack
+from ebl.runtime.mnist_relu_drn.runtime import (
     _amplification_index_report,
     _load_teacher,
     _validate_checkpoint_metadata,
 )
-from experiments.mnist_shared import build_mnist_loaders, limited
-from experiments.schema import RunMode
-from training.checkpoint import load_named_weights
-from training.ibm_reram_hwa import (
+from networks.data.mnist import build_mnist_loaders, limited
+from ebl.schema.base import RunMode
+from methods.checkpoint import load_named_weights
+from methods.ibm_om.api import (
     _raw_active_structural_cell_mask,
     load_om_array_population,
     map_ibm_reram_array_targets,

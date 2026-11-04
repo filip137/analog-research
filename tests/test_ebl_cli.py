@@ -317,7 +317,7 @@ def test_default_handlers_do_not_import_runtime_before_config_validation(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    runtime_module = "experiments.small_network.runtime"
+    runtime_module = "ebl.runtime.small_network.runtime"
     monkeypatch.delitem(sys.modules, runtime_module, raising=False)
     config_path = tmp_path / "invalid.json"
     config_path.write_text('{"schema_version": 1,', encoding="utf-8")
@@ -343,7 +343,7 @@ def test_default_handlers_lazily_dispatch_all_numerical_commands(
     monkeypatch,
 ) -> None:
     config_path = _write_config(tmp_path)
-    runtime = ModuleType("experiments.small_network.runtime")
+    runtime = ModuleType("ebl.runtime.small_network.runtime")
     seen = []
 
     def handler(command_name: str, result: int):
@@ -362,7 +362,7 @@ def test_default_handlers_lazily_dispatch_all_numerical_commands(
     )
     monkeypatch.setitem(
         sys.modules,
-        "experiments.small_network.runtime",
+        "ebl.runtime.small_network.runtime",
         runtime,
     )
 
@@ -651,7 +651,7 @@ def test_campaign_uses_lazy_default_runner(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    import campaigns.runner
+    import ebl.execution.runner
 
     manifest = _write_campaign_manifest(tmp_path)
     seen = []
@@ -660,7 +660,7 @@ def test_campaign_uses_lazy_default_runner(
         seen.append((spec, options))
         return {"base_train": {"status": "dry_run"}}
 
-    monkeypatch.setattr(campaigns.runner, "run_campaign", run_campaign)
+    monkeypatch.setattr(ebl.execution.runner, "run_campaign", run_campaign)
     result = main(
         [
             "campaign",

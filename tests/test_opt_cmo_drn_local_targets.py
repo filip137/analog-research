@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from experiments.opt_cmo_drn.local_targets import MODES, local_forward
+from methods.local_targets import MODES, local_forward
 from tests.test_opt_cmo_drn import tiny_model
 
 

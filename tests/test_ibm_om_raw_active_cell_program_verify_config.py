@@ -6,16 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from experiments import parse_experiment_config, resolve_experiment_config
-from experiments.reram_program_verify.raw_active_cell_config import (
+from ebl.registry import parse_experiment_config, resolve_experiment_config
+from ebl.schema.raw_active_cell import (
     P90_COMMON_CELL_9_PROFILE,
     RAW_ACTIVE_CELL_CODEBOOK_BASELINE,
     RAW_ACTIVE_CELL_CODEBOOK_LEVELS,
     RAW_ACTIVE_CELL_CODEBOOK_STEP,
     RawActiveCellProgramVerifySpec,
 )
-from experiments.reram_program_verify import raw_active_cell_runtime
-from experiments.schema import ConfigError, RunMode
+import ebl.runtime.raw_active_cell as raw_active_cell_runtime
+from ebl.schema.base import ConfigError, RunMode
 
 
 ROOT = Path(__file__).resolve().parents[1]

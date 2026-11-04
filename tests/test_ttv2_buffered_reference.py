@@ -8,7 +8,7 @@ import subprocess
 import pytest
 import torch
 
-from training.ttv2_buffered_reference import (
+from methods.ttv2_buffered_reference import (
     buffered_transfer_update,
     effective_fast_learning_rate,
     effective_transfer_learning_rate,

@@ -6,18 +6,18 @@ from pathlib import Path
 
 import pytest
 
-from experiments.definitions import get_definition, parse_experiment_config
-from experiments.mnist_relu_drn_reset.components import build_reset_student_stack
-from experiments.mnist_relu_drn_reset.learning_rate_selection import (
+from ebl.registry import get_definition, parse_experiment_config
+from ebl.runtime.mnist_relu_drn_reset.components import build_reset_student_stack
+from ebl.runtime.mnist_relu_drn_reset.learning_rate_selection import (
     _parameter_topology,
 )
-from experiments.mnist_relu_drn_reset.runtime import (
+from ebl.runtime.mnist_relu_drn_reset.runtime import (
     _requires_production_restart,
     _validate_checkpoint_metadata,
 )
-from experiments.schema import ConfigError, RunMode
+from ebl.schema.base import ConfigError, RunMode
 from labs.tools.analyze_mnist_relu_drn_reset_factorial import _factorial_effects
-from model.resistive.interaction import DenseResistive
+from networks.resistive.interaction import DenseResistive
 
 
 ROOT = Path(__file__).resolve().parents[1]

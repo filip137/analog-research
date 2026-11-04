@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from experiments.definitions import parse_experiment_config
-from experiments.mnist_relu_drn.runtime import (
+from ebl.registry import parse_experiment_config
+from ebl.runtime.mnist_relu_drn.runtime import (
     _validate_cohort_b_source_metadata,
 )
-from experiments.schema import RunMode
-from training.measured_trace import MeasuredTraceConfig
+from ebl.schema.base import RunMode
+from methods.measured_trace import MeasuredTraceConfig
 
 
 ROOT = Path(__file__).resolve().parents[1]

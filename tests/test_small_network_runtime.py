@@ -14,14 +14,14 @@ from ebl.cli import (
     TrainRequest,
     ValidateRequest,
 )
-from experiments.definitions import get_definition
-from experiments.schema import RunMode
-from experiments.small_network.components import build_model_stack
-from experiments.small_network.config import (
+from ebl.registry import get_definition
+from ebl.schema.base import RunMode
+from ebl.runtime.small_network.components import build_model_stack
+from ebl.schema.small_network import (
     ComponentSettings,
     parse_small_drn_config,
 )
-from experiments.small_network.runtime import (
+from ebl.runtime.small_network.runtime import (
     TrainingEpochReport,
     TrainingOutcome,
     execute_train,
@@ -30,8 +30,8 @@ from experiments.small_network.runtime import (
     run_train,
     run_validate,
 )
-from model.resistive.builders import ParameterCatalog
-from training.checkpoint import NAMED_WEIGHTS_SCHEMA, save_named_weights
+from networks.resistive.builders import ParameterCatalog
+from methods.checkpoint import NAMED_WEIGHTS_SCHEMA, save_named_weights
 
 
 _REPO_ROOT = Path(__file__).parents[1]
@@ -572,7 +572,7 @@ def test_digital_low_rank_programs_base_once_and_trains_only_readout(
         }
 
     monkeypatch.setattr(
-        "experiments.small_network.deployment."
+        "ebl.runtime.small_network.deployment."
         "program_wan2022_base_conductance",
         fake_program,
     )
@@ -657,7 +657,7 @@ def test_passive_layerwise_low_rank_programs_both_edges_once_and_freezes_base(
         }
 
     monkeypatch.setattr(
-        "experiments.small_network.deployment."
+        "ebl.runtime.small_network.deployment."
         "program_wan2022_base_conductances",
         fake_program,
     )

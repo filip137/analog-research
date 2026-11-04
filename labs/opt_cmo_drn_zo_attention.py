@@ -5,7 +5,7 @@ saved deployment, keeps the DRN simulator (BPTT) gradients exact, and changes
 only how errors cross the digital attention between analog MLPs:
 
 Arms local_cached, local_onpolicy and local_stream replace the error crossing
-attention by block-local targets (experiments/opt_cmo_drn/local_targets.py).
+attention by block-local targets (ebl/runtime/opt_cmo_drn/local_targets.py).
 
   epsilon    finite-difference directional derivatives against exact VJPs
   alignment  conductance-gradient quality on the first recovery batch
@@ -28,16 +28,16 @@ import time
 
 import torch
 
-from experiments.artifacts import atomic_write_json, sha256_file
-from experiments.opt_cmo_drn import runtime
-from experiments.opt_cmo_drn.config import parse_config
-from experiments.opt_cmo_drn.data import cohorts
-from experiments.opt_cmo_drn.local_targets import LocalRecoveryStep
-from experiments.opt_cmo_drn.physical import CmoDrnBank
-from experiments.opt_cmo_drn.recovery import RecoveryStep
-from experiments.opt_cmo_drn.zo_attention import AttentionBackward, install, uninstall
-from training.core.engine import train_epoch
-from training.core.guards import FiniteGradientGuard
+from ebl.runtime.store import atomic_write_json, sha256_file
+import ebl.runtime.opt_cmo_drn.runtime as runtime
+from ebl.schema.opt_cmo_drn import parse_config
+from networks.opt.data import cohorts
+from methods.local_targets import LocalRecoveryStep
+from networks.opt.physical import CmoDrnBank
+from ebl.runtime.opt_cmo_drn.recovery import RecoveryStep
+from methods.zo_attention import AttentionBackward, install, uninstall
+from methods.core.engine import train_epoch
+from methods.core.guards import FiniteGradientGuard
 
 
 def arm_estimator(arm, args, device):
@@ -96,9 +96,9 @@ def provenance(args, identity):
     # Cluster compute nodes may lack git; per-file hashes below identify the source.
     git = lambda *a: (subprocess.run(['git', '-C', str(root), *a], capture_output=True, text=True).stdout.strip()
                       or None) if shutil.which('git') else None
-    files = ['experiments/opt_cmo_drn/zo_attention.py', 'labs/opt_cmo_drn_zo_attention.py',
-             'experiments/opt_cmo_drn/recovery.py', 'experiments/opt_cmo_drn/model.py',
-             'model/resistive/differentiable.py', 'training/cmo_direct_adam.py']
+    files = ['methods/zo_attention.py', 'labs/opt_cmo_drn_zo_attention.py',
+             'ebl/runtime/opt_cmo_drn/recovery.py', 'networks/opt/drn.py',
+             'networks/resistive/differentiable.py', 'methods/cmo_direct_adam.py']
     return {'command': args.command, 'arguments': {k: str(v) for k, v in vars(args).items()}, **identity,
             'config_sha256': sha256_file(args.config), 'git_commit': git('rev-parse', 'HEAD'),
             'source_sha256': {f: sha256_file(root / f) for f in files},

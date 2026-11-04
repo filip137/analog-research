@@ -16,10 +16,10 @@ for path in (PROJECT_ROOT, LABS_DIR):
     if str(path) not in sys.path:
         sys.path.append(str(path))
 
-from labs.datasets import LinSpaceDataset  # noqa: E402
-from model.resistive.network import DeepResistiveEnergy  # noqa: E402
-from model.function.network import Network  # noqa: E402
-from custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer  # noqa: E402
+from networks.data.reference import LinSpaceDataset  # noqa: E402
+from networks.resistive.network import DeepResistiveEnergy  # noqa: E402
+from networks.function.network import Network  # noqa: E402
+from networks.resistive.solver import CustomQuadraticMinimizer as QuadraticMinimizer  # noqa: E402
 
 
 def _set_seed(seed: int | None) -> None:

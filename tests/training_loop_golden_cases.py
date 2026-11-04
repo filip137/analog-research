@@ -1,4 +1,4 @@
-"""Golden cases for routing the MNIST DRN loops through ``training.core.engine``.
+"""Golden cases for routing the MNIST DRN loops through ``methods.core.engine``.
 
 Every case drives a per-batch loop of ``mnist_relu_drn_kd.v1`` or
 ``mnist_relu_drn_reset*.v1`` (training, evaluation, calibration collection,
@@ -147,7 +147,7 @@ def _kd_stack(case_name: str = _LITERAL_GAIN):
 
 
 def _reset_stack(objective: str):
-    from experiments.mnist_relu_drn_reset.components import (
+    from ebl.runtime.mnist_relu_drn_reset.components import (
         build_reset_student_stack,
     )
 
@@ -223,8 +223,8 @@ def _ibm(case_name: str, bindings, workdir: Path):
 
 
 def _modifier(kind: str, stack, workdir: Path):
-    from training.add_normal import AddNormalConfig, build_add_normal_modifier
-    from training.core.modifier import SplitParameterModifier
+    from methods.add_normal import AddNormalConfig, build_add_normal_modifier
+    from methods.core.modifier import SplitParameterModifier
 
     bindings = tuple(stack.bundle.catalog.trainable)
     if kind == "clean":
@@ -267,7 +267,7 @@ KD_EVAL_CASES = {
 
 
 def run_kd_eval(name: str) -> dict[str, Any]:
-    from experiments.mnist_relu_drn import runtime
+    import ebl.runtime.mnist_relu_drn.runtime as runtime
 
     spec = KD_EVAL_CASES[name]
     stack = _kd_stack()
@@ -303,7 +303,7 @@ KD_SELECTION_CASES = {
 
 
 def run_kd_selection(name: str) -> dict[str, Any]:
-    from experiments.mnist_relu_drn import runtime
+    import ebl.runtime.mnist_relu_drn.runtime as runtime
 
     case = KD_SELECTION_CASES[name]
     stack = _kd_stack()
@@ -337,7 +337,7 @@ KD_TRAIN_CASES = {
 
 
 def run_kd_train(name: str) -> dict[str, Any]:
-    from experiments.mnist_relu_drn import runtime
+    import ebl.runtime.mnist_relu_drn.runtime as runtime
 
     spec = KD_TRAIN_CASES[name]
     stack = _kd_stack()
@@ -366,7 +366,7 @@ def run_kd_train(name: str) -> dict[str, Any]:
 
 
 def run_kd_train_nonfinite() -> dict[str, Any]:
-    from experiments.mnist_relu_drn import runtime
+    import ebl.runtime.mnist_relu_drn.runtime as runtime
 
     stack = _kd_stack()
     bindings = tuple(stack.bundle.catalog.trainable)
@@ -387,7 +387,7 @@ KD_COLLECT_CASES = ("clean", "ibm_evaluation_context")
 
 
 def run_kd_collect(name: str) -> dict[str, Any]:
-    from experiments.mnist_relu_drn.components import collect_calibration
+    from ebl.runtime.mnist_relu_drn.components import collect_calibration
 
     stack = _kd_stack()
     bindings = tuple(stack.bundle.catalog.trainable)
@@ -415,7 +415,7 @@ KD_TRACE_CASES = {
 
 
 def run_kd_trace(name: str) -> dict[str, Any]:
-    from experiments.mnist_relu_drn.ibm_om_deployment_decomposition import (
+    from ebl.runtime.mnist_relu_drn.ibm_om_deployment_decomposition import (
         collect_evaluation_trace,
     )
 
@@ -456,7 +456,7 @@ _RECOVERY_BATCHES = 2
 
 
 def _stack_recovery(spec: dict[str, Any], workdir: Path):
-    from training.ibm_reram_recovery import IbmOmDeployedRecovery
+    from methods.ibm_reram_recovery import IbmOmDeployedRecovery
 
     case = om.HWA_CASES[_RECOVERY_SOURCE]
     stack = _kd_stack(_RECOVERY_SOURCE)
@@ -502,8 +502,8 @@ def _stack_recovery(spec: dict[str, Any], workdir: Path):
 
 
 def run_recovery_loop(name: str) -> dict[str, Any]:
-    from experiments.mnist_relu_drn import ibm_om_deployed_recovery as deployed
-    from experiments.mnist_relu_drn import runtime
+    import ebl.runtime.mnist_relu_drn.ibm_om_deployed_recovery as deployed
+    import ebl.runtime.mnist_relu_drn.runtime as runtime
 
     spec = RECOVERY_LOOP_CASES[name]
     torch.manual_seed(2030)
@@ -587,8 +587,8 @@ RESET_TRAIN_CASES = {
 
 
 def run_reset_train(name: str) -> dict[str, Any]:
-    from experiments.mnist_relu_drn_reset import runtime
-    from experiments.mnist_relu_drn_reset.learning_rate_selection import (
+    import ebl.runtime.mnist_relu_drn_reset.runtime as runtime
+    from ebl.runtime.mnist_relu_drn_reset.learning_rate_selection import (
         SafetyMonitor,
     )
 
@@ -622,8 +622,8 @@ def run_reset_train(name: str) -> dict[str, Any]:
 
 
 def run_reset_train_nonfinite() -> dict[str, Any]:
-    from experiments.mnist_relu_drn_reset import runtime
-    from experiments.mnist_relu_drn_reset.learning_rate_selection import (
+    import ebl.runtime.mnist_relu_drn_reset.runtime as runtime
+    from ebl.runtime.mnist_relu_drn_reset.learning_rate_selection import (
         SafetyMonitor,
     )
 
@@ -661,7 +661,7 @@ RESET_EVAL_CASES = {
 
 
 def run_reset_eval(name: str) -> dict[str, Any]:
-    from experiments.mnist_relu_drn_reset import runtime
+    import ebl.runtime.mnist_relu_drn_reset.runtime as runtime
 
     spec = RESET_EVAL_CASES[name]
     stack = _reset_stack(spec["objective"])
@@ -682,7 +682,7 @@ def run_reset_eval(name: str) -> dict[str, Any]:
 
 
 def run_reset_collect() -> dict[str, Any]:
-    from experiments.mnist_relu_drn_reset import runtime
+    import ebl.runtime.mnist_relu_drn_reset.runtime as runtime
 
     stack = _reset_stack("teacher_kl")
     bindings = tuple(stack.bundle.catalog.trainable)
@@ -705,7 +705,7 @@ RESET_PROBE_CASES = {
 
 
 def run_reset_probe(name: str) -> dict[str, Any]:
-    from experiments.mnist_relu_drn_reset.learning_rate_selection import _run_probe
+    from ebl.runtime.mnist_relu_drn_reset.learning_rate_selection import _run_probe
 
     spec = RESET_PROBE_CASES[name]
     stack = _reset_stack("teacher_kl")

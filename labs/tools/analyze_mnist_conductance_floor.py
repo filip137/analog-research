@@ -29,8 +29,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from experiments.definitions import load_experiment_config
-from experiments.small_network.components import build_data
+from ebl.registry import load_experiment_config
+from ebl.runtime.small_network.components import build_data
 
 
 W1_KEY = "base.dense_weight.0"

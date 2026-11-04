@@ -39,10 +39,10 @@ _append_sys_path(LABS_DIR)
 _append_sys_path(PROJECT_ROOT)
 _append_sys_path(MODEL_ROOT)
 
-from model.function.cost import SquaredErrorPairedOutputs
-from model.function.network import Network
-from custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer
-from model.function.interaction import (
+from networks.function.cost import SquaredErrorPairedOutputs
+from networks.function.network import Network
+from networks.resistive.solver import CustomQuadraticMinimizer as QuadraticMinimizer
+from networks.function.interaction import (
     BiasInteraction,
     DoubleExponentialNonLinearInteraction,
     DoubleQuadraticNonLinearInteraction,
@@ -51,15 +51,15 @@ from model.function.interaction import (
     Function,
     QFunction,
 )
-from model.resistive.interaction import (
+from networks.resistive.interaction import (
     AveragePoolResistive, DenseResistive, MaxPoolResistive,
     ConvResistive as CoreConvResistive,
 )
-from model.resistive.network import DeepResistiveEnergy
-from model.resistive.layer import NonlinearResistiveLayer, PoolLayer
-from model.variable.layer import InputLayer, LinearLayer
-from model.variable.parameter import Bias, ConvWeight, DenseWeight, PoolWeight
-from training.core.sgd import Nudging
+from networks.resistive.network import DeepResistiveEnergy
+from networks.resistive.layer import NonlinearResistiveLayer, PoolLayer
+from networks.variable.layer import InputLayer, LinearLayer
+from networks.variable.parameter import Bias, ConvWeight, DenseWeight, PoolWeight
+from methods.core.sgd import Nudging
 
 import torch
 import torch.nn.functional as F

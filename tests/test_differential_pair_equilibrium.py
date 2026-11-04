@@ -5,16 +5,16 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from labs.custom_minimizer import (
+from networks.resistive.solver import (
     CustomMinimizer,
     CustomQuadraticMinimizer,
     MinimizerSettings,
 )
-from model.resistive.layer import NonlinearResistiveLayer
-from model.resistive.network import DeepResistiveEnergy
-from model.variable.layer import LinearLayer
-from model.function.cost import SquaredError
-from training.core.sgd import AugmentedFunction
+from networks.resistive.layer import NonlinearResistiveLayer
+from networks.resistive.network import DeepResistiveEnergy
+from networks.variable.layer import LinearLayer
+from networks.function.cost import SquaredError
+from methods.core.sgd import AugmentedFunction
 
 
 DTYPE = torch.float64

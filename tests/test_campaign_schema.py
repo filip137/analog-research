@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from campaigns.schema import (
+from ebl.execution.schema import (
     CampaignManifestError,
     CampaignSpec,
     load_campaign_manifest,

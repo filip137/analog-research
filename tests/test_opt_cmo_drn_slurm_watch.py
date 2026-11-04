@@ -1,5 +1,5 @@
 import pytest
-from workflow.slurm_recovery_watch import classify
+from ebl.lifecycle.slurm_recovery_watch import classify
 
 
 def data(state='PENDING', case_state='running', code=None):

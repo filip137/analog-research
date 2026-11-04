@@ -8,10 +8,10 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from experiments.opt_cmo_drn.config import Config,Training,Data,Recovery,Deployment,Solver,parse_config
-from experiments.opt_cmo_drn.devices import program_rewritten
-from experiments.opt_cmo_drn.physical import CmoDrnBank,ConductanceArray
-from training.cmo_thresholded_adam import ThresholdedWriteAdam
+from ebl.schema.opt_cmo_drn import Config,Training,Data,Recovery,Deployment,Solver,parse_config
+from methods.programming.cmo import program_rewritten
+from networks.opt.physical import CmoDrnBank,ConductanceArray
+from methods.cmo_thresholded_adam import ThresholdedWriteAdam
 from tests.test_opt_cmo_drn import tiny_model,cpu_threads
 
 
@@ -120,9 +120,10 @@ def test_physical_state_is_never_clipped_to_the_target_window():
     (4,1.,True,'thresholded_adam'),(None,1.,True,'thresholded_adam'),(None,0.,False,'thresholded_adam'),
     (None,0.,True,'direct_adam'),(None,1.,True,'direct_adam'),(None,1.,True,'bounded_thresholded_adam')])
 def test_matched_controls_and_exact_recovery_resume(tmp_path,monkeypatch,cap,noise_factor,retain_optimizer,update_rule):
-    from experiments.opt_cmo_drn import runtime,recovery
-    from experiments.artifacts import sha256_file
-    from workflow.__main__ import collect
+    import ebl.runtime.opt_cmo_drn.runtime as runtime
+    import ebl.runtime.opt_cmo_drn.recovery as recovery
+    from ebl.runtime.store import sha256_file
+    from ebl.lifecycle.__main__ import collect
     model,teacher=tiny_model()
     teacher_path=tmp_path/'teacher.pt';torch.save({},teacher_path)
     config=replace(Config(),stage='deploy',teacher_sha256=sha256_file(teacher_path),
@@ -256,7 +257,7 @@ def test_strict_recovery_contract():
 
 @pytest.mark.parametrize('noise_factor',[0.,1.])
 def test_gmin_clipping_only_changes_written_healthy_cells_and_resumes_exactly(noise_factor):
-    from training.reram_cmo import G_MIN_US,HALF_RANGE_US
+    from hardware.devices.cmo import G_MIN_US,HALF_RANGE_US
     x=torch.tensor([[8.,10.,8.],[0.,20.,25.]])
     mask=torch.zeros_like(x,dtype=torch.bool);mask[1,0]=True
     state={'name':'test','noise_scale':1.,'held':x,'target':x,'mask':mask,'stuck':x,
@@ -281,8 +282,8 @@ def test_gmin_clipping_only_changes_written_healthy_cells_and_resumes_exactly(no
 
 
 def test_noiseless_writes_preserve_threshold_initial_state_faults_and_rng():
-    from experiments.opt_cmo_drn.recovery import RecoveryWritePort,RecoveryStep
-    from training.reram_cmo import HALF_RANGE_US
+    from ebl.runtime.opt_cmo_drn.recovery import RecoveryWritePort,RecoveryStep
+    from hardware.devices.cmo import HALF_RANGE_US
     model,teacher=tiny_model()
     _,_,state=program_rewritten(model,271002,'random',.1,capture_state=True)
     noisy=CmoDrnBank(state,'cpu');noiseless=CmoDrnBank(state,'cpu')
@@ -309,9 +310,9 @@ def test_noiseless_writes_preserve_threshold_initial_state_faults_and_rng():
 
 
 def test_recovery_campaign_preserves_the_learning_trajectory(tmp_path):
-    from experiments.opt_cmo_drn.runtime import weights_payload,save
-    from experiments.artifacts import sha256_file
-    from workflow.recovery import build_plan
+    from ebl.runtime.opt_cmo_drn.runtime import weights_payload,save
+    from ebl.runtime.store import sha256_file
+    from ebl.lifecycle.recovery import build_plan
     import sys
     model,_=tiny_model()
     teacher=tmp_path/'teacher.pt';torch.save({},teacher)

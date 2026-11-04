@@ -7,14 +7,14 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from experiments.artifacts import atomic_write_json, sha256_file
-from training.ibm_reram_program_verify import PopulationStepEstimator
+from ebl.runtime.store import atomic_write_json, sha256_file
+from methods.ibm_reram_program_verify import PopulationStepEstimator
 
 
-SCHEMA = "ebl.ibm_reram.om_hwa_device_model"
-SCHEMA_VERSION = 1
-CONDITION_KEY = "adaptive__lower_to_target__tau_step_0.5"
-ESTIMATOR_KEY = "lower_to_target__tau_step_0.5"
+from hardware.ibm_om.model_schema import SCHEMA
+from hardware.ibm_om.model_schema import SCHEMA_VERSION
+from hardware.ibm_om.model_schema import CONDITION_KEY
+from hardware.ibm_om.model_schema import ESTIMATOR_KEY
 
 
 def _read_object(path: Path, *, role: str) -> dict[str, Any]:

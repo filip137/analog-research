@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from experiments.definitions import resolve_experiment_config
-from experiments.schema import ConfigError, RunMode
-from experiments.study_workflow import load_study_plan
+from ebl.registry import resolve_experiment_config
+from ebl.schema.base import ConfigError, RunMode
+from ebl.lifecycle.study import load_study_plan
 
 
 _ROOT = Path(__file__).resolve().parents[1]

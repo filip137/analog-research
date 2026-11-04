@@ -3,14 +3,14 @@ from __future__ import annotations
 import pytest
 import torch
 
-from experiments.mnist_relu_drn.components import (
+from ebl.runtime.mnist_relu_drn.components import (
     collapse_clamped_dual_rail_input,
     signed_differential_lift,
     signed_dual_rail_lift,
 )
-from model.resistive.interaction import DenseResistive, SignedDenseResistive
-from model.variable.layer import LinearLayer
-from model.variable.parameter import DenseWeight
+from networks.resistive.interaction import DenseResistive, SignedDenseResistive
+from networks.variable.layer import LinearLayer
+from networks.variable.parameter import DenseWeight
 
 
 DTYPE = torch.float64

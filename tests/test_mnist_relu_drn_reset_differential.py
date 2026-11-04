@@ -8,21 +8,21 @@ from pathlib import Path
 import pytest
 import torch
 
-from campaigns.schema import load_campaign_manifest
+from ebl.execution.schema import load_campaign_manifest
 from ebl.cli import main
-from experiments.definitions import get_definition, parse_experiment_config
-from experiments.mnist_relu_drn_reset.components import build_reset_student_stack
-from experiments.mnist_relu_drn_reset.learning_rate_selection import (
+from ebl.registry import get_definition, parse_experiment_config
+from ebl.runtime.mnist_relu_drn_reset.components import build_reset_student_stack
+from ebl.runtime.mnist_relu_drn_reset.learning_rate_selection import (
     _derive_rates,
     _parameter_topology,
 )
-from experiments.mnist_relu_drn_reset.runtime import (
+from ebl.runtime.mnist_relu_drn_reset.runtime import (
     _amplification_index_report,
     _requires_production_restart,
     _validate_checkpoint_metadata,
 )
-from experiments.schema import ConfigError, RunMode
-from model.resistive.interaction import SignedDenseResistive
+from ebl.schema.base import ConfigError, RunMode
+from networks.resistive.interaction import SignedDenseResistive
 
 
 ROOT = Path(__file__).resolve().parents[1]

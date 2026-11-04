@@ -7,14 +7,14 @@ from pathlib import Path
 import pytest
 import torch
 
-from experiments.definitions import parse_experiment_config
-from experiments.mnist_relu_drn.components import build_student_stack
-from experiments.mnist_relu_drn.runtime import (
+from ebl.registry import parse_experiment_config
+from ebl.runtime.mnist_relu_drn.components import build_student_stack
+from ebl.runtime.mnist_relu_drn.runtime import (
     _amplification_index_report,
     _single_topology_signature,
 )
-from experiments.schema import RunMode
-from training.sign_sgd import SignSGD
+from ebl.schema.base import RunMode
+from methods.sign_sgd import SignSGD
 
 
 ROOT = Path(__file__).resolve().parents[1]

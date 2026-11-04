@@ -5,9 +5,9 @@ import math
 import pytest
 import torch
 
-from model.resistive.interaction import DenseResistive, SignedDenseResistive
-from model.variable.layer import LinearLayer
-from model.variable.parameter import DenseWeight
+from networks.resistive.interaction import DenseResistive, SignedDenseResistive
+from networks.variable.layer import LinearLayer
+from networks.variable.parameter import DenseWeight
 
 
 DTYPE = torch.float64

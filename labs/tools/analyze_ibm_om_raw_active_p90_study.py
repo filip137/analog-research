@@ -26,8 +26,8 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from experiments.artifacts import atomic_write_json, sha256_file
-from experiments.mnist_relu_drn.ibm_om_deployment_decomposition import (
+from ebl.runtime.store import atomic_write_json, sha256_file
+from ebl.runtime.mnist_relu_drn.ibm_om_deployment_decomposition import (
     canonical_layer_geometries,
     logical_differential_contrast,
 )
@@ -1451,7 +1451,7 @@ def main(argv: list[str] | None = None) -> int:
     analysis_module = Path(__file__).resolve()
     decomposition_module = (
         _ROOT
-        / "experiments/mnist_relu_drn/ibm_om_deployment_decomposition.py"
+        / "ebl/runtime/mnist_relu_drn/ibm_om_deployment_decomposition.py"
     )
     report = {
         "schema": SCHEMA,

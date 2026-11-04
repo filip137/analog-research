@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 import torch
 
-from experiments.artifacts import sha256_file
-from experiments.mnist_relu_drn.ibm_om_reset_relative_initialization import (
+from ebl.runtime.store import sha256_file
+from ebl.runtime.mnist_relu_drn.ibm_om_reset_relative_initialization import (
     derive_full_span_checkpoint,
 )
-from training.checkpoint import atomic_torch_save
+from methods.checkpoint import atomic_torch_save
 
 
 TEACHER_SHA = "a" * 64

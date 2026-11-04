@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from experiments.definitions import resolve_experiment_config
-from experiments.schema import ConfigError, RunMode
-from experiments.small_network.runtime import (
+from ebl.registry import resolve_experiment_config
+from ebl.schema.base import ConfigError, RunMode
+from ebl.runtime.small_network.runtime import (
     TrainingEpochReport,
     TrainingOutcome,
 )

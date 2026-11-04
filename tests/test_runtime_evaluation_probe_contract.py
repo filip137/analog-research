@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from training.core.engine import EvaluationComponents, evaluate
+from methods.core.engine import EvaluationComponents, evaluate
 
 
 @dataclass

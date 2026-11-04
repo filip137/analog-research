@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 import torch
 
-from training.ibm_reram_program_verify import (
+from methods.ibm_reram_program_verify import (
     ControllerSettings,
     HFO2_PRESET,
     IbmReramPlant,

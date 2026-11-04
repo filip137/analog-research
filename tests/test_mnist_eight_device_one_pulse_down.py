@@ -7,17 +7,17 @@ from pathlib import Path
 
 import pytest
 
-from experiments.definitions import parse_experiment_config
-from experiments.mnist_relu_drn.components import (
+from ebl.registry import parse_experiment_config
+from ebl.runtime.mnist_relu_drn.components import (
     build_student_stack,
     measured_optimizer_type,
 )
-from experiments.mnist_relu_drn.runtime import (
+from ebl.runtime.mnist_relu_drn.runtime import (
     _amplification_index_report,
     _differential_topology_signature,
 )
-from experiments.schema import RunMode
-from training.measured_trace import MeasuredCohortAOnePulseDownOptimizer
+from ebl.schema.base import RunMode
+from methods.measured_trace import MeasuredCohortAOnePulseDownOptimizer
 
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -3,11 +3,11 @@ from dataclasses import asdict, replace
 import pytest
 import torch
 
-from experiments.opt_cmo_drn.config import Config, parse_config
-from experiments.opt_cmo_drn.devices import program_rewritten
-from experiments.opt_cmo_drn.physical import CmoDrnBank
-from experiments.opt_cmo_drn.recovery import RecoveryStep
-from experiments.opt_cmo_drn.microbatch_benchmark import gradient_agreement, select_microbatch
+from ebl.schema.opt_cmo_drn import Config, parse_config
+from methods.programming.cmo import program_rewritten
+from networks.opt.physical import CmoDrnBank
+from ebl.runtime.opt_cmo_drn.recovery import RecoveryStep
+from ebl.runtime.opt_cmo_drn.microbatch_benchmark import gradient_agreement, select_microbatch
 from tests.test_opt_cmo_drn import cpu_threads, tiny_model
 
 

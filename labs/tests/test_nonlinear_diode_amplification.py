@@ -1,11 +1,11 @@
 import pytest
 import torch
 
-from labs.custom_minimizer import CustomQuadraticMinimizer, MinimizerSettings
-from model.function.interaction import DoubleQuadraticNonLinearInteraction
-from model.resistive.layer import NonlinearResistiveLayer, ResistiveInputLayer
-from model.resistive.minimizer import QuadraticMinimizer
-from model.variable.layer import Layer
+from networks.resistive.solver import CustomQuadraticMinimizer, MinimizerSettings
+from networks.function.interaction import DoubleQuadraticNonLinearInteraction
+from networks.resistive.layer import NonlinearResistiveLayer, ResistiveInputLayer
+from networks.resistive.minimizer import QuadraticMinimizer
+from networks.variable.layer import Layer
 
 
 VOLTAGE_AMP = 4.0

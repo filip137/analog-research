@@ -1,6 +1,6 @@
 """Amplified circuit equations and actual equilibrium residuals.
 
-The dense/conv convention follows lean-experiment-workflow/model:
+The dense/conv convention follows lean-experiment-ebl.lifecycle/model:
 E_edge = 0.5 * (Ai/Av)**p * g * (alpha*v_pre - v_post)**2.
 Pooling uses the same convention rather than the reference's legacy scaling.
 """
@@ -10,16 +10,16 @@ import pytest
 import torch
 
 from labs.custom_classes import ConvResistive as FlexibleConvResistive
-from labs.custom_minimizer import CustomQuadraticMinimizer, MinimizerSettings
-from model.function.cost import SquaredError
-from model.resistive.interaction import (
+from networks.resistive.solver import CustomQuadraticMinimizer, MinimizerSettings
+from networks.function.cost import SquaredError
+from networks.resistive.interaction import (
     AveragePoolResistive, ConvResistive, DenseResistive, MaxPoolResistive,
 )
-from model.resistive.minimizer import QuadraticMinimizer
-from model.resistive.network import DeepResistiveEnergy
-from model.variable.layer import LinearLayer
-from model.variable.parameter import Bias, ConvWeight, DenseWeight, PoolWeight
-from training.core.sgd import AugmentedFunction
+from networks.resistive.minimizer import QuadraticMinimizer
+from networks.resistive.network import DeepResistiveEnergy
+from networks.variable.layer import LinearLayer
+from networks.variable.parameter import Bias, ConvWeight, DenseWeight, PoolWeight
+from methods.core.sgd import AugmentedFunction
 
 
 DTYPE = torch.float64

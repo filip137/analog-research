@@ -5,11 +5,11 @@ from dataclasses import replace
 import pytest
 import torch
 
-from experiments.opt_cmo_drn.config import Config, Recovery, parse_config
-from experiments.opt_cmo_drn.physical import ConductanceArray
-from experiments.opt_cmo_drn.recovery import RecoveryStep, RecoveryWritePort
-from training.cmo_direct_adam import DirectWriteAdam, ThresholdedBoundedWriteAdam
-from training.reram_cmo import G_MIN_US, G_MAX_US, HALF_RANGE_US, programming_sigma
+from ebl.schema.opt_cmo_drn import Config, Recovery, parse_config
+from networks.opt.physical import ConductanceArray
+from ebl.runtime.opt_cmo_drn.recovery import RecoveryStep, RecoveryWritePort
+from methods.cmo_direct_adam import DirectWriteAdam, ThresholdedBoundedWriteAdam
+from hardware.devices.cmo import G_MIN_US, G_MAX_US, HALF_RANGE_US, programming_sigma
 from tests.test_opt_cmo_drn import cpu_threads, tiny_model
 
 
@@ -113,8 +113,8 @@ def test_direct_policy_is_explicit_and_rejects_realized_clipping_or_write_caps()
 
 
 def test_direct_gradients_use_held_state_and_digital_parameters_are_frozen():
-    from experiments.opt_cmo_drn.devices import program_rewritten
-    from experiments.opt_cmo_drn.physical import CmoDrnBank
+    from methods.programming.cmo import program_rewritten
+    from networks.opt.physical import CmoDrnBank
     model,teacher=tiny_model()
     _,_,state=program_rewritten(model,271002,'random',.03,capture_state=True)
     bank=CmoDrnBank(state,'cpu')

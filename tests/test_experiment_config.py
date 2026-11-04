@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from experiments import (
+from ebl.registry import (
     ConfigError,
     EXPERIMENT_REGISTRY,
     RunMode,
     resolve_experiment_config,
     to_plain_data,
 )
-from experiments.small_network.config import (
+from ebl.schema.small_network import (
     LinspaceSpec,
     TrainSpec,
     ValidateSpec,

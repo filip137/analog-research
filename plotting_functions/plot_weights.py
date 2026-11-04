@@ -9,7 +9,7 @@ import torch
 # Add project root to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from model.resistive.network import DeepResistiveEnergy
+from networks.resistive.network import DeepResistiveEnergy
 
 def load_config(config_path="config.json"):
     with open(config_path, "r") as f:

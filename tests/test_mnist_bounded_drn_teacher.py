@@ -7,22 +7,22 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from experiments import RunMode, resolve_experiment_config
-from experiments.definitions import parse_experiment_config
-from experiments.mnist_relu_drn.components import (
+from ebl.registry import RunMode, resolve_experiment_config
+from ebl.registry import parse_experiment_config
+from ebl.runtime.mnist_relu_drn.components import (
     BoundedDrnTeacher,
     build_student_stack,
 )
-from experiments.mnist_relu_drn.runtime import (
+from ebl.runtime.mnist_relu_drn.runtime import (
     _build_weight_modifier,
     _literal_bounded_drn_initialization,
     _load_teacher,
     _selection_evaluate,
 )
-from experiments.schema import ConfigError
-from experiments.small_network.components import build_model_stack, seed_runtime
-from experiments.small_network.provenance import selected_model_metadata
-from training.checkpoint import save_named_weights
+from ebl.schema.base import ConfigError
+from ebl.runtime.small_network.components import build_model_stack, seed_runtime
+from ebl.runtime.small_network.provenance import selected_model_metadata
+from methods.checkpoint import save_named_weights
 
 
 ROOT = Path(__file__).resolve().parents[1]

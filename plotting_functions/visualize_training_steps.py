@@ -11,11 +11,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from model.resistive.network import DeepResistiveEnergy
-from labs.custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer
-from training.core.sgd import EquilibriumProp, AugmentedFunction
-from model.function.cost import SquaredError, SquaredErrorPairedOutputs
-from training.core.optimizers import build_optimizer
+from networks.resistive.network import DeepResistiveEnergy
+from networks.resistive.solver import CustomQuadraticMinimizer as QuadraticMinimizer
+from methods.core.sgd import EquilibriumProp, AugmentedFunction
+from networks.function.cost import SquaredError, SquaredErrorPairedOutputs
+from methods.core.optimizers import build_optimizer
 from datasets import load_dataloaders
 
 def load_config(config_path="config.json"):

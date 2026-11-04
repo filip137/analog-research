@@ -18,7 +18,7 @@ from experiments.reram_program_verify.local_short_launcher import (
     _require_clean_source_commit,
     _validate_prepared_study,
 )
-from experiments.study_workflow import prepare_study
+from ebl.lifecycle.study import prepare_study
 
 
 _ROOT = Path(__file__).resolve().parents[1]

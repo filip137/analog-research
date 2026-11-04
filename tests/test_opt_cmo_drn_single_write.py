@@ -8,14 +8,14 @@ import subprocess
 import pytest
 import torch
 
-from experiments.opt_cmo_drn.config import Config, Recovery, parse_config
-from experiments.opt_cmo_drn.physical import ConductanceArray
-from experiments.opt_cmo_drn.recovery import RecoveryStep, RecoveryWritePort
-from training.cmo_direct_adam import CappedNominalWriteAdam
-from training.reram_cmo import G_MAX_US, G_MIN_US, HALF_RANGE_US, MID_US, programming_sigma
+from ebl.schema.opt_cmo_drn import Config, Recovery, parse_config
+from networks.opt.physical import ConductanceArray
+from ebl.runtime.opt_cmo_drn.recovery import RecoveryStep, RecoveryWritePort
+from methods.cmo_direct_adam import CappedNominalWriteAdam
+from hardware.devices.cmo import G_MAX_US, G_MIN_US, HALF_RANGE_US, MID_US, programming_sigma
 from tests.test_opt_cmo_drn import tiny_model
 from tests.test_opt_cmo_drn_bounded_recovery import array_at
-from workflow import slurm_recovery as s
+import ebl.lifecycle.slurm_recovery as s
 
 NOMINAL_Q = 2 * programming_sigma(MID_US, 2.) / HALF_RANGE_US
 GOOD = {'update_rule': 'bounded_capped_nominal_adam', 'target_bounds': 'gmin_gmax', 'max_write_attempts': 1}
@@ -131,8 +131,8 @@ def test_config_admits_one_attempt_only_for_the_capped_bounded_writer():
 
 
 def test_recovery_step_builds_the_capped_writer_on_held_state():
-    from experiments.opt_cmo_drn.devices import program_rewritten
-    from experiments.opt_cmo_drn.physical import CmoDrnBank
+    from methods.programming.cmo import program_rewritten
+    from networks.opt.physical import CmoDrnBank
     model, teacher = tiny_model()
     _, _, state = program_rewritten(model, 271002, 'random', .03, capture_state=True)
     bank = CmoDrnBank(state, 'cpu')
@@ -174,7 +174,7 @@ def test_batch_wrapper_loads_a100_architecture_module_only_on_gpu_p5(tmp_path):
     source = tmp_path / 'source';(source / 'launch').mkdir(parents=True)
     manifest_path = source / 'launch/manifest.json';manifest_path.write_text('{}')
     wrapper = tmp_path / 'slurm_script'
-    wrapper.write_text((Path(__file__).parents[1] / 'workflow/slurm_recovery.slurm').read_text())
+    wrapper.write_text((Path(__file__).parents[1] / 'ebl/lifecycle/slurm_recovery.slurm').read_text())
     binary = tmp_path / 'bin';binary.mkdir()
     for name in ('nvidia-smi', 'srun'):
         path = binary / name;path.write_text('#!/bin/sh\nexit 0\n');path.chmod(0o755)

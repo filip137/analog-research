@@ -10,12 +10,13 @@ from contextlib import contextmanager
 import pytest
 import torch
 
-from experiments.mnist_shared import TeacherTargets, teacher_batches
-from training.core.batch import Batch, prepared_batches
-from training.core.engine import ExperimentComponents, train_epoch
-from training.core.guards import FiniteGradientGuard
-from training.core.modifier import ComposedModifier
-from training.core.probes import PerBatchProbe
+from methods.teacher_batches import TeacherTargets
+from methods.teacher_batches import teacher_batches
+from methods.core.batch import Batch, prepared_batches
+from methods.core.engine import ExperimentComponents, train_epoch
+from methods.core.guards import FiniteGradientGuard
+from methods.core.modifier import ComposedModifier
+from methods.core.probes import PerBatchProbe
 
 
 class _Parameter:

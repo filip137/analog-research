@@ -7,15 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from campaigns.schema import load_campaign_manifest
-from experiments.definitions import parse_experiment_config
-from experiments.mnist_relu_drn.components import build_student_stack
-from experiments.mnist_relu_drn.runtime import (
+from ebl.execution.schema import load_campaign_manifest
+from ebl.registry import parse_experiment_config
+from ebl.runtime.mnist_relu_drn.components import build_student_stack
+from ebl.runtime.mnist_relu_drn.runtime import (
     _amplification_index_report,
     _single_topology_signature,
     _validate_cohort_b_source_metadata,
 )
-from experiments.schema import RunMode
+from ebl.schema.base import RunMode
 
 
 ROOT = Path(__file__).resolve().parents[1]

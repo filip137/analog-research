@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from experiments.artifacts import RunStore, content_hash
+from ebl.runtime.store import RunStore, content_hash
 
 
 def _store(tmp_path: Path, *, run_id: str = "run-001") -> RunStore:

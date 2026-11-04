@@ -3,17 +3,17 @@ from __future__ import annotations
 import pytest
 import torch
 
-from model.resistive.interaction import DenseResistive
-from model.resistive.low_rank import (
+from networks.resistive.interaction import DenseResistive
+from networks.resistive.low_rank import (
     PassiveLowRankAdapterConfig,
     PassiveLowRankDenseWeight,
 )
-from model.resistive.minimizer import QuadraticMinimizer
-from model.resistive.network import DeepResistiveEnergy
-from model.variable.layer import LinearLayer
-from model.variable.parameter import Bias, DenseWeight
-from training.core.optimizers import build_optimizer
-from training.tiki_taka import TikiTakaOptimizer
+from networks.resistive.minimizer import QuadraticMinimizer
+from networks.resistive.network import DeepResistiveEnergy
+from networks.variable.layer import LinearLayer
+from networks.variable.parameter import Bias, DenseWeight
+from methods.core.optimizers import build_optimizer
+from methods.tiki_taka import TikiTakaOptimizer
 
 
 _QUADRATIC_DIODE_PARAM = {

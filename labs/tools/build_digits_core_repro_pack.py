@@ -1041,10 +1041,10 @@ import torch
 from sklearn.datasets import load_digits
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
-from labs.custom_minimizer import CustomQuadraticMinimizer, MinimizerSettings
-from model.function.cost import SquaredError, SquaredErrorPairedOutputs
-from model.function.network import Network
-from model.resistive.network import DeepResistiveEnergy
+from networks.resistive.solver import CustomQuadraticMinimizer, MinimizerSettings
+from networks.function.cost import SquaredError, SquaredErrorPairedOutputs
+from networks.function.network import Network
+from networks.resistive.network import DeepResistiveEnergy
 from repro.config import RuntimeConfig, load_runtime_config, parse_layer_shapes
 from repro.manifest import ReproJob
 

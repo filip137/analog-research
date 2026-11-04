@@ -38,12 +38,12 @@ from custom_classes import (
     FlexibleDeepResistiveEnergy,
     TrackingQuadraticMinimizer,
 )  # noqa: E402
-from custom_minimizer import CustomQuadraticMinimizer as QuadraticMinimizer, MinimizerSettings  # noqa: E402
-from model.function.cost import SquaredError, SquaredErrorPairedOutputs  # noqa: E402
-from model.function.network import Network  # noqa: E402
-from model.variable.parameter import ConvWeight  # noqa: E402
-from training.core.sgd import AugmentedFunction, EquilibriumProp  # noqa: E402
-from training.core.optimizers import build_optimizer  # noqa: E402
+from networks.resistive.solver import CustomQuadraticMinimizer as QuadraticMinimizer, MinimizerSettings  # noqa: E402
+from networks.function.cost import SquaredError, SquaredErrorPairedOutputs  # noqa: E402
+from networks.function.network import Network  # noqa: E402
+from networks.variable.parameter import ConvWeight  # noqa: E402
+from methods.core.sgd import AugmentedFunction, EquilibriumProp  # noqa: E402
+from methods.core.optimizers import build_optimizer  # noqa: E402
 
 
 def _default_quadratic_params():
@@ -214,7 +214,7 @@ def _resolve_dataset_config(config, dataset_key):
             )
 
         dataset_cfg = json.loads(json.dumps(base_cfg))
-        dataset_cfg["factory"] = "labs.datasets.FashionMnistDataset"
+        dataset_cfg["factory"] = "networks.data.reference.FashionMnistDataset"
 
         params = dict(dataset_cfg.get("params", {}))
         params["name"] = "fmnist"

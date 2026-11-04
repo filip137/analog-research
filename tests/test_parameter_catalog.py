@@ -3,13 +3,13 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from model.resistive.builders import (
+from networks.resistive.builders import (
     ModelBundle,
     ParameterBinding,
     ParameterCatalog,
     build_deep_resistive_energy,
 )
-from model.resistive.network import DeepResistiveEnergy
+from networks.resistive.network import DeepResistiveEnergy
 
 
 def _drn_kwargs():

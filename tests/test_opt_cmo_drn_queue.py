@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from experiments.artifacts import atomic_write_json, sha256_file
-from experiments.opt_cmo_drn.config import Config
-from workflow.queue_execution import Execution, artifact, artifact_removable, removable, runnable, storage_reservation, terminal_failure, terminal_receipt
+from ebl.runtime.store import atomic_write_json, sha256_file
+from ebl.schema.opt_cmo_drn import Config
+from ebl.lifecycle.queue_execution import Execution, artifact, artifact_removable, removable, runnable, storage_reservation, terminal_failure, terminal_receipt
 
 
 def test_collection_requires_one_success_and_charges_failures():
@@ -67,7 +67,7 @@ def test_phase_never_uses_partial_screen_coverage(tmp_path):
 
 
 def read_config(j):
-    from experiments.opt_cmo_drn.config import parse_config
+    from ebl.schema.opt_cmo_drn import parse_config
     return parse_config(json.loads(Path(j['config']).read_text()))
 
 
@@ -131,7 +131,7 @@ def test_storage_defers_without_submitting_or_changing_science(tmp_path,monkeypa
 
 def test_complete_ladder_expands_exact_matched_recovery_dag(tmp_path,monkeypatch):
     import torch
-    from workflow import tuning
+    import ebl.lifecycle.tuning as tuning
     e=execution(tmp_path)
     teacher=tmp_path/'teacher.pt';teacher.write_bytes(b'frozen teacher')
     base=replace(Config(),teacher_sha256=sha256_file(teacher))
@@ -250,7 +250,7 @@ def test_failure_release_requires_stopped_worker_and_released_lease():
 
 
 def test_failed_reservation_does_not_block_independent_case_or_complete_dependents(tmp_path,monkeypatch):
-    import workflow.queue_execution as module
+    import ebl.lifecycle.queue_execution as module
     e=execution(tmp_path)
     e.s.update(job_prefix='study-',project_dir=str(tmp_path))
     e.state['phases']=['screen','refine','confirm','full','recovery']

@@ -10,21 +10,21 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from experiments.definitions import get_definition, parse_experiment_config
-from experiments.mnist_relu_drn_reset.components import (
+from ebl.registry import get_definition, parse_experiment_config
+from ebl.runtime.mnist_relu_drn_reset.components import (
     PairedSupervision,
     build_reset_student_stack,
 )
-from experiments.mnist_relu_drn_reset.learning_rate_selection import (
+from ebl.runtime.mnist_relu_drn_reset.learning_rate_selection import (
     RuntimeSnapshot,
 )
-from experiments.mnist_relu_drn_reset.runtime import (
+from ebl.runtime.mnist_relu_drn_reset.runtime import (
     _validate_checkpoint_metadata,
 )
-from experiments.schema import ConfigError, RunMode
+from ebl.schema.base import ConfigError, RunMode
 from ebl.cli import main
-from model.variable.layer import LinearLayer
-from training.measured_trace import MeasuredTraceConfig
+from networks.variable.layer import LinearLayer
+from methods.measured_trace import MeasuredTraceConfig
 
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -19,17 +19,17 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from experiments.artifacts import sha256_file
-from experiments.definitions import resolve_experiment_config
-from experiments.mnist_relu_drn.components import build_student_stack
-from experiments.mnist_relu_drn.runtime import (
+from ebl.runtime.store import sha256_file
+from ebl.registry import resolve_experiment_config
+from ebl.runtime.mnist_relu_drn.components import build_student_stack
+from ebl.runtime.mnist_relu_drn.runtime import (
     _amplification_index_report,
     _load_teacher,
     _validate_checkpoint_metadata,
 )
-from experiments.mnist_shared import build_mnist_loaders, limited
-from experiments.schema import RunMode
-from training.checkpoint import load_named_weights
+from networks.data.mnist import build_mnist_loaders, limited
+from ebl.schema.base import RunMode
+from methods.checkpoint import load_named_weights
 
 
 _POSITIVE_QUANTILES = (0.0, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 1.0)

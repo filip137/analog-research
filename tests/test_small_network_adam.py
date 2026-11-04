@@ -8,18 +8,18 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from experiments import RunMode, resolve_experiment_config
-from experiments.schema import ConfigError
-from experiments.small_network.config import parse_small_drn_config
-from experiments.small_network.initialization import validate_training_initialization
-from model.resistive.builders import ParameterBinding, ParameterCatalog
-from model.variable.parameter import DenseWeight
-from training.adam import AdamOptimizer
-from training.ibm_om_fp32_bounds import (
+from ebl.registry import RunMode, resolve_experiment_config
+from ebl.schema.base import ConfigError
+from ebl.schema.small_network import parse_small_drn_config
+from ebl.runtime.small_network.initialization import validate_training_initialization
+from networks.resistive.builders import ParameterBinding, ParameterCatalog
+from networks.variable.parameter import DenseWeight
+from methods.adam import AdamOptimizer
+from methods.ibm_om_fp32_bounds import (
     IbmOmFp32BoundsOptimizer,
     effective_controller_bounds,
 )
-from training.ibm_reram_hwa import IbmReramArrayPopulation
+from methods.ibm_om.api import IbmReramArrayPopulation
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -364,7 +364,7 @@ def test_om_bounds_optimizer_initializes_projects_and_resumes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import training.ibm_om_fp32_bounds as bounds_module
+    import methods.ibm_om_fp32_bounds as bounds_module
 
     population_path = tmp_path / "population.npz"
     population_path.write_bytes(b"fixture")

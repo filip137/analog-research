@@ -15,11 +15,11 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
-from experiments.artifacts import atomic_write_json
-from experiments.opt_cmo_drn.config import parse_config
-from experiments.opt_cmo_drn.data import pinned_load
-from experiments.opt_cmo_drn.runtime import from_mapped, teacher_model
-from training.reram_cmo import G_MAX_US, HALF_RANGE_US, MID_US, programming_sigma
+from ebl.runtime.store import atomic_write_json
+from ebl.schema.opt_cmo_drn import parse_config
+from networks.opt.data import pinned_load
+from ebl.runtime.opt_cmo_drn.runtime import from_mapped, teacher_model
+from hardware.devices.cmo import G_MAX_US, HALF_RANGE_US, MID_US, programming_sigma
 
 
 def load(path):

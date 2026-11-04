@@ -7,17 +7,17 @@ from pathlib import Path
 
 import pytest
 
-from campaigns.schema import load_campaign_manifest
-from experiments.definitions import parse_experiment_config
-from experiments.mnist_relu_drn.components import build_student_stack
-from experiments.mnist_relu_drn.runtime import (
+from ebl.execution.schema import load_campaign_manifest
+from ebl.registry import parse_experiment_config
+from ebl.runtime.mnist_relu_drn.components import build_student_stack
+from ebl.runtime.mnist_relu_drn.runtime import (
     _amplification_index_report,
     _model_checkpoint_metadata,
     _single_topology_signature,
     _validate_checkpoint_metadata,
 )
-from experiments.schema import ConfigError, RunMode
-from training.measured_trace import MeasuredTraceOptimizer
+from ebl.schema.base import ConfigError, RunMode
+from methods.measured_trace import MeasuredTraceOptimizer
 
 
 ROOT = Path(__file__).resolve().parents[1]

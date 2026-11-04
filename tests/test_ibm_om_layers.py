@@ -6,11 +6,11 @@ from dataclasses import asdict
 
 import pytest
 
-from experiments.mnist_relu_drn.config import _parse_weight_modifier
-from experiments.schema import to_plain_data
-from training.ibm_om.constants import IBM_OM_RAW_ACTIVE_TOLERANCE
-from training.ibm_om.mappings import map_ibm_reram_array_targets
-from training.ibm_om.spec import (
+from ebl.schema.mnist_relu_drn import _parse_weight_modifier
+from ebl.schema.base import to_plain_data
+from hardware.ibm_om.constants import IBM_OM_RAW_ACTIVE_TOLERANCE
+from methods.ibm_om.mappings import map_ibm_reram_array_targets
+from methods.ibm_om.spec import (
     EXPLICIT_LAYER_FIELDS,
     IbmReramHwaConfig,
     backfill_config_dict,
@@ -174,7 +174,7 @@ def test_old_checkpoint_modifier_metadata_back_fills_to_current() -> None:
 def test_mapper_rejects_a_coordinate_the_mapping_cannot_use() -> None:
     import torch
 
-    from training.ibm_om.population import IbmReramArrayPopulation
+    from hardware.ibm_om.population import IbmReramArrayPopulation
 
     size = 4
     population = IbmReramArrayPopulation(

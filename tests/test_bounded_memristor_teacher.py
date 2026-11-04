@@ -6,12 +6,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from experiments import RunMode, resolve_experiment_config
-from experiments.schema import ConfigError
-from experiments.small_network.components import build_model_stack, seed_runtime
-from experiments.small_network.config import parse_small_drn_config
-from experiments.small_network.provenance import selected_model_metadata
-from model.variable.parameter import Bias
+from ebl.registry import RunMode, resolve_experiment_config
+from ebl.schema.base import ConfigError
+from ebl.runtime.small_network.components import build_model_stack, seed_runtime
+from ebl.schema.small_network import parse_small_drn_config
+from ebl.runtime.small_network.provenance import selected_model_metadata
+from networks.variable.parameter import Bias
 
 
 ROOT = Path(__file__).resolve().parents[1]

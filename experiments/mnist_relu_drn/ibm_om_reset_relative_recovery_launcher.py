@@ -13,8 +13,8 @@ import sys
 import time
 from typing import Any, Mapping, Sequence
 
-from experiments.artifacts import atomic_write_json, sha256_file
-from experiments.study_workflow import load_study_record
+from ebl.runtime.store import atomic_write_json, sha256_file
+from ebl.lifecycle.study import load_study_record
 
 
 _ROOT = Path(__file__).resolve().parents[2]

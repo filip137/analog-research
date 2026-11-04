@@ -5,9 +5,9 @@ import json
 
 import pytest
 
-from experiments.artifacts import atomic_write_json, content_hash, sha256_file
-from experiments.opt_cmo_drn.config import Config, parse_config, compatible_config_hashes
-from workflow.bounded_recovery import BoundedRecoveryExecution, CASES, RATES, pilot_config, winners, readiness_projection
+from ebl.runtime.store import atomic_write_json, content_hash, sha256_file
+from ebl.schema.opt_cmo_drn import Config, parse_config, compatible_config_hashes
+from ebl.lifecycle.bounded_recovery import BoundedRecoveryExecution, CASES, RATES, pilot_config, winners, readiness_projection
 
 
 def test_case_grid_and_noise_interventions_are_frozen():
@@ -90,7 +90,7 @@ def test_old_default_configs_resume_but_cannot_be_reinterpreted_as_bounded_recov
 
 
 def test_resume_collection_preserves_case_identity_and_charges_interrupted_work_once(tmp_path,monkeypatch):
-    from workflow.queue_execution import Execution
+    from ebl.lifecycle.queue_execution import Execution
     e=execution(tmp_path);e.initialize()
     original='noiseless-lr1e-4';replacement='resume-'+original
     e.state['resume_replacements']={replacement:original}

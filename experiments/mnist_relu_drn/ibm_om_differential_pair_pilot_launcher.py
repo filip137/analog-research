@@ -23,11 +23,11 @@ import sys
 import time
 from typing import Any, Iterator, Mapping
 
-from experiments.artifacts import atomic_write_json, sha256_file
+from ebl.runtime.store import atomic_write_json, sha256_file
 from experiments.current_simulations import refresh_current_simulations_for_run
-from experiments.definitions import resolve_experiment_config
-from experiments.study_workflow import load_study_record
-from training.ibm_om.spec import backfill_config_dict
+from ebl.registry import resolve_experiment_config
+from ebl.lifecycle.study import load_study_record
+from methods.ibm_om.spec import backfill_config_dict
 
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -692,14 +692,14 @@ def _canonicalize_base_checkpoint(
 
     import torch
 
-    from experiments.mnist_relu_drn.components import build_student_stack
-    from experiments.mnist_relu_drn.runtime import (
+    from ebl.runtime.mnist_relu_drn.components import build_student_stack
+    from ebl.runtime.mnist_relu_drn.runtime import (
         _amplification_index_report,
         _evaluate,
         _model_checkpoint_metadata,
         _validate_checkpoint_metadata,
     )
-    from training.checkpoint import load_named_weights, save_named_weights
+    from methods.checkpoint import load_named_weights, save_named_weights
 
     source_stack = build_student_stack(spec, enable_measured=False)
     loaded_source = load_named_weights(
@@ -910,11 +910,11 @@ def _run_authoritative_preflight(
 
     import torch
 
-    from experiments.mnist_relu_drn.runtime import _evaluate, _load_teacher
-    from experiments.mnist_shared import build_mnist_loaders
-    from experiments.schema import to_plain_data
-    from training.checkpoint import atomic_torch_save, load_named_weights
-    from training.ibm_reram_hwa import (
+    from ebl.runtime.mnist_relu_drn.runtime import _evaluate, _load_teacher
+    from networks.data.mnist import build_mnist_loaders
+    from ebl.schema.base import to_plain_data
+    from methods.checkpoint import atomic_torch_save, load_named_weights
+    from methods.ibm_om.api import (
         IbmReramHwaConfig,
         build_ibm_reram_hwa_modifier,
     )
@@ -1071,7 +1071,7 @@ def _run_authoritative_preflight(
         "study_id": STUDY_ID,
         "created_at": _utc_now(),
         "authoritative_entry_point": (
-            "training.ibm_reram_hwa."
+            "methods.ibm_om.api."
             "IbmReramHwaParameterModifier.preflight_target_mapping"
         ),
         "inputs": {
@@ -1723,7 +1723,7 @@ def _validate_preflight_report(report: Mapping[str, Any]) -> tuple[str, str, str
         or report.get("study_id") != STUDY_ID
         or report.get("authoritative_entry_point")
         != (
-            "training.ibm_reram_hwa."
+            "methods.ibm_om.api."
             "IbmReramHwaParameterModifier.preflight_target_mapping"
         )
     ):
@@ -2201,7 +2201,7 @@ def _validate_pulse_deployment_integrity(
 
     import torch
 
-    from experiments.mnist_relu_drn.ibm_om_deployment_decomposition import (
+    from ebl.runtime.mnist_relu_drn.ibm_om_deployment_decomposition import (
         validate_deployment_contract,
     )
 
@@ -2368,7 +2368,7 @@ def _validate_population_artifact(
     *,
     role: str,
 ) -> dict[str, Any]:
-    from training.ibm_reram_hwa import load_om_array_population
+    from methods.ibm_om.api import load_om_array_population
 
     prefix = run_dir / "artifacts" / f"ibm_om_population.{role}"
     population_path = Path(f"{prefix}.npz")

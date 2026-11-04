@@ -8,9 +8,9 @@ import numpy as np
 # Add project root to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from model.resistive.network import DeepResistiveEnergy
-from training.core.sgd import EquilibriumProp, AugmentedFunction
-from model.function.cost import SquaredError, SquaredErrorPairedOutputs
+from networks.resistive.network import DeepResistiveEnergy
+from methods.core.sgd import EquilibriumProp, AugmentedFunction
+from networks.function.cost import SquaredError, SquaredErrorPairedOutputs
 from datasets import load_dataloaders
 
 def load_config(config_path="config.json"):

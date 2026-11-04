@@ -6,14 +6,14 @@ from types import ModuleType, SimpleNamespace
 import pytest
 import torch
 
-from model.resistive.builders import ParameterCatalog, build_deep_resistive_energy
-from model.resistive.digital_low_rank import (
+from networks.resistive.builders import ParameterCatalog, build_deep_resistive_energy
+from networks.resistive.digital_low_rank import (
     DigitalLowRankReadout,
     DigitalLowRankWeight,
 )
-from model.resistive.digital_low_rank_config import Wan2022ProgrammingConfig
-from training.device_programming import program_wan2022_base_conductance
-from training.core.sgd import DirectReadoutGradient
+from networks.resistive.digital_low_rank_config import Wan2022ProgrammingConfig
+from methods.device_programming import program_wan2022_base_conductance
+from methods.core.sgd import DirectReadoutGradient
 
 
 def _bundle():

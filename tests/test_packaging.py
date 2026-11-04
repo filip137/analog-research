@@ -24,8 +24,10 @@ def test_package_discovery_keeps_runtime_and_campaign_modules() -> None:
         "ebl",
         "experiments",
         "labs",
-        "model",
-        "training",
+        "core",
+        "hardware",
+        "networks",
+        "methods",
     }.issubset(packages)
 
     distribution = Distribution()
@@ -38,7 +40,7 @@ def test_package_discovery_keeps_runtime_and_campaign_modules() -> None:
             str(root / "labs"),
         )
     }
-    assert "datasets" in labs_modules
+    assert "datasets" not in labs_modules
     assert {
         "small_network",
         "small_network_config",
@@ -48,8 +50,8 @@ def test_package_discovery_keeps_runtime_and_campaign_modules() -> None:
     experiment_modules = {
         module
         for _package, module, _path in command.find_package_modules(
-            "experiments.small_network",
-            str(root / "experiments" / "small_network"),
+            "ebl.runtime.small_network",
+            str(root / "ebl" / "runtime" / "small_network"),
         )
     }
-    assert {"components", "config", "runtime"}.issubset(experiment_modules)
+    assert {"components", "runtime"}.issubset(experiment_modules)

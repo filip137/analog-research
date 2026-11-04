@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from training.ibm_reram_endpoint_model import sample_ibm_reram_endpoints
+from hardware.devices.endpoint import sample_ibm_reram_endpoints
 
 
 CONDITION_KEY = "one_pulse__lower_to_target__tau_step_0.5"

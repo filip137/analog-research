@@ -7,15 +7,15 @@ from types import MappingProxyType
 import pytest
 import torch
 
-from experiments.artifacts import sha256_file
-from experiments.mnist_relu_drn.ibm_om_deployed_recovery import (
+from ebl.runtime.store import sha256_file
+from ebl.runtime.mnist_relu_drn.ibm_om_deployed_recovery import (
     _fixed_direct_gradient_thresholds,
 )
-from model.resistive.builders import ParameterBinding
-from model.variable.parameter import DenseWeight
-from training.ibm_reram_hwa import IbmReramArrayPopulation
-from training.ibm_reram_recovery import IbmOmDeployedRecovery
-from training.ttv2_buffered_reference import buffered_transfer_update
+from networks.resistive.builders import ParameterBinding
+from networks.variable.parameter import DenseWeight
+from methods.ibm_om.api import IbmReramArrayPopulation
+from methods.ibm_reram_recovery import IbmOmDeployedRecovery
+from methods.ttv2_buffered_reference import buffered_transfer_update
 
 
 _ROOT = Path(__file__).resolve().parents[1]

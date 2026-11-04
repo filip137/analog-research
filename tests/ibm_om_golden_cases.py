@@ -32,18 +32,18 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from experiments.artifacts import sha256_file  # noqa: E402
+from ebl.runtime.store import sha256_file  # noqa: E402
 from experiments.reram_program_verify.hwa_model import CONDITION_KEY  # noqa: E402
-from model.resistive.builders import ParameterBinding  # noqa: E402
-from model.variable.parameter import DenseWeight  # noqa: E402
-from training.ibm_reram_program_verify import PopulationStepEstimator  # noqa: E402
+from networks.resistive.builders import ParameterBinding  # noqa: E402
+from networks.variable.parameter import DenseWeight  # noqa: E402
+from methods.ibm_reram_program_verify import PopulationStepEstimator  # noqa: E402
 
 GOLDEN_DIR = ROOT / "tests" / "golden" / "ibm_om"
 
 # The module attribute through which the HWA modifier obtains its population.
 # Golden replays patch exactly this lookup site; it is the only line to update
 # when the modifier moves.
-POPULATION_LOOKUP_SITE = ("training.ibm_om.modifier", "sample_om_array_population")
+POPULATION_LOOKUP_SITE = ("methods.ibm_om.modifier", "sample_om_array_population")
 
 # Keys whose values hash implementation source files and therefore change with
 # any edit by design.  They are excluded from comparison everywhere.
@@ -68,7 +68,7 @@ STATE_VERSION_UPGRADES = {2: 3}
 
 
 def _assert_explicit_fields(value: dict, path: str) -> None:
-    from training.ibm_om.spec import legacy_explicit_defaults
+    from methods.ibm_om.spec import legacy_explicit_defaults
 
     mapping = value.get("target_mapping")
     try:
@@ -96,7 +96,7 @@ OM_WRITE_NOISE_STD = 1.4113
 
 
 def _hwa():
-    return importlib.import_module("training.ibm_reram_hwa")
+    return importlib.import_module("methods.ibm_om.api")
 
 
 @contextlib.contextmanager
@@ -590,7 +590,7 @@ class _LinearTeacher:
 
 
 def _tiny_stack(case: dict[str, Any]):
-    from experiments.mnist_relu_drn.components import build_student_stack
+    from ebl.runtime.mnist_relu_drn.components import build_student_stack
 
     gmin, gmax = _case_bounds(case)
     differential = case["mapping"] == "differential_pair_common_window"
@@ -622,7 +622,7 @@ def _tiny_stack(case: dict[str, Any]):
 
 
 def run_ste_case(name: str) -> dict[str, Any]:
-    from experiments.mnist_relu_drn import runtime
+    import ebl.runtime.mnist_relu_drn.runtime as runtime
 
     case = HWA_CASES[STE_CASES[name]]
     gmin, gmax = _case_bounds(case)
@@ -832,8 +832,8 @@ def _example_configs() -> list[Path]:
 
 
 def run_config_corpus() -> dict[str, Any]:
-    from experiments.definitions import load_experiment_config, resolve_experiment_config
-    from experiments.schema import to_plain_data
+    from ebl.registry import load_experiment_config, resolve_experiment_config
+    from ebl.schema.base import to_plain_data
 
     record: dict[str, Any] = {}
     for path in _example_configs():
@@ -904,8 +904,8 @@ def run_config_grid() -> dict[str, Any]:
 
 
 def run_parser_grid() -> dict[str, Any]:
-    from experiments.mnist_relu_drn.config import _parse_weight_modifier
-    from experiments.schema import to_plain_data
+    from ebl.schema.mnist_relu_drn import _parse_weight_modifier
+    from ebl.schema.base import to_plain_data
 
     record: dict[str, Any] = {}
     for name, case in HWA_CASES.items():
@@ -1059,7 +1059,7 @@ def _recovery_source(workdir: Path):
 
 
 def _build_recovery(spec: dict[str, Any], workdir: Path):
-    from training.ibm_reram_recovery import IbmOmDeployedRecovery
+    from methods.ibm_reram_recovery import IbmOmDeployedRecovery
 
     bindings, population, device_model, deployment = _recovery_source(workdir)
     gmin, gmax = _case_bounds(HWA_CASES[RECOVERY_SOURCE_CASE])
