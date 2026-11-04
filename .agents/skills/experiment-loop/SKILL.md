@@ -6,7 +6,7 @@ description: Take bounded DRN and crossbar research questions through specificat
 # Experiment loop
 
 Read root AGENTS.md and the assigned pilot/experiment record first. Enter at the
-appropriate role and reuse completed work. The [execution policy](../../../docs/experiment_workflow.md)
+appropriate role and reuse completed work. The [execution policy](../../../workflow/policy.md)
 owns authorization, resources, checks and storage; [artifact conventions](references/artifacts.md)
 own note structure. Use the existing ebl CLI and bundles, not a new launch schema.
 Planning alone launches nothing; assigned execution continues through interpretation.
@@ -68,7 +68,7 @@ The review ends with the closing [git checkpoint](#git-checkpoints).
 
 Each experiment or pilot lives on its own branch, from the first file it changes
 until it closes. The user granted standing authority to commit, merge and push
-([version control](../../../docs/experiment_workflow.md#version-control)). The DRN
+([version control](../../../workflow/policy.md#version-control)). The DRN
 trunk is `refactor/training-core`, checked out at `/home/filip/analog-research/drn`.
 The repository is shared with the hwa worktree, so DRN branches are `drn/<id>`,
 where `<id>` is the experiment id or the pilot's file name (`20261103-<slug>`).

@@ -2,20 +2,11 @@
 
 ## Design
 
-The repository has three layers:
-
-```text
-experiments/small_network/  compose one versioned scientific workflow
-             |
-             +--> training/ generic execution, modifiers, probes, updates
-             |
-             +--> model/    energy functions, networks, parameter adapters
-```
-
-This keeps the useful shape of the original energy-based-learning repository:
-the model and training packages describe reusable mechanics, while experiments
-assemble them. Dataset choice, CLI paths, artifact layout, and paper-specific
-choices do not belong in model classes or generic training loops.
+The [architecture guide](architecture.md) defines ownership. `networks/` owns
+equations, construction and solving; `hardware/` owns physical state and laws;
+`methods/` owns learning; `ebl/runtime/` composes them and publishes native runs.
+Schemas and registry are `ebl/schema/` and `ebl/registry.py`. Research records and
+analyses stay in campaigns and experiments.
 
 `small_drn.v1` has four independent choices:
 
@@ -91,9 +82,9 @@ will reproduce the fitted next state.
 
 ## Core training interfaces
 
-`training/core` is the per-step code that workflow-managed runs execute:
+`methods/core` is the per-step code that workflow-managed runs execute:
 `engine`, `sgd` (EP, backprop and `DirectReadoutGradient`), `optimizers`,
-`modifier`, `batch`, `probes` and `guards`. `training/lab` is the interactive
+`modifier`, `batch`, `probes` and `guards`. `labs/training` is the interactive
 harness used only by `labs/`: `epoch`, `statistics`, `monitor` and
 `diagnostics`. Core never imports lab.
 
@@ -105,7 +96,7 @@ The modifier is passed separately to the runner or engine.
 For unlabelled diagnostics, evaluation
 accepts `cost_fn=None` with `Batch(inputs, targets=None)`.
 
-`training.core.engine.train_epoch` owns the minibatch order: set input, settle,
+`methods.core.engine.train_epoch` owns the minibatch order: set input, settle,
 set target, measure the free phase, compute and assign gradients, restore the
 modifier, update once, and clamp. Gradient computation and measurements stay
 inside the modifier context. `evaluate` holds its modifier context across
@@ -127,7 +118,7 @@ experiment's composition decides which stages run:
 
 Experiment-specific behaviour is plugged in, not written as a loop:
 
-- `training.core.batch.prepared_batches` (and its MNIST wrapper
+- `methods.core.batch.prepared_batches` (and its MNIST wrapper
   `experiments.mnist_shared.teacher_batches`, which builds
   `TeacherTargets(logits, labels)`) applies batch and sample limits, an
   early `stop()` and device transfer without pulling extra loader items;
@@ -181,7 +172,7 @@ Observers consume `FreePhaseEvent`, `GradientsReadyEvent`,
 (after clamping). `training.lab.diagnostics.GradientUpdateObserver` snapshots
 parameters only when explicitly attached and reports the actual clamped
 update. `LayerMeasurements` is a reusable lab observer, and
-`training.core.guards.FiniteGradientGuard` rejects non-finite gradients before
+`methods.core.guards.FiniteGradientGuard` rejects non-finite gradients before
 the update in both `small_drn.v1` and the lab trainers.
 Lab layer measurements retain raw energy-gradient infinity norms over all
 layers; the solver's projected-current residual probe is a separate metric.
@@ -189,9 +180,9 @@ layers; the solver's projected-current residual probe is a separate metric.
 displacements against a nonzero nudged phase and restores voltages and
 nudging, including on failure.
 
-`training.core.optimizers` exports `SGDOptimizer` and `build_optimizer`; these
+`methods.core.optimizers` exports `SGDOptimizer` and `build_optimizer`; these
 are no longer exported from `monitor` or `tiki_taka`. Core EP and backprop
-remain in `training.core.sgd`. The unused recurrent-backprop and contrastive
+remain in `methods.core.sgd`. The unused recurrent-backprop and contrastive
 estimators and the `detailed_gradients` trajectory dispatcher were removed;
 recover them from git history if a study needs them.
 
@@ -210,7 +201,7 @@ each run; repeated `run(1)` calls preserve epoch numbering and series history.
 
 This document describes the numerical runtime. The plan-to-review lifecycle
 for multi-run studies is documented separately in
-[`experiment_workflow.md`](experiment_workflow.md).
+[`experiment_workflow.md`](../workflow/policy.md).
 
 Inspect the machine-readable protocol:
 
@@ -381,10 +372,10 @@ pass.
 
 For a new experiment:
 
-1. Add `experiments/<name>/config.py` with a versioned immutable schema.
-2. Register a stable ID explicitly in `experiments/definitions.py`.
-3. Build numerical objects in the experiment package.
-4. Reuse `training.core.engine`, probes, named checkpoints, and `RunStore`.
+1. Add `ebl/schema/<name>.py` with a versioned immutable schema.
+2. Register a stable ID explicitly in `ebl/registry.py`.
+3. Compose network, hardware and method objects in `ebl/runtime/<name>/`.
+4. Reuse `methods.core.engine`, probes, named checkpoints, and `RunStore`.
 5. Add a small nested example and CLI smoke test.
 
 For a new extension, prefer one protocol over a conditional in the engine.
@@ -394,7 +385,7 @@ each combination exposed by `describe --json`.
 
 ## Question-led run inspection
 
-New pilots use one [question-led record](experiment_workflow.md#records), exact
+New pilots use one [question-led record](../workflow/policy.md#records), exact
 configs and native bundles; no separate JSON study is mandatory. Inspect explicit
 paths with `python -m ebl runs inspect RUN_DIR --json`. Add `--verify-artifacts`
 for hash validation and `--require-complete` to fail on unfinished/failed cases.

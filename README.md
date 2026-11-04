@@ -1,10 +1,11 @@
 # Energy-Based Learning Framework
 
 This repository simulates and trains dissipative resistive networks with
-coordinate-descent equilibrium solvers. Its core layout follows the original
-[energy-based-learning framework](https://github.com/rain-neuromorphics/energy-based-learning):
-model mechanics live in `model/`, reusable learning mechanics live in
-`training/`, and executable research compositions live in `experiments/`.
+coordinate-descent equilibrium solvers. It builds on the original
+[energy-based-learning framework](https://github.com/rain-neuromorphics/energy-based-learning).
+Network equations and solvers live in `networks/`, physical state and laws in
+`hardware/`, reusable learning procedures in `methods/`, and execution in `ebl/`.
+See the [architecture and ownership guide](docs/architecture.md).
 
 The supported experiment entrypoint is:
 
@@ -37,7 +38,7 @@ status, then records command-specific metrics, results, artifacts, logs, or
 checkpoints as the work proceeds. See
 [`docs/experiment_runtime.md`](docs/experiment_runtime.md) for the extension
 boundaries, checkpoint rules, worktree workflow, and campaign protocol.
-Research follows the [question-led workflow](docs/experiment_workflow.md):
+Research follows the [question-led workflow](workflow/policy.md):
 small pilots use one evolving note, while sustained comparisons live in
 [scientific campaigns](campaigns/README.md). Native bundles retain exact
 execution identities; campaign result notes record observations, interpretation,

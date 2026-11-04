@@ -1,21 +1,22 @@
 # IBM OM device layers
 
-The IBM OM ReRAM integration lives in `training/ibm_om/`. It is split into
-layers that each do one job and are each selected from the config.
-`training/ibm_reram_hwa.py` stays as a re-export facade, so every historical
-import keeps working.
+The IBM OM ReRAM integration separates physical populations, coordinates and plants
+(`hardware/ibm_om/`), DRN binding/topology (`networks/resistive/ibm_om/`), and controllers
+and learning policy (`methods/ibm_om/`). Each layer is selected from config.
+Import the defining module directly; the historical facade is retired. External
+sampling and receipts belong to `ebl/runtime/device_sampling.py`.
 
 ## Layers
 
 | Layer | Module | Selected by | Input → output | Must not see |
 |---|---|---|---|---|
-| Assignment | `population.py`, `sampling.py` | `preset`, `assignment_seed`, `corruption_policy` | DRN bindings → fixed `IbmReramArrayPopulation` (one AIHWKit-sampled cell per DRN conductance) | anything downstream |
-| Topology | `topology.py` | `dual_rail_layout_by_parameter` | binding keys/shapes → dual-rail quads or G+/G− pairs | mapping, programming |
+| Assignment | `hardware/ibm_om/{population,sampling}.py`, network binding adapter | `preset`, `assignment_seed`, `corruption_policy` | explicit cell keys/shapes → fixed `IbmReramArrayPopulation` (one AIHWKit-sampled cell per DRN conductance) | anything downstream |
+| Topology | `networks/resistive/ibm_om/topology.py` | `dual_rail_layout_by_parameter` | binding keys/shapes → dual-rail quads or G+/G− pairs | mapping, programming |
 | Characterization | `characterization.py` | `characterization` (`none`, `reset_reads`) | population, topology → RESET-relative baselines or nothing | mapping, programming |
 | Mapping | `mappings/<name>.py` | `target_mapping` | clean fractions `q = (G − Gmin)/span`, cell bounds, baselines → `MappingResult` (targets, report, `program_mask`, `OutOfSupportContract`) | execution, controller, plant, RNG |
 | Programming | `programming/{ideal,compact,pulse}.py` | `execution`, `initial_state`, `controller`, `tolerance_step_ratio`, `verify_tolerance_absolute`, `maximum_program_pulses`, `target_out_of_support`, `endpoint_policy` | `ProgramRequest` + `ProgrammingContext` + RNG stream → endpoint, report, deployment | mapping name, mapping report, topology |
 | Readback | `readback.py` | `clamp_to_parameter_bounds` | endpoint → DRN conductances `G = Gmin + span·endpoint`, restored after each context | mapping, programming internals |
-| Coordinate | `coordinates.py` | `device_coordinate` (`logical_reference_subtracted`, `raw_active_v1`) | state ↔ [0, 1] conversion, cell bounds, plant type | — |
+| Coordinate | `hardware/ibm_om/coordinates.py` | `device_coordinate` (`logical_reference_subtracted`, `raw_active_v1`) | state ↔ [0, 1] conversion, cell bounds, plant type | — |
 
 `modifier.py` is the only module that runs the layers in order. It does
 nothing per-mapping: for mapping-specific setup it calls

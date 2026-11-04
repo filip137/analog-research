@@ -53,67 +53,37 @@ this tree. The standard device model is defined under [Drift](#drift).
 
 ## Repository map
 
-- `ebl/`: public command-line entry point. Workflow-managed training,
-  validation, checkpoint handling, and study lifecycle commands enter through
-  `python -m ebl`.
-- `model/resistive/`: perfect-diode DRN construction and numerical equations,
-  including the passive and digital low-rank adapter structures used by LoRA
-  controls.
-- `training/`: reusable training mechanisms. The worktree-relevant modules
-  include HWA modifiers, measured-trace programming and update backends,
-  Tiki-Taka accumulation, parameter catalogs, probes, and checkpoint codecs.
-- `training/core/`: the per-step engine, gradient estimators, digital
-  optimizer, modifier seam, probes and finite-gradient guard that every
-  workflow-managed run executes. `training/lab/`: the epoch runners,
-  statistics, monitor and diagnostics used only by `labs/`. Core never
-  imports lab.
-- `training/ibm_reram_program_verify.py`: explicit-RNG transcription of the
-  AIHWKit 1.1.0 `SoftBoundsReferenceDevice` pulse equation, capability-limited
-  controller port, one-pulse/adaptive controllers, and identity partitions.
-- `training/ibm_reram_endpoint_model.py`: deployment sampler for the fitted
-  target-conditioned bounded endpoint density with explicit non-corrupt
-  failure, persistent corrupt-device, target-support, and clipping outcomes.
-- `experiments/reram_program_verify/`: strict `characterize` composition
-  root, streaming trajectory/event store, held-out endpoint fitting, Wan
-  comparison, plots, and report generation.
-- `experiments/reram_program_verify/local_short_launcher.py`: persistent local
-  CUDA launcher and heartbeat/receipt writer for reviewed production studies.
-  It invokes the public CLI for every arm; it is not an alternative numerical
-  execution surface.
-- `experiments/lifecycle/`: the run lifecycle shared by workflow-managed
-  families. `train_phase` holds global-best selection, the epoch loop with its
-  checkpoints, and terminal completion or failure.
-- `experiments/opt_cmo_drn/`: CMO-initialized OPT-125M with six coupled
-  perfect-diode MLPs. It covers devices, faults, retention and drift,
-  calibration, recovery and ZO attention.
-- `experiments/mnist_relu_drn/`: strict teacher-to-perfect-diode-DRN mapping,
-  HWA, measured-device deployment, training, validation, and provenance.
-- `experiments/mnist_relu_drn_reset/`: measured pulse-zero/RESET
-  initialization experiments and their learning-rate protocol.
-- `experiments/small_network/`: existing composition root for DRN HWA,
-  Tiki-Taka, and low-rank adapter controls when a declared study uses the
-  `small_drn.v1` experiment family.
-- `examples/mnist_relu_drn/`, `examples/mnist_relu_drn_reset/`, and
-  `examples/small_drn/`: strict versioned experiment configs. A study plan
-  references exact config files; configs do not choose input checkpoints or
-  output locations.
-- `examples/reram_program_verify/`: operational smoke, sizing, immutable
-  production, cap-128, and focused HWA-prerequisite characterization configs.
-- `studies/`: historical/optional strict JSON study plans; new pilot specifications
-  live in their single Markdown note.
-- `campaigns/`: question-led notes and the existing subprocess-only orchestrator
-  of exact configs and explicit inputs.
-- `data/`: ignored staging area for measured synapse data. Its required file,
-  digest, and placement are defined in `docs/synapse_data.md`.
-- `results/`: ignored raw run directories and generated study analyses. One
-  prepared study owns one `results/<study-id>/` root.
-- `docs/`: scientific contracts and historical provenance. New execution handoffs
-  and conclusions belong to their campaign/pilot records.
-- `tests/`: strict config, numerical parity, provenance, lifecycle, measured
-  update, and study-workflow tests.
-- `labs/`: focused reference harnesses for direct perfect-diode and AIHWKit
-  Tiki-Taka comparisons. Use them for reference/parity work; workflow-managed
-  evidence must use the public `python -m ebl` CLI.
+See [architecture and ownership](docs/architecture.md) for enforced dependencies.
+
+- `core/`: neutral configuration, identities, artifacts and caches.
+- `hardware/`: physical device populations, laws, faults and held conductance state.
+  `hardware/devices/reram.py` owns the explicit-RNG pulse plant and capability-limited
+  verify port; `hardware/devices/endpoint.py` owns the fitted endpoint sampler.
+- `networks/`: data, frozen teachers, architecture, mapping and equations.
+  `networks/resistive/` owns perfect-diode construction, numerical solving and passive
+  or digital low-rank structures; `networks/opt/` owns coupled OPT and physical adapters.
+- `methods/`: HWA, programming controllers, Tiki-Taka, optimizers, calibration,
+  maintenance and checkpoint codecs. `methods/core/` is the production step engine,
+  gradient estimators, modifier seam, probes and finite-gradient guard.
+  Core never imports the lab harness in `labs/training/`.
+- `ebl/`: public `python -m ebl` CLI and registry. `ebl/schema/` composes domain
+  settings; `ebl/runtime/` assembles families, trains, validates and publishes bundles;
+  `ebl/runtime/lifecycle/` owns the shared epoch loop and global-best selection.
+  `ebl/execution/` owns canonical subprocess campaign execution; `ebl/lifecycle/`
+  owns study preparation, collection and scheduling through `ebl lifecycle`.
+- `experiments/`: research analyses and supported launch compositions. The local
+  characterization launcher invokes the public CLI for every arm.
+- `examples/`: strict versioned experiment configs, referenced exactly by studies.
+  Configs do not choose input checkpoints or output locations.
+- `studies/`: historical/optional strict JSON plans; new pilots use one Markdown note.
+- `campaigns/`: scientific questions, exact input/config handoffs and conclusions.
+- `workflow/`: execution policy and instructions only; no Python execution namespace.
+- `data/`: ignored measured-data staging; see `docs/synapse_data.md`.
+- `results/`: ignored native bundles and analyses, one root per declared study.
+- `docs/`: scientific contracts and historical provenance. New handoffs and conclusions
+  belong to campaign/pilot records.
+- `tests/`: config, numerical parity, provenance, lifecycle, device and continuation tests.
+- `labs/`: reference harnesses; workflow-managed evidence uses `python -m ebl`.
 
 ## Architecture
 
@@ -136,9 +106,9 @@ this tree. The standard device model is defined under [Drift](#drift).
   conditioning/programming seeds. Do not replace the explicit pulse plant with
   a native CPU tile unless its cycle-to-cycle RNG becomes serializable and an
   exact-replay test is added.
-- IBM OM code lives in the `training/ibm_om/` layers
-  ([`docs/ibm_om_layers.md`](docs/ibm_om_layers.md)); `training/ibm_reram_hwa.py`
-  is a re-export facade. Select each layer from the config, never from another
+- IBM OM layers span `hardware/ibm_om/`, `networks/resistive/ibm_om/` and
+  `methods/ibm_om/` ([layer contracts](docs/ibm_om_layers.md)); import defining
+  modules directly. Select each layer from the config, never from another
   layer, and keep `tests/test_ibm_om_golden.py` bit-exact unless a numerical
   change is intended and its goldens are deliberately re-captured.
 
@@ -154,7 +124,7 @@ this tree. The standard device model is defined under [Drift](#drift).
 ## Drift
 
 The user set the standard device model for the OPT CMO DRN
-(`experiments/opt_cmo_drn/`) on 3 November 2026. The CMO deployment is
+(`ebl/runtime/opt_cmo_drn/`) on 3 November 2026. The CMO deployment is
 followed by the power-law drift the user supplied on 28 October
 ([specification](../on-chip-learning/campaigns/drift/power-law-model.md)). One
 knob sets the temporal correlation
@@ -218,7 +188,7 @@ exact step: Y ← c·Y + √(1 − c²)·z,   c = (τ_prev/τ_next)^κ
 ## Experimental workflow and authority
 
 Use the [experiment-loop skill](.agents/skills/experiment-loop/SKILL.md) and
-[execution policy](docs/experiment_workflow.md). They supersede the former mandatory
+[execution policy](workflow/policy.md). They supersede the former mandatory
 study/manifest lifecycle and external closeout-skill instructions that conflict.
 Start from the question and decision. Small pilots use one evolving note in
 `campaigns/pilots/`; sustained work uses campaign experiment/result notes. Ideas,

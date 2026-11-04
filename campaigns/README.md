@@ -20,6 +20,6 @@ The 2026-10-02 migration reconciles historical reports with local summaries and 
 
 For a new bounded question use one [pilot note](pilots/20260925-lora-bounded-learning.md) and the [pilot template](../.agents/skills/experiment-loop/references/pilot.md). Sustained work belongs in the appropriate campaign series using the [record conventions](../.agents/skills/experiment-loop/references/artifacts.md). Generate that campaign’s ledger after changing its notes.
 
-The existing runner.py, schema.py and [executable manifests](manifests/README.md) remain subprocess orchestration. Historical JSON plans remain in studies; large bundles remain in [results](../results/README.md). The workflow-validation pilot retains its own synthetic-control evidence and is not counted as measured-device science.
+The existing `ebl/execution/runner.py`, `ebl/execution/schema.py` and [executable manifests](manifests/README.md) remain subprocess orchestration. Historical JSON plans remain in studies; large bundles remain in [results](../results/README.md). The workflow-validation pilot retains its own synthetic-control evidence and is not counted as measured-device science.
 
-[Technical documentation and historical sources](../docs/README.md) · [Execution and review policy](../docs/experiment_workflow.md).
+[Technical documentation and historical sources](../docs/README.md) · [Execution and review policy](../workflow/policy.md).
