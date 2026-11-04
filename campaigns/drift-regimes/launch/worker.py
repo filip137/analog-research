@@ -43,7 +43,7 @@ def slug(regime):
 def combine_plans(plans, campaign_id):
     """Keep one shared prepare/devices pair; prefix each regime's stages."""
     result = {'schema_version': 1, 'campaign_id': campaign_id, 'targets': None, 'stages': []}
-    for i, (regime, path) in enumerate(plans):
+    for i, (unit, path) in enumerate(plans):
         doc = read(path / 'campaign.json')
         if result['targets'] is None:
             result['targets'] = doc['targets']
@@ -57,8 +57,8 @@ def combine_plans(plans, campaign_id):
             else:
                 if not stage['id'].startswith('drift_regimes__'):
                     raise ValueError(f"Unexpected stage in a drift-regimes plan: {stage['id']}")
-                stage['id'] = slug(regime) + '__' + stage['id']
-                stage['case_id'] = slug(regime) + '__' + stage['case_id']
+                stage['id'] = slug(unit) + '__' + stage['id']
+                stage['case_id'] = slug(unit) + '__' + stage['case_id']
             stage['config'] = str((path / stage['config']).resolve())
             result['stages'].append(stage)
     ids = [stage['id'] for stage in result['stages']]
@@ -68,13 +68,14 @@ def combine_plans(plans, campaign_id):
 
 
 def validate_coverage(rows, specs):
-    expected = {(s['regime'], seed, t) for s in specs for seed in s['assignment_seeds'] for t in s['evaluation_seconds']}
-    observed = [(r['regime'], r['realization'], r['seconds']) for r in rows]
+    expected = {(s['regime'], seed, a['label'], t) for s in specs for seed in s['assignment_seeds']
+                for a in s.get('arms', [{'label': 'A0'}]) for t in s['evaluation_seconds']}
+    observed = [(r['regime'], r['realization'], r['arm'], r['seconds']) for r in rows]
     if len(observed) != len(expected) or set(observed) != expected:
-        raise ValueError('Missing, duplicate or unexpected regime/realization/age coverage.')
-    by_regime = {s['regime']: s for s in specs}
+        raise ValueError('Missing, duplicate or unexpected regime/realization/arm/age coverage.')
+    by_unit = {(s['regime'], seed): s for s in specs for seed in s['assignment_seeds']}
     for row in rows:
-        s = by_regime[row['regime']]
+        s = by_unit[(row['regime'], row['realization'])]
         for field in ('source_sha256', 'cohort_sha256', 'canary', 'law'):
             if row[field] != s[field]:
                 raise ValueError(f'Coverage identity mismatch: {field}.')
@@ -120,12 +121,13 @@ def main():
     if args.prepare:
         plans = []
         for config, spec in zip(configs, specs):
-            plan = root / 'plans' / slug(spec['regime'])
+            unit = Path(config).stem.removeprefix('opt125m-drift-regimes-')
+            plan = root / 'plans' / slug(unit)
             call(sys.executable, '-m', 'workflow', 'plan', config,
                  '--teacher-weights', m['teacher'], '--hwa-source', 'standard_hwa_model=' + m['weights'],
                  '--output', plan, '--device', 'cuda:0', '--cpu-threads', '10')
-            plans.append((spec['regime'], plan))
-        merged = combine_plans(plans, 'opt125m-drift-regimes-qual-' + args.mode)
+            plans.append((unit, plan))
+        merged = combine_plans(plans, m.get('campaign_prefix', 'opt125m-drift-regimes-qual-') + args.mode)
         manifest.parent.mkdir(exist_ok=True)
         if manifest.exists() and read(manifest) != merged:
             raise ValueError('Refusing to replace a different native campaign plan.')

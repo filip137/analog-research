@@ -9,9 +9,10 @@ Methods (``training.drift_regimes_config.ARM_KEYS``):
 - ``none``: untreated.
 - ``calibration``: per output column affine readout correction of every analog
   matrix, ``y' = g y + s`` after the digital bias, refitted at each event by
-  least squares on probe inputs. The reference for a probe input is the output
-  of the digital target weights for that same input. Matrices are fitted in
-  forward order, each after the earlier ones are corrected.
+  mean/variance matching on probe inputs: ``g = sd_ref / sd``, ``s = mean_ref -
+  g mean`` per column. The reference is the output of the digital target
+  weights for the same probe inputs. Matrices are fitted in forward order,
+  each after the earlier ones are corrected.
 - ``layernorm``: the affine of the LayerNorm in front of each analog MLP,
   trained on the held read at each event (warm start), teacher-KL objective.
 - ``lora``: a digital rank-r adapter on each analog matrix, trained the same
@@ -129,7 +130,7 @@ def _matrix_input(network, hidden, q, index):
 
 @torch.no_grad()
 def fit_calibration(network, q, probe, batch=8):
-    """Per-column least-squares affine correction of every analog matrix (see module doc)."""
+    """Per-column mean/variance-matching affine correction of every analog matrix (see module doc)."""
     device = q.device
     matrices = [_identity(network, i, device) for i in range(network.base_matrices)]
     network.drift_compensation = Compensation(matrices)
@@ -141,14 +142,16 @@ def fit_calibration(network, q, probe, batch=8):
                 current = network._matrix(x, index, q).flatten(0, -2).double()
                 reference = network._matrix(x, index, network.q.detach()).flatten(0, -2).double()
                 part = torch.stack((current.sum(0), reference.sum(0), current.square().sum(0),
-                                    (current * reference).sum(0)))
+                                    reference.square().sum(0)))
                 n = current.shape[0]
                 sums = (n, part) if sums is None else (sums[0] + n, sums[1] + part)
-            n, (sy, sr, syy, syr) = sums[0], sums[1]
+            n, (sy, sr, syy, srr) = sums[0], sums[1]
             my, mr = sy / n, sr / n
             var = (syy / n - my.square()).clamp_min(0)
-            cov = syr / n - my * mr
-            gain = torch.where(var > 1e-12, cov / var.clamp_min(1e-12), torch.ones_like(var)).clamp(*GAIN_BOUNDS)
+            var_ref = (srr / n - mr.square()).clamp_min(0)
+            # Constant channels stay constant, without a large gain.
+            gain = torch.where((var > 1e-12) & (var_ref > 1e-12), (var_ref / var.clamp_min(1e-12)).sqrt(),
+                               torch.ones_like(var)).clamp(*GAIN_BOUNDS)
             matrices[index].affine_gain = gain.float()
             matrices[index].shift = (mr - gain * my).float()
     finally:

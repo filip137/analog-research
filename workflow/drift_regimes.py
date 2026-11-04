@@ -57,9 +57,10 @@ def evaluation_cohort(lifecycle, cfg):
     corpus, _ = opt_mlp.load_corpus(data, lifecycle.network.model)
     length = lifecycle.data.sequence_length
     stream = corpus['splits'][cfg.evaluation_split]
-    if len(stream) < cfg.evaluation_sequences * length:
+    first, last = cfg.evaluation_start * length, (cfg.evaluation_start + cfg.evaluation_sequences) * length
+    if len(stream) < last:
         raise ValueError('Evaluation corpus is too small for the declared cohort.')
-    tokens = stream[:cfg.evaluation_sequences * length].reshape(cfg.evaluation_sequences, length).contiguous()
+    tokens = stream[first:last].reshape(cfg.evaluation_sequences, length).contiguous()
     if tensor_hash(tokens) != cfg.cohort_sha256:
         raise ValueError('Drift-regimes token-cohort hash mismatch.')
     return tokens

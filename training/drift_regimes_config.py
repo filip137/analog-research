@@ -72,6 +72,7 @@ class DriftRegimes:
     seed: int = 391103
     evaluation_split: str = 'validation'
     evaluation_sequences: int = 64
+    evaluation_start: int = 0
     evaluation_seconds: tuple = (0., 60., 900., 1800., 3600., 7200., 14400., 28800., 57600., 86400.)
     canary: bool = False
 
@@ -94,9 +95,13 @@ class DriftRegimes:
     def parse(cls, raw):
         names = {f.name for f in fields(cls)}
         legacy = (names - {'arms', 'adaptation'}) | {'arm'}
-        if not isinstance(raw, dict) or set(raw) not in (names, legacy):
+        # evaluation_start (the cohort's first sequence) is optional and defaults to 0.
+        keys = set(raw) | {'evaluation_start'} if isinstance(raw, dict) else None
+        if keys not in (names, legacy):
             raise ValueError('Expected exactly the drift-regimes fields.')
-        value = dict(raw)
+        value = {'evaluation_start': 0, **raw}
+        if type(value['evaluation_start']) is not int or not 0 <= value['evaluation_start'] < 2**31:
+            raise ValueError('Invalid evaluation_start.')
         if 'arm' in value:
             if value.pop('arm') != 'A0':
                 raise ValueError('A legacy drift-regimes file has only the untreated arm A0.')

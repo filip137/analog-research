@@ -252,3 +252,33 @@ def test_cached_suffix_matches_the_network_forward(scope):
         for m in correction.matrices:
             assert torch.allclose(m.affine_gain, torch.ones_like(m.affine_gain), atol=1e-4)
             assert torch.allclose(m.shift, torch.zeros_like(m.shift), atol=1e-4)
+
+
+def test_evaluation_start_is_optional_and_validated():
+    raw = config().to_dict()
+    del raw['evaluation_start']
+    assert DriftRegimes.parse(raw).evaluation_start == 0
+    raw['evaluation_start'] = 64
+    assert DriftRegimes.parse(raw).evaluation_start == 64
+    raw['evaluation_start'] = -1
+    with pytest.raises(ValueError):
+        DriftRegimes.parse(raw)
+
+
+def test_calibration_matches_column_moments_of_the_reference():
+    from workflow.networks.opt_mlp import OptConfig, OptDecoder, OptMlpSuffix
+    from workflow.drift_regimes_arms import prefix_states, fit_calibration, _matrix_input
+    torch.manual_seed(1)
+    teacher = OptDecoder(OptConfig(50, 16, 2, 2, 32, 16)).eval()
+    network = OptMlpSuffix(teacher, 1).eval()
+    cache = prefix_states(network, torch.randint(0, 50, (4, 8)), 'cpu')
+    q = network.q.detach() * 0.8 + 0.02 * torch.randn_like(network.q)
+    correction = fit_calibration(network, q, cache)
+    with torch.no_grad():
+        x = _matrix_input(network, cache.student, q, 0)
+        reference = network._matrix(x, 0, network.q.detach()).flatten(0, -2)
+        network.drift_compensation = correction
+        corrected = network._matrix(x, 0, q).flatten(0, -2)
+        network.drift_compensation = None
+    assert torch.allclose(corrected.mean(0), reference.mean(0), atol=1e-4)
+    assert torch.allclose(corrected.std(0), reference.std(0), rtol=1e-3, atol=1e-4)
