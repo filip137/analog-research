@@ -5,6 +5,7 @@ Use [scientific campaigns](../campaigns/README.md) for questions, experiment spe
 ## Workflow and scientific contracts
 
 - [Question-led experimental workflow](../workflow/policy.md).
+- [Experiment management handoff for a small repository](experiment-management-handoff.md).
 - [Architecture and ownership](architecture.md).
 - [Experiment runtime](experiment_runtime.md).
 - [Synapse data and device-model sources](synapse_data.md).
