@@ -1,7 +1,0 @@
-{
-  "cd_npz": "/home/filip/server_code/labs/figures_for_paper_digits/error_vs_iter/experimental/hidden_1/overrelax1.2/iterations/iter8/20260225-180025_experimental/validation_states.npz",
-  "spice_npz": "/home/filip/server_code/labs/figures_for_paper_digits/error_vs_iter/experimental/hidden_1/validation_states_spice_layers.npz",
-  "keys": "Layer_2",
-  "log_scale": false,
-  "cli": "/home/filip/miniconda3/envs/py312/bin/python /home/filip/server_code/labs/tools/error_compare_npz.py /home/filip/server_code/labs/figures_for_paper_digits/error_vs_iter/experimental/hidden_1/overrelax1.2/iterations/iter8/20260225-180025_experimental/validation_states.npz /home/filip/server_code/labs/figures_for_paper_digits/error_vs_iter/experimental/hidden_1/validation_states_spice_layers.npz --output-dir /home/filip/server_code/labs/figures_for_paper_digits/error_vs_iter/experimental/hidden_1/overrelax1.2/iterations/iter8/20260225-180025_experimental/error_npz"
-}

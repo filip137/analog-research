@@ -1,5 +1,0 @@
-rel_tol=1e-3
-real=14.80
-user=13.85
-sys=0.73
-

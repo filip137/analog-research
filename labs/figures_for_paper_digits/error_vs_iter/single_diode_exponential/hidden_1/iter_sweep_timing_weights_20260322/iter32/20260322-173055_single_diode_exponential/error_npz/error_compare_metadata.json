@@ -1,7 +1,0 @@
-{
-  "cd_npz": "/home/filip/server_code/labs/figures_for_paper_digits/error_vs_iter/single_diode_exponential/hidden_1/iter_sweep_timing_weights_20260322/iter32/20260322-173055_single_diode_exponential/validation_states.npz",
-  "spice_npz": "/home/filip/server_code/labs/figures_for_paper_digits/error_vs_iter/single_diode_exponential/hidden_1/iter_sweep_timing_weights_20260322/validation_states_spice_layers.npz",
-  "keys": null,
-  "log_scale": false,
-  "cli": null
-}

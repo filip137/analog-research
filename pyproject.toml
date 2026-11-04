@@ -32,11 +32,4 @@ include = [
   "networks",
   "ebl.*",
 ]
-exclude = [
-  "labs.MNIST_network_data*",
-  "labs.configs*",
-  "labs.figures_for_paper_digits*",
-  "labs.i_v_npz*",
-  "labs.shfiles*",
-]
 namespaces = true
