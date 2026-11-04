@@ -172,6 +172,57 @@
         "method": "none"
       },
       {
+        "label": "A11-W1-s0.0003",
+        "method": "learning",
+        "events": [
+          900.0,
+          3600.0,
+          14400.0,
+          57600.0
+        ],
+        "fraction": 0.01,
+        "attempts": 4,
+        "threshold": 0.7431,
+        "step": 0.0003,
+        "rounds": 4,
+        "batch_sequences": 16,
+        "ideal": false
+      },
+      {
+        "label": "A11-W1-s0.001",
+        "method": "learning",
+        "events": [
+          900.0,
+          3600.0,
+          14400.0,
+          57600.0
+        ],
+        "fraction": 0.01,
+        "attempts": 4,
+        "threshold": 0.7431,
+        "step": 0.001,
+        "rounds": 4,
+        "batch_sequences": 16,
+        "ideal": false
+      },
+      {
+        "label": "A11-W1-s0.003",
+        "method": "learning",
+        "events": [
+          900.0,
+          3600.0,
+          14400.0,
+          57600.0
+        ],
+        "fraction": 0.01,
+        "attempts": 4,
+        "threshold": 0.7431,
+        "step": 0.003,
+        "rounds": 4,
+        "batch_sequences": 16,
+        "ideal": false
+      },
+      {
         "label": "A11-W1-s0.01",
         "method": "learning",
         "events": [
@@ -206,7 +257,7 @@
         "ideal": false
       },
       {
-        "label": "A11-W1-s0.1",
+        "label": "A11-W2-s0.0003",
         "method": "learning",
         "events": [
           900.0,
@@ -214,16 +265,16 @@
           14400.0,
           57600.0
         ],
-        "fraction": 0.01,
+        "fraction": 0.1,
         "attempts": 4,
         "threshold": 0.7431,
-        "step": 0.1,
+        "step": 0.0003,
         "rounds": 4,
         "batch_sequences": 16,
         "ideal": false
       },
       {
-        "label": "A11-W1-s0.3",
+        "label": "A11-W2-s0.001",
         "method": "learning",
         "events": [
           900.0,
@@ -231,10 +282,27 @@
           14400.0,
           57600.0
         ],
-        "fraction": 0.01,
+        "fraction": 0.1,
         "attempts": 4,
         "threshold": 0.7431,
-        "step": 0.3,
+        "step": 0.001,
+        "rounds": 4,
+        "batch_sequences": 16,
+        "ideal": false
+      },
+      {
+        "label": "A11-W2-s0.003",
+        "method": "learning",
+        "events": [
+          900.0,
+          3600.0,
+          14400.0,
+          57600.0
+        ],
+        "fraction": 0.1,
+        "attempts": 4,
+        "threshold": 0.7431,
+        "step": 0.003,
         "rounds": 4,
         "batch_sequences": 16,
         "ideal": false
@@ -269,40 +337,6 @@
         "attempts": 4,
         "threshold": 0.7431,
         "step": 0.03,
-        "rounds": 4,
-        "batch_sequences": 16,
-        "ideal": false
-      },
-      {
-        "label": "A11-W2-s0.1",
-        "method": "learning",
-        "events": [
-          900.0,
-          3600.0,
-          14400.0,
-          57600.0
-        ],
-        "fraction": 0.1,
-        "attempts": 4,
-        "threshold": 0.7431,
-        "step": 0.1,
-        "rounds": 4,
-        "batch_sequences": 16,
-        "ideal": false
-      },
-      {
-        "label": "A11-W2-s0.3",
-        "method": "learning",
-        "events": [
-          900.0,
-          3600.0,
-          14400.0,
-          57600.0
-        ],
-        "fraction": 0.1,
-        "attempts": 4,
-        "threshold": 0.7431,
-        "step": 0.3,
         "rounds": 4,
         "batch_sequences": 16,
         "ideal": false

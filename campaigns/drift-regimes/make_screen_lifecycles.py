@@ -183,7 +183,8 @@ def probe():
 
 # --- run 3: the remaining crossbar arms (A6, A10, A11, O1, O2, no-drift controls) ---------------
 EVAL_AGES = [0., 60., 900., 1800., 3600., 7200., 14400., 28800., 57600., 86400.]
-TUNE_A11_STEPS = (0.01, 0.03, 0.1, 0.3)
+# The first grid (0.01-0.3) was cancelled: the run-3 canary showed step 0.1 raising KL to 1.5.
+TUNE_A11_STEPS = (3e-4, 1e-3, 3e-3, 1e-2, 3e-2)
 A11_BATCH = 16
 TIER = {'W1': .01, 'W2': .1}
 
