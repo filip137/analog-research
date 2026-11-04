@@ -181,7 +181,8 @@
         "threshold": 0.5477,
         "rounds": 4,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       },
       {
         "label": "A11-W2-N4",
@@ -197,7 +198,8 @@
         "threshold": 0.5477,
         "rounds": 4,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       }
     ],
     "adaptation": {

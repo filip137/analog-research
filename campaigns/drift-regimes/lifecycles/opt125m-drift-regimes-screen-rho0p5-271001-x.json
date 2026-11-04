@@ -213,7 +213,8 @@
         "threshold": 0.7109,
         "rounds": 4,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       },
       {
         "label": "A5-lr0.003",

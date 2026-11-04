@@ -181,7 +181,8 @@
         "threshold": null,
         "rounds": 4,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       },
       {
         "label": "A11-W1-N2",
@@ -197,7 +198,8 @@
         "threshold": 0.9302,
         "rounds": 4,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       },
       {
         "label": "A11-W1-N4",
@@ -213,7 +215,8 @@
         "threshold": 0.7431,
         "rounds": 4,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       },
       {
         "label": "A11-W1-N8",
@@ -229,7 +232,8 @@
         "threshold": 0.4958,
         "rounds": 2,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       },
       {
         "label": "A11-W2-N1",
@@ -245,7 +249,8 @@
         "threshold": null,
         "rounds": 4,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       },
       {
         "label": "A11-W2-N2",
@@ -261,7 +266,8 @@
         "threshold": 0.9302,
         "rounds": 4,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       },
       {
         "label": "A11-W2-N4",
@@ -277,7 +283,8 @@
         "threshold": 0.7431,
         "rounds": 4,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       },
       {
         "label": "A11-W2-N8",
@@ -293,7 +300,8 @@
         "threshold": 0.4958,
         "rounds": 2,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       },
       {
         "label": "A11-W2-twin",
@@ -310,6 +318,7 @@
         "rounds": 4,
         "batch_sequences": 16,
         "ideal": false,
+        "score": "fisher",
         "twin": true
       },
       {
@@ -326,7 +335,24 @@
         "threshold": null,
         "rounds": 4,
         "batch_sequences": 16,
-        "ideal": true
+        "ideal": true,
+        "score": "fisher"
+      },
+      {
+        "label": "A11n-W2-N4",
+        "method": "learning_newton",
+        "events": [
+          900.0,
+          3600.0,
+          14400.0,
+          57600.0
+        ],
+        "fraction": 0.1,
+        "attempts": 4,
+        "threshold": 0.7431,
+        "rounds": 4,
+        "batch_sequences": 16,
+        "ideal": false
       }
     ],
     "adaptation": {

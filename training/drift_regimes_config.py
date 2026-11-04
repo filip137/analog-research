@@ -164,8 +164,12 @@ class DriftRegimes:
             if not isinstance(item, dict) or item.get('method') not in ARM_KEYS:
                 raise ValueError('Unknown drift-regimes arm method.')
             keys = {'label', 'method'} | ARM_KEYS[item['method']]
-            if set(item) not in (keys, keys | {'twin'}) or ('twin' in item and item['method'] not in TWIN):
+            optional = {'twin'} | ({'score'} if item['method'] == 'learning_newton' else set())
+            if (not keys <= set(item) <= keys | optional
+                    or ('twin' in item and item['method'] not in TWIN)):
                 raise ValueError(f"Expected exactly the {item['method']} arm fields.")
+            if item.get('score', 'newton') not in ('newton', 'fisher'):
+                raise ValueError('Expected a newton or fisher learning score.')
             arm = dict(item)
             _label(arm['label'], 'arm label')
             if 'twin' in arm and type(arm['twin']) is not bool:

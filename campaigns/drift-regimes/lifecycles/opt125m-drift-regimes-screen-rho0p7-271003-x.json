@@ -213,7 +213,8 @@
         "threshold": 0.7093,
         "rounds": 4,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       }
     ],
     "adaptation": {

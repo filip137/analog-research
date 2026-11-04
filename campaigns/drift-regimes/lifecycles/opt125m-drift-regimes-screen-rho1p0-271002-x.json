@@ -213,7 +213,8 @@
         "threshold": null,
         "rounds": 4,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       },
       {
         "label": "A11-W1-N2",
@@ -229,7 +230,8 @@
         "threshold": 0.9824,
         "rounds": 4,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       },
       {
         "label": "A11-W1-N4",
@@ -245,7 +247,8 @@
         "threshold": 0.7029,
         "rounds": 4,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       },
       {
         "label": "A11-W1-N8",
@@ -261,7 +264,8 @@
         "threshold": 0.4779,
         "rounds": 2,
         "batch_sequences": 16,
-        "ideal": false
+        "ideal": false,
+        "score": "fisher"
       }
     ],
     "adaptation": {

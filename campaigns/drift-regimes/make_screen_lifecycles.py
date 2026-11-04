@@ -204,12 +204,15 @@ def learning(point, label, tier, attempts, step, *, ideal=False, twin=False):
     return arm
 
 
-def newton(point, label, tier, attempts, *, ideal=False, twin=False):
-    """A11: the exp-003 closed loop (Newton net-gain selection, reset of whole pairs to clean targets).
-    No learning rate; replaces the gradient-step rule, which degraded the model at every step size."""
+def newton(point, label, tier, attempts, *, ideal=False, twin=False, score='fisher'):
+    """A11: the exp-003 closed loop (reset of whole pairs to clean targets), with the unsigned
+    fisher_net score h (e^2 - v). The signed newton_net score overshot in the run-3 canary
+    (canary3, job 1957589) and stays as one R0 diagnostic. No learning rate."""
     arm = {'label': label, 'method': 'learning_newton', 'events': EVENTS, 'fraction': TIER[tier],
            'attempts': attempts, 'threshold': kappa(point, attempts), 'rounds': rounds(attempts),
            'batch_sequences': A11_BATCH, 'ideal': ideal}
+    if score != 'newton':
+        arm['score'] = score
     if twin:
         arm['twin'] = True
     return arm
@@ -237,7 +240,8 @@ def extension_arms(point, lr, step=None):
                 *[precompensated(point, t, n) for t in ('W1', 'W2') for n in sweep],
                 *[newton(point, f'A11-{t}-N{n}', t, n) for t in ('W1', 'W2') for n in sweep],
                 newton(point, 'A11-W2-twin', 'W2', 1, twin=True),
-                newton(point, 'A11-W2-ideal', 'W2', 1, ideal=True)]
+                newton(point, 'A11-W2-ideal', 'W2', 1, ideal=True),
+                newton(point, 'A11n-W2-N4', 'W2', 4, score='newton')]       # newton_net diagnostic
     if g == 'rho':
         levels = (1, 2, 4, 8) if point == 'rho1.0' else (4,)
         arms = [a6, o1, *[newton(point, f'A11-W1-N{n}', 'W1', n) for n in levels]]
@@ -256,6 +260,24 @@ def canary3():
     doc = lifecycle(point, kappa(point, 4), canary=True)
     doc['lifecycle_id'] = 'opt125m-drift-regimes-screen-canary3-r0'
     doc['question'] = {'text': 'Does the exp-003 A11 loop run at full scale and improve on A0?',
+                       'decision': 'drift-regimes exp-002 run-3 launch gate; no method comparison.',
+                       'primary_metric': 'teacher_kl', 'evidence_class': 'exploratory_model_based'}
+    spec = doc['drift_regimes']
+    del spec['arm']
+    spec['arms'] = [{'label': 'A0', 'method': 'none'}, newton(point, 'A11-W1-N4', 'W1', 4, score='newton'),
+                    newton(point, 'A11-W2-N8', 'W2', 8, score='newton'),
+                    newton(point, 'A11-W2-twin', 'W2', 1, twin=True, score='newton'),
+                    newton(point, 'A11-W2-ideal', 'W2', 1, ideal=True, score='newton')]
+    spec['adaptation'] = ADAPTATION
+    return doc
+
+
+def canary4():
+    """Run-3 gate for the fisher_net A11 on 2 sequences."""
+    point = 'R0'
+    doc = lifecycle(point, kappa(point, 4), canary=True)
+    doc['lifecycle_id'] = 'opt125m-drift-regimes-screen-canary4-r0'
+    doc['question'] = {'text': 'Does the fisher_net A11 loop run at full scale without the newton_net overshoot?',
                        'decision': 'drift-regimes exp-002 run-3 launch gate; no method comparison.',
                        'primary_metric': 'teacher_kl', 'evidence_class': 'exploratory_model_based'}
     spec = doc['drift_regimes']
@@ -310,7 +332,7 @@ def main():
     rates = [float(x) for x in sys.argv[1:3]]
     extend = len(sys.argv) > 3 and sys.argv[3] == 'extend'
     out = HERE / 'lifecycles'
-    docs = [probe(), *canaries(), *tuning(), canaries_v2(), tuning_a11(), canary3()]
+    docs = [probe(), *canaries(), *tuning(), canaries_v2(), tuning_a11(), canary3(), canary4()]
     for point in POINTS:
         for r in REALIZATIONS:
             docs.append(unit(point, r, 'w', write_arms(point), question=(

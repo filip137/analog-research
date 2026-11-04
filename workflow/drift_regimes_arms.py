@@ -302,11 +302,11 @@ def kl_gradient(network, q, hidden, index, chunk=4):
     return q.grad.detach()
 
 
-def newton_terms(network, q, hidden, index, seed):
+def newton_terms(network, q, hidden, index, seed, gradient=True):
     """exp-003 terms on ``hidden[index]``: the per-token mean teacher-KL gradient g and the Monte
     Carlo diagonal Gauss-Newton (true Fisher) h of the per-token loss, sampled labels with
-    Rademacher token weights, one sequence at a time."""
-    grad = kl_gradient(network, q, hidden, index)        # already the mean over tokens and sequences
+    Rademacher token weights, one sequence at a time. ``gradient=False`` skips g (Fisher score)."""
+    grad = kl_gradient(network, q, hidden, index) if gradient else None   # mean over tokens and sequences
     tokens = hidden.student.shape[1] - 1
     q = q.detach().requires_grad_(True)
     curvature = torch.zeros_like(q)
@@ -516,9 +516,10 @@ class Arm:
             physical = self.physical(cells)
             q = bind(physical)
             pick = torch.randperm(len(self.hidden), generator=generator)[:arm['batch_sequences']]
+            fisher = arm.get('score', 'newton') == 'fisher'
             g, h = newton_terms(network, q, self.hidden, pick.to(self.hidden.student.device),
-                                seed=self.adaptation['seed'] + 104729 * (index + 1) + r)
-            self.cost['gradient_sequences'] += 2 * len(pick)
+                                seed=self.adaptation['seed'] + 104729 * (index + 1) + r, gradient=not fisher)
+            self.cost['gradient_sequences'] += len(pick) if fisher else 2 * len(pick)
             self._count_read(cells)
             positive = 0
             for k, (c, spec) in enumerate(zip(cells, network.layout)):
@@ -526,7 +527,11 @@ class Arm:
                 e = q[sl] - clean[sl]
                 pairs = torch.arange(spec.size, device=c.target.device)
                 v = fresh_pair_variance(c, pairs, tau)
-                gain = (g[sl] * e - 0.5 * h[sl] * (e.square() + v)).masked_fill(written[k], -float('inf'))
+                if fisher:      # exp-003 fisher_net: unsigned curvature-weighted net error, no overshoot
+                    gain = h[sl] * (e.square() - v)
+                else:           # exp-003 newton_net: signed first-order gain (overshoots at large budgets)
+                    gain = g[sl] * e - 0.5 * h[sl] * (e.square() + v)
+                gain = gain.masked_fill(written[k], -float('inf'))
                 count = max(1, round(c.target.numel() * arm['fraction'] / 2 / arm['rounds']))
                 order = torch.argsort(gain, descending=True, stable=True)[:count]
                 ids = order[gain[order] > 0]

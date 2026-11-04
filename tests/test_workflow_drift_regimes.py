@@ -307,7 +307,8 @@ def test_native_stage_runs_the_oracle_precompensation_twin_and_learning_arms(cmo
            'rounds': 2, 'batch_sequences': 2, **extra}
           for suffix, extra in (('', {'attempts': 4, 'threshold': .7, 'ideal': False}),
                                 ('-ideal', {'attempts': 1, 'threshold': None, 'ideal': True}),
-                                ('-twin', {'attempts': 1, 'threshold': None, 'ideal': False, 'twin': True}))],
+                                ('-twin', {'attempts': 1, 'threshold': None, 'ideal': False, 'twin': True}),
+                                ('-fisher', {'attempts': 4, 'threshold': .7, 'ideal': False, 'score': 'fisher'}))],
     )
     cfg = DriftRegimes.parse(replace(base, arms=arm_list, adaptation=adaptation).to_dict())
     directory, metrics = _run(lc, cfg, results, teacher, tmp_path / 'arms')
@@ -351,6 +352,9 @@ def test_native_stage_runs_the_oracle_precompensation_twin_and_learning_arms(cmo
         assert c['selected_devices'] % 2 == 0 and 0 < c['selected_devices'] <= 2 * (n * .1 + 4 * 12)
         assert c['gradient_sequences'] == 2 * 2 * 2 * 2
     assert by[('N11-ideal', 3600.)]['q_rmse'] < by[('A0', 3600.)]['q_rmse']
+    fisher = arms['N11-fisher']['cost']
+    assert fisher['gradient_sequences'] == 2 * 2 * 2 and fisher['selected_devices'] % 2 == 0
+    assert by[('N11-fisher', 3600.)]['physical_sha256'] != by[('N11', 3600.)]['physical_sha256']
     assert by[('N11-twin', 900.)]['physical_sha256'] != release['physical_sha256']
     _, again = _run(lc, cfg, results, teacher, tmp_path / 'again')
     assert {k: v['mean_teacher_kl'] for k, v in again['arms'].items()} == \
