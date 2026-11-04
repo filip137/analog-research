@@ -102,3 +102,7 @@ labs/figures_for_paper_digits/**/model*.pt
 # Timing run bundles are large generated/input archives. Keep top-level summaries
 # visible, and force-add selected bundle files only when they are intended.
 labs/figures_for_paper_digits/timings/*/
+
+# Network dataset implementations are source, not staged datasets.
+!networks/data/
+!networks/data/*.py
