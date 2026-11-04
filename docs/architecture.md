@@ -5,6 +5,9 @@ execution. `workflow/` is [agent documentation](../workflow/README.md).
 `ebl` is the public execution interface. Scientific settings and native bundle
 identifiers remain stable; this is not a new device regime.
 
+The [DRN architecture handoff](drn-architecture-handoff.md) explains the design
+conceptually and proposes how to apply the same ownership boundaries to DRN.
+
 ## Ownership and allowed dependencies
 
 | Owner | Responsibility | May depend on |
