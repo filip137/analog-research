@@ -15,4 +15,3 @@ def hardware_view(model,noise_std,generator):
             pair.append(noisy.clamp_min(0)/G_MAX_US)
         views.append(tuple(pair))
     return tuple(views),projected
-

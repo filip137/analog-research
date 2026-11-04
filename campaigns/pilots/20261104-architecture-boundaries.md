@@ -22,7 +22,7 @@ Planning checks: 28 focused tests passed; 119 declared golden fixtures present; 
 
 ## Current handoff
 
-Implementation committed through `89b6134`. Coordinator owns the remaining CPU lifecycle replay (pytest PID 1587796, four workers, log `lifecycle-replay.log` in the evidence root). Full replay started 12:20 UTC; budget remains two hours per attempt. Device/teacher fixtures are the existing local inputs. Cases are advancing through measured and RESET continuations. Next: inspect replay results, resolve any differences, then integrate and push the tested cutover. No research launch, GPU work or scientific conclusion is authorized.
+Implementation committed through `89b6134`. Coordinator owns the remaining CPU lifecycle replay (pytest PID 1587796, four workers, log `lifecycle-replay.log` in the evidence root). Full replay started 12:21 UTC; budget remains two hours per attempt. Device/teacher fixtures are the existing local inputs. Cases are advancing through measured and RESET continuations. Next: inspect replay results, resolve any differences, then integrate and push the tested cutover. No research launch, GPU work or scientific conclusion is authorized.
 
 ## Extraction checkpoint
 

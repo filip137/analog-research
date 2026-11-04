@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-from networks.function.interaction import Function 
+from networks.function.interaction import Function
 
 
 
@@ -75,7 +75,7 @@ class BiasInteraction(Function):
         if len(grad.shape) > len(self._bias.shape):
             dims = tuple(range(len(self._bias.shape), len(grad.shape)))
             grad = grad.sum(dim=dims)
-            
+
         return grad
 
 
@@ -83,7 +83,7 @@ class DenseHopfield(Function):
     """Dense ('fully connected') interaction between two layers
 
     A dense interaction is defined between three variables: two adjacent layers, and the corresponding weight tensor between the two.
-    
+
     Attributes
     ----------
     _layer_pre (Layer): pre-synaptic layer. Tensor of shape (batch_size, layer_pre_shape). Type is float32.
@@ -108,13 +108,13 @@ class DenseHopfield(Function):
 
     def eval(self):
         """Returns the energy of a dense interaction.
-        
+
         Example:
             - layer_pre is of shape (16, 1, 28, 28), i.e. batch_size is 16, with 1 channel of 28 by 28 (e.g. input tensor for MNIST)
             - layer_post is of shape (16, 2048), i.e. batch_size is 16, with 2048 units
             - weight is of shape (1, 28, 28, 2048)
         pre * W is the tensor product of pre and W over the dimensions (1, 28, 28). The result is a tensor of shape (16, 2048).
-        
+
         Returns:
             Vector of size (batch_size,) and of type float32. Each value is the energy term of an example in the current mini-batch
         """
@@ -185,7 +185,7 @@ class ConvAvgPoolHopfield(Function):
     """Convolutional interaction between two layers, with 2*2 average (or `mean') pooling.
 
     A convolutional interaction with average pooling is defined between three variables: two adjacent layers, and the corresponding convolutional weight tensor between the two.
-    
+
     Attributes
     ----------
     _layer_pre (Layer): pre-synaptic layer. Tensor of shape (batch_size, layer_pre_shape). Type is float32.
@@ -196,7 +196,7 @@ class ConvAvgPoolHopfield(Function):
 
     def __init__(self, layer_pre, layer_post, conv_weight, padding=0):
         """Creates an instance of ConvAvgPoolHopfield
-        
+
         Args:
             layer_pre (Layer): pre-synaptic layer. Tensor of shape (batch_size, layer_shape). Type is float32.
             layer_post (Layer): post-synaptic layer. Tensor of shape (batch_size, layer_shape). Type is float32.
@@ -213,7 +213,7 @@ class ConvAvgPoolHopfield(Function):
 
     def eval(self):
         """Returns the energy of a convolutional interaction with average pooling.
-        
+
         Returns:
             Vector of size (batch_size,) and of type float32. Each value is the energy term of an example in the current mini-batch
         """
@@ -406,7 +406,7 @@ class ConvSoftPoolHopfield(Function):
         def patch_wise_max(input, kernel_size, stride):
             # Find all pooling windows
             input_windows_tmp = input.unfold(2, kernel_size, stride)
-            input_windows = input_windows_tmp.unfold(3, kernel_size, stride)   
+            input_windows = input_windows_tmp.unfold(3, kernel_size, stride)
             input_windows = input_windows.contiguous().view(*input_windows.size()[:-2], -1)
 
             # Take window-wise max values
@@ -418,7 +418,7 @@ class ConvSoftPoolHopfield(Function):
             values = values.contiguous().permute(0, 1, 3, 2)
             values = values.contiguous().view(values.size(0), -1, values.size(-1))
             out = F.fold(values, output_size=input.size()[2:], kernel_size=kernel_size, stride=stride)
-            
+
             return out
 
         layer_pre = self._layer_pre.state

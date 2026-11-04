@@ -207,5 +207,3 @@ class OptDrn(nn.Module):
             rows.append({'layer':i,**row})
             hidden=hidden+block(x,held)
         return rows
-
-

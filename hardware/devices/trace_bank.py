@@ -262,4 +262,3 @@ class MeasuredTraceBank:
             table.alpha * source[table.source_left, indices]
             + (1.0 - table.alpha) * source[table.source_right, indices]
         )
-
