@@ -302,6 +302,41 @@ def kl_gradient(network, q, hidden, index, chunk=4):
     return q.grad.detach()
 
 
+def newton_terms(network, q, hidden, index, seed):
+    """exp-003 terms on ``hidden[index]``: the per-token mean teacher-KL gradient g and the Monte
+    Carlo diagonal Gauss-Newton (true Fisher) h of the per-token loss, sampled labels with
+    Rademacher token weights, one sequence at a time."""
+    grad = kl_gradient(network, q, hidden, index)        # already the mean over tokens and sequences
+    tokens = hidden.student.shape[1] - 1
+    q = q.detach().requires_grad_(True)
+    curvature = torch.zeros_like(q)
+    generator = torch.Generator(device=q.device).manual_seed(seed)
+    with torch.enable_grad():
+        for i in index.tolist():
+            states = hidden[i:i + 1]
+            out = suffix_logits(network, states.student, q).flatten(0, 1)
+            with torch.no_grad():
+                y = torch.multinomial(out.softmax(-1), 1, generator=generator).squeeze(1)
+                r = torch.randint(0, 2, (out.shape[0],), generator=generator, device=q.device).float() * 2 - 1
+            g, = torch.autograd.grad((r * F.cross_entropy(out, y, reduction='none')).sum(), q)
+            curvature += g.square() / tokens
+    curvature /= len(index)
+    if not bool(torch.isfinite(curvature).all()):
+        raise FloatingPointError('Nonfinite analog-learning curvature.')
+    return grad, curvature
+
+
+def fresh_pair_variance(cells, ids, tau):
+    """Nominal squared weight error (normalized units) of a freshly reset active/reference pair at age tau:
+    both devices' CMO endpoint variance plus drift spread (the mean drift cancels within the pair)."""
+    law = cells.law
+    spread = law.spread_us * (tau / law.reference_seconds) ** law.spread_exponent
+    active = cells.target[0].flatten()[ids]
+    reference = cells.target[1].flatten()[ids]
+    cmo = (law.cmo_scale * law.cmo_sigma(active)).square() + (law.cmo_scale * law.cmo_sigma(reference)).square()
+    return (cmo + 2 * spread ** 2) / 39.6 ** 2
+
+
 LORA_METHODS = ('lora', 'lora_oracle', 'lora_rescaled', 'lora_clean')
 REWRITE_SELECTION = {'rewrite': 'observed', 'precompensated': 'precompensated', 'rewrite_oracle': 'oracle'}
 RESCALE_STRIDE = 16
@@ -465,11 +500,72 @@ class Arm:
             record['round_clocks'].append(max(c.clock for c in cells))
         return record
 
+    def _learn_newton(self, cells, clock, bind, index, age):
+        """A11, the exp-003 closed loop: Newton net-gain selection of pairs, reset to their clean targets."""
+        arm, network = self.arm, self.network
+        for c in cells:
+            c.advance(clock)
+        events = arm['events']
+        later = [t for t in events if t > age]
+        tau = 0.5 * ((later[0] if later else self.horizon) - age)
+        clean = network.q.detach()
+        written = [torch.zeros(c.target[0].numel(), dtype=torch.bool, device=c.target.device) for c in cells]
+        record = {'rounds': arm['rounds'], 'round_clocks': [], 'positive_gain_pairs': [], 'tau_seconds': tau}
+        generator = torch.Generator().manual_seed(self.adaptation['seed'] + 7919 * (index + 1))
+        for r in range(arm['rounds']):
+            physical = self.physical(cells)
+            q = bind(physical)
+            pick = torch.randperm(len(self.hidden), generator=generator)[:arm['batch_sequences']]
+            g, h = newton_terms(network, q, self.hidden, pick.to(self.hidden.student.device),
+                                seed=self.adaptation['seed'] + 104729 * (index + 1) + r)
+            self.cost['gradient_sequences'] += 2 * len(pick)
+            self._count_read(cells)
+            positive = 0
+            for k, (c, spec) in enumerate(zip(cells, network.layout)):
+                sl = slice(spec.offset, spec.offset + spec.size)
+                e = q[sl] - clean[sl]
+                pairs = torch.arange(spec.size, device=c.target.device)
+                v = fresh_pair_variance(c, pairs, tau)
+                gain = (g[sl] * e - 0.5 * h[sl] * (e.square() + v)).masked_fill(written[k], -float('inf'))
+                count = max(1, round(c.target.numel() * arm['fraction'] / 2 / arm['rounds']))
+                order = torch.argsort(gain, descending=True, stable=True)[:count]
+                ids = order[gain[order] > 0]
+                positive += int((gain > 0).sum())
+                if not ids.numel():
+                    continue
+                written[k][ids] = True
+                devices = torch.cat((ids, ids + spec.size))           # active and reference of each pair
+                goal = c.target.flatten()[devices]
+                if self.ideal is not None:
+                    overlay = self.ideal[k]
+                    mask = torch.zeros_like(c.target, dtype=torch.bool) if overlay is None else overlay[0]
+                    value = torch.zeros_like(c.target) if overlay is None else overlay[1]
+                    mask.view(-1)[devices] = True
+                    value.view(-1)[devices] = goal
+                    self.ideal[k] = (mask, value)
+                    self.cost['reset_attempts'] += devices.numel()
+                elif self.twin is not None:
+                    c.write(devices, goal)
+                    self.twin[k].view(-1)[devices] = c.anchor.reshape(-1)[devices]
+                    self.cost['reset_attempts'] += devices.numel()
+                else:
+                    stats = program_verify(c, devices, goal, attempts=arm['attempts'], threshold=arm['threshold'],
+                                           verify_seconds=self.verify_seconds)
+                    self.cost['reset_attempts'] += stats['reset_attempts']
+                    self.cost['verify_reads'] += stats['verify_reads']
+                self.cost['selected_devices'] += devices.numel()
+            record['round_clocks'].append(max(c.clock for c in cells))
+            record['positive_gain_pairs'].append(positive)
+        return record
+
     def event(self, index, age, clock, cells, bind):
         started = time.monotonic()
         record = {'event': index, 'seconds': age, 'clock_seconds': clock}
         self.network.drift_compensation = None
-        if self.method in REWRITE_SELECTION:
+        if self.method == 'learning_newton':
+            record.update(self._learn_newton(cells, clock, bind, index, age))
+            record['end_clock_seconds'] = max(c.clock for c in cells)
+        elif self.method in REWRITE_SELECTION:
             events = self.arm['events']
             later = [t for t in events if t > age]
             future = math.sqrt(max(age, 1.) * (later[0] if later else self.horizon))

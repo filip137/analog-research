@@ -33,12 +33,13 @@ ARM_KEYS = {
     'rewrite': REWRITE,                           # P&V reset of the largest observed |e| devices (A8, A9)
     'precompensated': REWRITE,                    # A9 with history-regressed target offsets (A10)
     'rewrite_oracle': REWRITE,                    # reset of the largest hidden future |e| devices (O2)
-    'learning': REWRITE | {'step', 'rounds', 'batch_sequences', 'ideal'},  # closed-loop gradient writes (A11)
+    'learning': REWRITE | {'step', 'rounds', 'batch_sequences', 'ideal'},  # gradient-step writes (diagnostic)
+    'learning_newton': REWRITE | {'rounds', 'batch_sequences', 'ideal'},   # exp-003 closed loop (A11)
 }
 # Optional on these methods: twin = True holds the released state (no drift) for reads and evaluation.
-TWIN = ('none', 'lora', 'learning')
-DIGITAL = ('layernorm', 'lora', 'lora_oracle', 'lora_rescaled', 'lora_clean', 'learning')
-WRITES = ('rewrite', 'precompensated', 'rewrite_oracle', 'learning')
+TWIN = ('none', 'lora', 'learning', 'learning_newton')
+DIGITAL = ('layernorm', 'lora', 'lora_oracle', 'lora_rescaled', 'lora_clean', 'learning', 'learning_newton')
+WRITES = ('rewrite', 'precompensated', 'rewrite_oracle', 'learning', 'learning_newton')
 ADAPTATION_KEYS = {'corpus', 'corpus_sha256', 'split', 'sequences', 'cohort_sha256', 'seed',
                    'probe_sequences', 'steps', 'batch'}
 
@@ -189,8 +190,9 @@ class DriftRegimes:
                 arm['learning_rate'] = _number(arm['learning_rate'], 'learning_rate')
             if 'rank' in arm:
                 _integer(arm['rank'], 'rank')
-            if arm['method'] == 'learning':
-                arm['step'] = _number(arm['step'], 'step')
+            if arm['method'] in ('learning', 'learning_newton'):
+                if 'step' in arm:
+                    arm['step'] = _number(arm['step'], 'step')
                 _integer(arm['rounds'], 'rounds')
                 _integer(arm['batch_sequences'], 'batch_sequences')
                 if type(arm['ideal']) is not bool:

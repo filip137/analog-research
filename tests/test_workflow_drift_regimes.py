@@ -303,6 +303,11 @@ def test_native_stage_runs_the_oracle_precompensation_twin_and_learning_arms(cmo
         {'label': 'A11', **learn, 'attempts': 4, 'threshold': .7, 'ideal': False},
         {'label': 'A11-ideal', **learn, 'attempts': 1, 'threshold': None, 'ideal': True},
         {'label': 'A11-twin', **learn, 'attempts': 1, 'threshold': None, 'ideal': False, 'twin': True},
+        *[{'label': f'N11{suffix}', 'method': 'learning_newton', 'events': (60., 900.), 'fraction': .1,
+           'rounds': 2, 'batch_sequences': 2, **extra}
+          for suffix, extra in (('', {'attempts': 4, 'threshold': .7, 'ideal': False}),
+                                ('-ideal', {'attempts': 1, 'threshold': None, 'ideal': True}),
+                                ('-twin', {'attempts': 1, 'threshold': None, 'ideal': False, 'twin': True}))],
     )
     cfg = DriftRegimes.parse(replace(base, arms=arm_list, adaptation=adaptation).to_dict())
     directory, metrics = _run(lc, cfg, results, teacher, tmp_path / 'arms')
@@ -338,6 +343,15 @@ def test_native_stage_runs_the_oracle_precompensation_twin_and_learning_arms(cmo
         assert by[(label, 3600.)]['physical_sha256'] != by[('A0', 3600.)]['physical_sha256']
     assert arms['A11']['cost']['reset_attempts'] >= arms['A11']['cost']['selected_devices']
     assert arms['A11-ideal']['cost']['verify_reads'] == 0
+    # The exp-003 loop resets whole pairs, only where the predicted net gain is positive, within budget.
+    newton = [e for e in events if e['arm'] == 'N11']
+    assert all(len(e['positive_gain_pairs']) == 2 for e in newton)
+    for label in ('N11', 'N11-ideal', 'N11-twin'):
+        c = arms[label]['cost']
+        assert c['selected_devices'] % 2 == 0 and 0 < c['selected_devices'] <= 2 * (n * .1 + 4 * 12)
+        assert c['gradient_sequences'] == 2 * 2 * 2 * 2
+    assert by[('N11-ideal', 3600.)]['q_rmse'] < by[('A0', 3600.)]['q_rmse']
+    assert by[('N11-twin', 900.)]['physical_sha256'] != release['physical_sha256']
     _, again = _run(lc, cfg, results, teacher, tmp_path / 'again')
     assert {k: v['mean_teacher_kl'] for k, v in again['arms'].items()} == \
            {k: v['mean_teacher_kl'] for k, v in arms.items()}

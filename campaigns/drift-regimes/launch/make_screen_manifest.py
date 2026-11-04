@@ -31,8 +31,8 @@ def estimate(doc):
             total += events * s['training'] * (1.5 if arm.get('rank', 16) > 16 else 1)
         elif arm['method'] in ('rewrite', 'precompensated', 'rewrite_oracle'):
             total += events * (s['reset_pass'] * RESETS[arm['attempts']] if arm['fraction'] >= 1 else s['selective'])
-        elif arm['method'] == 'learning':
-            total += events * arm['rounds'] * s['learning_round']
+        elif arm['method'] in ('learning', 'learning_newton'):
+            total += events * arm['rounds'] * s['learning_round'] * (2 if arm['method'] == 'learning_newton' else 1)
     return total
 
 
@@ -42,6 +42,7 @@ def units(run):
             'run1': lambda n: n.endswith('-w') or n.endswith('-tune-ln') or n.endswith('-tune-lora'),
             'run2': lambda n: n.endswith('-d'),
             'canary2': lambda n: '-canary2-' in n,
+            'canary3': lambda n: '-canary3-' in n,
             'tune3': lambda n: n.endswith('-tune-a11'),
             'tune3b': lambda n: n.endswith('-tune-a11'),   # rerun with the lower step grid (tune3 cancelled)
             'run3': lambda n: n.endswith('-x')}[run]
