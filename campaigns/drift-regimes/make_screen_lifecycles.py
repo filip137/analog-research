@@ -320,9 +320,15 @@ def main():
                 docs.append(unit(point, r, 'd', digital_arms(point, *rates), question=(
                     f'LayerNorm and LoRA arms at drift regime {point} (realization {r}): 24-h mean teacher KL.')))
             if rates and extend:
-                docs.append(unit(point, r, 'x', extension_arms(point, rates[1]), question=(
-                    f'Rescaled LoRA, precompensated rewrite, analog learning, oracles and no-drift controls '
-                    f'at drift regime {point} (realization {r}): 24-h mean teacher KL.')))
+                arms = extension_arms(point, rates[1])
+                # R0 is split so that each unit fits a 2-h dev job: part y holds the A11 arms.
+                parts = ({'x': [a for a in arms if a['method'] != 'learning_newton'],
+                          'y': [a for a in arms if a['method'] == 'learning_newton']}
+                         if group(point) == 'anchor' else {'x': arms})
+                for part, chosen in parts.items():
+                    docs.append(unit(point, r, part, chosen, question=(
+                        f'Rescaled LoRA, precompensated rewrite, analog learning, oracles and no-drift controls '
+                        f'at drift regime {point} (realization {r}): 24-h mean teacher KL.')))
     for doc in docs:
         (out / f"{doc['lifecycle_id']}.json").write_text(json.dumps(doc, indent=2) + '\n')
     print(json.dumps({'written': len(docs), 'arms': sum(len(d['drift_regimes']['arms']) for d in docs)}))
