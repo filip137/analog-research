@@ -22,7 +22,7 @@ Planning checks: 28 focused tests passed; 119 declared golden fixtures present; 
 
 ## Current handoff
 
-Implementation committed through `d266d38`; explicit CPU replay support is the next checkpoint. Coordinator owns the second lifecycle replay (four single-thread CPU workers; `lifecycle-cpu-replay.log`, records under `lifecycle-cpu-records/` in the evidence root). The first attempt completed in 733.48 s. It exposed ambient CUDA RNG snapshots in the goldens and seven cases launched before the data import fix. Next: compare all saved CPU records, resolve remaining differences, then integrate and push. No research launch or GPU work is authorized.
+Implementation and CPU acceptance are complete through `81b02ab`. No validation processes remain. The closing commit records the accepted cutover for `refactor/training-core`; raw evidence remains under the declared results root after the migration worktree is retired. No scientific experiment or GPU job was launched.
 
 ## Extraction checkpoint
 
@@ -32,7 +32,7 @@ Relocated reusable model/training and execution modules. Split pulse plants, end
 
 Validation: 131 initial extraction tests, 111 boundary/recovery tests and 65 path/training-golden tests passed. Eight independent OPT forward/gradient/state traces are bit-exact against baseline; all 573 accepted resolved example/mode configurations are identical. All 15 shared modules remain unchanged. Full post-relocation failures identified missing moved constants, missing ignored device-data staging, stale test instrumentation and relocation paths; those causes have been repaired and checked in affected suites.
 
-Domain settings/builders, external sampler orchestration, physical measured-trace banks and public lifecycle routing are complete. Obsolete Python facades are retired. Remaining: lifecycle replay completion and final integration.
+Domain settings/builders, external sampler orchestration, physical measured-trace banks and public lifecycle routing are complete. Obsolete Python facades are retired. Lifecycle replay acceptance is complete; this record is the closing review for integration.
 
 
 ## Acceptance evidence
@@ -43,7 +43,7 @@ All commands set `CUDA_VISIBLE_DEVICES=''`; ordinary CPU tests use `OMP_NUM_THRE
 
 - `python -B -m pytest tests -q -p no:cacheprovider`: **1505 passed, 49 skipped**, 78.66 s (`full-cpu-tests-final.log`). Includes the available native CPU characterization replays. The opt-in lifecycle cases run separately; unavailable CUDA/artifact-dependent checks are not claimed passed.
 - `python -B -m pytest labs/tests -q -p no:cacheprovider`: **50 passed, 1 skipped**, 5.40 s (`lab-tests.log`).
-- `EBL_RUN_LIFECYCLE_GOLDENS=1 EBL_GOLDEN_CPU_ONLY=1 EBL_GOLDEN_JOBS=4 EBL_GOLDEN_RECORD_DIR=<evidence>/lifecycle-cpu-records python -B -m pytest tests/test_run_lifecycle_golden.py -q -p no:cacheprovider`: second attempt running (`lifecycle-cpu-replay.log`). Each case uses one CPU thread. Strict default comparison is unchanged; explicit CPU-only comparison excludes only the absent global CUDA RNG snapshot, asserts CUDA is unavailable, and compares all other saved random, optimizer, device, loader and solver state exactly. GPU RNG continuation is untested. Two focused comparator/registry tests passed; saved base, base-resume, digital-LoRA, HWA and three KD records already match.
+- `EBL_RUN_LIFECYCLE_GOLDENS=1 EBL_GOLDEN_CPU_ONLY=1 EBL_GOLDEN_JOBS=4 EBL_GOLDEN_RECORD_DIR=<evidence>/lifecycle-cpu-records python -B -m pytest tests/test_run_lifecycle_golden.py -q -p no:cacheprovider`: **33 passed in 780.74 s**: all 31 replay cases plus registry and CPU-scope checks (`lifecycle-cpu-replay.log`). Each case uses one CPU thread. Strict default comparison is unchanged; explicit CPU-only comparison excludes only the absent global CUDA RNG snapshot, asserts CUDA is unavailable, and compares all other saved random, optimizer, device, loader and solver state exactly. GPU RNG continuation is untested. All 31 records are retained and match, including measured-cohort, RESET, teacher, HWA, LoRA, OM, program-and-verify and supported continuation chains.
 - All **573** normalized example/mode configs, **8** OPT forward/gradient/capture/state traces and **15** shared source files match the baseline. Shared bytes also match the current HWA checkout. Examples, historical study plans and existing golden fixture bytes are unchanged.
 - A wheel built without dependency downloads installs under `/tmp/drn-wheel-installed`. From `/tmp` with Python isolated mode it passes parser discovery, a tiny perfect-diode training/bundle integrity smoke, resource discovery and real external OM sampling. Every imported project module resolves inside the installation. The wheel contains the new network data and Slurm resource, and no retired Python packages (`wheel-build.log`, `installed-smoke.log`).
 
@@ -55,7 +55,7 @@ Five separate parser processes on the same CPU/environment: median startup **1.3
 
 A single-thread tiny physical OPT forward, 2×4 tokens, 20 warmups then five blocks of 100 forwards: median **4.090 → 4.231 ms** (`workload-benchmark.json`). This does not establish a kernel speedup; the modest increase is reported as measured on this host alongside concurrent CPU replay. No GPU performance claim.
 
-Raw evidence totals about 5 MiB plus temporary lifecycle replay outputs. Validation and engineering time are not experiment throughput; token usage is unavailable. No new study result is inferred from this architecture work.
+Raw evidence includes all 31 compact lifecycle records as well as logs, baseline traces, recipes and the installed-package smoke bundle. Validation and engineering time are not experiment throughput; token usage is unavailable. No new study result is inferred from this architecture work.
 
 
 Validation recipes (`drn_baseline.py`, `drn_import_bench.py`, `drn_workload_bench.py`,
@@ -63,3 +63,25 @@ Validation recipes (`drn_baseline.py`, `drn_import_bench.py`, `drn_workload_benc
 refer to checkouts at validation time; reproducing the baseline after integration
 requires a separate checkout of the baseline SHA. Existing golden fixture bytes
 remain the authoritative numerical references.
+
+
+## Review and delivery
+
+**Accepted for the coherent architecture cutover.** Numerical CPU evidence,
+configuration identity, held-state adapter traces, supported CPU continuation,
+physical sampling receipts, independent installation, ownership rules and shared
+source bytes meet the declared acceptance scope. The baseline calibration import
+failure is repaired. Existing examples, study plans and scientific golden files
+are unchanged; no physical equation, RNG draw ordering or scientific protocol was
+intentionally changed.
+
+Limitations: three CUDA characterization cases, other unavailable optional checks,
+and CUDA RNG continuation were not exercised. CPU lifecycle parity explicitly
+excludes the inactive global CUDA RNG snapshot; scientific values and all active
+state remain exact. No inference is made about GPU performance, improved model
+accuracy, new drift correlation, or CMO rewrites. Those remain separate work.
+
+The ordered commits on `drn/20261104-architecture-boundaries` deliver one trunk
+cutover. The repository's standing authority covers integration and push to
+`origin/refactor/training-core`; the clean task worktree and branch are retired
+at closure. No new execution assignment follows from this review.
