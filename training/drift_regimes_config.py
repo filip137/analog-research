@@ -20,14 +20,25 @@ SPLITS = ('validation',)
 ADAPTATION_SPLITS = ('train',)
 UNTREATED = {'label': 'A0', 'method': 'none'}
 # Keys of each arm method besides label and method.
+REWRITE = {'events', 'fraction', 'attempts', 'threshold'}
+LORA = {'events', 'rank', 'learning_rate'}
 ARM_KEYS = {
     'none': set(),
-    'calibration': {'events'},                                   # per-column affine readout fit
-    'layernorm': {'events', 'learning_rate'},                    # analog-MLP LayerNorm affine
-    'lora': {'events', 'rank', 'learning_rate'},                 # digital LoRA on each analog matrix
-    'rewrite': {'events', 'fraction', 'attempts', 'threshold'},  # P&V reset of the largest |e| devices
+    'calibration': {'events'},                    # per-column affine readout fit (A1)
+    'layernorm': {'events', 'learning_rate'},     # analog-MLP LayerNorm affine (A2, A3)
+    'lora': LORA,                                 # digital LoRA on each analog matrix (A4, A5, A7)
+    'lora_oracle': LORA,                          # fresh LoRA trained at each evaluation age, evaluated after it (O1)
+    'lora_rescaled': LORA | {'reads'},            # A4 rescaled in time with beta, kappa estimated from reads (A6)
+    'lora_clean': LORA,                           # LoRA trained on the clean target weights (no-drift diagnostic)
+    'rewrite': REWRITE,                           # P&V reset of the largest observed |e| devices (A8, A9)
+    'precompensated': REWRITE,                    # A9 with history-regressed target offsets (A10)
+    'rewrite_oracle': REWRITE,                    # reset of the largest hidden future |e| devices (O2)
+    'learning': REWRITE | {'step', 'rounds', 'batch_sequences', 'ideal'},  # closed-loop gradient writes (A11)
 }
-DIGITAL = ('layernorm', 'lora')
+# Optional on these methods: twin = True holds the released state (no drift) for reads and evaluation.
+TWIN = ('none', 'lora', 'learning')
+DIGITAL = ('layernorm', 'lora', 'lora_oracle', 'lora_rescaled', 'lora_clean', 'learning')
+WRITES = ('rewrite', 'precompensated', 'rewrite_oracle', 'learning')
 ADAPTATION_KEYS = {'corpus', 'corpus_sha256', 'split', 'sequences', 'cohort_sha256', 'seed',
                    'probe_sequences', 'steps', 'batch'}
 
@@ -138,34 +149,57 @@ class DriftRegimes:
         if tuple(sorted(set(times))) != times or times[0] != 0 or times[-1] <= 0:
             raise ValueError('Evaluation ages must increase from zero.')
         value['evaluation_seconds'] = times
-        value['arms'] = cls._arms(value['arms'], times[-1])
+        value['arms'] = cls._arms(value['arms'], times)
         value['adaptation'] = cls._adaptation(value['adaptation'], value['arms'])
         return cls(**value)
 
     @staticmethod
-    def _arms(raw, horizon):
+    def _arms(raw, ages):
+        horizon = ages[-1]
         if not isinstance(raw, (list, tuple)) or not raw:
             raise ValueError('Expected a nonempty arm list.')
         arms = []
         for item in raw:
             if not isinstance(item, dict) or item.get('method') not in ARM_KEYS:
                 raise ValueError('Unknown drift-regimes arm method.')
-            if set(item) != {'label', 'method'} | ARM_KEYS[item['method']]:
+            keys = {'label', 'method'} | ARM_KEYS[item['method']]
+            if set(item) not in (keys, keys | {'twin'}) or ('twin' in item and item['method'] not in TWIN):
                 raise ValueError(f"Expected exactly the {item['method']} arm fields.")
             arm = dict(item)
             _label(arm['label'], 'arm label')
-            if 'events' in arm:
-                if not isinstance(arm['events'], (list, tuple)) or not arm['events']:
-                    raise ValueError('Expected nonempty arm events.')
-                events = tuple(_number(t, 'event age') for t in arm['events'])
-                if tuple(sorted(set(events))) != events or events[-1] >= horizon:
-                    raise ValueError('Arm events must increase strictly inside the horizon.')
-                arm['events'] = events
+            if 'twin' in arm and type(arm['twin']) is not bool:
+                raise ValueError('Expected boolean twin.')
+            for key in ('events', 'reads'):
+                if key not in arm:
+                    continue
+                if not isinstance(arm[key], (list, tuple)) or not arm[key]:
+                    raise ValueError(f'Expected nonempty arm {key}.')
+                oracle = arm['method'] == 'lora_oracle'
+                times = tuple(_number(t, 'event age', positive=not oracle) for t in arm[key])
+                if tuple(sorted(set(times))) != times:
+                    raise ValueError(f'Arm {key} must increase strictly.')
+                if oracle and not set(times) <= set(ages):
+                    raise ValueError('Oracle events are evaluation ages.')
+                if not oracle and times[-1] >= horizon:
+                    raise ValueError(f'Arm {key} must lie strictly inside the horizon.')
+                arm[key] = times
+            if 'reads' in arm and (set(arm['reads']) & set(arm['events']) or arm['reads'][0] <= arm['events'][0]):
+                raise ValueError('Rescaling reads follow the training event and differ from it.')
             if 'learning_rate' in arm:
                 arm['learning_rate'] = _number(arm['learning_rate'], 'learning_rate')
             if 'rank' in arm:
                 _integer(arm['rank'], 'rank')
-            if arm['method'] == 'rewrite':
+            if arm['method'] == 'learning':
+                arm['step'] = _number(arm['step'], 'step')
+                _integer(arm['rounds'], 'rounds')
+                _integer(arm['batch_sequences'], 'batch_sequences')
+                if type(arm['ideal']) is not bool:
+                    raise ValueError('Expected boolean ideal.')
+                if arm['fraction'] >= 1:
+                    raise ValueError('Analog learning writes a fraction of the devices.')
+                if arm.get('twin') and (arm['attempts'] != 1 or arm['ideal']):
+                    raise ValueError('A no-drift learning twin uses single unverified writes.')
+            if arm['method'] in WRITES:
                 fraction = _number(arm['fraction'], 'fraction')
                 if fraction > 1:
                     raise ValueError('Expected a rewrite fraction in (0, 1].')

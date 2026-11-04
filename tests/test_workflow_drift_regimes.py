@@ -282,3 +282,62 @@ def test_calibration_matches_column_moments_of_the_reference():
         network.drift_compensation = None
     assert torch.allclose(corrected.mean(0), reference.mean(0), atol=1e-4)
     assert torch.allclose(corrected.std(0), reference.std(0), rtol=1e-3, atol=1e-4)
+
+
+def test_native_stage_runs_the_oracle_precompensation_twin_and_learning_arms(cmo_inputs, tmp_path):
+    lc, results, teacher, base, adaptation = _stage_inputs(cmo_inputs, tmp_path)
+    learn = {'method': 'learning', 'events': (60., 900.), 'fraction': .1, 'step': .05, 'rounds': 2,
+             'batch_sequences': 2}
+    arm_list = (
+        {'label': 'A0', 'method': 'none'},
+        {'label': 'A0-twin', 'method': 'none', 'twin': True},
+        {'label': 'A9', 'method': 'rewrite', 'events': (60., 900.), 'fraction': .1, 'attempts': 4, 'threshold': .7},
+        {'label': 'A10', 'method': 'precompensated', 'events': (60., 900.), 'fraction': .1, 'attempts': 4,
+         'threshold': .7},
+        {'label': 'O2', 'method': 'rewrite_oracle', 'events': (60.,), 'fraction': .1, 'attempts': 1, 'threshold': None},
+        {'label': 'O1', 'method': 'lora_oracle', 'events': (0., 60., 900., 3600.), 'rank': 2, 'learning_rate': 1e-3},
+        {'label': 'A6', 'method': 'lora_rescaled', 'events': (60.,), 'reads': (900.,), 'rank': 2,
+         'learning_rate': 1e-3},
+        {'label': 'A4c', 'method': 'lora_clean', 'events': (60.,), 'rank': 2, 'learning_rate': 1e-3},
+        {'label': 'A5-twin', 'method': 'lora', 'events': (60.,), 'rank': 2, 'learning_rate': 1e-3, 'twin': True},
+        {'label': 'A11', **learn, 'attempts': 4, 'threshold': .7, 'ideal': False},
+        {'label': 'A11-ideal', **learn, 'attempts': 1, 'threshold': None, 'ideal': True},
+        {'label': 'A11-twin', **learn, 'attempts': 1, 'threshold': None, 'ideal': False, 'twin': True},
+    )
+    cfg = DriftRegimes.parse(replace(base, arms=arm_list, adaptation=adaptation).to_dict())
+    directory, metrics = _run(lc, cfg, results, teacher, tmp_path / 'arms')
+    arms = metrics['arms']
+    rows = json.loads((directory / 'drift_regimes_measurements.json').read_text())
+    by = {(r['arm'], r['seconds']): r for r in rows}
+    events = json.loads((directory / 'drift_regimes_events.json').read_text())
+    n = metrics['cost']['physical_devices']
+    # No-drift twins hold the released state.
+    release = by[('A0', 0.)]
+    for t in (60., 900., 3600.):
+        assert by[('A0-twin', t)]['physical_sha256'] == release['physical_sha256']
+        assert by[('A0-twin', t)]['metrics']['teacher_kl'] == release['metrics']['teacher_kl']
+        assert by[('A5-twin', t)]['physical_sha256'] == release['physical_sha256']
+    assert by[('A11-twin', 3600.)]['physical_sha256'] != release['physical_sha256']
+    # A10 has no history at its first event, so it equals A9 until its second event.
+    assert by[('A10', 900.)]['physical_sha256'] == by[('A9', 900.)]['physical_sha256']
+    pre = [e for e in events if e['arm'] == 'A10']
+    assert pre[0]['precompensation'] == 0. and 0. <= pre[1]['precompensation'] <= 1.
+    assert by[('O2', 900.)]['physical_sha256'] != by[('A9', 900.)]['physical_sha256']
+    # O1 is evaluated after its training at every age, including release.
+    assert arms['O1']['cost']['events'] == 4
+    assert by[('O1', 0.)]['metrics']['teacher_kl'] != release['metrics']['teacher_kl']
+    a6 = [e for e in events if e['arm'] == 'A6']
+    assert [e['event'] for e in a6] == [0, 1] and 'kappa_hat' in a6[1]
+    assert arms['A4c']['cost']['reset_attempts'] == 0
+    assert by[('A4c', 3600.)]['physical_sha256'] == by[('A0', 3600.)]['physical_sha256']
+    # Analog learning resets at most its budget of active devices per round.
+    for label in ('A11', 'A11-ideal', 'A11-twin'):
+        c = arms[label]['cost']
+        assert c['gradient_sequences'] == 2 * 2 * 2
+        assert 0 < c['selected_devices'] <= 2 * 2 * (n * .1 / 2 + len(metrics['arms']))
+        assert by[(label, 3600.)]['physical_sha256'] != by[('A0', 3600.)]['physical_sha256']
+    assert arms['A11']['cost']['reset_attempts'] >= arms['A11']['cost']['selected_devices']
+    assert arms['A11-ideal']['cost']['verify_reads'] == 0
+    _, again = _run(lc, cfg, results, teacher, tmp_path / 'again')
+    assert {k: v['mean_teacher_kl'] for k, v in again['arms'].items()} == \
+           {k: v['mean_teacher_kl'] for k, v in arms.items()}

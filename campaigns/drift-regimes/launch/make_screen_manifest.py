@@ -17,7 +17,8 @@ import sys
 from make_manifest import JZ, ROOT
 
 RESETS = {1: 1.0, 2: 1.35, 4: 1.76, 8: 2.6}
-SECONDS = {'setup': 210, 'evaluation': 40, 'training': 35, 'reset_pass': 30, 'selective': 6}  # training: V100 canary, 32.5 s
+SECONDS = {'setup': 210, 'evaluation': 40, 'training': 35, 'reset_pass': 30, 'selective': 6,  # training: V100 canary, 32.5 s
+           'learning_round': 12}                                                             # learning: refined by the run-3 canary
 
 
 def estimate(doc):
@@ -26,18 +27,23 @@ def estimate(doc):
     for arm in spec['arms']:
         total += s['evaluation']
         events = len(arm.get('events', ()))
-        if arm['method'] in ('layernorm', 'lora'):
+        if arm['method'] in ('layernorm', 'lora', 'lora_oracle', 'lora_rescaled', 'lora_clean'):
             total += events * s['training'] * (1.5 if arm.get('rank', 16) > 16 else 1)
-        elif arm['method'] == 'rewrite':
+        elif arm['method'] in ('rewrite', 'precompensated', 'rewrite_oracle'):
             total += events * (s['reset_pass'] * RESETS[arm['attempts']] if arm['fraction'] >= 1 else s['selective'])
+        elif arm['method'] == 'learning':
+            total += events * arm['rounds'] * s['learning_round']
     return total
 
 
 def units(run):
     paths = sorted((ROOT / 'campaigns/drift-regimes/lifecycles').glob('opt125m-drift-regimes-screen-*.json'))
     pick = {'canary': lambda n: '-canary-' in n,
-            'run1': lambda n: n.endswith('-w') or '-tune-' in n,
-            'run2': lambda n: n.endswith('-d')}[run]
+            'run1': lambda n: n.endswith('-w') or n.endswith('-tune-ln') or n.endswith('-tune-lora'),
+            'run2': lambda n: n.endswith('-d'),
+            'canary2': lambda n: '-canary2-' in n,
+            'tune3': lambda n: n.endswith('-tune-a11'),
+            'run3': lambda n: n.endswith('-x')}[run]
     return [p for p in paths if pick(p.stem)]
 
 

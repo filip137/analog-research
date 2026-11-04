@@ -135,11 +135,13 @@ def run(stage):
     for spec in cfg.arms:
         arm_started = time.monotonic()
         cells = [ReramDriftCells.restore(state, device=stage.device) for state in released]
-        controller = arms.Arm(spec, stage.network, cfg.adaptation, hidden, probe, realization, cfg.verify_seconds)
-        arm_id = {**identity, 'arm': spec['label'], 'method': spec['method']}
+        controller = arms.Arm(spec, stage.network, cfg.adaptation, hidden, probe, realization, cfg.verify_seconds,
+                              cells, cfg.evaluation_seconds[-1])
+        arm_id = {**identity, 'arm': spec['label'], 'method': spec['method'], 'twin': bool(spec.get('twin'))}
         arm_rows = []
         try:
-            for age, evaluate, index in arms.timeline(cfg.evaluation_seconds, spec.get('events', ())):
+            for age, evaluate, index in arms.timeline(cfg.evaluation_seconds, controller.schedule,
+                                                      controller.evaluate_after_event):
                 clock = release + age
                 if not evaluate:
                     record = controller.event(index, age, clock, cells, adapter.bind)
@@ -147,9 +149,9 @@ def run(stage):
                     stage.store.append_metric({'phase': 'event', **arm_id, **record})
                     continue
                 started = time.monotonic()
-                physical = [c.advance(clock) for c in cells]
+                physical = controller.physical(cells, clock)
                 q = adapter.bind(physical)
-                controller.context()
+                controller.context(age)
                 metrics = opt_mlp.evaluate(stage.network, {'tokens': tokens}, stage.device, q=q)
                 stage.network.drift_compensation = None
                 if not arms.finite(metrics):

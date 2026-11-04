@@ -20,6 +20,29 @@ Methods (``training.drift_regimes_config.ARM_KEYS``):
 - ``rewrite``: P&V reset of the devices whose observed deviation from the
   nominal expectation ``requested + m u^alpha`` is largest (a fraction per
   matrix), or of every device at fraction 1, to the deployment targets.
+- ``precompensated`` (A10): ``rewrite``'s selection; each reset target is
+  offset by ``-c e`` with c regressed from the previous event's rewrites (see
+  ``rewrite``).
+- ``rewrite_oracle`` (O2): selection by the hidden deviation at the log-midpoint
+  of the interval to the next event (or the horizon). Labelled oracle.
+- ``lora_oracle`` (O1): a fresh LoRA trained on the read at each evaluation
+  age and evaluated right after it. Labelled oracle.
+- ``lora_rescaled`` (A6): LoRA trained once; at each later read the controller
+  estimates beta (spread growth) and kappa (decorrelation) from the deviations
+  of a fixed 1/16 device subsample against its training-time read. Between
+  reads the LoRA output is scaled by ``(t1/t)^kappa (t/t1)^beta``.
+- ``lora_clean``: LoRA trained on the clean digital target weights, then
+  deployed on the drifting devices (no-drift diagnostic).
+- ``learning`` (A11): closed-loop analog learning. Each event runs ``rounds``
+  rounds. A round reads the array and takes the teacher-KL gradient with
+  respect to the read weights (``batch_sequences`` adaptation sequences). It
+  selects the not yet written weights with the largest |gradient| (the round's
+  share of ``fraction`` of the matrix's devices) and sets new targets
+  ``q - step * g / rms(g_selected)``. The active device is reset to
+  ``g_reference_now + 39.6 q_new`` with P&V. ``ideal`` writes land exactly and
+  hold (diagnostic).
+- ``twin`` (none, lora, learning): the no-drift twin holds the released state;
+  a twin write holds its programmed endpoint.
 
 Digital training takes no device time: it uses the read held at the event, and
 the devices keep drifting from the event clock. A rewrite's P&V moves the
@@ -193,29 +216,68 @@ def train_digital(network, parameters, q, hidden, *, steps, batch, learning_rate
             'last_loss': sum(losses[-10:]) / min(10, len(losses))}
 
 
-def nominal_deviation(cells):
-    """Observed read minus the nominal expectation at each device's own age; counts a full read."""
+def _expected(cells, seconds, ids=None):
+    """Nominal expectation requested + m u^alpha at each device's own age (controller knowledge)."""
     law = cells.law
-    read = cells.read()
-    u = (cells.clock - cells.last_write) / law.reference_seconds
-    expected = cells.requested + (law.mean_us * u.pow(law.mean_exponent)).to(torch.float32)
-    return (read - expected).flatten()
+    last = cells.last_write.flatten() if ids is None else cells.last_write.flatten()[ids]
+    requested = cells.requested.flatten() if ids is None else cells.requested.flatten()[ids]
+    u = (seconds - last) / law.reference_seconds
+    return requested + (law.mean_us * u.pow(law.mean_exponent)).to(torch.float32)
 
 
-def rewrite(cells, arm, clock, verify_seconds):
+def nominal_deviation(cells, ids=None):
+    """Observed read minus the nominal expectation at each device's own age; counts the read."""
+    read = cells.read(ids).flatten()
+    return read - _expected(cells, cells.clock, ids)
+
+
+def oracle_deviation(cells, seconds):
+    """Hidden future deviation at ``seconds`` without moving the clock (labelled oracle arm only)."""
+    return cells.value(seconds).flatten() - _expected(cells, seconds)
+
+
+def rewrite(cells, arm, clock, verify_seconds, *, selection='observed', future=None, history=None):
+    """P&V resets of a fraction of each matrix's devices (all of them at fraction 1).
+
+    ``selection``: 'observed' |e| (A9), 'oracle' hidden |e| at the clock ``future`` (O2), or
+    'precompensated' (A10): A9's selection with targets offset by -c * e. c is regressed, over the
+    devices rewritten at the previous event, from their new-episode deviation now on their deviation
+    before that rewrite, and clipped to [0, 1]; c = 0 at the first event. ``history`` carries the
+    previous event's (ids, deviation) per matrix and is updated in place.
+    """
     for c in cells:
         c.advance(clock)
     cost = {'reset_attempts': 0, 'verify_reads': 0, 'selection_reads': 0, 'selected_devices': 0}
+    deviations = []
     for c in cells:
-        n = c.target.numel()
         if arm['fraction'] >= 1:
+            deviations.append(None)
+        elif selection == 'oracle':
+            deviations.append(oracle_deviation(c, future))
+        else:
+            deviations.append(nominal_deviation(c))
+            cost['selection_reads'] += c.target.numel()
+    coefficient = 0.
+    if selection == 'precompensated' and history:
+        old = torch.cat([d for _, d in history]).double()
+        new = torch.cat([dev[ids] for (ids, _), dev in zip(history, deviations)]).double()
+        var = float(old.var())
+        coefficient = min(max(float(((old - old.mean()) * (new - new.mean())).mean()) / var, 0.), 1.) if var > 0 else 0.
+    cost['precompensation'] = coefficient
+    if history is not None:
+        history.clear()
+    for c, error in zip(cells, deviations):
+        n = c.target.numel()
+        if error is None:
             ids = torch.arange(n, device=c.target.device)
         else:
-            error = nominal_deviation(c).abs()
-            cost['selection_reads'] += n
             count = max(1, round(n * arm['fraction']))
-            ids = torch.argsort(error, descending=True, stable=True)[:count]
-        stats = program_verify(c, ids, c.target.flatten()[ids], attempts=arm['attempts'],
+            ids = torch.argsort(error.abs(), descending=True, stable=True)[:count]
+        goal = c.target.flatten()[ids]
+        if selection == 'precompensated':
+            goal = (goal - coefficient * error[ids]).clamp(c.law.program_min, c.law.program_max)
+            history.append((ids, error[ids].clone()))
+        stats = program_verify(c, ids, goal, attempts=arm['attempts'],
                                threshold=arm['threshold'], verify_seconds=verify_seconds)
         cost['reset_attempts'] += stats['reset_attempts']
         cost['verify_reads'] += stats['verify_reads']
@@ -223,28 +285,85 @@ def rewrite(cells, arm, clock, verify_seconds):
     return cost
 
 
-class Arm:
-    """One arm's controller state on the network; ``event`` acts, ``context`` prepares evaluation."""
+def kl_gradient(network, q, hidden, index, chunk=4):
+    """Gradient of the teacher KL with respect to the held normalized weights ``q`` on ``hidden[index]``."""
+    q = q.detach().requires_grad_(True)
+    total = len(index)
+    with torch.enable_grad():
+        for part in index.split(chunk):
+            states = hidden[part]
+            with torch.no_grad():
+                teacher = network.teacher_logits(states.teacher).flatten(0, 1).log_softmax(-1)
+            student = suffix_logits(network, states.student, q).flatten(0, 1).log_softmax(-1)
+            loss = (teacher.exp() * (teacher - student)).sum(-1).mean() * (len(part) / total)
+            loss.backward()
+    if not bool(torch.isfinite(q.grad).all()):
+        raise FloatingPointError('Nonfinite analog-learning gradient.')
+    return q.grad.detach()
 
-    def __init__(self, arm, network, adaptation, hidden, probe, realization, verify_seconds):
+
+LORA_METHODS = ('lora', 'lora_oracle', 'lora_rescaled', 'lora_clean')
+REWRITE_SELECTION = {'rewrite': 'observed', 'precompensated': 'precompensated', 'rewrite_oracle': 'oracle'}
+RESCALE_STRIDE = 16
+
+
+class Arm:
+    """One arm's controller state on the network.
+
+    ``physical`` is the arm's view of the devices (the twin and ideal overlays apply), ``event``
+    acts at an event or read age, and ``context`` prepares the network for an evaluation.
+    """
+
+    def __init__(self, arm, network, adaptation, hidden, probe, realization, verify_seconds, cells, horizon):
         self.arm, self.network, self.adaptation = arm, network, adaptation
         self.hidden, self.probe = hidden, probe
-        self.realization, self.verify_seconds = realization, verify_seconds
+        self.realization, self.verify_seconds, self.horizon = realization, verify_seconds, horizon
         self.method = arm['method']
         self.correction = None
         self.norms = {k: v.detach().clone() for k, v in network.mlp_norms.state_dict().items()}
         self.cost = {'events': 0, 'reset_attempts': 0, 'verify_reads': 0, 'selection_reads': 0,
                      'selected_devices': 0, 'probe_tokens': 0, 'optimizer_steps': 0,
                      'adaptation_sequence_presentations': 0, 'adaptation_tokens': 0,
-                     'digital_parameters': 0, 'event_wall_seconds': 0.}
+                     'gradient_sequences': 0, 'digital_parameters': 0, 'event_wall_seconds': 0.}
         self.events = []
-        if self.method == 'lora':
-            network.enable_lora(SimpleNamespace(rank=arm['rank'], alpha=float(arm['rank'])), seed=realization)
+        self.twin = [c.value().clone() for c in cells] if arm.get('twin') else None
+        self.ideal = [None] * len(cells) if arm.get('ideal') else None
+        self.history = []
+        self.rescale = None
+        self.base_multiplier = None
+        if self.method in LORA_METHODS:
+            self._fresh_lora()
             self.cost['digital_parameters'] = sum(p.numel() for p in network.lora.parameters())
         elif self.method == 'layernorm':
             self.cost['digital_parameters'] = sum(p.numel() for p in network.mlp_norms.parameters())
         elif self.method == 'calibration':
             self.cost['digital_parameters'] = sum(2 * network.layout[i].shape[0] for i in range(network.base_matrices))
+
+    @property
+    def schedule(self):
+        """Every action age: training/fit/write events plus A6's rescaling reads."""
+        return tuple(sorted(set(self.arm.get('events', ())) | set(self.arm.get('reads', ()))))
+
+    @property
+    def evaluate_after_event(self):
+        return self.method == 'lora_oracle'
+
+    def _fresh_lora(self):
+        rank = self.arm['rank']
+        self.network.enable_lora(SimpleNamespace(rank=rank, alpha=float(rank)), seed=self.realization)
+        self.base_multiplier = self.network.lora_multiplier
+
+    def physical(self, cells, clock=None):
+        """Device values as this arm's array holds them (at ``clock``, or at each cell's own clock)."""
+        live = [c.advance(clock) if clock is not None else c.value() for c in cells]
+        if self.twin is not None:
+            return [h.clone() for h in self.twin]
+        if self.ideal is not None:
+            for k, overlay in enumerate(self.ideal):
+                if overlay is not None:
+                    mask, value = overlay
+                    live[k] = torch.where(mask, value, live[k])
+        return live
 
     def close(self):
         self.network.enable_lora(None)
@@ -253,43 +372,135 @@ class Arm:
         for p in self.network.parameters():
             p.requires_grad_(False)
 
-    def context(self):
+    def context(self, age):
         self.network.drift_compensation = self.correction
+        if self.method == 'lora_rescaled':
+            factor = 1.
+            if self.rescale is not None and self.rescale.get('beta') is not None:
+                t1, beta, kappa = self.rescale['t1'], self.rescale['beta'], self.rescale['kappa']
+                factor = (t1 / age) ** kappa * (age / t1) ** beta if age > t1 else 1.
+            self.network.lora_multiplier = self.base_multiplier * factor
+
+    def _count_read(self, cells):
+        reads = sum(c.target.numel() for c in cells)
+        for c in cells:
+            c.selection_reads += c.target.numel()
+        self.cost['selection_reads'] += reads
+        return reads
+
+    def _train(self, q, index):
+        parameters = (list(self.network.lora.parameters()) if self.method in LORA_METHODS
+                      else list(self.network.mlp_norms.parameters()))
+        a = self.adaptation
+        self.network.lora_multiplier = self.base_multiplier if self.base_multiplier is not None else 0.
+        trace = train_digital(self.network, parameters, q, self.hidden, steps=a['steps'], batch=a['batch'],
+                              learning_rate=self.arm['learning_rate'], seed=a['seed'] + 1000 * index)
+        presentations = a['steps'] * a['batch']
+        self.cost['optimizer_steps'] += a['steps']
+        self.cost['adaptation_sequence_presentations'] += presentations
+        self.cost['adaptation_tokens'] += presentations * self.hidden.sequence_length
+        return {**trace, 'optimizer_steps': a['steps']}
+
+    def _rescale_read(self, cells, age):
+        """A6: deviations of a fixed device subsample; estimates against the training-time read."""
+        parts = []
+        for c in cells:
+            ids = torch.arange(0, c.target.numel(), RESCALE_STRIDE, device=c.target.device)
+            parts.append(nominal_deviation(c, ids).double())
+        d = torch.cat(parts)
+        self.cost['selection_reads'] += d.numel()
+        if self.rescale is None:
+            self.rescale = {'t1': age, 'd1': d, 'beta': None, 'kappa': None}
+            return {'rescale_reads': d.numel()}
+        d1, t1 = self.rescale['d1'], self.rescale['t1']
+        ratio = math.log(age / t1)
+        beta = math.log(float(d.std()) / float(d1.std())) / ratio
+        corr = float(torch.corrcoef(torch.stack((d1, d)))[0, 1])
+        kappa = -math.log(min(max(corr, 1e-3), 1.)) / ratio
+        self.rescale.update(beta=beta, kappa=kappa)
+        return {'rescale_reads': d.numel(), 'beta_hat': beta, 'kappa_hat': kappa, 'correlation': corr}
+
+    def _learn(self, cells, clock, bind, index):
+        arm, network = self.arm, self.network
+        for c in cells:
+            c.advance(clock)
+        written = [torch.zeros(c.target[0].numel(), dtype=torch.bool, device=c.target.device) for c in cells]
+        record = {'rounds': arm['rounds'], 'round_clocks': []}
+        generator = torch.Generator().manual_seed(self.adaptation['seed'] + 7919 * (index + 1))
+        for r in range(arm['rounds']):
+            physical = self.physical(cells)
+            q = bind(physical)
+            pick = torch.randperm(len(self.hidden), generator=generator)[:arm['batch_sequences']]
+            grad = kl_gradient(network, q, self.hidden, pick.to(self.hidden.student.device))
+            self.cost['gradient_sequences'] += len(pick)
+            self._count_read(cells)
+            for k, (c, spec) in enumerate(zip(cells, network.layout)):
+                g = grad[spec.offset:spec.offset + spec.size]
+                count = max(1, round(c.target.numel() * arm['fraction'] / arm['rounds']))
+                score = g.abs().masked_fill(written[k], -1.)
+                ids = torch.argsort(score, descending=True, stable=True)[:count]
+                written[k][ids] = True
+                step = g[ids] / g[ids].square().mean().sqrt().clamp_min(1e-30)
+                q_new = (q[spec.offset + ids] - arm['step'] * step).clamp(-1., 1.)
+                reference = physical[k][1].flatten()[ids]
+                goal = (reference + 39.6 * q_new).clamp(c.law.program_min, c.law.program_max)
+                if self.ideal is not None:
+                    overlay = self.ideal[k]
+                    mask = torch.zeros_like(c.target, dtype=torch.bool) if overlay is None else overlay[0]
+                    value = torch.zeros_like(c.target) if overlay is None else overlay[1]
+                    mask[0].view(-1)[ids] = True
+                    value[0].view(-1)[ids] = goal
+                    self.ideal[k] = (mask, value)
+                    self.cost['reset_attempts'] += ids.numel()
+                elif self.twin is not None:
+                    c.write(ids, goal)
+                    self.twin[k][0].view(-1)[ids] = c.anchor[0].reshape(-1)[ids]
+                    self.cost['reset_attempts'] += ids.numel()
+                else:
+                    stats = program_verify(c, ids, goal, attempts=arm['attempts'], threshold=arm['threshold'],
+                                           verify_seconds=self.verify_seconds)
+                    self.cost['reset_attempts'] += stats['reset_attempts']
+                    self.cost['verify_reads'] += stats['verify_reads']
+                self.cost['selected_devices'] += ids.numel()
+            record['round_clocks'].append(max(c.clock for c in cells))
+        return record
 
     def event(self, index, age, clock, cells, bind):
         started = time.monotonic()
         record = {'event': index, 'seconds': age, 'clock_seconds': clock}
         self.network.drift_compensation = None
-        if self.method == 'rewrite':
-            cost = rewrite(cells, self.arm, clock, self.verify_seconds)
+        if self.method in REWRITE_SELECTION:
+            events = self.arm['events']
+            later = [t for t in events if t > age]
+            future = math.sqrt(max(age, 1.) * (later[0] if later else self.horizon))
+            cost = rewrite(cells, self.arm, clock, self.verify_seconds, selection=REWRITE_SELECTION[self.method],
+                           future=clock - age + future, history=self.history)
             record.update(cost, end_clock_seconds=max(c.clock for c in cells))
             for k, v in cost.items():
-                self.cost[k] += v
-        else:
-            q = bind([c.advance(clock) for c in cells])
-            reads = sum(c.target.numel() for c in cells)
+                if k in self.cost:
+                    self.cost[k] += v
+        elif self.method == 'learning':
+            record.update(self._learn(cells, clock, bind, index))
+            record['end_clock_seconds'] = max(c.clock for c in cells)
+        elif self.method == 'lora_rescaled' and age in self.arm['reads']:
             for c in cells:
-                c.selection_reads += c.target.numel()
-            self.cost['selection_reads'] += reads
-            record['selection_reads'] = reads
+                c.advance(clock)
+            record.update(self._rescale_read(cells, age))
+        else:
+            q = bind(self.physical(cells, clock))
+            record['selection_reads'] = self._count_read(cells)
             if self.method == 'calibration':
                 self.correction = fit_calibration(self.network, q, self.probe)
-                tokens = self.probe.tokens
-                self.cost['probe_tokens'] += tokens
-                record['probe_tokens'] = tokens
+                self.cost['probe_tokens'] += self.probe.tokens
+                record['probe_tokens'] = self.probe.tokens
             else:
-                if self.method == 'lora':
-                    parameters = list(self.network.lora.parameters())
-                else:
-                    parameters = list(self.network.mlp_norms.parameters())
-                a = self.adaptation
-                trace = train_digital(self.network, parameters, q, self.hidden, steps=a['steps'], batch=a['batch'],
-                                      learning_rate=self.arm['learning_rate'], seed=a['seed'] + 1000 * index)
-                presentations = a['steps'] * a['batch']
-                self.cost['optimizer_steps'] += a['steps']
-                self.cost['adaptation_sequence_presentations'] += presentations
-                self.cost['adaptation_tokens'] += presentations * self.hidden.sequence_length
-                record.update(trace, optimizer_steps=a['steps'])
+                if self.method == 'lora_oracle':
+                    self._fresh_lora()
+                if self.method == 'lora_clean':
+                    q = self.network.q.detach()
+                record.update(self._train(q, index))
+                if self.method == 'lora_rescaled':
+                    record.update(self._rescale_read(cells, age))
         self.cost['events'] += 1
         record['wall_seconds'] = time.monotonic() - started
         self.cost['event_wall_seconds'] += record['wall_seconds']
@@ -297,14 +508,17 @@ class Arm:
         return record
 
 
-def timeline(ages, events):
-    """(age, evaluate, event index or None); an evaluation at an event age comes first."""
+def timeline(ages, events, after=False):
+    """(age, evaluate, event index or None). An evaluation at an event age comes first, unless
+    ``after`` (the O1 oracle, evaluated right after its training)."""
     points = []
     for t in sorted(set(ages) | set(events)):
+        steps = []
         if t in ages:
-            points.append((t, True, None))
+            steps.append((t, True, None))
         if t in events:
-            points.append((t, False, events.index(t)))
+            steps.append((t, False, events.index(t)))
+        points.extend(reversed(steps) if after else steps)
     return points
 
 

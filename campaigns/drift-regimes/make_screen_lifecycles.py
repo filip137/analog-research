@@ -181,10 +181,106 @@ def probe():
     return doc
 
 
+# --- run 3: the remaining crossbar arms (A6, A10, A11, O1, O2, no-drift controls) ---------------
+EVAL_AGES = [0., 60., 900., 1800., 3600., 7200., 14400., 28800., 57600., 86400.]
+TUNE_A11_STEPS = (0.01, 0.03, 0.1, 0.3)
+A11_BATCH = 16
+TIER = {'W1': .01, 'W2': .1}
+
+
+def rounds(attempts):
+    """Closed-loop rounds per event: P&V of every round must end before the next evaluation (>= 900 s)."""
+    return 4 if attempts <= 4 else 2
+
+
+def learning(point, label, tier, attempts, step, *, ideal=False, twin=False):
+    arm = {'label': label, 'method': 'learning', 'events': EVENTS, 'fraction': TIER[tier], 'attempts': attempts,
+           'threshold': kappa(point, attempts), 'step': step, 'rounds': rounds(attempts),
+           'batch_sequences': A11_BATCH, 'ideal': ideal}
+    if twin:
+        arm['twin'] = True
+    return arm
+
+
+def precompensated(point, tier, attempts):
+    return {'label': f'A10-{tier}-N{attempts}', 'method': 'precompensated', 'events': EVENTS,
+            'fraction': TIER[tier], 'attempts': attempts, 'threshold': kappa(point, attempts)}
+
+
+def extension_arms(point, lr, step):
+    """Part x: the remaining exp-002 arms for this point's group (N sweep at R0 and rho* 1.0)."""
+    g = group(point)
+    o1 = {'label': 'O1', 'method': 'lora_oracle', 'events': EVAL_AGES, 'rank': 16, 'learning_rate': lr}
+    a6 = {'label': 'A6', 'method': 'lora_rescaled', 'events': EVENTS[:1], 'reads': EVENTS[1:], 'rank': 16,
+          'learning_rate': lr}
+    o2 = {'label': 'O2-W2-N4', 'method': 'rewrite_oracle', 'events': EVENTS, 'fraction': .1, 'attempts': 4,
+          'threshold': kappa(point, 4)}
+    if g == 'anchor':
+        sweep = (1, 2, 4, 8)
+        return [{'label': 'A0-twin', 'method': 'none', 'twin': True},
+                {**lora('A5-twin', EVENTS, lr), 'twin': True},
+                {'label': 'A4c', 'method': 'lora_clean', 'events': EVENTS[:1], 'rank': 16, 'learning_rate': lr},
+                a6, o1, o2,
+                *[precompensated(point, t, n) for t in ('W1', 'W2') for n in sweep],
+                *[learning(point, f'A11-{t}-N{n}', t, n, step) for t in ('W1', 'W2') for n in sweep],
+                learning(point, 'A11-W2-twin', 'W2', 1, step, twin=True),
+                learning(point, 'A11-W2-ideal', 'W2', 1, step, ideal=True)]
+    if g == 'rho':
+        levels = (1, 2, 4, 8) if point == 'rho1.0' else (4,)
+        arms = [a6, o1, *[learning(point, f'A11-W1-N{n}', 'W1', n, step) for n in levels]]
+        if point == 'rho0.5':   # off-anchor retuning check of the LoRA rate (exp-002 tuning rule)
+            arms += [lora(f'A5-lr{x:g}', EVENTS, x) for x in (3e-3, 1e-2)]
+        return arms
+    if g == 'sigma':
+        return [learning(point, f'A11-{t}-N4', t, 4, step) for t in ('W1', 'W2')]
+    return [*[precompensated(point, t, 4) for t in ('W1', 'W2')],
+            *[learning(point, f'A11-{t}-N4', t, 4, step) for t in ('W1', 'W2')], o2]
+
+
+def tuning_a11():
+    point = 'R0'
+    arms = [{'label': 'A0', 'method': 'none'},
+            *[learning(point, f'A11-{t}-s{s:g}', t, 4, s) for t in ('W1', 'W2') for s in TUNE_A11_STEPS]]
+    doc = unit(point, TUNE_REALIZATION, 'tune-a11', arms, question=(
+        'Which analog-learning step minimizes the 24-h mean teacher KL at R0 '
+        '(development realization, held-out validation sequences 64-127)?'))
+    doc['drift_regimes']['evaluation_start'] = TUNE_COHORT[0]
+    doc['drift_regimes']['cohort_sha256'] = TUNE_COHORT[1]
+    return doc
+
+
+def canaries_v2():
+    """Run-3 gate on 2 sequences: one of every new method, plus run 1's A0, A8 and A9 canary arms,
+    whose final conductance hashes must equal the run-1 canary's."""
+    point = 'R0'
+    doc = lifecycle(point, kappa(point, 4), canary=True)
+    doc['lifecycle_id'] = 'opt125m-drift-regimes-screen-canary2-r0'
+    doc['question'] = {'text': 'Does the run-3 plan run every new arm method, unchanged for the old ones?',
+                       'decision': 'drift-regimes exp-002 run-3 launch gate; no method comparison.',
+                       'primary_metric': 'teacher_kl', 'evidence_class': 'exploratory_model_based'}
+    spec = doc['drift_regimes']
+    del spec['arm']
+    spec['arms'] = [{'label': 'A0', 'method': 'none'}, rewrite(point, 'A8', 1), rewrite(point, 'A9-W1', 4),
+                    {'label': 'A0-twin', 'method': 'none', 'twin': True},
+                    {'label': 'O1', 'method': 'lora_oracle', 'events': [0., 900.], 'rank': 16,
+                     'learning_rate': LORA_LR},
+                    {'label': 'A6', 'method': 'lora_rescaled', 'events': EVENTS[:1], 'reads': EVENTS[1:2],
+                     'rank': 16, 'learning_rate': LORA_LR},
+                    precompensated(point, 'W1', 4),
+                    {'label': 'O2', 'method': 'rewrite_oracle', 'events': EVENTS[:2], 'fraction': .01,
+                     'attempts': 4, 'threshold': kappa(point, 4)},
+                    {**learning(point, 'A11', 'W1', 8, .1), 'events': EVENTS[:2]},
+                    {**learning(point, 'A11-twin', 'W1', 1, .1, twin=True), 'events': EVENTS[:1]},
+                    {**learning(point, 'A11-ideal', 'W1', 1, .1, ideal=True), 'events': EVENTS[:1]}]
+    spec['adaptation'] = ADAPTATION
+    return doc
+
+
 def main():
     rates = [float(x) for x in sys.argv[1:3]]
+    step = float(sys.argv[3]) if len(sys.argv) > 3 else None
     out = HERE / 'lifecycles'
-    docs = [probe(), *canaries(), *tuning()]
+    docs = [probe(), *canaries(), *tuning(), canaries_v2(), tuning_a11()]
     for point in POINTS:
         for r in REALIZATIONS:
             docs.append(unit(point, r, 'w', write_arms(point), question=(
@@ -193,6 +289,10 @@ def main():
             if rates:
                 docs.append(unit(point, r, 'd', digital_arms(point, *rates), question=(
                     f'LayerNorm and LoRA arms at drift regime {point} (realization {r}): 24-h mean teacher KL.')))
+            if rates and step is not None:
+                docs.append(unit(point, r, 'x', extension_arms(point, rates[1], step), question=(
+                    f'Rescaled LoRA, precompensated rewrite, analog learning, oracles and no-drift controls '
+                    f'at drift regime {point} (realization {r}): 24-h mean teacher KL.')))
     for doc in docs:
         (out / f"{doc['lifecycle_id']}.json").write_text(json.dumps(doc, indent=2) + '\n')
     print(json.dumps({'written': len(docs), 'arms': sum(len(d['drift_regimes']['arms']) for d in docs)}))
