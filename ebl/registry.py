@@ -69,6 +69,10 @@ from ebl.schema.raw_active_cell import (
     parse_raw_active_cell_program_verify_config,
     resolve_raw_active_cell_program_verify_spec,
 )
+from ebl.schema.opt_cmo_drn_drift_regimes import (
+    parse_config as parse_opt_cmo_drn_drift_regimes_config,
+    resolve_config as resolve_opt_cmo_drn_drift_regimes_config,
+)
 from ebl.schema.opt_cmo_drn import (
     parse_config as parse_opt_cmo_drn_config,
     resolve_config as resolve_opt_cmo_drn_config,
@@ -858,8 +862,18 @@ OPT_CMO_DRN_HWA_V1 = ExperimentDefinition(
     resolver=resolve_opt_cmo_drn_config,
 )
 
+OPT_CMO_DRN_DRIFT_REGIMES_V1 = ExperimentDefinition(
+    experiment_id="opt_cmo_drn_drift_regimes.v1",
+    schema_version=1,
+    description="exp-003 drift-regimes screen on the frozen OPT CMO DRN: matched P&V deployment, power-law drift family and maintenance arms.",
+    supported_modes=(RunMode.TRAIN,),
+    parser=parse_opt_cmo_drn_drift_regimes_config,
+    resolver=resolve_opt_cmo_drn_drift_regimes_config,
+)
+
 EXPERIMENT_REGISTRY: Dict[str, ExperimentDefinition] = {
     OPT_CMO_DRN_HWA_V1.experiment_id: OPT_CMO_DRN_HWA_V1,
+    OPT_CMO_DRN_DRIFT_REGIMES_V1.experiment_id: OPT_CMO_DRN_DRIFT_REGIMES_V1,
     SMALL_DRN_V1.experiment_id: SMALL_DRN_V1,
     MNIST_RELU_V1.experiment_id: MNIST_RELU_V1,
     MNIST_RELU_DRN_KD_V1.experiment_id: MNIST_RELU_DRN_KD_V1,

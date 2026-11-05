@@ -789,6 +789,8 @@ def _handler_result(handler: Handler, request: Any) -> int:
 def _default_train_handler(request: TrainRequest) -> Optional[int]:
     if request.definition.experiment_id == "opt_cmo_drn_hwa.v1":
         from ebl.runtime.opt_cmo_drn.runtime import run_train
+    elif request.definition.experiment_id == "opt_cmo_drn_drift_regimes.v1":
+        from ebl.runtime.opt_cmo_drn.drift_regimes import run_train
     elif request.definition.experiment_id == "small_drn.v1":
         from ebl.runtime.small_network.runtime import run_train
     elif request.definition.experiment_id == "mnist_relu.v1":
