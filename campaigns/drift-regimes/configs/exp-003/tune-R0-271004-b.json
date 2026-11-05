@@ -69,32 +69,6 @@
     },
     "arms": [
       {
-        "label": "A0",
-        "method": "none"
-      },
-      {
-        "events": [
-          900.0,
-          3600.0,
-          14400.0,
-          57600.0
-        ],
-        "label": "A3-lr0.0003",
-        "learning_rate": 0.0003,
-        "method": "layernorm"
-      },
-      {
-        "events": [
-          900.0,
-          3600.0,
-          14400.0,
-          57600.0
-        ],
-        "label": "A3-lr0.001",
-        "learning_rate": 0.001,
-        "method": "layernorm"
-      },
-      {
         "events": [
           900.0,
           3600.0,

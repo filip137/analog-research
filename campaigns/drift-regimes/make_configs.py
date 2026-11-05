@@ -31,9 +31,17 @@ REPORTING = '7411cf50b625e4c62f65d8e12bac538fd83c6dad3e4c74b29a9f2a6f5ad83191'
 TUNING = '99c12a626280f6be079b24ae72cacb1900a07f6917ef530cc4c2d1bf1ad7014c'
 TRAINING = 'c919329dbe0d545d7614daf3d8f790881e944cd80ff53fff88fc19d9697f7762'
 # Run parts: arms of one deployment split over jobs; arms within a part share evaluations.
+# A3 is its own part ('ln'): it runs only after the R0 tuning run has frozen its rate.
 PARTS = {'R0': {'a': ('A0', 'A1', 'A0-twin', 'A9-W2-N4', 'A10-W2-N4'),
-                'b': ('A3', 'A8-N4'),
+                'b': ('A8-N4',),
                 'c': ('A11-W2-N4', 'A11-W2-twin')}}
+
+
+def parts(regime, labels):
+    chosen = dict(PARTS.get(regime, {'a': tuple(l for l in labels if l != 'A3')}))
+    if 'A3' in labels:
+        chosen['ln'] = ('A3',)
+    return chosen
 
 
 def law(rho_star, f):
@@ -66,6 +74,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('counterparts', type=Path)
     parser.add_argument('--check', action='store_true', help='fail if a generated file differs')
+    parser.add_argument('--a3-rate', type=float, default=None,
+                        help='LayerNorm rate frozen by the R0 tuning run; A3 configs are written only with it')
     args = parser.parse_args()
     cells = {}
     with args.counterparts.open() as handle:
@@ -78,16 +88,24 @@ def main():
     documents = {}
     for (regime, realization), arms in sorted(cells.items()):
         labels = list(arms)
-        parts = PARTS.get(regime, {'a': tuple(labels)})
-        if sorted(sum(map(list, parts.values()), [])) != sorted(labels):
+        split = parts(regime, labels)
+        if sorted(sum(map(list, split.values()), [])) != sorted(labels):
             raise SystemExit(f'Parts of {regime} do not cover its arms exactly.')
-        for part, chosen in parts.items():
+        for part, chosen in split.items():
+            if part == 'ln':
+                if args.a3_rate is None:
+                    continue
+                selected = [{**arms[label], 'learning_rate': args.a3_rate} for label in chosen]
+            else:
+                selected = [arms[label] for label in chosen]
             name = f'screen-{regime}-{realization}-{part}.json'
-            documents[name] = config('drift_regimes', regime, realization, [arms[label] for label in chosen])
+            documents[name] = config('drift_regimes', regime, realization, selected)
     tuning = [{'label': 'A0', 'method': 'none'}] + [
         {'events': EVENTS, 'label': f'A3-lr{rate:g}', 'learning_rate': rate, 'method': 'layernorm'}
         for rate in TUNING_RATES]
-    documents['tune-R0-271004-ln.json'] = config('drift_regimes', 'R0', TUNING_SEED, tuning, start=64, cohort=TUNING)
+    # Two jobs; the shared deployment is deterministic, so splitting the arms changes no value.
+    documents['tune-R0-271004-a.json'] = config('drift_regimes', 'R0', TUNING_SEED, tuning[:3], start=64, cohort=TUNING)
+    documents['tune-R0-271004-b.json'] = config('drift_regimes', 'R0', TUNING_SEED, tuning[3:], start=64, cohort=TUNING)
     for regime in ('R0', 'corner_rho1_f1'):
         documents[f'readiness-{regime}-271004.json'] = config('readiness', regime, TUNING_SEED,
                                                               [{'label': 'A0', 'method': 'none'}],

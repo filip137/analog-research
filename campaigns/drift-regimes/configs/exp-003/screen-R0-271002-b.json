@@ -69,17 +69,6 @@
     },
     "arms": [
       {
-        "events": [
-          900.0,
-          3600.0,
-          14400.0,
-          57600.0
-        ],
-        "label": "A3",
-        "learning_rate": 0.003,
-        "method": "layernorm"
-      },
-      {
         "attempts": 4,
         "events": [
           900.0,
