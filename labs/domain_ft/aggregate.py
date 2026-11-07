@@ -77,11 +77,13 @@ def main():
     screen = []
     for jid, d in sorted(runs.items()):
         ds, name = jid.split("/")
-        parts = name.split("__")
+        if ds == "drn":
+            continue
+        m_, lr_, u_, sd_ = P.parse(name)
         t1, t2, nt = main_test(d)
         row = {"id": jid, "dataset": ds.split("@")[0], "base": ds.split("@")[1] if "@" in ds else "opt",
-               "method": parts[0], "lr": float(parts[1][2:]) if len(parts) > 1 else "",
-               "updates": d.get("updates_done", d.get("updates_planned")), "status": d.get("status"),
+               "method": m_, "lr": lr_ if lr_ is not None else "", "updates": u_, "seed": sd_,
+               "updates_done": d.get("updates_done"), "status": d.get("status"),
                "params": d.get("params"), "metric": d.get("metric", ""), "dev_final": d.get("dev_final"),
                "dev_best": d.get("dev_best"), "dev_best_update": d.get("dev_best_update"),
                "test": t1, "test_mismatched": t2, "n_test": nt,
@@ -95,7 +97,8 @@ def main():
 
     # selection.json
     keys = sorted({(r["dataset"] + ("" if r["base"] == "opt" else "@" + r["base"]), r["method"], r["updates"])
-                   for r in screen if r["method"] != "zs" and r["dataset"] != "gap" and r["status"] == "done"})
+                   for r in screen if r["method"] != "zs" and r["dataset"] != "gap" and r["status"] == "done"
+                   and r["seed"] == 1})
     selection = {}
     for ds, m, u in keys:
         u = int(u or 1000)
@@ -259,6 +262,39 @@ def main():
                      "peak_mem_gb_max": max(x["peak_mem_gb"] or 0 for x in rs),
                      "wall_s_mean": statistics.fmean(x["wall_s"] for x in rs if x["wall_s"] is not None) if any(x["wall_s"] is not None for x in rs) else None})
     write_csv(S / "timing.csv", rows)
+
+    # seeds.csv: seed-1 vs seed-2 at the selected LR
+    rows = []
+    for r in screen:
+        if r["seed"] != 2 or r["status"] != "done":
+            continue
+        d1 = runs.get(P.job_id(r["dataset"], r["method"], r["lr"], r["base"], r["updates"]))
+        if not d1:
+            continue
+        t1 = main_test(d1)[0]
+        rows.append({"dataset": r["dataset"], "method": r["method"], "lr": r["lr"], "metric": r["metric"],
+                     "dev_s1": d1.get("dev_final"), "dev_s2": r["dev_final"],
+                     "abs_d_dev": abs(r["dev_final"] - d1["dev_final"]) if d1.get("dev_final") is not None else None,
+                     "test_s1": t1, "test_s2": r["test"],
+                     "abs_d_test": abs(r["test"] - t1) if (t1 is not None and r["test"] is not None) else None})
+    write_csv(S / "seeds.csv", rows)
+
+    # budget.csv: H-002 budget sensitivity (U = 1,000 / 2,000 / 4,000 at the selected LR)
+    rows = []
+    for r in screen:
+        if r["updates"] in (2000, 4000) and r["seed"] == 1:
+            d1 = runs.get(P.job_id(r["dataset"], r["method"], r["lr"], r["base"], 1000), {})
+            rows.append({"dataset": r["dataset"], "method": r["method"], "lr": r["lr"], "updates": r["updates"],
+                         "status": r["status"], "dev_final": r["dev_final"], "dev_best": r["dev_best"],
+                         "test": r["test"], "dev_u1000": d1.get("dev_final"), "test_u1000": main_test(d1)[0] if d1 else None,
+                         "dev_curve": r.get("dev_curve"), "wikitext_ppl": r.get("wikitext_ppl"),
+                         "wikitext_kl": r.get("wikitext_kl"), "sec_per_update": r["sec_per_update"]})
+    write_csv(S / "budget.csv", rows)
+
+    # drn.json: DRN stretch outputs (timing and D1 on the DRN), copied as-is
+    drn = {jid.split("/")[1]: d for jid, d in runs.items() if jid.startswith("drn/")}
+    if drn:
+        (S / "drn.json").write_text(json.dumps(drn, indent=2, default=str))
     print(json.dumps({"runs": len(runs), "done": sum(1 for d in runs.values() if d.get("status") == "done"),
                       "failed": [j for j, d in runs.items() if d.get("status") == "failed"],
                       "selections": len(selection)}))
