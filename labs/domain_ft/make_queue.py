@@ -57,6 +57,7 @@ def main():
     ap.add_argument("--sync-only", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--max-prio", type=float, default=1e9)
+    ap.add_argument("--post-drain", action="store_true", help="include main's post-drain list (seeds, budgets, D2 mnli)")
     a = ap.parse_args()
     for h in a.hosts:
         sync(h)
@@ -73,7 +74,7 @@ def main():
         for i in ids:
             queued[i] = h
         pending[h] = sum(cost(i) for i in ids if i not in claims)
-    new = [j for j in P.plan(runs) if j[1] not in queued and j[0] <= a.max_prio]
+    new = [j for j in P.plan(runs, a.post_drain) if j[1] not in queued and j[0] <= a.max_prio]
     add = {h: [] for h in a.hosts}
     for prio, jid, args in new:
         h = min(a.hosts, key=lambda x: pending[x])
