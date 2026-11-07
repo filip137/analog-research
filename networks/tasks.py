@@ -60,18 +60,49 @@ def _piqa(record: dict) -> tuple[str, list[str], int, str]:
     return f"Question: {record['goal']}\nAnswer:", [record["sol1"], record["sol2"]], int(record["label"]), record["goal"]
 
 
+# Domain fine-tuning tasks (exp/domain-finetuning, exp-001). BoolQ passages are tail-truncated
+# to the 256-token budget before formatting; CaseHOLD contexts end with "(" and take the holding
+# without a delimiter.
+RCT_SECTIONS = ("background", "objective", "methods", "results", "conclusions")
+
+
+def _mnli(record: dict) -> tuple[str, list[str], int, str]:
+    query = f"{record['premise']}\nQuestion: {record['hypothesis']} True, False or Neither?\nAnswer:"
+    return query, ["True", "Neither", "False"], int(record["label"]), record["premise"]
+
+
+def _rct(record: dict) -> tuple[str, list[str], int, str]:
+    query = f"Sentence from a clinical trial abstract: {record['text']}\nSection:"
+    return query, list(RCT_SECTIONS), RCT_SECTIONS.index(record["label"]), str(record["abstract_id"])
+
+
+def _boolq(record: dict) -> tuple[str, list[str], int, str]:
+    query = f"{record['passage']}\nQuestion: {record['question']}?\nAnswer:"
+    return query, ["no", "yes"], int(bool(record["answer"])), record["passage"]
+
+
+def _casehold(record: dict) -> tuple[str, list[str], int, str]:
+    context = record["context"].split("<HOLDING>")[0]
+    return context, [str(e) for e in record["endings"]], int(record["label"]), record["context"]
+
+
 @dataclass(frozen=True)
 class TaskSpec:
     choices: int
     template: str
     group: str
     format: Callable[[dict], tuple[str, list[str], int, str]]
+    delimiter: str = " "
 
 
 TASKS = {
     "hellaswag": TaskSpec(4, "lm_eval_v0.4_hellaswag+bos", "source_id", _hellaswag),
     "sst2": TaskSpec(2, "lm_eval_v0.4_glue_sst2+bos", "sentence", _sst2),
     "piqa": TaskSpec(2, "lm_eval_v0.4_piqa+bos", "goal", _piqa),
+    "mnli": TaskSpec(3, "lm_eval_v0.4_mnli+bos", "premise", _mnli),
+    "rct": TaskSpec(5, "domain_ft_rct_section+bos", "abstract_id", _rct),
+    "boolq": TaskSpec(2, "lm_eval_v0.4_boolq+bos;passage_tail_truncated_256", "passage", _boolq),
+    "casehold": TaskSpec(5, "domain_ft_casehold_prefix_holding+bos", "context", _casehold, ""),
 }
 
 
@@ -95,7 +126,7 @@ def _encode_split(spec: TaskSpec, encode, examples: list[tuple[int, dict]]) -> d
         if len(choices) != spec.choices or not 0 <= label < spec.choices:
             raise ValueError(f"Expected {spec.choices} choices and a valid label in source row {row}.")
         for k, choice in enumerate(choices):
-            head, tail = encode_pair(encode, query, " " + choice)
+            head, tail = encode_pair(encode, query, spec.delimiter + choice)
             if k == 0:
                 contexts.append(head)
             elif head != contexts[-1]:
