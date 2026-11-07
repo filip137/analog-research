@@ -68,8 +68,11 @@ def main(root: Path, slot: str):
         say(f"run {jid}")
         t0 = time.time()
         out = open(root / "logs" / f"{key}.log", "a")
-        cmd = [PY, str(root / "code/labs/domain_ft/train.py"), "--root", str(root),
-               "--deadline", str(limits["kill_at"])] + shlex.split(args)
+        if args.startswith("!"):
+            cmd = ["bash", "-c", args[1:]]  # shell job (e.g. the DRN stretch script)
+        else:
+            cmd = [PY, str(root / "code/labs/domain_ft/train.py"), "--root", str(root),
+                   "--deadline", str(limits["kill_at"])] + shlex.split(args)
         rc = subprocess.call(cmd, stdout=out, stderr=subprocess.STDOUT, cwd=str(root / "code"))
         (claims / key / "rc").write_text(f"{rc} {time.time() - t0:.1f}\n")
         say(f"end {jid} rc={rc} {time.time() - t0:.0f}s")
