@@ -144,6 +144,12 @@ def timing(a):
         adapters = nn.ModuleList(PAdapter(64, gen=gen) for _ in range(len(model.blocks))).to(dev)
         params = list(adapters.parameters())
         lr = a.lr or 3e-4
+    elif a.method == "analog":
+        # DRN analog masters u1/u2 of layers 6-11 (OptDrn.parameter_groups()[0]): the experiment's HWA/on-chip
+        # gradient path, a straight-through from the held view into the masters (DrnMlp.conductances),
+        # with masters clamped to [-1, 1] after each step (OptDrn.clamp_masters).
+        params = model.parameter_groups()[0]
+        lr = a.lr or 1e-4
     elif a.method == "ln":
         params = []
         for i in range(model.start, len(model.digital.layers)):
@@ -177,6 +183,8 @@ def timing(a):
             total += float(loss.detach())
         torch.nn.utils.clip_grad_norm_(params, 1.0)
         opt.step()
+        if a.method == "analog":
+            model.clamp_masters()
         torch.cuda.synchronize()
         times.append(time.time() - t0)
         losses.append(total)
