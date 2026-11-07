@@ -257,7 +257,7 @@ def main():
                      "params": rs[0]["params"],
                      "sec_per_update_mean": statistics.fmean(x["sec_per_update"] for x in rs),
                      "peak_mem_gb_max": max(x["peak_mem_gb"] or 0 for x in rs),
-                     "wall_s_mean": statistics.fmean(x["wall_s"] for x in rs)})
+                     "wall_s_mean": statistics.fmean(x["wall_s"] for x in rs if x["wall_s"] is not None) if any(x["wall_s"] is not None for x in rs) else None})
     write_csv(S / "timing.csv", rows)
     print(json.dumps({"runs": len(runs), "done": sum(1 for d in runs.values() if d.get("status") == "done"),
                       "failed": [j for j, d in runs.items() if d.get("status") == "failed"],
