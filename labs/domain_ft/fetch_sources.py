@@ -34,6 +34,7 @@ SOURCES = {
                                      "validation": "ARC-Easy/validation-00000-of-00001.parquet",
                                      "test": "ARC-Easy/test-00000-of-00001.parquet"}),
     "lambada": ("EleutherAI/lambada_openai", {"test": "default/test/default.parquet"}),
+    "pubmedqa": ("qiaojin/PubMedQA", {"artificial": "pqa_artificial/train-00000-of-00001.parquet"}),
 }
 
 

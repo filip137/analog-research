@@ -30,7 +30,7 @@ SEED = 20261108
 BATCH = 32
 MAX_LEN = 256
 TASKS = ("mnli", "rct", "hellaswag", "boolq", "casehold", "sst2")
-DOMAINS = ("pubmed", "code")
+DOMAINS = ("pubmed", "code", "pubmed_lc")
 EVAL_AT = (250, 500, 750, 1000)
 
 
@@ -43,6 +43,8 @@ def run_dir(root: Path, a) -> Path:
     name = a.method if a.method == "zs" else f"{a.method}__lr{lr_tag(a.lr)}"
     if a.updates != 1000:
         name += f"__u{a.updates}"
+    if a.seed != 1:
+        name += f"__s{a.seed}"
     return root / "runs" / ds / name
 
 
@@ -56,7 +58,7 @@ def data_files(root: Path) -> dict:
         "mnli": b / "mnli-opt125m-dft1.pt", "rct": b / "rct-opt125m-dft1.pt", "boolq": b / "boolq-opt125m-dft1.pt",
         "casehold": b / "casehold-opt125m-dft1.pt", "hellaswag": h / "hellaswag-opt125m-v1.pt",
         "sst2": h / "sst2-opt125m-v1.pt", "piqa": h / "piqa-opt125m-v1.pt",
-        "pubmed": b / "pubmed-opt125m-dft1.pt", "code": b / "code-opt125m-dft1.pt",
+        "pubmed": b / "pubmed-opt125m-dft2.pt", "pubmed_lc": b / "pubmed-opt125m-dft1.pt", "code": b / "code-opt125m-dft1.pt",
         "wikitext": h / "wikitext-2-raw-v1.pt", "synthtest": b / "synthtest-256-dft1.pt",
         "arc_easy": b / "arc_easy-test-opt125m-dft1.pt", "lambada": b / "lambada-2000-opt125m-dft1.pt",
     }
@@ -285,6 +287,7 @@ def main(argv=None):
     p.add_argument("--method", required=True)
     p.add_argument("--lr", type=float, default=0.0)
     p.add_argument("--updates", type=int, default=1000)
+    p.add_argument("--seed", type=int, default=1, help="replicate: data order 20261108+(s-1), adapter init 41+(s-1)")
     p.add_argument("--base", default="opt", help="opt | std3_clean | std3_d<seed>")
     p.add_argument("--root", type=Path, required=True)
     p.add_argument("--std3", type=Path, default=Path.home() / "explore-20261101/inputs/crossbar-std3.pt")
@@ -295,6 +298,8 @@ def main(argv=None):
     p.add_argument("--probe", action="store_true", help="timing probe: no evals, no outputs except final.json")
     p.add_argument("--out", type=Path, default=None)
     a = p.parse_args(argv)
+    global SEED
+    SEED = 20261108 + (a.seed - 1)
     out = a.out or run_dir(a.root, a)
     out.mkdir(parents=True, exist_ok=True)
     final = {"status": "running", "dataset": a.dataset, "method": a.method, "lr": a.lr, "base": a.base,
@@ -319,7 +324,7 @@ def run(a, out: Path, final: dict):
     opt_path = a.root / "model" / "pytorch_model.bin"
     model, receipt = M.build_model(opt_path, a.base, a.std3, dev)
     w0 = {k: v.clone() for k, v in M.analog_weights(model).items()}
-    params = M.apply_method(model, a.method, seed=41)
+    params = M.apply_method(model, a.method, seed=41 + (a.seed - 1))
     n_params = sum(p.numel() for p in params)
     exp = M.expected_params(a.method)
     if exp is not None and n_params != exp:
@@ -331,7 +336,7 @@ def run(a, out: Path, final: dict):
     cfg = {"args": {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(a).items()},
            "commit": git_commit(), "host": socket.gethostname(), "gpu": torch.cuda.get_device_name(0),
            "versions": {"python": platform.python_version(), "torch": torch.__version__},
-           "model": receipt, "seed_data": SEED, "seed_adapter": 41, "batch": BATCH, "max_len": MAX_LEN,
+           "model": receipt, "seed_data": SEED, "seed_adapter": 41 + (a.seed - 1), "batch": BATCH, "max_len": MAX_LEN,
            "optimizer": "AdamW(0.9,0.999,1e-8,wd0) clip1.0 warmup6% cosine->0; fp32 + TF32 matmul",
            "objective": "choice CE over token_mean" if is_task else ("next-token CE" if is_lm else "eval"),
            "data_sha256": {}}

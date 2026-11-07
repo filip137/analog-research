@@ -19,7 +19,7 @@ import model as M  # noqa: E402
 import train as T  # noqa: E402
 
 METHODS = ["full", "mlp", "digital", "ln", "bitfit", "ia3", "lora_fc16", "padapter64", "lora_attn16",
-           "lora_fc4", "lora_fc64", "lora_fc256", "padapter16", "padapter256", "padapter1024"]
+           "lora_fc4", "lora_fc64", "lora_fc256", "padapter16", "padapter256", "padapter1024", "calib", "calib_out"]
 
 
 def main(root: Path):

@@ -50,14 +50,20 @@ class Layer(nn.Module):
         self.final_layer_norm = nn.LayerNorm(d)
         self.ia3 = None
         self.pa_down = self.pa_up = None
+        self.cal1_g = self.cal1_b = self.cal2_g = self.cal2_b = None
 
     def forward(self, x):
         x = x + self.self_attn(self.self_attn_layer_norm(x))
         h = self.final_layer_norm(x)
-        a = F.relu(self.fc1(h))
+        z = self.fc1(h)
+        if self.cal1_g is not None:
+            z = z * self.cal1_g + self.cal1_b
+        a = F.relu(z)
         if self.ia3 is not None:
             a = a * self.ia3
         y = self.fc2(a)
+        if self.cal2_g is not None:
+            y = y * self.cal2_g + self.cal2_b
         if self.pa_down is not None:
             y = y + 4.0 * self.pa_up(F.relu(self.pa_down(h)))
         return x + y
@@ -231,6 +237,15 @@ def apply_method(model: Opt, method: str, seed: int = 41) -> list[nn.Parameter]:
         elif kind == "ia3":
             L.ia3 = nn.Parameter(torch.ones(L.fc1.out_features, device=dev))
             params.append(L.ia3)
+        elif kind in ("calib", "calib_out"):
+            # per-output-channel ADC-style gain/offset (fc1 pre-ReLU and fc2 output; calib_out: fc2 only)
+            if kind == "calib":
+                L.cal1_g = nn.Parameter(torch.ones(L.fc1.out_features, device=dev))
+                L.cal1_b = nn.Parameter(torch.zeros(L.fc1.out_features, device=dev))
+                params += [L.cal1_g, L.cal1_b]
+            L.cal2_g = nn.Parameter(torch.ones(L.fc2.out_features, device=dev))
+            L.cal2_b = nn.Parameter(torch.zeros(L.fc2.out_features, device=dev))
+            params += [L.cal2_g, L.cal2_b]
         elif kind == "lora_fc":
             L.fc1 = LoRALinear(L.fc1, size, 2 * size, gen)
             L.fc2 = LoRALinear(L.fc2, size, 2 * size, gen)
@@ -258,7 +273,8 @@ def apply_method(model: Opt, method: str, seed: int = 41) -> list[nn.Parameter]:
 
 def expected_params(method: str) -> int | None:
     kind, s = method_size(method)
-    table = {"zs": 0, "mlp": 28_311_552, "digital": 14_215_680, "ln": 18_432, "bitfit": 50_688, "ia3": 18_432}
+    table = {"zs": 0, "mlp": 28_311_552, "digital": 14_215_680, "ln": 18_432, "bitfit": 50_688, "ia3": 18_432,
+             "calib": 46_080, "calib_out": 9_216}
     if kind in table:
         return table[kind]
     if kind == "lora_fc":

@@ -278,6 +278,69 @@ class Builder:
             "blocks": {k: len(v) // MAX_LEN for k, v in splits.items()},
             "dev_blocks_used": 128, "test_blocks_used": 256, "sources": self.src_receipt("pubmed")})
 
+    def pubmed2(self):
+        """Natural-case PubMed abstracts from PubMedQA pqa_artificial (main decision 2026-11-07 22:40):
+        abstract = " ".join(contexts) + " " + long_answer; split by pubid (seeded): test 2,000, dev 1,000."""
+        rows = pq.read_table(self.src("pubmedqa", "artificial"), columns=["pubid", "context", "long_answer"]).to_pylist()
+        by_id = {}
+        for r in rows:
+            by_id.setdefault(int(r["pubid"]), r)
+        ids = sorted(by_id)
+        order = torch.randperm(len(ids), generator=torch.Generator().manual_seed(SEED)).tolist()
+        test_ids = [ids[i] for i in order[:2000]]
+        dev_ids = [ids[i] for i in order[2000:3000]]
+        train_ids = [ids[i] for i in order[3000:]]
+
+        def text(r):
+            return " ".join((" ".join(r["context"]["contexts"]) + " " + (r["long_answer"] or "")).split())
+
+        rct = self.jsonl(self.src("rct", "test"))
+        index: dict[tuple, list[tuple]] = {}
+        n_sent = 0
+        for r in rct:
+            if len(r["text"].split()) < 10:
+                continue
+            w = tuple(self.words(r["text"]))
+            if len(w) < 6:
+                continue
+            n_sent += 1
+            index.setdefault(w[:6], []).append(w)
+
+        def contaminated(a):
+            w = self.words(a)
+            for p in range(len(w) - 5):
+                cands = index.get(tuple(w[p:p + 6]))
+                if cands and any(tuple(w[p:p + len(c)]) == c for c in cands):
+                    return True
+            return False
+
+        train, dropped = [], 0
+        for i in train_ids:
+            a = text(by_id[i])
+            if contaminated(a):
+                dropped += 1
+            else:
+                train.append(a)
+        val = [text(by_id[i]) for i in dev_ids]
+        test = [text(by_id[i]) for i in test_ids]
+        dev_cont = sum(contaminated(a) for a in val)
+        test_cont = sum(contaminated(a) for a in test)
+        splits = {"train": self.stream(train), "validation": self.stream(val), "test": self.stream(test)}
+        corpus = {"schema": CORPUS_SCHEMA, "model": MODEL,
+                  "tokenizer": {**self.tok_receipt, "special_tokens": "BOS (2) at the start and between documents"},
+                  "sources": self.src_receipt("pubmedqa"), "splits": splits}
+        self.save("pubmed-opt125m-dft2", corpus, {
+            "field": "PubMedQA pqa_artificial: ' '.join(context.contexts) + ' ' + long_answer (whitespace collapsed; natural case)",
+            "split": "by pubid (seeded 20261108): test 2,000, dev 1,000, rest train",
+            "rows": len(rows), "unique_pubids": len(ids),
+            "documents": {"train": len(train), "validation": len(val), "test": len(test)},
+            "decontamination": {"rct_test_sentences_ge10_words": n_sent, "train_abstracts_dropped": dropped,
+                                "dev_abstracts_matching_(kept)": dev_cont, "test_abstracts_matching_(kept)": test_cont,
+                                "match": "normalized word sequence (lowercase, digit runs -> @, punctuation dropped)"},
+            "tokens": {k: len(v) for k, v in splits.items()},
+            "blocks": {k: len(v) // MAX_LEN for k, v in splits.items()},
+            "dev_blocks_used": 128, "test_blocks_used": 256, "sources": self.src_receipt("pubmedqa")})
+
     def code(self):
         repos: dict[str, list[str]] = {}
         licenses: dict[str, int] = {}
