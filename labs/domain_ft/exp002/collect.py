@@ -107,6 +107,35 @@ def bench_rows():
     return out
 
 
+def means(rows):
+    """summary/benchmark_means.csv: mean (and draw SD) over draws per arch/target/arm/policy/c_p."""
+    groups = {}
+    for r in rows:
+        groups.setdefault((r["arch"], r["target"], r["arm"], r["deploy_policy"], r["c_p"]), []).append(r)
+    out = []
+    for (arch, t, arm, pol, cp), rs in groups.items():
+        def m(k):
+            v = [float(r[k]) for r in rs if r[k] not in ("", None)]
+            return sum(v) / len(v) if v else ""
+
+        def sd(k):
+            v = [float(r[k]) for r in rs if r[k] not in ("", None)]
+            if len(v) < 2:
+                return ""
+            mu = sum(v) / len(v)
+            return (sum((x - mu) ** 2 for x in v) / (len(v) - 1)) ** 0.5
+        out.append({"arch": arch, "target": t, "arm": arm, "deploy_policy": pol, "lr": rs[0]["lr"], "c_p": cp,
+                    "draws": len(rs), "metric": rs[0]["metric"], "dev_mean": m("dev_metric"),
+                    "test_mean": m("test_metric"), "test_sd": sd("test_metric"),
+                    "test_kl_to_offline_mean": m("test_kl_to_offline"), "wikitext_ppl_mean": m("wikitext_ppl"),
+                    "wikitext_teacher_kl_mean": m("wikitext_teacher_kl"),
+                    **{k: rs[0][k] for k in ("devices_written", "channels_rescaled", "frac_clipped", "moved_any",
+                                             "moved_gt_1sigma", "moved_gt_2sigma", "bytes_dense_fp16_changed_analog",
+                                             "bytes_sparse_idx32_fp16_2sigma", "bytes_digital_changed_fp16",
+                                             "train_tokens", "trainable_params")}})
+    write_csv(ART / "summary/benchmark_means.csv", out)
+
+
 def write_csv(path, rows):
     if not rows:
         return
@@ -129,6 +158,7 @@ def main():
     (ART / "summary/selection.json").write_text(json.dumps(sel, indent=2))
     b = bench_rows()
     write_csv(ART / "summary/benchmark.csv", b)
+    means(b)
     print(f"screen {len(rows)} runs ({sum(r['status'] == 'done' for r in rows)} done); selections {len(sel)}; "
           f"benchmark rows {len(b)}")
     for k, v in sel.items():
