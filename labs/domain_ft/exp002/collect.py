@@ -81,13 +81,15 @@ def bench_rows():
         prog = d.get("programming", {})
         wt = d.get("wikitext_test", {})
         out.append({
-            "arch": arch, "target": d["dataset"], "arm": d["arm"], "lr": rf.get("lr"), "c_p": d["c_p"],
+            "arch": arch, "target": d["dataset"], "arm": d["arm"], "deploy_policy": d.get("deploy_policy", "rescale"),
+            "lr": rf.get("lr"), "c_p": d["c_p"],
             "draw": d["draw"] if d["draw"] is not None else "",
             "metric": "acc_norm" if d["dataset"] in TASKS else "ppl",
             "dev_metric": d["dev"]["metric"], "test_metric": d["test"]["metric"],
             "test_kl_to_offline": d["test"].get("kl_to_offline", ""),
             "wikitext_ppl": wt.get("ppl"), "wikitext_teacher_kl": wt.get("teacher_kl"),
             "devices_written": prog.get("devices"), "channels_rescaled": prog.get("channels_rescaled"),
+            "weights_clipped": prog.get("weights_clipped", 0), "frac_clipped": c.get("frac_clipped", 0.0),
             "out_of_range_active": prog.get("out_of_range_active"),
             "out_of_range_reference": prog.get("out_of_range_reference"),
             "moved_any": c.get("moved_any"), "moved_gt_1sigma": c.get("moved_gt_1sigma"),
@@ -101,7 +103,7 @@ def bench_rows():
             "train_updates": rf.get("updates_done", 0) if rf else 0,
             "file": str(f.relative_to(ART))})
     key = {"crossbar": 0, "drn": 1}
-    out.sort(key=lambda r: (key.get(r["arch"], 9), r["target"], r["arm"], r["c_p"], str(r["draw"])))
+    out.sort(key=lambda r: (key.get(r["arch"], 9), r["target"], r["arm"], r["deploy_policy"], r["c_p"], str(r["draw"])))
     return out
 
 

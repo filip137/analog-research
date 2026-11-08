@@ -26,6 +26,12 @@ def main():
         z = (w1.double() / s2[:, None] - q) / sig
         assert abs(float(z.std()) - 1) < 0.01 and abs(float(z.mean())) < 0.01, (cp, float(z.std()))
         print(f"cp={cp}: z std {float(z.std()):.4f} mean {float(z.mean()):+.5f}")
+    wc, ic = M.program_weights(w, s, 0.0, None, "layers.6.fc1", policy="clip")
+    qc = (w.double() / s[:, None])
+    assert ic["channels_rescaled"] == 0 and ic["weights_clipped"] == int((qc.abs() > 1 + 1e-6).sum()) > 0
+    assert torch.equal(wc, (s[:, None] * qc.clamp(-1, 1)).float())
+    assert torch.equal(wc[5:], w[5:])
+    print(f"clip: {ic['weights_clipped']} clipped in {ic['channels_with_clipping']} channels")
     print("exp002 law tests passed")
 
 

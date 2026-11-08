@@ -190,21 +190,33 @@ def std3_scales(source_path) -> dict:
 
 
 @torch.no_grad()
-def deploy_targets(w: torch.Tensor, scale: torch.Tensor, tol: float = 1e-6):
-    """Target q (float64, CPU) and per-channel scale; channels with max|q| > 1 + tol get s_j' = max_i |W_ji|."""
+def deploy_targets(w: torch.Tensor, scale: torch.Tensor, tol: float = 1e-6, policy: str = "rescale"):
+    """Target q (float64, CPU) and per-channel scale.
+
+    policy "rescale" (P-rescale): channels with max|q| > 1 + tol get s_j' = max_i |W_ji|.
+    policy "clip" (P-clip): s_j stays the source scale and q = clamp(W / s_j, -1, 1).
+    """
     wd = w.detach().to("cpu", torch.float64)
     s = scale.to(torch.float64).clone()
     amax = wd.abs().amax(1)
     over = amax > s * (1 + tol)
-    s[over] = amax[over]
-    info = {"channels": int(s.numel()), "channels_rescaled": int(over.sum()),
-            "max_abs_q_before": float((amax / scale.double()).max())}
-    return wd / s[:, None], s, info
+    info = {"channels": int(s.numel()), "max_abs_q_before": float((amax / scale.double()).max()), "policy": policy}
+    if policy == "rescale":
+        s[over] = amax[over]
+        info.update({"channels_rescaled": int(over.sum()), "weights_clipped": 0})
+        return wd / s[:, None], s, info
+    if policy != "clip":
+        raise ValueError(policy)
+    q = wd / s[:, None]
+    clipped = q.abs() > 1 + tol
+    info.update({"channels_rescaled": 0, "channels_with_clipping": int(over.sum()),
+                 "weights_clipped": int(clipped.sum()), "weights": int(q.numel())})
+    return q.clamp(-1.0, 1.0), s, info
 
 
 @torch.no_grad()
 def program_weights(w: torch.Tensor, scale: torch.Tensor, cp: float, draw_seed: int | None, name: str,
-                    tol: float = 1e-6) -> tuple[torch.Tensor, dict]:
+                    tol: float = 1e-6, policy: str = "rescale") -> tuple[torch.Tensor, dict]:
     """Deploy one analog matrix (exp-002): q = W / s_j with the source's per-channel scale s_j.
 
     A channel with max|q| > 1 + tol is rescaled to s_j' = max_i |W_ji| (counted). Then each weight is an
@@ -213,7 +225,7 @@ def program_weights(w: torch.Tensor, scale: torch.Tensor, cp: float, draw_seed: 
     cp = 0 returns s_j' q exactly (the offline weights). e, e' come from the same per-matrix generator
     (key "<seed>:decoder.<name>") as std3_state, so draws are common across cp levels.
     """
-    q, s, info = deploy_targets(w, scale, tol)
+    q, s, info = deploy_targets(w, scale, tol, policy)
     info.update({"devices": 2 * int(q.numel()), "out_of_range_active": 0, "out_of_range_reference": 0})
     if cp > 0:
         if draw_seed is None:

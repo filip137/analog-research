@@ -39,9 +39,10 @@ def main():
             p += 1
             for arm in ("B1", "B2", "B3"):
                 s = sel[f"{target}/{arm}"]
-                lines.append((p, f"deploy/{target}/{arm}", est,
-                              f"deploy.py --dataset {target} --arm {arm} --run {s['run']} --std3 {S3}"))
-                p += 1
+                for pol in ("rescale", "clip"):
+                    lines.append((p, f"deploy/{target}/{arm}/{pol}", est,
+                                  f"deploy.py --dataset {target} --arm {arm} --policy {pol} --run {s['run']} --std3 {S3}"))
+                    p += 1
     for prio, jid, est, cmd in lines:
         print(f"{prio}\t{jid}\t{int(est)}\t{cmd}")
 

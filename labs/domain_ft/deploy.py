@@ -26,40 +26,45 @@ import model as M  # noqa: E402
 import train as T  # noqa: E402
 
 
-def deployed_state(offline: dict, scales: dict, cp: float, draw: int | None, base_q: dict | None):
+def deployed_state(offline: dict, scales: dict, cp: float, draw: int | None, policy: str = "rescale"):
     state = dict(offline)
-    info = {"channels_rescaled": 0, "devices": 0, "out_of_range_active": 0, "out_of_range_reference": 0,
-            "max_abs_q_before": 0.0, "per_matrix": {}}
+    info = {"policy": policy, "channels_rescaled": 0, "weights_clipped": 0, "devices": 0, "out_of_range_active": 0,
+            "out_of_range_reference": 0, "max_abs_q_before": 0.0, "per_matrix": {}}
     for name, s in scales.items():
         w = offline[f"{name}.weight"]
-        wh, i = M.program_weights(w, s, cp, draw, name)
+        wh, i = M.program_weights(w, s, cp, draw, name, policy=policy)
         state[f"{name}.weight"] = wh.to(w.device)
-        for k in ("channels_rescaled", "devices", "out_of_range_active", "out_of_range_reference"):
+        for k in ("channels_rescaled", "weights_clipped", "devices", "out_of_range_active", "out_of_range_reference"):
             info[k] += i[k]
         info["max_abs_q_before"] = max(info["max_abs_q_before"], i["max_abs_q_before"])
-        info["per_matrix"][name] = {"channels_rescaled": i["channels_rescaled"],
+        info["per_matrix"][name] = {"channels_rescaled": i["channels_rescaled"], "weights_clipped": i["weights_clipped"],
                                     "max_abs_q_before": i["max_abs_q_before"]}
     return state, info
 
 
 @torch.no_grad()
-def change_cost(offline: dict, base_state: dict, scales: dict, base_q: dict) -> dict:
+def change_cost(offline: dict, base_state: dict, scales: dict, base_q: dict, policy: str = "rescale") -> dict:
     """exp-004 cost accounting (independent of c_p and draw): which programming targets moved versus the base.
 
-    Active device target G* = 48.6 + 39.6 q (q after any channel rescale); moved by |dG*| = 39.6 |q - q_base|,
+    Active device target G* = 48.6 + 39.6 q, q the deployed target under the policy (P-rescale: on the possibly
+    rescaled channel scale s_j'; P-clip: clamp(W/s_j, -1, 1) on the fixed source scale), compared with the base target
+    q_base = W0/s_j on the source scale, i.e. in programmed-conductance units: moved by |dG*| = 39.6 |q - q_base|,
     counted when > 0, > 1 sigma_PV(G*_new) and > 2 sigma_PV(G*_new) at c_p = 1. Reference devices never move.
     Bytes: dense FP16 of every changed analog weight (2 B each); sparse int32 index + FP16 value (6 B) at the 2 sigma
     threshold; FP16 of every changed digital element (2 B each; includes biases/LNs/embeddings); FP16 of the
     per-channel scales that changed (rescaled channels).
     """
-    per, tot = {}, {"weights": 0, "moved_any": 0, "moved_gt_1sigma": 0, "moved_gt_2sigma": 0, "channels_rescaled": 0}
+    per, tot = {}, {"weights": 0, "moved_any": 0, "moved_gt_1sigma": 0, "moved_gt_2sigma": 0, "channels_rescaled": 0,
+                    "weights_clipped": 0}
     for name, sc in scales.items():
-        q, s, info = M.deploy_targets(offline[f"{name}.weight"], sc)
+        q, s, info = M.deploy_targets(offline[f"{name}.weight"], sc, policy=policy)
         g = M.G_MID + M.G_SPAN * q
         dg = M.G_SPAN * (q - base_q[name]).abs()
         sig = M.sigma_pv(g)
         r = {"weights": int(q.numel()), "moved_any": int((dg > 0).sum()), "moved_gt_1sigma": int((dg > sig).sum()),
-             "moved_gt_2sigma": int((dg > 2 * sig).sum()), "channels_rescaled": info["channels_rescaled"]}
+             "moved_gt_2sigma": int((dg > 2 * sig).sum()), "channels_rescaled": info["channels_rescaled"],
+             "weights_clipped": info["weights_clipped"]}
+        r["frac_clipped"] = r["weights_clipped"] / r["weights"]
         per[name] = r
         for k in tot:
             tot[k] += r[k]
@@ -74,7 +79,8 @@ def change_cost(offline: dict, base_state: dict, scales: dict, base_q: dict) -> 
         dig_changed += n
         if n:
             dig_per[k] = n
-    tot.update({"digital_elements": dig_total, "digital_changed": dig_changed,
+    tot["frac_clipped"] = tot["weights_clipped"] / tot["weights"]
+    tot.update({"policy": policy, "digital_elements": dig_total, "digital_changed": dig_changed,
                 "bytes_dense_fp16_changed_analog": 2 * tot["moved_any"],
                 "bytes_sparse_idx32_fp16_2sigma": 6 * tot["moved_gt_2sigma"],
                 "bytes_digital_changed_fp16": 2 * dig_changed,
@@ -129,12 +135,14 @@ def main(argv=None):
     p.add_argument("--std3", type=Path, required=True)
     p.add_argument("--out", type=Path, default=None)
     p.add_argument("--deadline", type=float, default=0.0)
+    p.add_argument("--policy", default="rescale", choices=("rescale", "clip"),
+                   help="P-rescale (rescale channels with |q| > 1) or P-clip (fixed source scale, q clipped to [-1, 1])")
     a = p.parse_args(argv)
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
     dev = torch.device("cuda")
     run = (a.root / a.run) if a.run else None
-    out = a.out or (a.root / "deploy" / a.dataset / a.arm)
+    out = a.out or (a.root / "deploy" / a.dataset / (a.arm if a.policy == "rescale" else f"{a.arm}@{a.policy}"))
     out.mkdir(parents=True, exist_ok=True)
     files = T.data_files(a.root)
     opt_path = a.root / "model" / "pytorch_model.bin"
@@ -156,7 +164,7 @@ def main(argv=None):
     offline = {**base_state, **{k: v.to(dev) for k, v in trained.items()}}
     model.load_state_dict(offline, strict=True)
     model.eval().requires_grad_(False)
-    cost = change_cost(offline, base_state, scales, base_q)
+    cost = change_cost(offline, base_state, scales, base_q, a.policy)
     print(json.dumps({"cost": cost["total"]}), flush=True)
     offline_model = None
     if a.dataset not in T.TASKS:
@@ -165,7 +173,7 @@ def main(argv=None):
         offline_model.eval().requires_grad_(False)
     teach = M.teacher(opt_path, dev)
     doc = T.load(T.data_files(a.root)[a.dataset])
-    common = {"dataset": a.dataset, "arm": a.arm, "run": str(a.run) if a.run else None,
+    common = {"dataset": a.dataset, "arm": a.arm, "deploy_policy": a.policy, "run": str(a.run) if a.run else None,
               "run_final": {k: fin.get(k) for k in ("method", "lr", "hwa_noise", "dev_final", "updates_done", "params",
                                                     "train_tokens", "sec_per_update", "wall_s")}
               if run else None,
@@ -184,7 +192,7 @@ def main(argv=None):
                 print("DEADLINE", name, flush=True)
                 return 2
             t0 = time.time()
-            state, info = deployed_state(offline, scales, cp, draw, base_q)
+            state, info = deployed_state(offline, scales, cp, draw, a.policy)
             model.load_state_dict(state, strict=True)
             if cp == 0:
                 info["max_abs_weight_diff_vs_offline"] = max(
@@ -196,7 +204,8 @@ def main(argv=None):
             (out / f"{name}.json").write_text(json.dumps(rec, indent=2))
             print(json.dumps({"deploy": name, "dev": res["dev"]["metric"], "test": res["test"]["metric"],
                               "wikitext_ppl": res["wikitext_test"]["ppl"], "kl": res["wikitext_test"]["teacher_kl"],
-                              "rescaled": info["channels_rescaled"], "s": rec["eval_s"]}), flush=True)
+                              "rescaled": info["channels_rescaled"], "clipped": info["weights_clipped"],
+                              "s": rec["eval_s"]}), flush=True)
     return 0
 
 
