@@ -40,7 +40,8 @@ def lr_tag(lr: float) -> str:
 
 def run_dir(root: Path, a) -> Path:
     ds = a.dataset if a.base == "opt" else f"{a.dataset}@{a.base}"
-    name = a.method if a.method == "zs" else f"{a.method}__lr{lr_tag(a.lr)}"
+    method = a.method + (f"_hwa{lr_tag(a.hwa_noise)}" if getattr(a, "hwa_noise", 0.0) else "")
+    name = method if a.method == "zs" else f"{method}__lr{lr_tag(a.lr)}"
     if a.updates != 1000:
         name += f"__u{a.updates}"
     if a.seed != 1:
@@ -297,13 +298,18 @@ def main(argv=None):
     p.add_argument("--no-test", action="store_true")
     p.add_argument("--probe", action="store_true", help="timing probe: no evals, no outputs except final.json")
     p.add_argument("--out", type=Path, default=None)
+    p.add_argument("--hwa-noise", type=float, default=0.0,
+                   help="exp-002 B2: additive Gaussian noise std x per-output-channel absmax on the analog fc1/fc2 "
+                        "weights of layers 6-11, resampled every update, straight-through (hwa docs/reram_cmo_device.md)")
+    p.add_argument("--hwa-seed", type=int, default=31)
+    p.add_argument("--save-state", action="store_true", help="save the trained parameters to state.pt (exp-002 deploy)")
     a = p.parse_args(argv)
     global SEED
     SEED = 20261108 + (a.seed - 1)
     out = a.out or run_dir(a.root, a)
     out.mkdir(parents=True, exist_ok=True)
     final = {"status": "running", "dataset": a.dataset, "method": a.method, "lr": a.lr, "base": a.base,
-             "updates_planned": a.updates}
+             "updates_planned": a.updates, "hwa_noise": a.hwa_noise}
     t_start = time.time()
     try:
         run(a, out, final)
@@ -399,9 +405,19 @@ def run(a, out: Path, final: dict):
         fused = all(p.is_cuda for p in params)
         opt = torch.optim.AdamW(params, lr=a.lr, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, fused=fused)
         order = Order(train.n if is_task else len(train_blocks))
+        noisy = []
+        if a.hwa_noise:
+            noisy = [getattr(model.layers[i], n).weight for i in M.ANALOG for n in ("fc1", "fc2")]
+            hwa_gen = torch.Generator(device=dev).manual_seed(a.hwa_seed)
+            cfg["hwa"] = {"noise_model": "additive_gaussian_weight", "noise_std": a.hwa_noise,
+                          "noise_scaling": "output_channel_abs_max (current master)", "resample": "every update",
+                          "gradient": "straight-through (backward at the noisy weights, applied to the master)",
+                          "master_clamp": "none", "seed": a.hwa_seed, "matrices": "fc1/fc2 of layers 6-11"}
+            (out / "config.json").write_text(json.dumps(cfg, indent=2))
         model.train()
         torch.cuda.reset_peak_memory_stats()
         train_time, loss_acc, n_acc = 0.0, 0.0, 0
+        tokens_seen = 0
         torch.cuda.synchronize()
         t0 = time.time()
         eval_at = sorted({x * updates // 1000 for x in EVAL_AT} | {updates}) if updates >= 1000 else sorted(
@@ -417,21 +433,33 @@ def run(a, out: Path, final: dict):
                 g["lr"] = lr_at(step, updates, a.lr)
             idx = order.take(BATCH)
             total = 0.0
+            clean = []
+            with torch.no_grad():
+                for w in noisy:
+                    clean.append(w.detach().clone())
+                    amax = w.abs().amax(1, keepdim=True)
+                    w.add_(a.hwa_noise * amax * torch.randn(w.shape, generator=hwa_gen, device=w.device))
             for m0 in range(0, BATCH, micro):
                 part = idx[m0: m0 + micro]
                 if is_task:
                     rows = train.rows_of(part)
+                    tokens_seen += sum(len(train.rows[r]) for r in rows)
                     s, c = row_scores(model, [train.rows[r] for r in rows], [train.ctx[r] for r in rows], dev)
                     scores = (s / c.double()).view(-1, k)
                     loss = F.cross_entropy(scores, train.labels[part].to(dev), reduction="sum") / BATCH
                 else:
                     t = train_blocks[part].to(dev)
+                    tokens_seen += t.numel()
                     logits = model.head(model.hidden(t)[:, :-1])
                     loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]).float(), t[:, 1:].reshape(-1),
                                            reduction="sum") / (BATCH * (MAX_LEN - 1))
                     del logits
                 loss.backward()
                 total += float(loss.detach())
+            with torch.no_grad():
+                for w, c in zip(noisy, clean):
+                    w.copy_(c)
+            del clean
             gn = torch.nn.utils.clip_grad_norm_(params, 1.0)
             opt.step()
             opt.zero_grad(set_to_none=True)
@@ -459,6 +487,7 @@ def run(a, out: Path, final: dict):
         final["sec_per_update"] = train_time / updates
         final["peak_mem_gb_train"] = torch.cuda.max_memory_allocated() / 2 ** 30
         final["updates_done"] = updates
+        final["train_tokens"] = tokens_seen
         final["micro"] = micro
     if a.probe:
         final["status"] = "done"
@@ -531,6 +560,9 @@ def run(a, out: Path, final: dict):
     kind, _ = M.method_size(a.method)
     if updates and kind in ("full", "mlp", "lora_fc"):
         (out / "deltaw.json").write_text(json.dumps(M.deltaw_stats(w0, M.analog_weights(model)), indent=2))
+    if updates and a.save_state:
+        torch.save(M.peft_state(model, a.method), out / "state.pt")
+        final["state_file"] = str(out / "state.pt")
     if updates and 0 < n_params <= 1_000_000:
         torch.save(M.peft_state(model, a.method), out / "peft.pt")
     final["peak_mem_gb"] = torch.cuda.max_memory_allocated() / 2 ** 30
