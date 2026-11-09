@@ -188,3 +188,43 @@ decision here and link it from the shared campaign. Commit the handoff/review on
 skill. Do not remove this worktree or the pinned local runtime while any watcher
 needs it. The final completion incident owns the scientific review, not just a
 scheduler-success check.
+
+### Canary review and gated release — 9 November, 23:08 Paris
+
+Canary parent `2198883` completed with `0:0` in 85 seconds of allocation wall
+time (78 seconds for the worker step). All 30 records are present: 18 graph,
+six MLP and six DRN. The collected native bundle passed `ebl runs inspect
+--verify-artifacts --require-complete --json`: 32 artifacts, no errors. All
+JSON artifact numeric values are finite. Both DRN audits have zero forward and
+gradient relative error and cosine approximately 1; the completed sparse arms
+passed the runner's unchanged-physical-base assertions. Logs contain only the
+expected module loading and successful input checks. V100 memory capacity is
+32,768 MiB; host grant is 40,000 MiB. Peak GPU memory was not recorded, so no
+peak-memory claim is made. Canary update timings were 0.020–0.024 s for MLP
+and 0.107–0.147 s for DRN at smoke batch 1; these do not forecast full-batch time.
+
+The two-pair, two-update smoke is readiness evidence only. Source fitting raised
+development loss from 0.527 to 1.338 (MLP) and 0.611 to 4.541 (DRN), which must
+remain visible when reviewing production source headroom. Graph MLP source fits
+are also poor after two smoke updates. Neither result justifies retuning or an
+architecture conclusion. The next decision remains the frozen development screen.
+
+The exact unchanged release command passed the source/static/native/scheduler
+checks and submitted **one production parent `9694`** at 23:07:17 Paris.
+`canary-gate.json`, `gate.json`, `scheduler.json`, `production-submission.json`
+and Slurm logs are collected under the local results root. Array `0-1%2` started
+at 23:07:24: `9694_0` (raw ID `9703`, graph + MLP) and `9694_1` (raw ID `9694`,
+DRN), both on `r7i5n3`, each with one scheduler-assigned V100, 10 CPUs per task,
+40,000 MiB host memory, `umg@v100`, `gpu_p13`, `qos_gpu-dev`, `v100-32g`, and a
+two-hour limit. Physical GPU indices are managed by Slurm. Both environment
+receipts name the frozen source and Python. No duplicate parent or extra
+allocation was created; the original 4 h 20 min allowance is unchanged.
+
+Watcher PID `2119883` and its watcher lock plus all three per-run ownership locks
+were verified live outside the sandbox process namespace. It retains the next
+five-minute checks, production collection and scientific review. No source,
+scientific configuration, checkpoint or runtime allowance was changed.
+
+Immediate post-release verification also confirmed both native manifests and
+first metrics: task 0 published graph frozen/step-0 metrics; task 1 published
+DRN loaded with 113,246,208 eligible devices. Future checks belong to run-watch.
