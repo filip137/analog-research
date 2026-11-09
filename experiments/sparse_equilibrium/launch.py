@@ -17,7 +17,8 @@ def command(path,m,stage):
     if stage not in ('canary','production'):raise ValueError('Unknown stage')
     local={**m,'walltime':'00:20:00' if stage=='canary' else '02:00:00'}
     cmd=s.command(path,local,[0] if stage=='canary' else [0,1],canary=stage=='canary',wave=1)
-    cmd[1:1]=['--begin='+m['begin_slurm'],'--deadline='+m['deadline_slurm'],'--mem=80G']
+    # IDRIS assigns host memory from the allocation; explicit --mem is forbidden.
+    cmd[1:1]=['--begin='+m['begin_slurm'],'--deadline='+m['deadline_slurm']]
     return cmd
 
 

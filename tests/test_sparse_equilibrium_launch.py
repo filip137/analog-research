@@ -19,8 +19,9 @@ def test_commands_have_same_wrapper_and_environment_with_bounded_smoke(tmp_path)
     m=manifest(tmp_path);p=tmp_path/'manifest.json'
     a=l.command(p,m,'canary');b=l.command(p,m,'production')
     assert a[-3:-1]==b[-3:-1]
-    for x in ('--begin=2026-11-09T23:00:00','--export=ALL','--mem=80G','--gres=gpu:1','--cpus-per-task=10'):
+    for x in ('--begin=2026-11-09T23:00:00','--export=ALL','--gres=gpu:1','--cpus-per-task=10'):
         assert x in a and x in b
+    assert not any(x.startswith('--mem') for x in a+b)
     assert '--array=0-0' in a and '--time=00:20:00' in a
     assert '--array=0,1%2' in b and '--time=02:00:00' in b
 
