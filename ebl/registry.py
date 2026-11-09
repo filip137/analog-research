@@ -888,6 +888,13 @@ EXPERIMENT_REGISTRY: Dict[str, ExperimentDefinition] = {
     ),
 }
 
+from ebl.schema.sparse_equilibrium import parse_config as _sparse_parse, resolve_config as _sparse_resolve
+EXPERIMENT_REGISTRY['sparse_equilibrium_pilot.v1'] = ExperimentDefinition(
+    experiment_id='sparse_equilibrium_pilot.v1', schema_version=1,
+    description='Bounded exploratory sparse-equilibrium graph and counterfactual-sentiment pilots.',
+    supported_modes=(RunMode.TRAIN,), parser=_sparse_parse, resolver=_sparse_resolve,
+)
+
 
 def list_definitions() -> Tuple[ExperimentDefinition, ...]:
     """Return definitions in stable identifier order."""

@@ -1,0 +1,16 @@
+{
+  "experiment_id": "sparse_equilibrium_pilot.v1",
+  "schema_version": 1,
+  "task": "drn",
+  "input_root": "/lustre/fsn1/projects/rech/umg/ucy17uy/sparse-equilibrium-20261109/inputs",
+  "device": "cuda",
+  "cpu_threads": 10,
+  "seed": 271109,
+  "source_updates": 128,
+  "updates": 128,
+  "batch": 8,
+  "mask_size": 46080,
+  "fisher_examples": 16,
+  "learning_rates": [0.0003, 0.001],
+  "wall_seconds": 6600
+}

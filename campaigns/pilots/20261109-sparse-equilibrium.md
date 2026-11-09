@@ -41,6 +41,10 @@ a first rate screen, not a claim of converged capacity. The short context may
 truncate a causal edit: record identical-token pairs and exclude them from paired
 adaptation/evaluation, preserving exclusions in the data receipt. Keep standard
 dataset split assignments and check original/revision grouping and duplicates.
+Original identity uses exact text after whitespace normalization. Pairs without
+one unambiguous original are excluded with an explicit reason; no fuzzy matching.
+Development pairs overlapping training text after whitespace normalization are
+excluded as whole pairs; retain their IDs and reasons in the data receipt.
 
 DRN forward uses 24 total sweeps in both training and evaluation (16 settling
 plus 8 differentiated in training). Canary compares against longer relaxation
@@ -63,11 +67,32 @@ qos_gpu-dev; PyTorch module pytorch-gpu/py3/2.5.0. Maximum allocated allowance
 4 h 20 min. Source/data/results combined <=12 GB incremental storage.
 Stop at the wall-time guard and preserve completed cases as partial coverage;
 no automatic extra allocation. A failed canary prevents full submission.
+Require completion by 06:00 Paris on 10 November; Slurm's deadline bounds late
+starts. The worker stops after 6,600 seconds (canary 1,050), leaving teardown
+time inside the allocation. Memory request is 80 GB host RAM and V100-32GB.
+
+Data freeze: 1,630 train and 231 development pairs. Training exclusions: four
+ambiguous original identities and 73 identical truncated prompts. Development:
+one ambiguous identity, 12 identical prompts, one training-text overlap. The
+prepared data preserves original/revised labels, token IDs, pair IDs, text hashes,
+truncation flags, excluded IDs/reasons and pinned source-file hashes.
 
 ## Handoff
 
 Branch: drn/sparse-equilibrium-pilot. Numerical work uses the public
-`python -m ebl train --experiment sparse_equilibrium_pilot.v1` and native RunStore
+`python -m ebl train --config <config.json> --output-dir <destination>` and native RunStore
 bundles. The exact staged commit, commands, tests, Slurm IDs and durable watch
 are filled before scheduling. Scheduling/resume must never duplicate a parent.
 The watcher owns gating, observation, collection and the terminal review handoff.
+
+Implementation: `experiments/sparse_equilibrium/launch.py` reuses the native Slurm
+accounting and locking helpers. Launch configs are in `examples/sparse_equilibrium/`.
+The same `recovery.slurm` wrapper handles the explicit canary mode and production.
+`launch/manifest.json` in the staged source records both exact commands, all
+effective source/config hashes and the passing static receipt. The release command
+checks successful singleton accounting, native artifact hashes, coverage and logs,
+then submits one array. A persisted uncertain submission blocks duplicate attempts.
+
+Static checks: `bash -n experiments/sparse_equilibrium/recovery.slurm`, compilation
+of changed Python, and the sparse-equilibrium, architecture-boundary, public-CLI
+and native Slurm tests. Source and configs are immutable after the live canary.
