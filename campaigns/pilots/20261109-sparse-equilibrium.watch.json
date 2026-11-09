@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "project_dir": "/home/filip/analog-research",
+  "state_dir": "/home/filip/analog-research/drn/results/sparse-equilibrium-20261109/watch-state",
+  "poll_seconds": 300,
+  "agent": {
+    "command": [
+      "/home/filip/.local/bin/codex"
+    ],
+    "model": "gpt-6-astra",
+    "effort": "medium",
+    "timeout_seconds": 900,
+    "max_per_day": 4,
+    "max_per_incident": 2,
+    "cooldown_seconds": 300
+  },
+  "targets": {
+    "jean-zay": {
+      "host": "jean-zay",
+      "probe_command": [
+        "/home/filip/miniconda3/envs/py312/bin/python",
+        "-c",
+        "import sys;sys.path.insert(0,'/home/filip/analog-research/drn/results/sparse-equilibrium-20261109/runtime-9a15c50c');from experiments.sparse_equilibrium.watch import main;main()"
+      ]
+    }
+  },
+  "runs": [
+    {
+      "id": "sea-20261109-canary",
+      "case": "canary",
+      "target": "jean-zay",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/sparse-equilibrium-20261109/canary",
+      "remote_manifest": "/lustre/fsn1/projects/rech/umg/ucy17uy/sparse-equilibrium-20261109/source-9a15c50c/launch/manifest.json",
+      "remote_python": "/lustre/fshomisc/sup/hpe/pub/miniforge/24.9.0/envs/pytorch-gpu-2.5.0+py3.12.7/bin/python",
+      "handoff": "/home/filip/analog-research/worktrees/drn-sparse-equilibrium-pilot/campaigns/pilots/20261109-sparse-equilibrium.md",
+      "authorization": "User authorized first sparse-equilibrium exploratory runs at 23:00 Paris, 9 November 2026, V100 dev. One 20-minute canary, then the reviewed two-task array with two-hour limits; total 4 h 20 GPU allowance. Canary completion authorizes review and exact gated production release. Read the handoff: preserve partial evidence, collect and interpret results; no new science, extra allocations, other hosts or unrelated job changes. The canary agent must release the gated batch before declaring its own task complete.",
+      "windows": [
+        {
+          "start": "2026-11-09T23:00:00+01:00",
+          "end": "2026-11-10T06:00:00+01:00"
+        }
+      ],
+      "gpu_count": 1,
+      "min_free_mib": 20000,
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 600
+    },
+    {
+      "id": "sea-20261109-mlp",
+      "case": "mlp",
+      "target": "jean-zay",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/sparse-equilibrium-20261109/mlp",
+      "remote_manifest": "/lustre/fsn1/projects/rech/umg/ucy17uy/sparse-equilibrium-20261109/source-9a15c50c/launch/manifest.json",
+      "remote_python": "/lustre/fshomisc/sup/hpe/pub/miniforge/24.9.0/envs/pytorch-gpu-2.5.0+py3.12.7/bin/python",
+      "handoff": "/home/filip/analog-research/worktrees/drn-sparse-equilibrium-pilot/campaigns/pilots/20261109-sparse-equilibrium.md",
+      "authorization": "User authorized first sparse-equilibrium exploratory runs at 23:00 Paris, 9 November 2026, V100 dev. One 20-minute canary, then the reviewed two-task array with two-hour limits; total 4 h 20 GPU allowance. Canary completion authorizes review and exact gated production release. Read the handoff: preserve partial evidence, collect and interpret results; no new science, extra allocations, other hosts or unrelated job changes. The canary agent must release the gated batch before declaring its own task complete.",
+      "windows": [
+        {
+          "start": "2026-11-09T23:00:00+01:00",
+          "end": "2026-11-10T06:00:00+01:00"
+        }
+      ],
+      "gpu_count": 1,
+      "min_free_mib": 20000,
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 600
+    },
+    {
+      "id": "sea-20261109-drn",
+      "case": "drn",
+      "target": "jean-zay",
+      "run_dir": "/lustre/fsn1/projects/rech/umg/ucy17uy/sparse-equilibrium-20261109/drn",
+      "remote_manifest": "/lustre/fsn1/projects/rech/umg/ucy17uy/sparse-equilibrium-20261109/source-9a15c50c/launch/manifest.json",
+      "remote_python": "/lustre/fshomisc/sup/hpe/pub/miniforge/24.9.0/envs/pytorch-gpu-2.5.0+py3.12.7/bin/python",
+      "handoff": "/home/filip/analog-research/worktrees/drn-sparse-equilibrium-pilot/campaigns/pilots/20261109-sparse-equilibrium.md",
+      "authorization": "User authorized first sparse-equilibrium exploratory runs at 23:00 Paris, 9 November 2026, V100 dev. One 20-minute canary, then the reviewed two-task array with two-hour limits; total 4 h 20 GPU allowance. Canary completion authorizes review and exact gated production release. Read the handoff: preserve partial evidence, collect and interpret results; no new science, extra allocations, other hosts or unrelated job changes. The canary agent must release the gated batch before declaring its own task complete.",
+      "windows": [
+        {
+          "start": "2026-11-09T23:00:00+01:00",
+          "end": "2026-11-10T06:00:00+01:00"
+        }
+      ],
+      "gpu_count": 1,
+      "min_free_mib": 20000,
+      "stale_seconds": 2700,
+      "startup_grace_seconds": 600
+    }
+  ]
+}

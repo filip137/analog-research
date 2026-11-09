@@ -69,7 +69,8 @@ Stop at the wall-time guard and preserve completed cases as partial coverage;
 no automatic extra allocation. A failed canary prevents full submission.
 Require completion by 06:00 Paris on 10 November; Slurm's deadline bounds late
 starts. The worker stops after 6,600 seconds (canary 1,050), leaving teardown
-time inside the allocation. Memory request is 80 GB host RAM and V100-32GB.
+time inside the allocation. GPU memory is V100-32GB. IDRIS assigns host memory
+from the allocation and forbids explicit `--mem` options; record the actual grant.
 
 Data freeze: 1,630 train and 231 development pairs. Training exclusions: four
 ambiguous original identities and 73 identical truncated prompts. Development:
@@ -96,3 +97,94 @@ then submits one array. A persisted uncertain submission blocks duplicate attemp
 Static checks: `bash -n experiments/sparse_equilibrium/recovery.slurm`, compilation
 of changed Python, and the sparse-equilibrium, architecture-boundary, public-CLI
 and native Slurm tests. Source and configs are immutable after the live canary.
+
+### Overnight owner and exact handoff
+
+Current state (9 November, 19:15 Paris): canary parent **2198883**, task 0,
+`PENDING (BeginTime)`, eligible/start estimate 23:00 Paris, 20-minute limit.
+Exactly one parent is recorded in `scheduler.json`; production is prepared and
+has not been submitted. `scontrol` confirms `umg@v100`, `gpu_p13`, `qos_gpu-dev`,
+`v100-32g`, one GPU, 10 CPUs and scheduler-derived `mem=40000M`. Queue availability
+can delay execution. The final candidate passed 67 tests, Python compilation,
+shell syntax and both exact `sbatch --test-only` commands.
+
+Watcher PID **2119883**, dispatch enabled; its real initial probe confirms the
+canary queue state and both gated production tasks. Local state is
+`<local results>/watch-state/`, with `monitor-armed.json` recording ownership and
+observation. Next routine check is every five minutes, with a poll at 23:00;
+deadline 10 November 06:00 Paris. The next scientific handoff is the live-canary
+completion review, followed by exact gated release. No numerical result exists yet.
+
+Launch source: `9a15c50c` (full SHA in `launch-receipt.json`); numerical source
+unchanged from `c173efed`. The first large staging attempt hit the WORK quota.
+Only that attempt's new files were removed. The reduced runtime archive is retained
+under `$WORK/sparse-equilibrium-20261109/runtime-source.tar.gz`; its execution copy
+is `$SCRATCH/sparse-equilibrium-20261109/source-9a15c50c`. Historical lab artifacts
+are omitted. The reduced tree passes the same checks. No canary preceded this fix.
+
+Remote root: `/lustre/fsn1/projects/rech/umg/ucy17uy/sparse-equilibrium-20261109`.
+Manifest: `<remote root>/source-9a15c50c/launch/manifest.json`.
+Local receipts and collected evidence:
+`/home/filip/analog-research/drn/results/sparse-equilibrium-20261109/`.
+Native outputs are `<remote root>/{canary,mlp,drn}/run`; Slurm logs are in
+`<remote root>/slurm/`. Per-stage `completion.json`, native `result.json`, metrics,
+source-fit states, per-arm JSON and trainable-parameter checkpoints form evidence.
+Source-fit writes are separate from adaptation writes; these are ideal assignment
+commands, not measured programming pulses or energy. The K-cell mask budget counts
+addressed cells; the four-rail DRN has more eligible cells than the crossbar.
+
+The sole overnight owner is the installed `run-watch` service, using the adjacent
+`20261109-sparse-equilibrium.watch.json`. It polls every 300 seconds and holds the
+shared per-run owner locks. It checks queue/accounting state, native artifacts,
+metric growth and bounded logs. Its bounded incident agent is Astra/medium,
+900 seconds maximum, four invocations per 24 hours, at most two per incident.
+The local host must remain awake and connected. No external messaging or automatic
+chat callback is configured; decisions and evidence are written to local status.
+Read this worktree's `AGENTS.md` and `.agents/skills/experiment-loop/SKILL.md`
+before editing the backend handoff or collecting/reviewing native results.
+
+The canary completion incident owns the already-authorized batch release. Read
+its stdout/stderr and both baseline/audit JSON files. Check all 30 records (18
+graph, six MLP, six DRN), finite metrics, gradient/convergence audits, physical
+mask isolation, actual timing and memory. Then use the exact prepared release:
+
+```bash
+ssh -o BatchMode=yes jean-zay 'bash -l -s' <<'REMOTE'
+set -euo pipefail
+cd /lustre/fsn1/projects/rech/umg/ucy17uy/sparse-equilibrium-20261109/source-9a15c50c
+PYTHONDONTWRITEBYTECODE=1 /lustre/fshomisc/sup/hpe/pub/miniforge/24.9.0/envs/pytorch-gpu-2.5.0+py3.12.7/bin/python -m experiments.sparse_equilibrium.launch release --manifest "$PWD/launch/manifest.json"
+REMOTE
+```
+
+The command verifies the frozen candidate, static receipt, singleton canary
+accounting, logs and every native artifact hash, writes the gate receipt and
+submits exactly one production parent. The same command safely returns an already
+recorded parent on resume; an uncertain submission requires scheduler reconciliation,
+never a blind retry. Preserve any partial/failed evidence. A failed canary blocks
+production. No new scientific settings, extra allocation or alternate host is
+authorized by this first screen. Do not touch unrelated jobs.
+
+Immediately verify the new parent has indices 0 and 1, concurrency two, the declared
+account/QOS/constraint/resources, and a live run-watch PID/owner lock. Watch the
+first running task through `environment.json` and its native manifest/first metric;
+if it stays queued, retain the pending reason and return to the durable watcher.
+Record parent IDs and gate paths below and in the shared campaign handoff.
+
+On each completion, collect its native bundle locally with `rsync -a` from that
+explicit path and use `python -m ebl runs inspect <local run> --verify-artifacts
+--require-complete --json`. Require 30 records for MLP (18 graph plus 12 sentiment)
+and 12 for DRN. Collect the scheduler/gate receipts and Slurm logs too. A wall-budget
+stop is partial coverage: collect completed per-arm artifacts and label missing
+cases, without new allocations or an invented complete result.
+
+Review against the question: report graph linear/constrained outcomes, source-fit
+mismatch/headroom, dev original/revised/both-correct accuracy and loss, parameter
+and physical-write counts, each rate and timings. Compare random/Fisher against
+full analog and the zero-write digital controls within each architecture before
+cross-architecture conclusions. This is one-seed development evidence; do not claim
+implicitness, EP or noisy-hardware superiority. Save the interpretation and next
+decision here and link it from the shared campaign. Commit the handoff/review on
+`drn/sparse-equilibrium-pilot`; integrate/push at closeout per the experiment-loop
+skill. Do not remove this worktree or the pinned local runtime while any watcher
+needs it. The final completion incident owns the scientific review, not just a
+scheduler-success check.
