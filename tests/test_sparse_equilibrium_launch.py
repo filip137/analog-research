@@ -1,9 +1,20 @@
 """First-pilot gate, duplicate prevention and scheduled Slurm observations."""
 import json
+from datetime import datetime,timezone
 from pathlib import Path
 import subprocess
 import pytest
 from experiments.sparse_equilibrium import launch as l,watch as w
+
+
+@pytest.fixture(autouse=True)
+def fixed_prelaunch_clock(monkeypatch):
+    class Clock(datetime):
+        @classmethod
+        def now(cls,tz=None):
+            value=cls(2026,11,9,18,tzinfo=timezone.utc)
+            return value.astimezone(tz) if tz is not None else value
+    monkeypatch.setattr(l,'datetime',Clock)
 
 
 def manifest(tmp_path):
