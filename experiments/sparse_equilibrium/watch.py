@@ -85,8 +85,12 @@ def main():
     try:
         if len(paths)!=1:raise ValueError('Expected one immutable launch manifest')
         path=paths.pop();source=str(Path(path).parent.parent)
+        interpreters={r['remote_python'] for r in runs}
+        if len(interpreters)!=1:raise ValueError('Expected one declared remote Python interpreter')
+        interpreter=interpreters.pop()
+        if not Path(interpreter).is_absolute():raise ValueError('Remote Python must be an absolute module interpreter path')
         code='import json,sys;sys.path.insert(0,sys.argv[1]);from experiments.sparse_equilibrium.watch import remote_observation;print(json.dumps(remote_observation(sys.argv[2])))'
-        cmd='python3 -c '+shlex.quote(code)+' '+shlex.quote(source)+' '+shlex.quote(path)
+        cmd=shlex.quote(interpreter)+' -c '+shlex.quote(code)+' '+shlex.quote(source)+' '+shlex.quote(path)
         data=json.loads(subprocess.check_output(['ssh','-o','BatchMode=yes','-o','ConnectTimeout=15','jean-zay',cmd],text=True,stderr=subprocess.PIPE,timeout=90))
         result={'gpus':[],'gpu_error':'Capacity is allocated by Slurm.','runs':{r['id']:classify(r,data) for r in runs}}
     except Exception as error:

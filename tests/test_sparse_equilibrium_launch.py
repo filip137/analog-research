@@ -74,3 +74,15 @@ def test_wrapper_parses_and_resolves_from_manifest_not_spool():
     subprocess.run(['bash','-n',str(wrapper)],check=True)
     text=wrapper.read_text()
     assert 'dirname "$1"' in text and '${SLURM_ARRAY_TASK_ID}' not in text
+
+
+def test_watch_uses_declared_python_instead_of_old_login_default(monkeypatch,capsys):
+    import io
+    request={'runs':[{'id':'a','case':'canary','remote_manifest':'/tmp/source/launch/manifest.json',
+                      'remote_python':'/module/python311/bin/python'}]}
+    monkeypatch.setattr(w.sys,'stdin',io.StringIO(json.dumps(request)))
+    def query(argv,**kwargs):
+        assert argv[-1].startswith('/module/python311/bin/python -c ')
+        return json.dumps({'jobs':[{'stage':'canary'}],'items':{}})
+    monkeypatch.setattr(w.subprocess,'check_output',query)
+    w.main();assert json.loads(capsys.readouterr().out)['runs']['a']['probe_error']=='Missing submitted task'
