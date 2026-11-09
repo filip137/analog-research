@@ -299,3 +299,86 @@ and digital adaptation, so no DRN or implicitness advantage can be inferred from
 this task alone. Results are single-seed development evidence, with no hardware,
 EP or generalization claim. Next decision: retain these controls for the separately
 owned DRN comparison and final campaign review; no extra allocation or retuning.
+
+
+### DRN completion and final scientific review — 10 November, 00:15 Paris
+
+Task `9694_1` completed on `r7i5n3` with exit `0:0`; the live scheduler query
+shows no remaining production task. Allocation wall time was 3,769 seconds,
+worker step 3,761 seconds and inner runner 3,728.45 seconds. The charged receipt
+is allocation wall time, including overhead. Together with the previously
+validated canary (85 seconds) and MLP task (362 seconds), measured allocation
+usage is 4,216 GPU-seconds (1 h 10 min 16 s), within the original 4 h 20 min
+allowance. Unused time is not authorization for another allocation. No launch,
+retry, scientific setting or budget was changed.
+
+Collected the native DRN bundle, completion/environment receipts and Slurm logs
+under `<local results>/drn/` and `<local results>/slurm/sea-w1-9694_1.*`.
+`drn/inspection.json` verifies all 29 native artifact hashes without errors.
+`drn/coverage-validation.json` confirms exactly the six arms at both rates,
+128 updates each, 231 development pairs, matching per-arm records/source metrics,
+finite JSON numbers, retained source/per-arm checkpoints and the completion
+summary hash. The resolved config retains the frozen seed, batch, mask size,
+Fisher cohort and rates. Initial and source-fit convergence/gradient audits both
+report zero relative error and cosine 1. Stderr contains module loading only.
+Scheduler resources were one GPU, 20 allocated CPUs and 40,000 MiB host memory;
+the requested CPU count remains 10. No peak GPU-memory measurement is available.
+
+Source fitting improves original/revised/both-correct development accuracy from
+78.35/62.77/42.86% to 88.31/83.55/71.86%, reducing loss from 0.5517 to 0.4222.
+Every adaptation arm starts from those source metrics; source writes are separate.
+
+| Arm | Rate | Original % | Revised % | Both % | Loss | Seconds/update |
+| --- | --- | --- | --- | --- | --- | --- |
+| random | 0.0003 | 88.74 | 83.55 | 72.29 | 0.4198 | 1.993 |
+| fisher | 0.0003 | 88.74 | 84.85 | 73.59 | 0.3723 | 2.002 |
+| boundary | 0.0003 | 88.74 | 84.42 | 73.16 | 0.4030 | 1.686 |
+| bias | 0.0003 | 88.74 | 83.98 | 72.73 | 0.4028 | 1.683 |
+| lora | 0.0003 | 87.88 | 88.74 | 76.62 | 0.4303 | 1.534 |
+| full | 0.0003 | 81.82 | 86.15 | 68.40 | 0.6085 | 2.029 |
+| random | 0.001 | 89.18 | 83.12 | 72.29 | 0.4155 | 2.014 |
+| fisher | 0.001 | 88.74 | 85.71 | 74.46 | 0.3504 | 2.000 |
+| boundary | 0.001 | 88.74 | 87.88 | 76.62 | 0.4316 | 1.685 |
+| bias | 0.001 | 89.18 | 86.15 | 75.32 | 0.4171 | 1.676 |
+| lora | 0.001 | 85.28 | 87.01 | 72.73 | 0.5172 | 1.532 |
+| full | 0.001 | 85.71 | 87.88 | 74.46 | 0.3584 | 1.996 |
+
+Random and Fisher each address/train 46,080 physical cells and issue 5,898,240
+ideal assignment commands. Full DRN addresses/trains 113,246,208 cells and
+issues 14,495,514,624 commands per arm. Boundary, bias and LoRA train 18,432,
+23,040 and 46,080 digital scalars respectively with zero physical writes.
+These are ideal assignments, not pulses or energy. Four-rail DRN full-device
+counts are four times the crossbar's; equal K therefore means different fractions
+of eligible devices. DRN updates take 1.53–2.03 seconds versus the previously
+measured MLP 0.118–0.137 seconds in this implementation.
+
+Within DRN, Fisher at 1e-3 reaches 74.46% both-correct (172/231), compared with
+random's 72.29% (167/231) and the source's 71.86% (166/231). It matches full's
+best both-correct accuracy with far fewer ideal writes and has lower loss
+(0.3504 versus 0.3584). However, boundary at 1e-3 and LoRA at 3e-4 reach
+76.62% (177/231) without physical writes; bias reaches 75.32%. Loss and accuracy
+rankings differ: Fisher has the lowest loss, whereas the best boundary/LoRA
+accuracy comes with loss above source. Full at 3e-4 reduces both-correct accuracy
+to 68.40%; this is a valid negative rate-screen outcome, not a retry trigger.
+
+Combined verdict: sensitivity-guided sparse updates help in both architectures,
+but this screen does not establish a sparse DRN advantage. Best Fisher MLP
+both-correct is 75.32% versus DRN 74.46%; their source values differ
+(70.56% versus 71.86%), so raw endpoints alone do not isolate architecture.
+The two-pair endpoint difference is not a significance result. The graph
+positive control recovers changed edges in both linear and constrained systems,
+so nonlinearity is not necessary for that constructed success. Its constrained
+explicit-MLP source mismatch further limits the mechanism comparison. Within
+DRN, digital controls already achieve higher pair accuracy with no analog
+writes, although hardware inference cost was not measured.
+
+Next decision: retain the sparse/digital controls and conclude this authorized
+first screen. No extra runs, retuning, test evaluation, hardware/EP claim or
+implicitness claim is authorized or supported here. Any confirmatory paired
+multi-seed/test or mechanism study needs a new specification and allocation.
+All 42 production records (30 previously validated graph/MLP, 12 DRN) are
+collected and reviewed; this is complete single-seed development coverage,
+not a completed broader research campaign. Keep this worktree and the pinned
+runtime because the existing watcher still references them; removal is deferred
+until monitoring has relinquished those paths. The scientific review is complete;
+repository cleanup is a separate remaining administrative step.
