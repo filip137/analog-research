@@ -382,3 +382,12 @@ not a completed broader research campaign. Keep this worktree and the pinned
 runtime because the existing watcher still references them; removal is deferred
 until monitoring has relinquished those paths. The scientific review is complete;
 repository cleanup is a separate remaining administrative step.
+
+Publication handoff: review commit `1dc10b7` was fast-forward integrated into the
+local DRN trunk. The shared campaign link/verdict is committed as `53716f5` in
+its own repository, preserving unrelated working changes. Automatic approval
+review rejected `git push origin refactor/training-core`, judging the shared
+remote mutation outside this bounded request despite the handoff's closeout
+instructions. No workaround was attempted. Remote publication requires explicit
+user approval; automatic incident retries should stop. Artifact validation and
+scientific review succeeded, but administrative closeout/publication is blocked.
