@@ -228,3 +228,74 @@ scientific configuration, checkpoint or runtime allowance was changed.
 Immediate post-release verification also confirmed both native manifests and
 first metrics: task 0 published graph frozen/step-0 metrics; task 1 published
 DRN loaded with 113,246,208 eligible devices. Future checks belong to run-watch.
+
+### MLP task completion review — 9 November, 23:20 Paris
+
+Task `9694_0` completed on `r7i5n3` with exit `0:0`: allocation wall time
+362 seconds, worker step 354 seconds, inner runner 327.77 seconds. The allocation
+receipt is the charged duration; no remaining allowance was increased or reused.
+`sacct` reports one GPU, 20 allocated CPUs and 40,000 MiB host memory (the wrapper
+requested 10 CPUs; scheduler allocation is recorded as observed). No new job was
+launched. This closes only the graph + MLP case; the separate DRN case and overall
+scientific closeout remain with run-watch.
+
+Collected the complete native bundle, completion/environment receipts and task logs
+under `<local results>/mlp/` and `<local results>/slurm/sea-w1-9694_0.*`.
+`mlp/inspection.json` verifies all 29 declared artifact hashes with no errors.
+`mlp/coverage-validation.json` confirms exactly 18 graph cases and all six sentiment
+arms at both rates, 128 updates each, 231 development pairs, finite JSON numeric
+values and matching completion-summary hash. Source and per-arm checkpoints are
+retained. `mlp/sacct.txt` records scheduler completion; stderr contains module
+loading only. Resolved config retains seed 271109, batch 8, K=46,080, 16 Fisher
+examples and the two frozen rates. Test sentiment remains outside this screen.
+
+Source fitting improves development original/revised/both-correct accuracy from
+78.35/67.10/47.19% to 87.45/83.12/70.56%, and loss from 0.5509 to 0.3779.
+All adaptation arms report this same source starting point. The following table
+retains both rates rather than conflating loss and accuracy selection.
+
+| Arm | Rate | Original % | Revised % | Both % | Loss | Seconds/update |
+| --- | --- | --- | --- | --- | --- | --- |
+| random | 0.0003 | 87.45 | 83.55 | 71.00 | 0.3704 | 0.137 |
+| fisher | 0.0003 | 87.01 | 86.58 | 74.03 | 0.3396 | 0.135 |
+| boundary | 0.0003 | 87.01 | 87.45 | 74.89 | 0.3789 | 0.132 |
+| bias | 0.0003 | 86.58 | 87.45 | 74.89 | 0.3720 | 0.118 |
+| lora | 0.0003 | 86.15 | 88.31 | 74.46 | 0.3917 | 0.137 |
+| full | 0.0003 | 86.58 | 89.61 | 76.62 | 0.4212 | 0.126 |
+| random | 0.001 | 87.88 | 85.28 | 73.59 | 0.3595 | 0.131 |
+| fisher | 0.001 | 87.45 | 87.45 | 75.32 | 0.3292 | 0.132 |
+| boundary | 0.001 | 85.71 | 87.01 | 73.16 | 0.5530 | 0.131 |
+| bias | 0.001 | 86.15 | 87.01 | 73.59 | 0.5267 | 0.118 |
+| lora | 0.001 | 85.28 | 88.74 | 74.03 | 0.5133 | 0.128 |
+| full | 0.001 | 80.52 | 86.15 | 67.10 | 0.4652 | 0.127 |
+
+Random and Fisher each train/address 46,080 cells and issue 5,898,240 ideal
+assignment commands per arm. Full trains/addresses 28,311,552 cells and issues
+3,623,878,656 commands. Boundary, bias and LoRA train 18,432, 23,040 and 46,080
+scalars respectively with zero physical writes. Source fitting is separate from
+these adaptation counts (128 full-coordinate updates); these counts are neither
+measured pulses nor energy. The best Fisher both-correct result (75.32%, rate
+1e-3) exceeds random (73.59%, 1e-3), is close to digital boundary/bias (74.89%,
+3e-4), and trails full (76.62%, 3e-4). Fisher has the lowest reported development
+loss, 0.3292. Full at 1e-3 underperforms its source, preserving rate sensitivity
+as evidence rather than a reason to retune.
+
+Graph linear/constrained frozen MSE is 0.003313/0.001466. Fisher recovers exactly
+the four changed edges and reaches 5.99e-15/2.38e-15, comparable to the known-edge
+oracle and full update. Random reaches 0.002417/0.001423. Fisher/oracle use 1,024
+commands over four cells, versus full's 6,144 over 24. Their response-change r90
+is 4 in the linear case and 6 in the constrained case; constrained zero fraction
+changes from 0.3823 to 0.3738. Explicit sparse MLP controls remain near their
+frozen MSE: linear random/Fisher 0.003240/0.003273; constrained
+0.003997/0.003985. Full MLP reaches 2.65e-6/0.002500 using 524,288 commands over
+2,048 parameters. Linear MLP source fit is essentially exact, but constrained
+MLP source MSE 0.002563 confounds the constrained comparison.
+
+Scoped verdict: sensitivity-guided sparse adaptation is useful in this screen.
+The constructed graph target favors its exact circuit parameterization, and the
+same sparse recovery succeeds without nonlinear constraints; it does not establish
+that nonlinearity is necessary. MLP sentiment already obtains competitive sparse
+and digital adaptation, so no DRN or implicitness advantage can be inferred from
+this task alone. Results are single-seed development evidence, with no hardware,
+EP or generalization claim. Next decision: retain these controls for the separately
+owned DRN comparison and final campaign review; no extra allocation or retuning.
