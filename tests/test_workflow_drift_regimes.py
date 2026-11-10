@@ -359,3 +359,39 @@ def test_native_stage_runs_the_oracle_precompensation_twin_and_learning_arms(cmo
     _, again = _run(lc, cfg, results, teacher, tmp_path / 'again')
     assert {k: v['mean_teacher_kl'] for k, v in again['arms'].items()} == \
            {k: v['mean_teacher_kl'] for k, v in arms.items()}
+
+
+def test_measured_bin_laws_parse_round_trip_and_old_files_keep_their_law():
+    from test_drift_family import BINNED, MEASURED
+    raw = config(law=asdict(ReramFamily(**BINNED))).to_dict()
+    parsed = DriftRegimes.parse(json.loads(json.dumps(raw)))
+    assert parsed == DriftRegimes.parse(raw)
+    assert parsed.family.coefficient_bins == tuple(tuple(float(v) for v in r) for r in MEASURED)
+    assert parsed.family.mean_us is None and parsed.family.spread_us is None
+    old = config().to_dict()
+    del old['law']['coefficient_bins']                      # a law written before the table existed
+    assert DriftRegimes.parse(old).law == old['law'] and DriftRegimes.parse(old).family == ReramFamily()
+    bad = dict(raw, law=dict(raw['law'], mean_us=-2.))
+    with pytest.raises(ValueError):
+        DriftRegimes.parse(bad)
+
+
+def test_fresh_pair_error_adds_the_mean_mismatch_under_bins():
+    from test_drift_family import BINNED, MEASURED, expected_bin
+    from training.drift_family import ReramDriftCells
+    from workflow.drift_regimes_arms import fresh_pair_variance
+    active = torch.tensor([15., 45., 55., 85.])
+    target = torch.stack((active, torch.full((4,), 48.6)))
+    ids, tau, u = torch.arange(4), 7200., 2.
+    scalar = ReramDriftCells(target, law=ReramFamily(), seed=1, name='c')
+    law = scalar.law
+    cmo = law.cmo_sigma(active) ** 2 + law.cmo_sigma(torch.full((4,), 48.6)) ** 2
+    torch.testing.assert_close(fresh_pair_variance(scalar, ids, tau), (cmo + 2 * (3 * u**.11) ** 2) / 39.6**2)
+    binned = ReramDriftCells(target, law=ReramFamily(**BINNED), seed=1, name='c')
+    rows = [MEASURED[i] for i in expected_bin(active)]
+    ref = MEASURED[expected_bin(torch.tensor([48.6]))[0]]
+    want = torch.tensor([(s**2 + ref[2]**2) * u**.22 + ((m - ref[1]) * u**.23) ** 2 for _, m, s in rows])
+    got = fresh_pair_variance(binned, ids, tau)
+    assert got.dtype == torch.float32
+    torch.testing.assert_close(got, ((cmo + want) / 39.6**2).float())
+    assert float(got[1]) < float(got[2])            # same bin as the reference: no mismatch term

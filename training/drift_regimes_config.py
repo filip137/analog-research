@@ -123,10 +123,15 @@ class DriftRegimes:
         for key in ('evaluation_corpus', 'regime'):
             _label(value[key], key)
         law = value['law']
-        if not isinstance(law, dict) or set(law) != {f.name for f in fields(ReramFamily)}:
+        # coefficient_bins is optional, so that files written before it existed still parse unchanged.
+        every = {f.name for f in fields(ReramFamily)}
+        if not isinstance(law, dict) or set(law) not in (every, every - {'coefficient_bins'}):
             raise ValueError('Expected every ReramFamily field in law.')
-        ReramFamily(**law)
-        value['law'] = dict(law)
+        family = ReramFamily(**law)
+        law = dict(law)
+        if 'coefficient_bins' in law:      # canonical tuples, so JSON round trips compare equal
+            law['coefficient_bins'] = family.coefficient_bins
+        value['law'] = law
         if value['evaluation_split'] not in SPLITS:
             raise ValueError('Unsupported evaluation split.')
         if type(value['canary']) is not bool:

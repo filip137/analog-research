@@ -222,7 +222,7 @@ def _expected(cells, seconds, ids=None):
     last = cells.last_write.flatten() if ids is None else cells.last_write.flatten()[ids]
     requested = cells.requested.flatten() if ids is None else cells.requested.flatten()[ids]
     u = (seconds - last) / law.reference_seconds
-    return requested + (law.mean_us * u.pow(law.mean_exponent)).to(torch.float32)
+    return requested + (law.mean_at(requested) * u.pow(law.mean_exponent)).to(torch.float32)
 
 
 def nominal_deviation(cells, ids=None):
@@ -328,13 +328,19 @@ def newton_terms(network, q, hidden, index, seed, gradient=True):
 
 def fresh_pair_variance(cells, ids, tau):
     """Nominal squared weight error (normalized units) of a freshly reset active/reference pair at age tau:
-    both devices' CMO endpoint variance plus drift spread (the mean drift cancels within the pair)."""
+    both devices' CMO endpoint variance plus drift spread. Under the scalar law the mean drift cancels
+    within the pair; with coefficient bins (looked up at the targets) the squared mean mismatch is added."""
     law = cells.law
-    spread = law.spread_us * (tau / law.reference_seconds) ** law.spread_exponent
     active = cells.target[0].flatten()[ids]
     reference = cells.target[1].flatten()[ids]
     cmo = (law.cmo_scale * law.cmo_sigma(active)).square() + (law.cmo_scale * law.cmo_sigma(reference)).square()
-    return (cmo + 2 * spread ** 2) / 39.6 ** 2
+    if not law.coefficient_bins:
+        spread = law.spread_us * (tau / law.reference_seconds) ** law.spread_exponent
+        return (cmo + 2 * spread ** 2) / 39.6 ** 2
+    u = tau / law.reference_seconds
+    drift = (law.spread_at(active).square() + law.spread_at(reference).square()) * u ** (2 * law.spread_exponent)
+    bias = ((law.mean_at(active) - law.mean_at(reference)) * u ** law.mean_exponent).square()
+    return (cmo + (drift + bias).to(cmo.dtype)) / 39.6 ** 2
 
 
 LORA_METHODS = ('lora', 'lora_oracle', 'lora_rescaled', 'lora_clean')

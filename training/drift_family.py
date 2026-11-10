@@ -8,6 +8,7 @@ ReRAM-like (one tensor of physical devices, write episode k of device i):
 
     G_p   = clamp(target + c_p sigma_CMO(target) xi, program_min, program_max)
     G(tau) = clip(G_p + m u^alpha + s u^beta a_i Y(tau), drift_min, drift_max),  u = tau / 1 h
+    (m, s) = (mean_us, spread_us), or the step bin of G_p when coefficient_bins is set
     Y_0    = C_0                              (initial deployment episode)
     Y_k    = sqrt(f) D + sqrt(1 - f) C_k      (k >= 1)
     D      = sqrt(f) C_0 + sqrt(1 - f) I      (persistent path, replayed from tau = 0 by every episode)
@@ -61,14 +62,22 @@ def _finite(values, names):
 
 @dataclass(frozen=True)
 class ReramFamily:
-    """ReRAM-like law. Defaults are the campaign anchor R0."""
+    """ReRAM-like law. Defaults are the campaign anchor R0.
+
+    ``coefficient_bins`` (optional) replaces the scalar ``mean_us`` and ``spread_us``,
+    which must then be None, by step bins of the programmed conductance:
+    rows ``(lower_us, mean_us, spread_us)`` with strictly increasing lower edges, the
+    first at or below ``program_min``. A device's bin is that of its programmed
+    conductance G_p, looked up again at every write. Without it the arithmetic is the
+    scalar law's, bit for bit.
+    """
     rho_star: float = 0.335
     persistent_share: float = 0.0
     cmo_scale: float = 1.0
     cmo_acceptance: float = 2.0
     amplitude_sigma: float = 0.0
-    mean_us: float = -2.0
-    spread_us: float = 3.0
+    mean_us: float | None = -2.0
+    spread_us: float | None = 3.0
     mean_exponent: float = .23
     spread_exponent: float = .11
     reference_seconds: float = 3600.0
@@ -77,14 +86,39 @@ class ReramFamily:
     drift_min: float = 5.0
     drift_max: float = 150.0
     time_dtype: str = 'float64'
+    coefficient_bins: tuple = ()
 
     def __post_init__(self):
         values = asdict(self)
-        _finite(values, [k for k in values if k != 'time_dtype'])
+        scalar = ('mean_us', 'spread_us')
+        _finite(values, [k for k in values if k not in ('time_dtype', 'coefficient_bins', *scalar)])
+        if not isinstance(self.coefficient_bins, (list, tuple)):
+            raise ValueError('Expected a sequence of coefficient bins.')
+        if self.coefficient_bins:
+            if self.mean_us is not None or self.spread_us is not None:
+                raise ValueError('coefficient_bins replace mean_us and spread_us; set both to None.')
+            rows = []
+            for row in self.coefficient_bins:
+                if not isinstance(row, (list, tuple)) or len(row) != 3:
+                    raise ValueError('Expected coefficient bins (lower_us, mean_us, spread_us).')
+                _finite(dict(zip(('lower_us', 'bin mean_us', 'bin spread_us'), row)),
+                        ('lower_us', 'bin mean_us', 'bin spread_us'))
+                rows.append(tuple(float(v) for v in row))
+            lower = [r[0] for r in rows]
+            if any(b <= a for a, b in zip(lower, lower[1:])) or lower[0] > self.program_min:
+                raise ValueError('Expected strictly increasing bin edges, the first at or below program_min.')
+            if any(r[2] < 0 for r in rows):
+                raise ValueError('Expected nonnegative bin spreads.')
+            object.__setattr__(self, 'coefficient_bins', tuple(rows))
+        else:
+            object.__setattr__(self, 'coefficient_bins', ())
+            _finite(values, scalar)
+            if self.spread_us < 0:
+                raise ValueError('Expected nonnegative spread_us.')
         if not 0 < self.rho_star <= 1 or not 0 <= self.persistent_share <= 1:
             raise ValueError('Expected rho_star in (0, 1] and persistent_share in [0, 1].')
-        if self.cmo_scale < 0 or self.amplitude_sigma < 0 or self.spread_us < 0:
-            raise ValueError('Expected nonnegative cmo_scale, amplitude_sigma and spread_us.')
+        if self.cmo_scale < 0 or self.amplitude_sigma < 0:
+            raise ValueError('Expected nonnegative cmo_scale and amplitude_sigma.')
         if self.cmo_acceptance not in CMO_SIGMA:
             raise ValueError(f'CMO acceptance must be one of {sorted(CMO_SIGMA)} percent.')
         if min(self.mean_exponent, self.spread_exponent, self.reference_seconds) <= 0:
@@ -101,6 +135,21 @@ class ReramFamily:
     def cmo_sigma(self, g):
         c0, c1 = CMO_SIGMA[self.cmo_acceptance]
         return c0 + c1 * g
+
+    def _bin_values(self, g, column):
+        bins = self.coefficient_bins
+        edges = torch.tensor([r[0] for r in bins[1:]], dtype=g.dtype, device=g.device)
+        table = torch.tensor([r[column] for r in bins], dtype=torch.float64, device=g.device)
+        return table[torch.bucketize(g, edges, right=True)]
+
+    def mean_at(self, g):
+        """Mean coefficient (uS at the reference age) for conductances ``g``: the scalar
+        ``mean_us`` (a float), or each value's bin mean as a float64 tensor."""
+        return self.mean_us if not self.coefficient_bins else self._bin_values(g, 1)
+
+    def spread_at(self, g):
+        """Spread coefficient (uS at the reference age) for conductances ``g``; see ``mean_at``."""
+        return self.spread_us if not self.coefficient_bins else self._bin_values(g, 2)
 
 
 @dataclass(frozen=True)
@@ -363,11 +412,12 @@ class ReramDriftCells(_Cells):
         ids = self._ids(indices)
         law = self.law
         age = (seconds - self._flat(self.last_write, ids)) / law.reference_seconds
-        mean = (law.mean_us * age.pow(law.mean_exponent)).to(torch.float32)
-        spread = (law.spread_us * age.pow(law.spread_exponent)).to(torch.float32)
+        anchor = self._flat(self.anchor, ids)
+        mean = (law.mean_at(anchor) * age.pow(law.mean_exponent)).to(torch.float32)
+        spread = (law.spread_at(anchor) * age.pow(law.spread_exponent)).to(torch.float32)
         if self.amplitude is not None:
             spread = spread * self._flat(self.amplitude, ids)
-        raw = self._flat(self.anchor, ids) + mean + spread * self._y(seconds, ids)
+        raw = anchor + mean + spread * self._y(seconds, ids)
         held = raw.clamp(law.drift_min, law.drift_max)
         return held.reshape(self.shape) if ids is None else held
 
@@ -409,12 +459,19 @@ class ReramDriftCells(_Cells):
         self.write_commands += ids.numel()
 
     def verify_score(self, read, requested, seconds_since_write):
-        """Standardized verify deviation for P&V; uses only the nominal law, never hidden draws."""
+        """Standardized verify deviation for P&V; uses only the nominal law, never hidden draws.
+        With coefficient bins the controller uses the bin of the requested target (G_p is hidden)."""
         law = self.law
         u = seconds_since_write / law.reference_seconds
-        expected = requested + law.mean_us * u**law.mean_exponent
-        sd = ((law.cmo_scale * law.cmo_sigma(requested)).square()
-              + (law.spread_us * u**law.spread_exponent) ** 2).sqrt()
+        if not law.coefficient_bins:
+            expected = requested + law.mean_us * u**law.mean_exponent
+            sd = ((law.cmo_scale * law.cmo_sigma(requested)).square()
+                  + (law.spread_us * u**law.spread_exponent) ** 2).sqrt()
+        else:
+            # Same rounding as the scalar branch: coefficient terms in float64, sums in the read dtype.
+            expected = requested + (law.mean_at(requested) * u**law.mean_exponent).to(requested.dtype)
+            sd = ((law.cmo_scale * law.cmo_sigma(requested)).square()
+                  + (law.spread_at(requested) * u**law.spread_exponent).square().to(requested.dtype)).sqrt()
         return torch.where(sd > 0, (read - expected) / sd, torch.zeros_like(sd))
 
     def oracle_y(self):
