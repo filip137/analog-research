@@ -1,5 +1,8 @@
 # Sparse equilibrium adaptation first pilots
 
+**Status: first screen complete, collected and reviewed; publication reconciled
+and monitoring stopped on 10 November 2026.** The broader campaign remains open.
+
 User authorization: 9 November 2026, test the Explorer proposal, first runs at
 23:00 Europe/Paris on Jean Zay V100 dev queue. Earliest start is
 2026-11-09T23:00:00+01:00. This is exploratory simulation evidence.
@@ -391,3 +394,25 @@ remote mutation outside this bounded request despite the handoff's closeout
 instructions. No workaround was attempted. Remote publication requires explicit
 user approval; automatic incident retries should stop. Artifact validation and
 scientific review succeeded, but administrative closeout/publication is blocked.
+
+### Closeout reconciliation — 10 November
+
+The root review confirmed all three Slurm allocations completed with `0:0`,
+no remaining pilot job, 4,216 GPU-seconds charged, and unchanged result/summary
+hashes matching the collected native validation receipts. All 42 production
+records are scientifically reviewed. The best-per-arm sentiment table is a
+development comparison across two rates, one seed and 231 paired reviews;
+it does not establish an architecture advantage or a hardware/EP result.
+
+The publication blocker above is resolved. Read-only inspection showed the four
+unpublished commits changed only this pilot note and the remote still pointed to
+the session's published launch handoff. A reviewed push of the exact commit
+`be41225` succeeded under the existing pilot/trunk authorization. No unrelated
+code, branch, tag, experiment or allocation was changed.
+
+The stopped run-watch owner relinquished its locks. A fresh read-only observation
+accepted all three tasks as terminal; incident history and budgets are preserved.
+`<local results>/closeout.json` records the evidence and cleanup state. This
+pilot's worktree and merged branch can now be removed after the closing note is
+pushed. Native results, checkpoints and pinned runtime snapshots stay under the
+declared results root; no scientific evidence is stored in the removable worktree.
