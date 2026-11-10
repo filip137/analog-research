@@ -1,4 +1,5 @@
 import json
+import math
 import os
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -43,8 +44,11 @@ def test_settings_round_trip_and_endpoint_weights():
     assert float(w @ np.array([0., 60., 3600., 86400.])) == pytest.approx(86400 / 2)
 
 
-@pytest.mark.parametrize('law', [dict(), dict(rho_star=1., persistent_share=.7)])
+@pytest.mark.parametrize('law', [dict(), dict(rho_star=1., persistent_share=.7), 'binned'])
 def test_native_stage_deploys_by_pv_releases_after_it_and_replays(cmo_inputs, tmp_path, law):
+    if law == 'binned':                     # exp-004 R0-G: the measured conductance bins
+        from test_drift_family import BINNED
+        law = BINNED
     teacher, digest = cmo_inputs
     lc = small(**{'onchip': None, 'defects.cases': [case_doc()], 'data.corpus': {'name': 'synthetic', 'sha256': digest},
                   'data.sequence_length': 9, 'data.max_examples': 4, 'hwa.arms': [{'id': 'digital', 'method': 'none'}]})
@@ -395,3 +399,33 @@ def test_fresh_pair_error_adds_the_mean_mismatch_under_bins():
     assert got.dtype == torch.float32
     torch.testing.assert_close(got, ((cmo + want) / 39.6**2).float())
     assert float(got[1]) < float(got[2])            # same bin as the reference: no mismatch term
+
+
+def test_native_stage_runs_every_arm_method_under_measured_bins(cmo_inputs, tmp_path):
+    from test_drift_family import BINNED
+    lc, results, teacher, base, adaptation = _stage_inputs(cmo_inputs, tmp_path)
+    arm_list = (
+        {'label': 'A0', 'method': 'none'},
+        {'label': 'A1', 'method': 'calibration', 'events': (60., 900.)},
+        {'label': 'A3', 'method': 'layernorm', 'events': (60.,), 'learning_rate': 1e-3},
+        {'label': 'A5', 'method': 'lora', 'events': (60.,), 'rank': 2, 'learning_rate': 1e-3},
+        {'label': 'A8', 'method': 'rewrite', 'events': (60.,), 'fraction': 1., 'attempts': 1, 'threshold': None},
+        {'label': 'A9', 'method': 'rewrite', 'events': (60., 900.), 'fraction': .1, 'attempts': 4, 'threshold': .7},
+        {'label': 'A10', 'method': 'precompensated', 'events': (60., 900.), 'fraction': .1, 'attempts': 4,
+         'threshold': .7},
+        {'label': 'O2', 'method': 'rewrite_oracle', 'events': (60.,), 'fraction': .1, 'attempts': 1, 'threshold': None},
+        {'label': 'A6', 'method': 'lora_rescaled', 'events': (60.,), 'reads': (900.,), 'rank': 2,
+         'learning_rate': 1e-3},
+        {'label': 'A11', 'method': 'learning_newton', 'events': (60., 900.), 'fraction': .1, 'rounds': 2,
+         'batch_sequences': 2, 'attempts': 4, 'threshold': .7, 'ideal': False, 'score': 'fisher'},
+    )
+    cfg = DriftRegimes.parse(replace(base, law=asdict(ReramFamily(**BINNED)), arms=arm_list,
+                                     adaptation=adaptation).to_dict())
+    directory, metrics = _run(lc, cfg, results, teacher, tmp_path / 'binned')
+    assert metrics['source_unchanged'] and metrics['replay_exact']
+    arms = metrics['arms']
+    assert set(arms) == {a['label'] for a in arm_list}
+    assert all(math.isfinite(a['mean_teacher_kl']) for a in arms.values())
+    assert arms['A0']['cost']['reset_attempts'] == 0 and arms['A9']['cost']['reset_attempts'] > 0
+    rows = json.loads((directory / 'drift_regimes_measurements.json').read_text())
+    assert all(r['law']['coefficient_bins'] == [list(x) for x in ReramFamily(**BINNED).coefficient_bins] for r in rows)

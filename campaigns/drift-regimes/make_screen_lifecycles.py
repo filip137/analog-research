@@ -41,13 +41,15 @@ TUNE_REALIZATION = 271004
 TUNE_COHORT = (64, '99c12a626280f6be079b24ae72cacb1900a07f6917ef530cc4c2d1bf1ad7014c')
 TUNE_LAYERNORM = (3e-4, 1e-3, 3e-3, 1e-2)
 TUNE_LORA = (1e-3, 3e-3, 1e-2)
-N_SWEEP_POINTS = {'R0': ('A8', 'A9-W1', 'A9-W2'), 'rho1.0': ('A9-W1',)}
+N_SWEEP_POINTS = {'R0': ('A8', 'A9-W1', 'A9-W2'), 'R0-G': ('A8', 'A9-W1', 'A9-W2'), 'rho1.0': ('A9-W1',)}
 
 
 def kappa(point, attempts):
     if attempts == 1:
         return None
     table = json.loads((HERE / 'kappa_family.json').read_text())['points']
+    if point not in table:          # exp-004's R0-G point has its own table
+        table = json.loads((HERE / 'kappa_measured_g.json').read_text())['points']
     return round(table[point]['by_attempts'][str(attempts)]['kappa_star'], 4)
 
 
@@ -70,7 +72,7 @@ def lora(label, events, lr, rank=16):
 
 
 def group(point):
-    if point == 'R0':
+    if point in ('R0', 'R0-G'):     # R0-G (exp-004): R0 with the measured conductance bins
         return 'anchor'
     if point.startswith('rho'):
         return 'rho'

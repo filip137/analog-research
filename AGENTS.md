@@ -76,6 +76,12 @@ drift.
   - Reads are exact. Controllers still see only reads, never Y, κ or other
     hidden draws, except in labelled oracle arms.
   - Report the fraction of devices at the 5 µS and 150 µS bounds at every age.
+  - **R0-G, measured conductance bins (exp-004, user, 10 November 2026).** This
+    is R0 with m and s taken from the 28 October 25-h bin table, as step bins of
+    the programmed conductance G_p (`coefficient_bins` in `ReramFamily`).
+    Controllers use the bin of the requested target. It is crossbar only, at R0
+    only, and is never pooled with the scalar anchor. The table and the
+    semantics are in the campaign's `drift-family.md` and the exp-004 note.
 - **Programming error:** the measured 2% CMO fit (c_p = 1) at every write. This
   is fixed for the first screen, because drift should overshadow it.
 - **Regime knobs:** ρ*, the D2D share f and the amplitude spread σ_a, plus three

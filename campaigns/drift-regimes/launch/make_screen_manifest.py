@@ -1,7 +1,8 @@
 """Write a Jean Zay manifest for one exp-002 screen run, its units packed into GPU groups.
 
 Usage: python campaigns/drift-regimes/launch/make_screen_manifest.py <run> <groups> <source dir> <output root> <out.json>
-  run: canary | run1 (tuning + part w) | run2 (part d)
+  run: canary | run1 (tuning + part w) | run2 (part d) | ... (exp-002)
+       g-canary | g-run1 (R0-G tuning + parts w, y) | g-run2 (R0-G parts d, x)   (exp-004)
 
 Units (lifecycles) are packed greedily, longest first, into <groups> groups by
 an estimated V100 time; each group is one dev-queue job running its units in
@@ -38,6 +39,13 @@ def estimate(doc):
 
 def units(run):
     paths = sorted((ROOT / 'campaigns/drift-regimes/lifecycles').glob('opt125m-drift-regimes-screen-*.json'))
+    measured = lambda n: '-r0-g-' in n           # exp-004 units; never part of an exp-002 run
+    if run.startswith('g-'):
+        pick = {'g-canary': lambda n: '-canary5-' in n,
+                'g-run1': lambda n: measured(n) and n.endswith(('-w', '-y', '-tune-ln', '-tune-lora')),
+                'g-run2': lambda n: measured(n) and n.endswith(('-d', '-x'))}[run]
+        return [p for p in paths if pick(p.stem)]
+    paths = [p for p in paths if not measured(p.stem) and '-canary5-' not in p.stem]
     pick = {'canary': lambda n: '-canary-' in n,
             'run1': lambda n: n.endswith('-w') or n.endswith('-tune-ln') or n.endswith('-tune-lora'),
             'run2': lambda n: n.endswith('-d'),
