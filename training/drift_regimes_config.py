@@ -40,6 +40,23 @@ ARM_KEYS = {
 TWIN = ('none', 'lora', 'learning', 'learning_newton')
 DIGITAL = ('layernorm', 'lora', 'lora_oracle', 'lora_rescaled', 'lora_clean', 'learning', 'learning_newton')
 WRITES = ('rewrite', 'precompensated', 'rewrite_oracle', 'learning', 'learning_newton')
+# Optional on 'lora' arms: the training target (recovery-data-preparation exp-001). Absent means the
+# full teacher distribution, so files written before this key existed parse and run unchanged.
+TARGETS = ('kl', 'text', 'topk', 'samples')
+
+
+def parse_target(value):
+    """'kl' | 'text' | 'topk:<k>' | 'samples:<n>' -> (kind, count); count is None for kl and text."""
+    if not isinstance(value, str):
+        raise ValueError('Expected a target string.')
+    kind, _, count = value.partition(':')
+    if kind in ('kl', 'text') and not count:
+        return kind, None
+    if kind in ('topk', 'samples') and count.isdigit() and str(int(count)) == count and 0 < int(count) < 2**16:
+        return kind, int(count)
+    raise ValueError(f'Unknown training target {value!r}.')
+
+
 ADAPTATION_KEYS = {'corpus', 'corpus_sha256', 'split', 'sequences', 'cohort_sha256', 'seed',
                    'probe_sequences', 'steps', 'batch'}
 
@@ -169,12 +186,15 @@ class DriftRegimes:
             if not isinstance(item, dict) or item.get('method') not in ARM_KEYS:
                 raise ValueError('Unknown drift-regimes arm method.')
             keys = {'label', 'method'} | ARM_KEYS[item['method']]
-            optional = {'twin'} | ({'score'} if item['method'] == 'learning_newton' else set())
+            optional = ({'twin'} | ({'score'} if item['method'] == 'learning_newton' else set())
+                        | ({'target'} if item['method'] == 'lora' else set()))
             if (not keys <= set(item) <= keys | optional
                     or ('twin' in item and item['method'] not in TWIN)):
                 raise ValueError(f"Expected exactly the {item['method']} arm fields.")
             if item.get('score', 'newton') not in ('newton', 'fisher'):
                 raise ValueError('Expected a newton or fisher learning score.')
+            if 'target' in item:
+                parse_target(item['target'])
             arm = dict(item)
             _label(arm['label'], 'arm label')
             if 'twin' in arm and type(arm['twin']) is not bool:

@@ -58,6 +58,7 @@ from torch.nn import functional as F
 from training.drift_compensation import Compensation, MatrixCorrection
 from training.drift_family import program_verify
 from training.drift_recovery import tensor_hash
+from training.drift_regimes_config import parse_target
 from workflow.networks import opt_mlp
 
 GAIN_BOUNDS = (0.1, 10.0)
@@ -82,19 +83,24 @@ def adaptation_cohort(lifecycle, settings):
 
 class Prefix:
     """Cached frozen prefixes: the student's residual stream entering the first analog layer
-    (its own digital copy for a whole-model student) and the teacher's prefix state."""
+    (its own digital copy for a whole-model student) and the teacher's prefix state. Optional:
+    the token ids (text targets) and fixed teacher samples per scored position (sample targets)."""
 
-    def __init__(self, student, teacher):
-        self.student, self.teacher = student, teacher
+    def __init__(self, student, teacher, tokens=None, samples=None):
+        self.student, self.teacher, self.tokens_ids, self.samples = student, teacher, tokens, samples
 
     def __len__(self):
         return len(self.student)
 
     def __getitem__(self, index):
-        return Prefix(self.student[index], self.teacher[index])
+        pick = lambda x: None if x is None else x[index]
+        return Prefix(self.student[index], self.teacher[index], pick(self.tokens_ids), pick(self.samples))
 
     def split(self, size):
-        return [Prefix(a, b) for a, b in zip(self.student.split(size), self.teacher.split(size))]
+        n = len(self.student)
+        parts = lambda x: [None] * len(range(0, n, size)) if x is None else list(x.split(size))
+        return [Prefix(*p) for p in zip(self.student.split(size), self.teacher.split(size),
+                                         parts(self.tokens_ids), parts(self.samples))]
 
     @property
     def tokens(self):
@@ -113,7 +119,59 @@ def prefix_states(network, tokens, device, batch=16):
         student.append(network.analog_input(chunk))
         features = network.features(chunk)
         teacher.append(features.teacher_hidden if isinstance(features, opt_mlp.StudentInput) else features)
-    return Prefix(torch.cat(student), torch.cat(teacher))
+    return Prefix(torch.cat(student), torch.cat(teacher), tokens.to(device))
+
+
+@torch.no_grad()
+def teacher_samples(network, hidden, count, seed, batch=16):
+    """``count`` tokens drawn once from the teacher's distribution at every scored position.
+
+    Drawn when the adaptation set is prepared and then fixed, as a stored data set would be;
+    never redrawn during training. Returns int64 of shape (sequences, length - 1, count)."""
+    generator = torch.Generator(device=hidden.student.device).manual_seed(seed)
+    out = []
+    for part in hidden.split(batch):
+        probs = network.teacher_logits(part.teacher).float().softmax(-1)
+        shape = probs.shape[:-1]
+        draw = torch.multinomial(probs.flatten(0, 1), count, replacement=True, generator=generator)
+        out.append(draw.view(*shape, count))
+    return torch.cat(out)
+
+
+def topk_tail_kl(teacher, student, k, round_fp16=True):
+    """KL between teacher and student coarsened to k + 1 bins: the teacher's top-k tokens and one tail.
+
+    ``teacher``/``student`` are log-probabilities (positions, vocabulary). The stored teacher part
+    is k ids, k log-probabilities and the tail log-mass, rounded to fp16 as stored."""
+    top, ids = teacher.topk(k, dim=-1)
+    rest = teacher.scatter(-1, ids, float('-inf'))
+    tail = torch.logsumexp(rest, -1, keepdim=True)
+    p = torch.cat((top, tail), -1)
+    if round_fp16:
+        p = p.half().float()
+    p = p - torch.logsumexp(p, -1, keepdim=True)   # renormalize after rounding
+    q_top = student.gather(-1, ids)
+    q_tail = torch.logsumexp(student.scatter(-1, ids, float('-inf')), -1, keepdim=True)
+    q = torch.cat((q_top, q_tail), -1)
+    w = p.exp()
+    cross = torch.where(w > 0, w * q, torch.zeros_like(q))   # an empty tail bin contributes nothing
+    return (torch.xlogy(w, w) - cross).sum(-1).mean()
+
+
+def target_loss(target, teacher, student, states):
+    """Per-position mean training loss. ``teacher`` is None for the text and sample targets."""
+    kind, count = target
+    if kind == 'kl':
+        return (teacher.exp() * (teacher - student)).sum(-1).mean()
+    if kind == 'topk':
+        return topk_tail_kl(teacher, student, count)
+    if kind == 'text':
+        labels = states.tokens_ids[:, 1:].flatten()
+        return -student.gather(-1, labels[:, None]).mean()
+    if kind == 'samples':
+        drawn = states.samples[..., :count].flatten(0, 1)
+        return -student.gather(-1, drawn).mean()
+    raise ValueError(f'Unknown target {kind}.')
 
 
 def _digital(network):
@@ -182,8 +240,12 @@ def fit_calibration(network, q, probe, batch=8):
     return Compensation(matrices)
 
 
-def train_digital(network, parameters, q, hidden, *, steps, batch, learning_rate, seed):
-    """Adam with cosine decay on the teacher KL of the held read ``q``; returns the loss trace."""
+def train_digital(network, parameters, q, hidden, *, steps, batch, learning_rate, seed, target=('kl', None)):
+    """Adam with cosine decay on the teacher KL of the held read ``q``; returns the loss trace.
+
+    ``target`` (recovery-data-preparation exp-001) replaces the full teacher distribution with the
+    text's next token, the teacher's top-k plus a tail bin, or fixed teacher samples. The default
+    is the original full-KL path, operation for operation."""
     for p in network.parameters():
         p.requires_grad_(False)
     for p in parameters:
@@ -198,10 +260,12 @@ def train_digital(network, parameters, q, hidden, *, steps, batch, learning_rate
         for _ in range(steps):
             index = torch.randint(0, len(hidden), (batch,), generator=generator).to(hidden.student.device)
             states = hidden[index]
-            with torch.no_grad():
-                teacher = network.teacher_logits(states.teacher).flatten(0, 1).log_softmax(-1)
+            teacher = None
+            if target[0] in ('kl', 'topk'):
+                with torch.no_grad():
+                    teacher = network.teacher_logits(states.teacher).flatten(0, 1).log_softmax(-1)
             student = suffix_logits(network, states.student, q).flatten(0, 1).log_softmax(-1)
-            loss = (teacher.exp() * (teacher - student)).sum(-1).mean()
+            loss = target_loss(target, teacher, student, states)
             if not bool(torch.isfinite(loss)):
                 raise FloatingPointError('Nonfinite digital adaptation loss.')
             optimizer.zero_grad(set_to_none=True)
@@ -434,8 +498,10 @@ class Arm:
                       else list(self.network.mlp_norms.parameters()))
         a = self.adaptation
         self.network.lora_multiplier = self.base_multiplier if self.base_multiplier is not None else 0.
+        target = parse_target(self.arm.get('target', 'kl'))
         trace = train_digital(self.network, parameters, q, self.hidden, steps=a['steps'], batch=a['batch'],
-                              learning_rate=self.arm['learning_rate'], seed=a['seed'] + 1000 * index)
+                              learning_rate=self.arm['learning_rate'], seed=a['seed'] + 1000 * index,
+                              target=target)
         presentations = a['steps'] * a['batch']
         self.cost['optimizer_steps'] += a['steps']
         self.cost['adaptation_sequence_presentations'] += presentations

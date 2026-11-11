@@ -20,10 +20,13 @@ import torch
 from experiments.artifacts import atomic_write_json, sha256_file
 from training.drift_family import ReramDriftCells, program_verify
 from training.drift_recovery import tensor_hash
+from training.drift_regimes_config import parse_target
 from workflow.drift_recovery import CrossbarAdapter
 from workflow.initial_programming import teacher_ppl
 from workflow import drift_regimes_arms as arms
 from workflow.networks import opt_mlp
+
+SAMPLE_SEED_OFFSET = 104729   # teacher samples for sample-target arms (recovery-data-preparation exp-001)
 
 ACTIVE, REFERENCE = 0, 1
 
@@ -127,6 +130,12 @@ def run(stage):
     if cfg.adaptation is not None:
         adaptation_tokens = arms.adaptation_cohort(lc, cfg.adaptation)
         hidden = arms.prefix_states(stage.network, adaptation_tokens, stage.device)
+        counts = [n for kind, n in (parse_target(a.get('target', 'kl')) for a in cfg.arms) if kind == 'samples']
+        if counts:   # one fixed draw shared by every sample-target arm (prefix columns for smaller counts)
+            seed = cfg.adaptation['seed'] + SAMPLE_SEED_OFFSET
+            hidden.samples = arms.teacher_samples(stage.network, hidden, max(counts), seed)
+            stage.store.append_metric({'phase': 'teacher_samples', **identity, 'count': max(counts), 'seed': seed,
+                                       'samples_sha256': tensor_hash(hidden.samples.cpu())})
         probe = hidden[:cfg.adaptation['probe_sequences']]
     for p in stage.network.parameters():
         p.requires_grad_(False)

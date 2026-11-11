@@ -3,6 +3,7 @@
 Usage: python campaigns/drift-regimes/launch/make_screen_manifest.py <run> <groups> <source dir> <output root> <out.json>
   run: canary | run1 (tuning + part w) | run2 (part d) | ... (exp-002)
        g-canary | g-run1 (R0-G tuning + parts w, y) | g-run2 (R0-G parts d, x)   (exp-004)
+       t-tune | t-eval   (recovery-data-preparation exp-001: LoRA training targets at R0-G)
 
 Units (lifecycles) are packed greedily, longest first, into <groups> groups by
 an estimated V100 time; each group is one dev-queue job running its units in
@@ -40,6 +41,9 @@ def estimate(doc):
 def units(run):
     paths = sorted((ROOT / 'campaigns/drift-regimes/lifecycles').glob('opt125m-drift-regimes-screen-*.json'))
     measured = lambda n: '-r0-g-' in n           # exp-004 units; never part of an exp-002 run
+    if run.startswith('t-'):
+        pick = {'t-tune': lambda n: '-targets-tune-' in n, 't-eval': lambda n: n.endswith('-targets-eval')}[run]
+        return [p for p in paths if pick(p.stem)]
     if run.startswith('g-'):
         pick = {'g-canary': lambda n: '-canary5-' in n,
                 'g-run1': lambda n: measured(n) and n.endswith(('-w', '-y', '-tune-ln', '-tune-lora')),
