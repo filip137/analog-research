@@ -187,7 +187,7 @@ class DriftRegimes:
                 raise ValueError('Unknown drift-regimes arm method.')
             keys = {'label', 'method'} | ARM_KEYS[item['method']]
             optional = ({'twin'} | ({'score'} if item['method'] == 'learning_newton' else set())
-                        | ({'target'} if item['method'] == 'lora' else set()))
+                        | ({'target', 'token_backward', 'microbatch'} if item['method'] == 'lora' else set()))
             if (not keys <= set(item) <= keys | optional
                     or ('twin' in item and item['method'] not in TWIN)):
                 raise ValueError(f"Expected exactly the {item['method']} arm fields.")
@@ -195,6 +195,14 @@ class DriftRegimes:
                 raise ValueError('Expected a newton or fisher learning score.')
             if 'target' in item:
                 parse_target(item['target'])
+            if 'token_backward' in item:
+                from workflow.token_backward import parse_mode
+                parse_mode(item['token_backward'])
+                if parse_target(item.get('target', 'kl'))[0] != 'samples':
+                    raise ValueError('Token backward requires sampled teacher targets.')
+                _integer(item.get('microbatch', 1), 'microbatch')
+            elif 'microbatch' in item:
+                raise ValueError('microbatch requires token_backward.')
             arm = dict(item)
             _label(arm['label'], 'arm label')
             if 'twin' in arm and type(arm['twin']) is not bool:

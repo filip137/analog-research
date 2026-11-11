@@ -1,0 +1,309 @@
+{
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1,
+  "lifecycle_id": "opt125m-drift-regimes-screen-r0-g-271004-tokens-tune-random-32",
+  "question": {
+    "text": "Does full-context token-selective LoRA backward recover drift better than short context?",
+    "decision": "recovery-data-preparation exp-003: retained recovery versus working memory and work",
+    "primary_metric": "teacher_kl",
+    "evidence_class": "exploratory_model_based"
+  },
+  "network": {
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m",
+    "analog_decoder_layers": 6
+  },
+  "data": {
+    "corpus": {
+      "name": "opt125m-synthetic-50m",
+      "sha256": "ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984"
+    },
+    "sequence_length": 256,
+    "data_seed": 20261008,
+    "hwa_sequences": 195226,
+    "recovery_sequences": 8192,
+    "development_sequences": 256,
+    "test_sequences": 0,
+    "evaluation": "development",
+    "max_examples": 0
+  },
+  "devices": {
+    "technology": "cmo",
+    "model": "aihwkit_1.1.0_reram_cmo",
+    "noise_scale": 1.0,
+    "assignment_seeds": [
+      271001,
+      271002,
+      271003,
+      271004,
+      271005
+    ],
+    "selection_seeds": [
+      211001,
+      211002
+    ],
+    "endpoint_seed_offset": 10000
+  },
+  "defects": {
+    "placement": "hierarchical_die_array",
+    "persistence": "permanent",
+    "arrays_per_die": 48,
+    "cases": [
+      {
+        "kind": "none",
+        "rate_ppm": 0,
+        "die_concentration": null,
+        "array_concentration": null
+      }
+    ]
+  },
+  "deployment": {
+    "scaling": "per_output_channel_absmax",
+    "encoding": "active_reference_pair",
+    "tile_size": 256,
+    "read_noise": 0.0,
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias"
+  },
+  "hwa": {
+    "noise_model": "additive_gaussian_weight",
+    "noise_std": 0.03,
+    "noise_scaling": "output_channel_abs_max",
+    "sequences_per_epoch": 8192,
+    "lr_schedule": {
+      "kind": "cosine_warmup_decay",
+      "total_steps": 25600,
+      "warmup_steps": 205,
+      "min_factor": 0.2
+    },
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "learning_rate": 0.005,
+    "lr_milestones": [],
+    "lr_decay": 1.0,
+    "epochs": 100,
+    "batch_size": 32,
+    "augment": false,
+    "seed": 41,
+    "selection": {
+      "every_epochs": 2,
+      "extension_epochs": 0
+    },
+    "arms": [
+      {
+        "id": "standard_hwa_model",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "corruption": null,
+        "selection_cases": [
+          {
+            "kind": "none",
+            "rate_ppm": 0,
+            "die_concentration": null,
+            "array_concentration": null
+          },
+          {
+            "kind": "random",
+            "rate_ppm": 30000,
+            "die_concentration": null,
+            "array_concentration": null
+          }
+        ],
+        "scope": "model",
+        "digital_learning_rate": 1e-05
+      }
+    ]
+  },
+  "program_verify": {
+    "method": "gaussian_endpoint",
+    "acceptance_percent": 2.0,
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "onchip": null,
+  "drift_regimes": {
+    "source_sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028",
+    "evaluation_corpus": "wikitext-2-raw-v1",
+    "evaluation_corpus_sha256": "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01",
+    "cohort_sha256": "99c12a626280f6be079b24ae72cacb1900a07f6917ef530cc4c2d1bf1ad7014c",
+    "regime": "R0-G",
+    "law": {
+      "rho_star": 0.335,
+      "persistent_share": 0.0,
+      "cmo_scale": 1.0,
+      "cmo_acceptance": 2.0,
+      "amplitude_sigma": 0.0,
+      "mean_us": null,
+      "spread_us": null,
+      "mean_exponent": 0.23,
+      "spread_exponent": 0.11,
+      "reference_seconds": 3600.0,
+      "program_min": 9.0,
+      "program_max": 88.2,
+      "drift_min": 5.0,
+      "drift_max": 150.0,
+      "time_dtype": "float64",
+      "coefficient_bins": [
+        [
+          0.0,
+          0.59,
+          2.35
+        ],
+        [
+          10.0,
+          0.02,
+          3.35
+        ],
+        [
+          20.0,
+          -0.43,
+          5.54
+        ],
+        [
+          30.0,
+          -0.29,
+          7.28
+        ],
+        [
+          40.0,
+          -4.51,
+          9.93
+        ],
+        [
+          50.0,
+          -3.04,
+          11.05
+        ],
+        [
+          65.0,
+          -2.45,
+          8.49
+        ],
+        [
+          80.0,
+          -2.52,
+          9.56
+        ],
+        [
+          100.0,
+          -1.03,
+          6.66
+        ],
+        [
+          115.0,
+          -0.68,
+          6.28
+        ],
+        [
+          130.0,
+          -0.87,
+          4.83
+        ],
+        [
+          145.0,
+          -1.01,
+          4.59
+        ],
+        [
+          160.0,
+          -0.88,
+          3.74
+        ]
+      ]
+    },
+    "deployment_attempts": 4,
+    "deployment_threshold": 0.6779,
+    "verify_seconds": 60.0,
+    "assignment_seeds": [
+      271004
+    ],
+    "seed": 391103,
+    "evaluation_split": "validation",
+    "evaluation_sequences": 64,
+    "evaluation_seconds": [
+      0.0,
+      60.0,
+      900.0,
+      1800.0,
+      3600.0,
+      7200.0,
+      14400.0,
+      28800.0,
+      57600.0,
+      86400.0
+    ],
+    "canary": false,
+    "arms": [
+      {
+        "label": "T-samp8-lr0.01",
+        "method": "lora",
+        "events": [
+          900.0,
+          3600.0,
+          14400.0,
+          57600.0
+        ],
+        "rank": 16,
+        "learning_rate": 0.01,
+        "target": "samples:8"
+      },
+      {
+        "label": "TB-random-32-lr0.001",
+        "method": "lora",
+        "events": [
+          900.0,
+          3600.0,
+          14400.0,
+          57600.0
+        ],
+        "rank": 16,
+        "learning_rate": 0.001,
+        "target": "samples:4",
+        "token_backward": "random:32",
+        "microbatch": 1
+      },
+      {
+        "label": "TB-random-32-lr0.003",
+        "method": "lora",
+        "events": [
+          900.0,
+          3600.0,
+          14400.0,
+          57600.0
+        ],
+        "rank": 16,
+        "learning_rate": 0.003,
+        "target": "samples:4",
+        "token_backward": "random:32",
+        "microbatch": 1
+      },
+      {
+        "label": "TB-random-32-lr0.01",
+        "method": "lora",
+        "events": [
+          900.0,
+          3600.0,
+          14400.0,
+          57600.0
+        ],
+        "rank": 16,
+        "learning_rate": 0.01,
+        "target": "samples:4",
+        "token_backward": "random:32",
+        "microbatch": 1
+      }
+    ],
+    "adaptation": {
+      "corpus": "wikitext-2-raw-v1",
+      "corpus_sha256": "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01",
+      "split": "train",
+      "sequences": 1024,
+      "cohort_sha256": "c919329dbe0d545d7614daf3d8f790881e944cd80ff53fff88fc19d9697f7762",
+      "seed": 20261104,
+      "probe_sequences": 16,
+      "steps": 300,
+      "batch": 8
+    },
+    "evaluation_start": 64
+  }
+}

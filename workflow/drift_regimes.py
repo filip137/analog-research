@@ -136,6 +136,21 @@ def run(stage):
             hidden.samples = arms.teacher_samples(stage.network, hidden, max(counts), seed)
             stage.store.append_metric({'phase': 'teacher_samples', **identity, 'count': max(counts), 'seed': seed,
                                        'samples_sha256': tensor_hash(hidden.samples.cpu())})
+        context_lengths = {int(a['token_backward'].split(':')[1]) for a in cfg.arms
+                           if a.get('token_backward', '').startswith('context:')}
+        if context_lengths:
+            if len(context_lengths) != 1:
+                raise ValueError('One short-context length per native unit is supported.')
+            length = context_lengths.pop()
+            if adaptation_tokens.shape[1] % length:
+                raise ValueError('Short contexts must partition every parent sequence.')
+            short_tokens = adaptation_tokens.reshape(-1, length)
+            hidden.short_context = arms.prefix_states(stage.network, short_tokens, stage.device)
+            hidden.short_context.samples = arms.teacher_samples(
+                stage.network, hidden.short_context, max(counts), seed)
+            stage.store.append_metric({'phase': 'short_context_targets', **identity, 'length': length,
+                'tokens_sha256': tensor_hash(short_tokens),
+                'samples_sha256': tensor_hash(hidden.short_context.samples.cpu())})
         probe = hidden[:cfg.adaptation['probe_sequences']]
     for p in stage.network.parameters():
         p.requires_grad_(False)

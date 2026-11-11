@@ -499,9 +499,14 @@ class Arm:
         a = self.adaptation
         self.network.lora_multiplier = self.base_multiplier if self.base_multiplier is not None else 0.
         target = parse_target(self.arm.get('target', 'kl'))
-        trace = train_digital(self.network, parameters, q, self.hidden, steps=a['steps'], batch=a['batch'],
-                              learning_rate=self.arm['learning_rate'], seed=a['seed'] + 1000 * index,
-                              target=target)
+        kwargs = dict(steps=a['steps'], batch=a['batch'], learning_rate=self.arm['learning_rate'],
+                      seed=a['seed'] + 1000 * index, target=target)
+        if 'token_backward' in self.arm:
+            from workflow.token_backward import train
+            trace = train(self.network, parameters, q, self.hidden, **kwargs,
+                          mode=self.arm['token_backward'], microbatch=self.arm.get('microbatch', 1))
+        else:
+            trace = train_digital(self.network, parameters, q, self.hidden, **kwargs)
         presentations = a['steps'] * a['batch']
         self.cost['optimizer_steps'] += a['steps']
         self.cost['adaptation_sequence_presentations'] += presentations
