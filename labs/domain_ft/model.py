@@ -246,6 +246,19 @@ def build_model(opt_path, base="opt", std3_path=None, device="cuda") -> tuple[Op
     receipt = {"opt_weights": str(opt_path), "opt_sha256": sha256_file(opt_path), "base": base}
     if base == "opt":
         state = opt
+    elif base.startswith("std3_cp"):
+        # exp-005 on-chip base: the std3 source programmed at c_p with one draw, exactly as deploy.py programs B0
+        cp_s, d_s = base.removeprefix("std3_cp").split("_d")
+        cp, seed = float(cp_s), int(d_s)
+        state, _ = std3_state(opt, std3_path, None)
+        info = {"c_p": cp, "devices": 0, "out_of_range_active": 0, "out_of_range_reference": 0, "channels_rescaled": 0}
+        for name, s in std3_scales(std3_path).items():
+            wh, i = program_weights(state[f"{name}.weight"], s, cp, seed, name)
+            state[f"{name}.weight"] = wh
+            for k in ("devices", "out_of_range_active", "out_of_range_reference", "channels_rescaled"):
+                info[k] += i[k]
+        receipt.update({"std3_source": str(std3_path), "std3_sha256": sha256_file(std3_path),
+                        "draw_seed": seed, "c_p": cp, "programming": info})
     else:
         seed = None if base == "std3_clean" else int(base.removeprefix("std3_d"))
         state, info = std3_state(opt, std3_path, seed)

@@ -135,6 +135,9 @@ def main(argv=None):
     p.add_argument("--std3", type=Path, required=True)
     p.add_argument("--out", type=Path, default=None)
     p.add_argument("--deadline", type=float, default=0.0)
+    p.add_argument("--method", default=None,
+                   help="exp-005: PEFT method of --run (e.g. lora_fc16). Its trained parameters (state.pt or peft.pt) "
+                        "stay digital; only the frozen std3 analog base is programmed at each (c_p, draw)")
     p.add_argument("--policy", default="rescale", choices=("rescale", "clip"),
                    help="P-rescale (rescale channels with |q| > 1) or P-clip (fixed source scale, q clipped to [-1, 1])")
     a = p.parse_args(argv)
@@ -151,6 +154,8 @@ def main(argv=None):
     scales = M.std3_scales(a.std3)
     base_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
     base_q = {n: base_state[f"{n}.weight"].double().cpu() / s.double()[:, None] for n, s in scales.items()}
+    if a.method:
+        return main_peft(a, run, out, files, opt_path, model, receipt, scales, base_state, dev)
     trained = {}
     if run is not None:
         fin = json.loads((run / "final.json").read_text())
@@ -206,6 +211,73 @@ def main(argv=None):
                               "wikitext_ppl": res["wikitext_test"]["ppl"], "kl": res["wikitext_test"]["teacher_kl"],
                               "rescaled": info["channels_rescaled"], "clipped": info["weights_clipped"],
                               "s": rec["eval_s"]}), flush=True)
+    return 0
+
+
+def main_peft(a, run, out, files, opt_path, model, receipt, scales, base_state, dev) -> int:
+    """exp-005: a digital PEFT run (trained off-chip on the clean base, or on-chip on one programmed draw) deployed
+    on the std3 base programmed at (c_p, draw). The analog matrices are written in place into the (wrapped) model;
+    the adapter parameters are loaded once and never programmed. An on-chip run (base std3_cp<c>_d<seed>) may only
+    be evaluated on the chip it was trained on."""
+    if run is None:
+        raise ValueError("--method needs --run")
+    fin = json.loads((run / "final.json").read_text())
+    if fin.get("status") != "done" or fin.get("method") != a.method:
+        raise RuntimeError(f"run not done or method mismatch: {run}")
+    base = fin.get("base", "std3_clean")
+    if base.startswith("std3_cp"):
+        cp_s, d_s = base.removeprefix("std3_cp").split("_d")
+        if [float(c) for c in a.cps] != [float(cp_s)] or a.draws != [int(d_s)]:
+            raise ValueError(f"on-chip run {base} evaluated only at its own chip, got cps={a.cps} draws={a.draws}")
+    elif base != "std3_clean":
+        raise ValueError(f"unsupported run base {base}")
+    sfile = run / "state.pt" if (run / "state.pt").exists() else run / "peft.pt"
+    trained = torch.load(sfile, map_location=dev, weights_only=True)
+    params = M.apply_method(model, a.method)
+    names = {n for n, p in model.named_parameters() if p.requires_grad}
+    if set(trained) != names:
+        raise KeyError(f"{sfile} keys do not match {a.method}: {sorted(set(trained) ^ names)[:6]}")
+    with torch.no_grad():
+        mp = dict(model.named_parameters())
+        for k, v in trained.items():
+            mp[k].copy_(v)
+    model.eval().requires_grad_(False)
+    receipt["state_sha256"] = M.sha256_file(sfile)
+    n_tr = sum(int(p.numel()) for p in params)
+    cost = {"total": {"policy": "none (analog base unchanged)", "moved_any": 0, "moved_gt_1sigma": 0, "moved_gt_2sigma": 0,
+                      "channels_rescaled": 0, "weights_clipped": 0, "frac_clipped": 0.0, "digital_changed": n_tr,
+                      "bytes_dense_fp16_changed_analog": 0, "bytes_sparse_idx32_fp16_2sigma": 0,
+                      "bytes_digital_changed_fp16": 2 * n_tr, "bytes_scales_changed_fp16": 0}}
+    analog = {n: getattr(model.layers[int(n.split(".")[1])], n.split(".")[2]).weight for n in scales}
+    teach = M.teacher(opt_path, dev)
+    doc = T.load(files[a.dataset])
+    common = {"dataset": a.dataset, "arm": a.arm, "deploy_policy": "none", "method": a.method, "run": str(a.run),
+              "run_base": base,
+              "run_final": {k: fin.get(k) for k in ("method", "lr", "base", "hwa_noise", "hwa_cp", "dev_final",
+                                                    "updates_done", "params", "train_tokens", "sec_per_update", "wall_s")},
+              "model": receipt, "host": socket.gethostname(), "gpu": torch.cuda.get_device_name(0),
+              "commit": T.git_commit(), "torch": torch.__version__}
+    for cp in a.cps:
+        for draw in (a.draws if cp > 0 else [None]):
+            name = "cp0" if cp == 0 else f"cp{T.lr_tag(cp)}_d{draw}"
+            if (out / f"{name}.json").exists():
+                print("SKIP", name, flush=True)
+                continue
+            if a.deadline and time.time() > a.deadline:
+                print("DEADLINE", name, flush=True)
+                return 2
+            t0 = time.time()
+            state, info = deployed_state(base_state, scales, cp, draw, "rescale")
+            with torch.no_grad():
+                for n, w in analog.items():
+                    w.copy_(state[f"{n}.weight"])
+            del state
+            res = evaluate(model, a, doc, files, dev, teach, None)
+            rec = {**common, "c_p": cp, "draw": draw, "programming": info, "change_cost": cost, **res,
+                   "eval_s": time.time() - t0}
+            (out / f"{name}.json").write_text(json.dumps(rec, indent=2))
+            print(json.dumps({"deploy": name, "dev": res["dev"]["metric"], "test": res["test"]["metric"],
+                              "wikitext_ppl": res["wikitext_test"]["ppl"], "s": rec["eval_s"]}), flush=True)
     return 0
 
 

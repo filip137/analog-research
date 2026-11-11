@@ -41,6 +41,7 @@ def lr_tag(lr: float) -> str:
 def run_dir(root: Path, a) -> Path:
     ds = a.dataset if a.base == "opt" else f"{a.dataset}@{a.base}"
     method = a.method + (f"_hwa{lr_tag(a.hwa_noise)}" if getattr(a, "hwa_noise", 0.0) else "")
+    method += f"_hwacp{lr_tag(a.hwa_cp)}" if getattr(a, "hwa_cp", 0.0) else ""
     name = method if a.method == "zs" else f"{method}__lr{lr_tag(a.lr)}"
     if a.updates != 1000:
         name += f"__u{a.updates}"
@@ -301,6 +302,10 @@ def main(argv=None):
     p.add_argument("--hwa-noise", type=float, default=0.0,
                    help="exp-002 B2: additive Gaussian noise std x per-output-channel absmax on the analog fc1/fc2 "
                         "weights of layers 6-11, resampled every update, straight-through (hwa docs/reram_cmo_device.md)")
+    p.add_argument("--hwa-cp", type=float, default=0.0,
+                   help="exp-005 L1: frozen analog base re-programmed every update with a fresh draw of the deployment "
+                        "law at this c_p (model.program_weights, CMO active/reference pair); needs --base std3_clean "
+                        "and a method that leaves fc1/fc2 of layers 6-11 frozen")
     p.add_argument("--hwa-seed", type=int, default=31)
     p.add_argument("--save-state", action="store_true", help="save the trained parameters to state.pt (exp-002 deploy)")
     a = p.parse_args(argv)
@@ -308,8 +313,10 @@ def main(argv=None):
     SEED = 20261108 + (a.seed - 1)
     out = a.out or run_dir(a.root, a)
     out.mkdir(parents=True, exist_ok=True)
+    if a.hwa_cp and (a.hwa_noise or a.base != "std3_clean" or M.method_size(a.method)[0] in ("full", "mlp")):
+        p.error("--hwa-cp needs --base std3_clean, no --hwa-noise, and a method with frozen analog weights")
     final = {"status": "running", "dataset": a.dataset, "method": a.method, "lr": a.lr, "base": a.base,
-             "updates_planned": a.updates, "hwa_noise": a.hwa_noise}
+             "updates_planned": a.updates, "hwa_noise": a.hwa_noise, "hwa_cp": a.hwa_cp}
     t_start = time.time()
     try:
         run(a, out, final)
@@ -414,6 +421,23 @@ def run(a, out: Path, final: dict):
                           "gradient": "straight-through (backward at the noisy weights, applied to the master)",
                           "master_clamp": "none", "seed": a.hwa_seed, "matrices": "fc1/fc2 of layers 6-11"}
             (out / "config.json").write_text(json.dumps(cfg, indent=2))
+        hwacp = []
+        if a.hwa_cp:
+            # targets from the frozen clean base exactly as deploy.py derives them (source scale, no rescale needed)
+            hwa_gen = torch.Generator(device=dev).manual_seed(a.hwa_seed)
+            for name, sc in M.std3_scales(a.std3).items():
+                i, fc = name.split(".")[1], name.split(".")[2]
+                w = getattr(model.layers[int(i)], fc).weight
+                q, s, info = M.deploy_targets(w, sc)
+                if info["channels_rescaled"]:
+                    raise ValueError(f"clean base needs rescaling in {name}")
+                hwacp.append((w, (M.G_MID + M.G_SPAN * q).float().to(dev), s.float().to(dev)[:, None]))
+            cfg["hwa"] = {"noise_model": "deployment law (model.program_weights): G_a = clamp(G_a* + c_p sigma_PV(G_a*) e), "
+                          "G_r = clamp(48.6 + c_p sigma_PV(48.6) e'), W = s_j (G_a - G_r) / 39.6",
+                          "c_p": a.hwa_cp, "resample": "every update, fresh e, e' for every device",
+                          "gradient": "trainable parameters only; analog base frozen and restored after each update",
+                          "seed": a.hwa_seed, "matrices": "fc1/fc2 of layers 6-11"}
+            (out / "config.json").write_text(json.dumps(cfg, indent=2))
         model.train()
         torch.cuda.reset_peak_memory_stats()
         train_time, loss_acc, n_acc = 0.0, 0.0, 0
@@ -439,6 +463,14 @@ def run(a, out: Path, final: dict):
                     clean.append(w.detach().clone())
                     amax = w.abs().amax(1, keepdim=True)
                     w.add_(a.hwa_noise * amax * torch.randn(w.shape, generator=hwa_gen, device=w.device))
+                for w, gas, sc in hwacp:
+                    clean.append(w.detach().clone())
+                    e = torch.randn(w.shape, generator=hwa_gen, device=w.device)
+                    ga = (gas + a.hwa_cp * M.sigma_pv(gas) * e).clamp_(M.G_MIN, M.G_MAX)
+                    e.normal_(generator=hwa_gen)
+                    gr = (M.G_MID + a.hwa_cp * M.sigma_pv(M.G_MID) * e).clamp_(M.G_MIN, M.G_MAX)
+                    w.copy_(sc * (ga - gr) / M.G_SPAN)
+                    del e, ga, gr
             for m0 in range(0, BATCH, micro):
                 part = idx[m0: m0 + micro]
                 if is_task:
@@ -457,7 +489,7 @@ def run(a, out: Path, final: dict):
                 loss.backward()
                 total += float(loss.detach())
             with torch.no_grad():
-                for w, c in zip(noisy, clean):
+                for w, c in zip(noisy + [h[0] for h in hwacp], clean):
                     w.copy_(c)
             del clean
             gn = torch.nn.utils.clip_grad_norm_(params, 1.0)
