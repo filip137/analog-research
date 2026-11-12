@@ -125,7 +125,8 @@ def select(deps):
 
 def bench(t, arm, cp, policy="rescale"):
     f = ART2 / "remote/deploy" / t / (arm if policy == "rescale" else f"{arm}@{policy}")
-    xs = [json.loads(p.read_text())["test"]["metric"] for p in f.glob(f"cp{cp:g}*.json")] if f.exists() else []
+    pat = "cp0.json" if cp == 0 else f"cp{cp:g}_d*.json"  # not cp{cp}*: "cp1*" also matches cp10
+    xs = [json.loads(p.read_text())["test"]["metric"] for p in f.glob(pat)] if f.exists() else []
     return mean_sd(xs)[0]
 
 

@@ -41,6 +41,7 @@ def main():
     ap.add_argument("--l0-cps", type=float, nargs="+", default=None, help="deploy L0 at these c_p (default --cps)")
     ap.add_argument("--updates", type=int, default=1000)
     ap.add_argument("--prio", type=int, default=100)
+    ap.add_argument("--id-suffix", default="", help="appended to every queue id (re-queueing work whose id was claimed)")
     a = ap.parse_args()
     p = a.prio
     utag = "" if a.updates == 1000 else f"__u{a.updates}"
@@ -87,7 +88,7 @@ def main():
                                               f"--cps {g(cp)} --draws {d}"))
                 p += 1
     for prio, jid, est, needs, cmd in lines:
-        print(f"{prio}\t{jid}\t{int(est)}\t{needs}\t{cmd}")
+        print(f"{prio}\t{jid}{a.id_suffix}\t{int(est)}\t{needs}\t{cmd}")
 
 
 if __name__ == "__main__":
