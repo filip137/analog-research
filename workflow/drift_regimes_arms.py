@@ -41,7 +41,7 @@ Methods (``training.drift_regimes_config.ARM_KEYS``):
   ``q - step * g / rms(g_selected)``. The active device is reset to
   ``g_reference_now + 39.6 q_new`` with P&V. ``ideal`` writes land exactly and
   hold (diagnostic).
-- ``twin`` (none, lora, learning): the no-drift twin holds the released state;
+- ``twin`` (none, calibration, lora, learning): the no-drift twin holds the released state;
   a twin write holds its programmed endpoint.
 
 Digital training takes no device time: it uses the read held at the event, and

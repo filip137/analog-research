@@ -429,3 +429,42 @@ def test_native_stage_runs_every_arm_method_under_measured_bins(cmo_inputs, tmp_
     assert arms['A0']['cost']['reset_attempts'] == 0 and arms['A9']['cost']['reset_attempts'] > 0
     rows = json.loads((directory / 'drift_regimes_measurements.json').read_text())
     assert all(r['law']['coefficient_bins'] == [list(x) for x in ReramFamily(**BINNED).coefficient_bins] for r in rows)
+
+
+def test_log_independent_laws_parse_and_restrict_arms_and_old_files_still_parse():
+    from test_drift_family import CMO_LOG
+    raw = config(law=asdict(ReramFamily(**CMO_LOG))).to_dict()
+    assert DriftRegimes.parse(json.loads(json.dumps(raw))).family.temporal == 'independent'
+    old = config().to_dict()
+    for key in ('coefficient_bins', 'time_law', 'log_offset_us', 'temporal'):   # written before the fields
+        del old['law'][key]
+    assert DriftRegimes.parse(old).family == ReramFamily()
+    rewrite = {'label': 'A9', 'method': 'rewrite', 'events': (900.,), 'fraction': .1, 'attempts': 4,
+               'threshold': .7}
+    with pytest.raises(ValueError):
+        DriftRegimes.parse(dict(raw, arms=[dict(rewrite)]))
+    twin = {'label': 'A1e-twin', 'method': 'calibration', 'events': (60., 900.), 'twin': True}
+    adaptation = {**ADAPT, 'corpus_sha256': 'b' * 64, 'cohort_sha256': 'd' * 64}
+    parsed = DriftRegimes.parse(dict(raw, arms=[{'label': 'A0', 'method': 'none'}, twin], adaptation=adaptation))
+    assert parsed.arms[1]['twin']
+
+
+def test_native_stage_runs_calibration_twins_under_the_log_independent_law(cmo_inputs, tmp_path):
+    from test_drift_family import CMO_LOG
+    lc, results, teacher, base, adaptation = _stage_inputs(cmo_inputs, tmp_path)
+    arm_list = (
+        {'label': 'A0', 'method': 'none'},
+        {'label': 'A0-twin', 'method': 'none', 'twin': True},
+        {'label': 'A1e', 'method': 'calibration', 'events': (60., 900.)},
+        {'label': 'A1e-twin', 'method': 'calibration', 'events': (60., 900.), 'twin': True},
+    )
+    cfg = DriftRegimes.parse(replace(base, law=asdict(ReramFamily(**CMO_LOG, drift_min=5.)), arms=arm_list,
+                                     adaptation=adaptation).to_dict())
+    directory, metrics = _run(lc, cfg, results, teacher, tmp_path / 'log')
+    assert metrics['source_unchanged'] and metrics['replay_exact']
+    rows = json.loads((directory / 'drift_regimes_measurements.json').read_text())
+    twin = {r['physical_sha256'] for r in rows if r['arm'] == 'A1e-twin'}
+    assert twin == {r['physical_sha256'] for r in rows if r['arm'] == 'A0-twin'} and len(twin) == 1
+    live = [r['physical_sha256'] for r in rows if r['arm'] == 'A0']
+    assert len(set(live)) == len(live)                   # a fresh draw at every age
+    assert metrics['arms']['A1e-twin']['cost']['probe_tokens'] > 0

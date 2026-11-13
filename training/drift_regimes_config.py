@@ -37,7 +37,10 @@ ARM_KEYS = {
     'learning_newton': REWRITE | {'rounds', 'batch_sequences', 'ideal'},   # exp-003 closed loop (A11)
 }
 # Optional on these methods: twin = True holds the released state (no drift) for reads and evaluation.
-TWIN = ('none', 'lora', 'learning', 'learning_newton')
+# calibration twins (drift-mapping campaign): the calibrated no-drift reference.
+TWIN = ('none', 'calibration', 'lora', 'learning', 'learning_newton')
+# Optional ReramFamily fields, absent from files written before they existed.
+OPTIONAL_LAW = {'coefficient_bins', 'time_law', 'log_offset_us', 'temporal'}
 DIGITAL = ('layernorm', 'lora', 'lora_oracle', 'lora_rescaled', 'lora_clean', 'learning', 'learning_newton')
 WRITES = ('rewrite', 'precompensated', 'rewrite_oracle', 'learning', 'learning_newton')
 ADAPTATION_KEYS = {'corpus', 'corpus_sha256', 'split', 'sequences', 'cohort_sha256', 'seed',
@@ -123,9 +126,10 @@ class DriftRegimes:
         for key in ('evaluation_corpus', 'regime'):
             _label(value[key], key)
         law = value['law']
-        # coefficient_bins is optional, so that files written before it existed still parse unchanged.
+        # coefficient_bins and the drift-mapping time-law fields are optional, so that files written
+        # before they existed still parse unchanged.
         every = {f.name for f in fields(ReramFamily)}
-        if not isinstance(law, dict) or set(law) not in (every, every - {'coefficient_bins'}):
+        if not isinstance(law, dict) or not (every - OPTIONAL_LAW <= set(law) <= every):
             raise ValueError('Expected every ReramFamily field in law.')
         family = ReramFamily(**law)
         law = dict(law)
@@ -156,6 +160,10 @@ class DriftRegimes:
             raise ValueError('Evaluation ages must increase from zero.')
         value['evaluation_seconds'] = times
         value['arms'] = cls._arms(value['arms'], times)
+        if (family.time_law != 'power' or family.temporal != 'correlated') and any(
+                a['method'] in WRITES + ('lora_rescaled',) for a in value['arms']):
+            # Write controllers and A6's rescaling use the power-law nominal deviation.
+            raise ValueError('Log or time-independent drift laws support only non-writing arms without rescaling.')
         value['adaptation'] = cls._adaptation(value['adaptation'], value['arms'])
         return cls(**value)
 
