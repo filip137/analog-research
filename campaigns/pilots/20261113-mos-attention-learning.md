@@ -78,6 +78,45 @@ quasistatic state dynamics dissipate that energy. The compact model includes
 internal charge dynamics; empirical SPICE settling is checked, not advertised
 as a global Lyapunov proof for all parasitic transients or fabricated devices.
 
+## Relation to the papers and remaining circuit stages
+
+[Bacvanski et al., Appendix J, Eq. 97](https://arxiv.org/html/2512.15002v1#A10)
+write the Analog ET attention energy using learned affine scores. This
+implementation instead computes bilinear scores from two evolving token
+projections and explicitly includes both derivatives in its state drive.
+
+[Abbott and Machta](https://arxiv.org/pdf/2610.12571) implement bump-based
+similarity and restore learning signals with a doubled/dyadic circuit. Here,
+the score is a nominal bilinear MOS product; the reciprocal state drive is
+derived from a scalar energy, with the normalized-current potential above.
+This pilot does not reproduce their in-context learning result or its task.
+
+```mermaid
+flowchart LR
+    Z[Token RC states] --> G[Ideal LayerNorm]
+    G --> Q[Resistor projection Q]
+    G --> K[Resistor projection K]
+    Q --> S[MOS score products and sums]
+    K --> S
+    S --> P[Regulated MOS current bank P]
+    P --> R[MOS products P K and transpose-P Q]
+    Q --> R
+    K --> R
+    R --> W[Tied transposed resistor projections]
+    W --> Z
+    G --> Y[Reciprocal decoder and output RCs]
+    Y --> Z
+    B[Output nudge plus/minus beta] --> Y
+```
+
+The memory/ReLU path, persistent input drive and bias sources also feed the
+state nodes; the diagram focuses on the attention/learning loop. The chosen
+RCs use simulation-scale time constants (1 ms tokens, 1.3 ms outputs; 100 nF
+and 130 nF at 100 uS leak). These are not on-chip area or speed targets.
+Foundry models, mismatch/noise, finite amplifier bandwidth, physical weight
+writing and compact normalization/rectification remain subsequent stages.
+A selective retrieval task is the next scientific test before model scaling.
+
 ## Development evidence and changes before freeze
 
 Preserved under `/tmp/mos-attention-learning/`:
@@ -155,7 +194,7 @@ Launch source `ff5be7b3491ba16c0fa20e3add09372ec5c9e82b`, clean and pushed to
 Integrated validation: 41 passed, one unrelated architecture test skipped.
 
 Run started 2026-11-13 18:08:45 UTC; hard deadline 18:38:45 UTC. Tool execution
-session 60199. Native bundle:
+session 60199, parent PID 1508055. Native bundle:
 `/home/filip/analog-research/drn/results/mos-attention-learning/task-001/20261113T180845.863831Z-a26f3db6-e035838e`.
 Log: `/home/filip/analog-research/drn/results/mos-attention-learning/task-001.log`.
 Initial bank/EP checks passed and epochs 0–2 emitted valid measured metrics.
