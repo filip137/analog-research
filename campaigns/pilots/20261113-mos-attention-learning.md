@@ -147,4 +147,17 @@ Use `python -m ebl runs inspect RUN_DIR --verify-artifacts --require-complete`
 for collection. Preserve failed attempts; operational fixes only within the
 remaining budget. Do not change scientific settings as an automatic retry.
 
-Current state: circuit readiness passed; preparing the pinned task run.
+## Active handoff
+
+Launch source `ff5be7b3491ba16c0fa20e3add09372ec5c9e82b`, clean and pushed to
+`energy-transformer` and `refactor/training-core`. Pinned checkout:
+`/home/filip/analog-research/drn/results/mos-attention-learning/source-ff5be7b`.
+Integrated validation: 41 passed, one unrelated architecture test skipped.
+
+Run started 2026-11-13 18:08:45 UTC; hard deadline 18:38:45 UTC. Tool execution
+session 60199. Native bundle:
+`/home/filip/analog-research/drn/results/mos-attention-learning/task-001/20261113T180845.863831Z-a26f3db6-e035838e`.
+Log: `/home/filip/analog-research/drn/results/mos-attention-learning/task-001.log`.
+Initial bank/EP checks passed and epochs 0–2 emitted valid measured metrics.
+Owner remains the executing agent; next check within 60 seconds. Task result
+is pending, not yet a learning claim.
