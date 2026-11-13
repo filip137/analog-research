@@ -186,7 +186,7 @@ Use `python -m ebl runs inspect RUN_DIR --verify-artifacts --require-complete`
 for collection. Preserve failed attempts; operational fixes only within the
 remaining budget. Do not change scientific settings as an automatic retry.
 
-## Active handoff
+## Completed launch record
 
 Launch source `ff5be7b3491ba16c0fa20e3add09372ec5c9e82b`, clean and pushed to
 `energy-transformer` and `refactor/training-core`. Pinned checkout:
@@ -197,6 +197,84 @@ Run started 2026-11-13 18:08:45 UTC; hard deadline 18:38:45 UTC. Tool execution
 session 60199, parent PID 1508055. Native bundle:
 `/home/filip/analog-research/drn/results/mos-attention-learning/task-001/20261113T180845.863831Z-a26f3db6-e035838e`.
 Log: `/home/filip/analog-research/drn/results/mos-attention-learning/task-001.log`.
-Initial bank/EP checks passed and epochs 0–2 emitted valid measured metrics.
-Owner remains the executing agent; next check within 60 seconds. Task result
-is pending, not yet a learning claim.
+Run completed successfully at 18:29:10 UTC in 1,223.25 s, before the 30-minute
+deadline. There are no active training processes. The executing agent monitored
+through completion, then collected and scientifically reviewed the bundle.
+
+
+## Result and scientific review
+
+**The tiny circuit-learning milestone passed all seven frozen criteria.**
+The final, unselected 200-update checkpoint learned masked averaging from 12
+training pairs and generalized to the 32 fresh seed-3102 pairs.
+
+| Metric | Measured MSE |
+| --- | ---: |
+| Initial training | 0.0255063095 |
+| Final training | 0.0006389849 |
+| Initial held out | 0.0257994435 |
+| Final held out | 0.0019376395 |
+| Held-out zero predictor | 0.0242172545 |
+| Trained circuit with attention removed | 0.0258826310 |
+
+Held-out MSE fell by **92.49%**. Removing attention made the masked output
+constant across the 32 examples (standard deviation 7.8e-18), confirming that
+the learned cross-token information travels through the attention paths.
+The final prediction plot also shows compression at the most extreme target
+means; this is useful learning, not exact arithmetic or perfect generalization.
+One training seed and this small regression task do not establish selective
+attention, in-context learning, multihead scaling or pretrained-model transfer.
+
+All 27 logical parameters trained; all six groups changed. Initial and final
+EP checks perturbed the actual circuit in one fixed direction per group.
+Maximum relative directional-gradient error was 2.66e-5 initially and 6.03e-5
+finally. The regulated BSIM bank's measured Jacobian asymmetry was 3.51e-11,
+with minimum symmetric eigenvalue 7.9e-12. These corroborate the stated static
+energy and local EP construction; they are not a global transient stability
+proof for arbitrary weights or device nonidealities.
+
+The run used **7,341 SPICE transients**, covering 7,338 required settled phases
+and three retained shorter attempts. All three extensions occurred at update
+70, sample 8 (free/minus/plus): 300 time units were insufficient, and 1,200
+settled each phase. The plus/minus state separation there was .00547 in L2;
+the two distances from the free state were .00274 and .00273. No unfinished
+phase supplied an update. There was no retry with changed scientific settings.
+
+Worst accepted terminal KCL residual: 4.31e-8. Worst measured product error:
+9.81e-11; minimum Vds .2705 V; minimum triode margin .6410 V; maximum measured
+operand .58994. Tail-fraction error was below 5.95e-13, regulated-Vds error
+below 9e-16, and deviation from nominal mathematical softmax below 9.05e-5.
+These are nominal simulator measurements, not silicon accuracy specifications.
+
+`ebl runs inspect --verify-artifacts --require-complete --json` passed with
+no errors: **36,765 artifacts**, 183,944,364 declared bytes, clean source
+`ff5be7b3491ba16c0fa20e3add09372ec5c9e82b`. An independent read-only audit
+recomputed every reported prediction MSE, checked train/test disjointness,
+all 200 x 12 x 3 training phase paths, the 7,341 netlist count, checkpoint
+changes and the constant-output attention ablation. The result receipt hash is
+`2ada4ad60416f1deeb521adb304040d72b00ef8a7f49a4a2ddaca1e6eda15e79`.
+
+Derived artifacts, inspection receipt and audit are under:
+`/home/filip/analog-research/drn/results/mos-attention-learning/analysis-task-001/`.
+This includes `learning.png`, `learning.svg`, `provenance.json`, `inspect.json`,
+`audit.json`, its retained `audit_completed.py`, and `trained-attention.cir`.
+The readable trained netlist is an exact decompression of the final gradient
+check's free-phase circuit, with inputs [.3,-.1,0]. Native phase artifacts and
+all checkpoints remain in the bundle named above. The plotting utility is
+`experiments/plot_mos_attention_learning.py`; it reads artifacts only and runs
+with the existing `/usr/bin/python3` Matplotlib environment. Training used
+`/home/filip/miniconda3/bin/python` and the pinned ngspice binary.
+
+**Decision:** retain this MOS score/current-normalization/reciprocal-return
+design as a working staged prototype. The next scientific test should require
+query-dependent selection, before scaling token count or width. Further physical
+work should replace ideal buffers/normalization/rectification, implement body
+isolation and drain regulation in a chosen process, and evaluate mismatch,
+noise, bandwidth and weight programming. Those are proposed next stages, not
+additional runs performed here. The broad small/mid-scale transformer issue
+#36 remains open; the end-to-end attention/simple-task assignment is complete.
+
+Version-control closeout: the implementation and result record are merged and
+pushed to the DRN trunk; keep the user-requested `energy-transformer` branch.
+Remove this pilot's worktrees after integration; all evidence stays in the
+native results directory. No user README or frozen study notes were edited.
