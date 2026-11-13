@@ -18,6 +18,7 @@ import ebl.runtime.retention as retention
 import ebl.runtime.compensation as compensation
 import ebl.runtime.drift_recovery as drift_recovery
 import ebl.runtime.initial_programming as initial_programming
+import ebl.runtime.fault_tuning as fault_tuning
 import hardware.arrays as device_stage
 from ebl.schema.lifecycle import EXPERIMENT_ID, StageConfig, provenance, verify_provenance
 from networks import family
@@ -50,6 +51,7 @@ REQUIRED_INPUTS = {
     "compensate": {"teacher_weights", "device_data", "device_model", "weights", "device_state"},
     "drift_recovery": {"teacher_weights", "device_data", "device_model", "weights"},
     "initial_programming": {"teacher_weights", "device_data", "device_model", "weights"},
+    "fault_tuning": {"teacher_weights", "device_data", "device_model", "weights"},
 }
 
 
@@ -412,6 +414,7 @@ STAGES = {
     "compensate": compensation.run,
     "drift_recovery": drift_recovery.run,
     "initial_programming": initial_programming.run,
+    "fault_tuning": fault_tuning.run,
 }
 
 
@@ -457,6 +460,8 @@ def _inputs(request, kind, lifecycle=None, selection=None) -> list[dict]:
         if digest != settings.model_sha256:
             raise ValueError('Pinned Flowers model changed.')
         inputs.append({'role': 'flowers_model', 'path': str(model_path), 'sha256': digest})
+    if kind == 'fault_tuning':
+        inputs += fault_tuning.pinned_inputs(lifecycle)
     return inputs + staged_source_inputs()
 
 

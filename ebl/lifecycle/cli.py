@@ -24,7 +24,8 @@ def summary(lifecycle) -> dict:
     devices, hwa, onchip = lifecycle.devices, lifecycle.hwa, lifecycle.onchip
     stages = stage_selections(lifecycle)
     deployments = len(hwa.arms) * len(devices.assignment_seeds) * len(lifecycle.defects.cases)
-    if lifecycle.retention is not None or lifecycle.drift_recovery is not None or lifecycle.initial_programming is not None:
+    if (lifecycle.retention is not None or lifecycle.drift_recovery is not None or lifecycle.initial_programming is not None
+            or lifecycle.fault_tuning is not None):
         deployments = 0
     trajectories = (0 if onchip is None else len(hwa.arms) * len(devices.assignment_seeds)
                     * len(lifecycle.onchip_cases) * len(onchip.arms))
@@ -58,6 +59,7 @@ def summary(lifecycle) -> dict:
                        if (kind != "retention" or lifecycle.retention is not None)
                        and (kind != "drift_recovery" or lifecycle.drift_recovery is not None)
                        and (kind != "initial_programming" or lifecycle.initial_programming is not None)
+                       and (kind != "fault_tuning" or lifecycle.fault_tuning is not None)
                        and (kind != "compensate" or lifecycle.drift_compensation is not None)},
         **({"retention": lifecycle.retention.to_dict(),
             "retention_snapshots": len(hwa.arms) * len(lifecycle.retention.assignment_seeds)
@@ -82,6 +84,7 @@ def summary(lifecycle) -> dict:
             * len(lifecycle.retention.case_labels) * len(lifecycle.drift_compensation.methods)
             * sum(len(lifecycle.drift_compensation.snapshots(lifecycle.retention, m)) for m in lifecycle.retention.models)}
            if lifecycle.drift_compensation is not None else {}),
+        **({"fault_tuning": lifecycle.fault_tuning.to_dict()} if lifecycle.fault_tuning is not None else {}),
         **({"task": lifecycle.task.to_dict()} if lifecycle.task is not None else {}),
         "analog_weights": lifecycle.network.analog_weights,
         "onchip_state_gb_estimate": round(
