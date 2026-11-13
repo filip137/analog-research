@@ -37,7 +37,7 @@ import math
 
 import torch
 
-from hardware.drift.writable import cycle_normal, stream_seed
+from hardware.drift.writable import _hash32, cycle_normal, stream_seed
 
 # AIHWKit 1.1.0 ReRamCMONoiseModel: sigma(G) = c0 + c1 G (uS), keyed by the
 # P&V acceptance range in percent (same table as hwa training/reram_cmo.py).
@@ -71,6 +71,14 @@ class ReramFamily:
     first at or below ``program_min``. A device's bin is that of its programmed
     conductance G_p, looked up again at every write. Without it the arithmetic is the
     scalar law's, bit for bit.
+
+    ``time_law = 'log'`` (drift-mapping exp-006) replaces the power law by the AIHWKit 1.1.0
+    ReRamCMONoiseModel relaxation, with t the seconds since the device's latest write:
+    mean = mean_us * ln t and spread = spread_us * ln t + log_offset_us (no drift at t = 0;
+    ln t is floored at 0 for t < 1 s). The exponents and reference time are then unused.
+    ``temporal = 'independent'`` draws a fresh Y for every read time (AIHWKit draws anew at
+    each inference time); it needs rho_star 1, no persistent share and no amplitude spread.
+    With the defaults ('power', 'correlated') the arithmetic is unchanged, bit for bit.
     """
     rho_star: float = 0.335
     persistent_share: float = 0.0
@@ -88,11 +96,24 @@ class ReramFamily:
     drift_max: float = 150.0
     time_dtype: str = 'float64'
     coefficient_bins: tuple = ()
+    time_law: str = 'power'
+    log_offset_us: float = 0.0
+    temporal: str = 'correlated'
 
     def __post_init__(self):
         values = asdict(self)
         scalar = ('mean_us', 'spread_us')
-        _finite(values, [k for k in values if k not in ('time_dtype', 'coefficient_bins', *scalar)])
+        _finite(values, [k for k in values if k not in ('time_dtype', 'coefficient_bins', 'time_law', 'temporal',
+                                                        *scalar)])
+        if self.time_law not in ('power', 'log') or self.temporal not in ('correlated', 'independent'):
+            raise ValueError("Expected time_law 'power'/'log' and temporal 'correlated'/'independent'.")
+        if self.time_law == 'log' and (self.coefficient_bins or self.log_offset_us < 0):
+            raise ValueError('The log time law takes scalar coefficients and a nonnegative log_offset_us.')
+        if self.time_law == 'power' and self.log_offset_us != 0:
+            raise ValueError('log_offset_us applies only to the log time law.')
+        if self.temporal == 'independent' and (self.rho_star != 1 or self.persistent_share
+                                               or self.amplitude_sigma):
+            raise ValueError('Independent draws need rho_star 1, no persistent share and no amplitude spread.')
         if not isinstance(self.coefficient_bins, (list, tuple)):
             raise ValueError('Expected a sequence of coefficient bins.')
         if self.coefficient_bins:
@@ -151,6 +172,15 @@ class ReramFamily:
     def spread_at(self, g):
         """Spread coefficient (uS at the reference age) for conductances ``g``; see ``mean_at``."""
         return self.spread_us if not self.coefficient_bins else self._bin_values(g, 2)
+
+    def log_curves(self, age_seconds):
+        """(mean, spread) in uS, float64, of the log time law at ``age_seconds`` since the write."""
+        age = age_seconds.double()
+        ln = age.clamp_min(1.0).log()
+        written = age > 0
+        mean = torch.where(written, self.mean_us * ln, torch.zeros_like(ln))
+        spread = torch.where(written, self.spread_us * ln + self.log_offset_us, torch.zeros_like(ln))
+        return mean, spread
 
 
 class _Cells:
@@ -278,6 +308,7 @@ class ReramDriftCells(_Cells):
         self._program_seed = stream_seed(self.seed, 'cmo-endpoint')
         self._c_step_seed = stream_seed(self.seed, 'C-steps')
         self._i_step_seed = stream_seed(self.seed, 'I-steps')
+        self._time_seed = stream_seed(self.seed, 'independent-times')
         c = 10.0 ** (-self.law.kappa / GRID_PER_DECADE)
         self._c, self._q = c, math.sqrt(max(0.0, 1 - c * c))
 
@@ -352,7 +383,18 @@ class ReramDriftCells(_Cells):
             flat(self.d_lo), flat(self.d_hi), target_grid)
         return grid, c_lo, c_hi, d_lo, d_hi, w
 
+    def _independent_y(self, seconds, ids):
+        """Fresh N(0, 1) per (device, write cycle, read age in ms): no temporal correlation."""
+        age_ms = ((seconds - self._flat(self.last_write, ids).double()) * 1000).round().to(torch.int64)
+        if bool((age_ms >= 2**32).any()):
+            raise ValueError('Independent draws are keyed on ages below 2^32 ms (49.7 days).')
+        key = _hash32(self._flat(self.cycles, ids).to(torch.int64) + self._time_seed) ^ age_ms
+        all_ids = (torch.arange(self.target.numel(), device=self.target.device) if ids is None else ids)
+        return cycle_normal(all_ids, key, 0)
+
     def _y(self, seconds, ids, state=None):
+        if self.law.temporal == 'independent':
+            return self._independent_y(seconds, ids)
         if self.law.kappa == 0:
             return self._flat(self.epsilon, ids)
         _, c_lo, c_hi, d_lo, d_hi, w = state or self._path_state(seconds, ids)
@@ -370,10 +412,14 @@ class ReramDriftCells(_Cells):
         seconds = self._seconds(seconds)
         ids = self._ids(indices)
         law = self.law
-        age = (seconds - self._flat(self.last_write, ids)) / law.reference_seconds
         anchor = self._flat(self.anchor, ids)
-        mean = (law.mean_at(anchor) * age.pow(law.mean_exponent)).to(torch.float32)
-        spread = (law.spread_at(anchor) * age.pow(law.spread_exponent)).to(torch.float32)
+        if law.time_law == 'log':
+            mean, spread = law.log_curves(seconds - self._flat(self.last_write, ids))
+            mean, spread = mean.to(torch.float32), spread.to(torch.float32)
+        else:
+            age = (seconds - self._flat(self.last_write, ids)) / law.reference_seconds
+            mean = (law.mean_at(anchor) * age.pow(law.mean_exponent)).to(torch.float32)
+            spread = (law.spread_at(anchor) * age.pow(law.spread_exponent)).to(torch.float32)
         if self.amplitude is not None:
             spread = spread * self._flat(self.amplitude, ids)
         raw = anchor + mean + spread * self._y(seconds, ids)
@@ -422,7 +468,11 @@ class ReramDriftCells(_Cells):
         With coefficient bins the controller uses the bin of the requested target (G_p is hidden)."""
         law = self.law
         u = seconds_since_write / law.reference_seconds
-        if not law.coefficient_bins:
+        if law.time_law == 'log':
+            mean, spread = law.log_curves(torch.full_like(requested, float(seconds_since_write), dtype=torch.float64))
+            expected = requested + mean.to(requested.dtype)
+            sd = ((law.cmo_scale * law.cmo_sigma(requested)).square() + spread.square().to(requested.dtype)).sqrt()
+        elif not law.coefficient_bins:
             expected = requested + law.mean_us * u**law.mean_exponent
             sd = ((law.cmo_scale * law.cmo_sigma(requested)).square()
                   + (law.spread_us * u**law.spread_exponent) ** 2).sqrt()

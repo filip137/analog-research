@@ -296,3 +296,60 @@ def test_verify_score_uses_the_bin_of_the_requested_target():
         assert float(c.verify_score(read, c.requested, 60.)[k]) == pytest.approx(z, rel=1e-5, abs=1e-5)
     state = ReramDriftCells.restore(c.state_dict())
     assert state.law == c.law and torch.equal(state.value(), c.value())
+
+
+# -- AIHWKit CMO log-time relaxation and time-independent draws (drift-mapping exp-006) ------------
+# aihwkit 1.1.0 ReRamCMONoiseModel decay_dict: mean [-0.08900206], std [0.04201137, 0.41183342].
+CMO_LOG = dict(time_law='log', mean_us=-0.08900206, spread_us=0.04201137, log_offset_us=0.41183342,
+               rho_star=1., temporal='independent')
+
+
+def test_log_law_validates():
+    ReramFamily(**CMO_LOG)
+    for bad in (dict(CMO_LOG, time_law='exp'), dict(CMO_LOG, temporal='white'),
+                dict(CMO_LOG, rho_star=.335), dict(CMO_LOG, log_offset_us=-1.),
+                dict(log_offset_us=.4), dict(CMO_LOG, persistent_share=.5)):
+        with pytest.raises(ValueError):
+            ReramFamily(**bad)
+    assert ReramFamily().time_law == 'power' and ReramFamily().temporal == 'correlated'
+
+
+def test_log_law_matches_the_aihwkit_marginals():
+    n = 200_000
+    target = torch.full((n,), 30.)
+    c = ReramDriftCells(target, law=ReramFamily(**CMO_LOG, cmo_scale=0., **WIDE), seed=11, name='cell')
+    for t in (60., 3600., 86400.):
+        d = (c.value(t) - c.anchor).double()
+        mean, sd = -0.08900206 * math.log(t), 0.04201137 * math.log(t) + 0.41183342
+        assert float(d.mean()) == pytest.approx(mean, abs=4 * sd / math.sqrt(n))
+        assert float(d.std()) == pytest.approx(sd, rel=0.01)
+    fresh = ReramDriftCells(target[:5], law=ReramFamily(**CMO_LOG, cmo_scale=0.), seed=11, name='cell')
+    assert torch.equal(fresh.value(0.), target[:5])
+
+
+def test_independent_draws_are_uncorrelated_deterministic_and_replayable():
+    n = 200_000
+    target = torch.full((n,), 30.)
+    law = ReramFamily(**CMO_LOG, cmo_scale=0., **WIDE)
+    c = ReramDriftCells(target, law=law, seed=12, name='cell')
+    a, b = (c.value(t) - c.anchor for t in (3600., 7200.))
+    assert abs(float(torch.corrcoef(torch.stack((a, b)))[0, 1])) < 0.01
+    assert torch.equal(c.value(3600.), c.value(3600.))
+    path = ReramDriftCells.restore(c.state_dict())
+    for t in (60., 900., 3600.):
+        path.advance(t)
+    assert torch.equal(path.value(), c.value(3600.))
+    # A reset gives a fresh draw at the same age since the write.
+    before = c.advance(100.) - c.anchor
+    c.write(torch.arange(n), target)
+    after = c.value(200.) - c.anchor
+    assert abs(float(torch.corrcoef(torch.stack((before, after)))[0, 1])) < 0.01
+
+
+def test_log_verify_score_uses_the_log_law():
+    target = torch.tensor([15., 45.])
+    c = ReramDriftCells(target, law=ReramFamily(**CMO_LOG, cmo_scale=0., **WIDE), seed=13, name='cell')
+    read = c.advance(60.)
+    mean, sd = -0.08900206 * math.log(60.), 0.04201137 * math.log(60.) + 0.41183342
+    z = c.verify_score(read, c.requested, 60.)
+    torch.testing.assert_close(z, ((read - target - mean) / sd).float(), atol=1e-5, rtol=1e-5)

@@ -299,3 +299,23 @@ def test_tiny_readiness_reports_checks_and_timings(tmp_path):
     assert len(report['checks']) == 3 and all(c['replay_exact'] for c in report['checks'])
     assert all(c['finite_physical_gradients'] and c['finite_layernorm_gradients'] for c in report['checks'])
     assert {'fisher_round_16_sequences', 'rewrite_full_event', 'evaluation_full_cohort'} <= set(report['timing'])
+
+
+CMO_LOG_LAW = {**LAW, 'rho_star': 1., 'mean_us': -0.08900206, 'spread_us': 0.04201137,
+               'time_law': 'log', 'log_offset_us': 0.41183342, 'temporal': 'independent'}
+
+
+def test_log_independent_law_parses_restricts_arms_and_runs(tmp_path):
+    parsed = DriftRegimes.parse(settings_raw(law=dict(CMO_LOG_LAW), arms=copy.deepcopy(ARMS[:3])))
+    assert ReramFamily(**parsed.law).temporal == 'independent'
+    with pytest.raises(ValueError):
+        DriftRegimes.parse(settings_raw(law=dict(CMO_LOG_LAW), arms=[ARMS[4]]))
+    with pytest.raises(ValueError):
+        DriftRegimes.parse(settings_raw(law={**CMO_LOG_LAW, 'time_law': 'exp'}, arms=copy.deepcopy(ARMS[:3])))
+    early = [60.] + EVENTS
+    spec = [ARMS[0], ARMS[7], {'label': 'A1e', 'method': 'calibration', 'events': early},
+            {'label': 'A1e-twin', 'method': 'calibration', 'events': early, 'twin': True}]
+    stage = tiny_stage(tmp_path, law=CMO_LOG_LAW, arms_spec=spec)
+    stage.mapping = stage_module.remap(stage.model, {'scale': 3., 'offset_us': 0.})
+    report, _ = stage_module.run_screen(stage)
+    assert report['replay_exact'] and report['source_unchanged']

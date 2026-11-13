@@ -175,7 +175,16 @@ class DriftRegimes:
         # Optional measured bins (R0-G, drift-mapping exp-003): coefficient_bins replace the
         # scalar mean_us and spread_us, which are then None. ReramFamily validates the table.
         binned = 'coefficient_bins' in law
-        _exact(law, set(RERAM_FAMILY_FIELDS) | ({'coefficient_bins'} if binned else set()), 'law')
+        # Optional exp-006 fields: AIHWKit CMO log-time relaxation and time-independent draws.
+        optional = {'time_law', 'log_offset_us', 'temporal'} & set(law)
+        _exact(law, set(RERAM_FAMILY_FIELDS) | ({'coefficient_bins'} if binned else set()) | optional, 'law')
+        if optional:
+            if law.get('time_law', 'power') not in ('power', 'log') or \
+                    law.get('temporal', 'correlated') not in ('correlated', 'independent'):
+                _fail("Expected law.time_law 'power'/'log' and law.temporal 'correlated'/'independent'.")
+            if 'log_offset_us' in law:
+                _float(law['log_offset_us'], 'law.log_offset_us')
+        nondefault_time = law.get('time_law', 'power') != 'power' or law.get('temporal', 'correlated') != 'correlated'
         if binned:
             bins = law['coefficient_bins']
             if (not isinstance(bins, (list, tuple)) or not bins or law['mean_us'] is not None
@@ -243,9 +252,10 @@ class DriftRegimes:
         arms = tuple(parse_arm(a, ages[-1]) for a in raw['arms'])
         if len({a['label'] for a in arms}) != len(arms):
             _fail('Expected distinct arm labels.')
-        if binned and any(a['method'] in ('rewrite', 'precompensated', 'learning_newton') for a in arms):
-            # Their nominal deviation and fresh moments still use the scalar law in this backend.
-            _fail('Binned drift coefficients support only none, calibration and layernorm arms.')
+        if (binned or nondefault_time) and any(a['method'] in ('rewrite', 'precompensated', 'learning_newton')
+                                               for a in arms):
+            # Their nominal deviation and fresh moments still use the scalar power law in this backend.
+            _fail('Binned or log/independent drift laws support only none, calibration and layernorm arms.')
         for a in arms:
             if a['method'] == 'layernorm' or a['method'] == 'learning_newton':
                 if a.get('batch_sequences', 1) > adaptation.sequences:

@@ -153,13 +153,36 @@ def exp005():
     return configs
 
 
+# exp-006: AIHWKit 1.1.0 ReRamCMONoiseModel relaxation x M (log time, conductance-independent),
+# fresh draws at every read time; CMO write noise at scale 1.
+AIHWKIT_CMO_DECAY = {'mean': -0.08900206, 'slope': 0.04201137, 'offset': 0.41183342}
+EXP006_MULTIPLIERS = (1.0, 4.0, 10.0)
+
+
+def exp006():
+    configs = {}
+    d = AIHWKIT_CMO_DECAY
+    for realization in SEEDS:
+        for m in EXP006_MULTIPLIERS:
+            for label in ('base', 'ratio3'):
+                config = base(realization)
+                settings = config['drift_regimes']
+                settings['regime'] = f'AIHWKIT-CMO-M{m:g}-map-{label}'
+                settings['law'].update(rho_star=1.0, mean_us=d['mean'] * m, spread_us=d['slope'] * m,
+                                       time_law='log', log_offset_us=d['offset'] * m, temporal='independent')
+                settings['mapping'] = dict(EXP002[label])
+                settings['arms'] = [a for a in settings['arms'] if a['label'] != 'A1'] + copy.deepcopy(EXP002_ARMS)
+                configs[f'M{m:g}-{label}-{realization}'] = config
+    return configs
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('experiment', choices=['exp-001', 'exp-002', 'exp-003', 'exp-004', 'exp-005'])
+    parser.add_argument('experiment', choices=['exp-001', 'exp-002', 'exp-003', 'exp-004', 'exp-005', 'exp-006'])
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
     configs = {'exp-001': exp001, 'exp-002': exp002, 'exp-003': exp003, 'exp-004': exp004,
-               'exp-005': exp005}[args.experiment]()
+               'exp-005': exp005, 'exp-006': exp006}[args.experiment]()
     out = ROOT / 'configs' / args.experiment
     out.mkdir(parents=True, exist_ok=True)
     stale = []
