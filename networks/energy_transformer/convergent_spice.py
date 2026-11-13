@@ -1,7 +1,8 @@
 """Explicit analog-block netlist for the convergent ET prototype.
 
-State RCs and differential weight resistors are explicit. Softmax uses matched
-BJTs. Normalization, multiplication, rectification and buffers remain ideal.
+State RCs and differential weight resistors are explicit. Softmax defaults to
+matched ideal subthreshold MOSFET device macros; the BJT reference is selectable.
+Normalization, multiplication, rectification and buffers remain ideal.
 No behavioral source implements the whole vector field or matrix product.
 """
 from dataclasses import dataclass
@@ -10,8 +11,9 @@ import shutil
 import subprocess
 import numpy as np
 
-from networks.energy_transformer.convergent import Parameters, Boundary
+from networks.energy_transformer.convergent import Parameters, Boundary, ports
 from networks.energy_transformer.spice import THERMAL_VOLTAGE, TAIL_CURRENT, BJT_BETA
+from networks.energy_transformer import mosfet
 
 G0 = 1e-4
 TIME_UNIT = 1e-3
@@ -19,14 +21,23 @@ TAUS = (1.,1.3)
 
 
 class Builder:
-    def __init__(self):
+    def __init__(self, softmax_device=mosfet.DEVICE):
+        if softmax_device not in ("bjt",mosfet.DEVICE):
+            raise ValueError("Unknown softmax device")
+        self.softmax_device = softmax_device
         self.lines = ["Convergent energy transformer -- ideal analog block prototype",
             "* Quasistatic multiplier/normalizer/rectifier macros; finite bandwidth untested.",
-            ".temp 27", ".options reltol=1e-9 abstol=1e-14 vntol=1e-10 gmin=1e-15 method=gear maxord=2",
-            ".model qsoft NPN(IS=1e-15 BF=1e8 CJE=0 CJC=0 TF=0 TR=0)", "Vcc vcc 0 3"]
+            f"* softmax_device={softmax_device}", ".temp 27", "Vcc vcc 0 3"]
+        if softmax_device == mosfet.DEVICE:
+            self.lines += [".options reltol=1e-9 abstol=1e-18 vntol=1e-10 gmin=1e-18 method=gear maxord=2",
+                           f"Vmosbias mosbias 0 {mosfet.GATE_BIAS:.17g}"]+mosfet.subcircuit()
+        else:
+            self.lines += [".options reltol=1e-9 abstol=1e-14 vntol=1e-10 gmin=1e-15 method=gear maxord=2",
+                           ".model qsoft NPN(IS=1e-15 BF=1e8 CJE=0 CJC=0 TF=0 TR=0)"]
         self.serial = 0
         self.negatives = {}
         self.positives = {}
+        self.banks = []
 
     def name(self,prefix):
         self.serial += 1
@@ -76,27 +87,39 @@ class Builder:
 
     def softmax(self,scores,kappa):
         emitter = self.name("emitter")
-        self.lines.append(f"{self.name('Itail')} {emitter} 0 {TAIL_CURRENT:.17g}")
+        tail = mosfet.TAIL_CURRENT if self.softmax_device == mosfet.DEVICE else TAIL_CURRENT
+        self.lines.append(f"{self.name('Itail')} {emitter} 0 {tail:.17g}")
         outputs=[]
+        gates=[]
+        drains=[]
         alpha=BJT_BETA/(BJT_BETA+1)
         for score in scores:
             base,collector,out = self.name("base"),self.name("collector"),self.name("probability")
             measure = self.name("Vcollector")
-            self.lines += [f"{self.name('Ebase')} {base} 0 {score} 0 {kappa*THERMAL_VOLTAGE:.17g}",
-                           f"{measure} vcc {collector} 0", f"{self.name('Qsoft')} {collector} {base} {emitter} qsoft",
-                           f"{self.name('Fprob')} 0 {out} {measure} 1",f"{self.name('Rprob')} {out} 0 {1/(alpha*TAIL_CURRENT):.17g}"]
+            if self.softmax_device == mosfet.DEVICE:
+                self.lines += [f"{self.name('Egate')} {base} mosbias {score} 0 {kappa*mosfet.SLOPE_FACTOR*mosfet.THERMAL_VOLTAGE:.17g}",
+                               f"{measure} vcc {collector} 0", f"{self.name('Xsoftmos')} {collector} {base} {emitter} mosweak",
+                               f"{self.name('Fprob')} 0 {out} {measure} {TAIL_CURRENT/tail:.17g}",
+                               f"{self.name('Rprob')} {out} 0 {1/TAIL_CURRENT:.17g}"]
+            else:
+                self.lines += [f"{self.name('Ebase')} {base} 0 {score} 0 {kappa*THERMAL_VOLTAGE:.17g}",
+                               f"{measure} vcc {collector} 0", f"{self.name('Qsoft')} {collector} {base} {emitter} qsoft",
+                               f"{self.name('Fprob')} 0 {out} {measure} 1",f"{self.name('Rprob')} {out} 0 {1/(alpha*TAIL_CURRENT):.17g}"]
             outputs.append(out)
+            gates.append(base)
+            drains.append(collector)
+        self.banks.append({"source":emitter,"gates":gates,"drains":drains})
         return outputs
 
 
-def export_netlist(parameters, boundary, nudge=0., initial=None):
+def export_netlist(parameters, boundary, nudge=0., initial=None, *, softmax_device=mosfet.DEVICE):
     p,b = parameters,boundary.checked(parameters,nudge)
     n,d = p.shape
     h,a,_ = p.query.shape
     patch = p.output_shape[1]
     initial = np.zeros(p.size) if initial is None else initial
     z0,y0 = p.split(initial)
-    net = Builder()
+    net = Builder(softmax_device)
     z = np.array([[f"z_{i}_{j}" for j in range(d)] for i in range(n)])
     y = np.array([[f"y_{i}_{j}" for j in range(patch)] for i in range(n)])
     g=[]; enc=[]; pos=[]
@@ -159,6 +182,30 @@ def export_netlist(parameters, boundary, nudge=0., initial=None):
         for node,drive in zip(y[i],dy): net.lines.append(f"{net.name('Goutput')} 0 {node} {drive} 0 {G0:.17g}")
         drivez.append(dz); drivey.append(dy)
     groups={"z":z,"y":y,"g":g,"q":q,"k":k,"p":probabilities,"r":np.array(rectified),"token_drive":np.array(drivez),"output_drive":np.array(drivey)}
+    if softmax_device == mosfet.DEVICE:
+        groups["softmax_sources"]=np.array([bank["source"] for bank in net.banks]).reshape(h,n)
+        groups["softmax_gates"]=np.array([bank["gates"] for bank in net.banks]).reshape(h,n,n)
+        # The ideal exponential macro lacks a compact model's Newton limiting.
+        # Seed algebraic voltages consistently with the prescribed RC initial
+        # states; this changes no component law or physical initial state.
+        initial_ports=ports(p,np.asarray(initial))
+        initial_values={"vcc":mosfet.DRAIN_VOLTAGE,"mosbias":mosfet.GATE_BIAS}
+        for i in range(n):
+            initial_values[f"mean_{i}"]=z0[i].mean()
+            initial_values[f"variance_{i}"]=initial_ports["s"][i,0]**2
+            initial_values[f"scale_{i}"]=initial_ports["s"][i,0]
+        for key in ("g","q","k","p","r"):
+            initial_values.update(zip(groups[key].ravel(),initial_ports[key].ravel()))
+        for index,bank in enumerate(net.banks):
+            head,row=divmod(index,n)
+            scores=initial_ports["k"][head]@initial_ports["q"][head,row]
+            gates=mosfet.GATE_BIAS+p.kappa*mosfet.SLOPE_FACTOR*mosfet.THERMAL_VOLTAGE*scores
+            amplitude=np.exp((gates-mosfet.THRESHOLD)/(mosfet.SLOPE_FACTOR*mosfet.THERMAL_VOLTAGE)).sum()
+            source=-mosfet.THERMAL_VOLTAGE*np.log(mosfet.TAIL_CURRENT/(mosfet.CURRENT_SCALE*amplitude)+np.exp(-mosfet.DRAIN_VOLTAGE/mosfet.THERMAL_VOLTAGE))
+            initial_values[bank["source"]]=source
+            initial_values.update(zip(bank["gates"],gates))
+            initial_values.update({node:mosfet.DRAIN_VOLTAGE for node in bank["drains"]})
+        net.lines += [f".ic V({node})={float(value):.17g}" for node,value in initial_values.items()]
     vectors=[f"v({node})" for nodes in groups.values() for node in nodes.ravel()]
     step,stop=TIME_UNIT/20,80*TIME_UNIT
     net.lines += [".control","set noaskquit","set numdgt=15","set wr_singlescale","set wr_vecnames",
@@ -173,10 +220,10 @@ class SpiceTrace:
     ports: dict
 
 
-def run_spice(parameters,boundary,directory,*,executable="ngspice",nudge=0.,initial=None,timeout=30):
+def run_spice(parameters,boundary,directory,*,executable="ngspice",nudge=0.,initial=None,timeout=30,softmax_device=mosfet.DEVICE):
     directory=Path(directory).resolve()
     directory.mkdir(parents=True,exist_ok=False)
-    text,shapes=export_netlist(parameters,boundary,nudge,initial)
+    text,shapes=export_netlist(parameters,boundary,nudge,initial,softmax_device=softmax_device)
     (directory/"circuit.cir").write_text(text)
     executable=shutil.which(str(executable))
     if executable is None: raise FileNotFoundError("ngspice executable not found")
