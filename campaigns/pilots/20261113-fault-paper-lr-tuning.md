@@ -109,27 +109,48 @@ Analog LoRA is crossbar only (DRN deferred).
   - Deterministic deployment: see deviation 2.
   - Canary `results/fault-paper-lr-tuning/local/canary-1/run`: all six methods at
     3 updates; native bundle complete and valid.
-- Jean Zay: five V100 dev jobs (`umg@v100`, `gpu_p13`, `qos_gpu-dev`, `v100-32g`,
-  10 CPUs, 2 h), `--begin=2026-11-13T22:00:00`. Each job draws and verifies the
-  samples, then runs one packed config:
-  - A: holds + noisy ×5;
-  - B: noiseless ×5;
-  - C: Child-D (Fisher + ×5);
-  - D: LoRA r16 ×3;
-  - E: LoRA r64 ×3.
+- Jean Zay. The V100 dev queue was full (10/10 submitted jobs, other studies)
+  when this setup was ready, so the launch is mixed. All jobs carry
+  `--begin=2026-11-13T22:00:00`.
+  - One V100 job ([draw.slurm](20261113-fault-paper-lr-tuning/launch/draw.slurm),
+    `umg@v100`, `qos_gpu-dev`, `v100-32g`, 20 min) reproduces the samples. It
+    writes them to `runs-<commit>/samples-v100/` only if the hash is `df73ce66…`.
+  - Five A100 dev jobs (`umg@a100`, `gpu_p5`, `qos_gpu_a100-dev`, `-C a100`, 8 CPUs,
+    2 h, `--dependency=afterok:<draw>`) each run one packed config:
+    - A: holds + noisy ×5;
+    - B: noiseless ×5;
+    - C: Child-D (Fisher + ×5);
+    - D: LoRA r16 ×3;
+    - E: LoRA r64 ×3.
+  - If the draw fails, no training job starts.
+  - Submitted by [jz_submit_hybrid.sh](20261113-fault-paper-lr-tuning/launch/jz_submit_hybrid.sh)
+    as soon as one V100 dev slot was free. The all-V100 variant
+    ([jz_submit.sh](20261113-fault-paper-lr-tuning/launch/jz_submit.sh); each job
+    draws its own samples) is kept for reruns.
 - Inputs on Jean Zay (`$SCRATCH` = `/lustre/fsn1/projects/rech/umg/ucy17uy`):
   - teacher `opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin`;
   - HWA `opt125m-cmo-drn-rates-v1/inputs/hwa-std3.pt` (`dfb9f22f…`, checked);
   - WikiText `opt-cmo-exp1/inputs/corpora/wikitext-2-raw-v1.pt` (`33e95834…`, checked);
   - deployment `drn-fault-paper-lr-tuning-20261113/inputs/deployed-3pct-271001.pt`.
+- Source: `git archive` of the launch commit, staged read-only at
+  `$SCRATCH/drn-fault-paper-lr-tuning-20261113/source-<commit>/` with
+  `source_snapshot.json`. On the login node with PyTorch 2.5.0, 56 tests pass,
+  including the 10 new ones. The legacy `ThresholdedWriteAdam` golden fails, as
+  documented in October.
 - Outputs: `$SCRATCH/drn-fault-paper-lr-tuning-20261113/runs-<commit>/<config>/run/`,
   Slurm logs in `runs-<commit>/slurm/`.
 - Retention: no final banks are saved (held hashes are recorded); masks and
   adapters are kept. New storage is under 100 MB.
-- Expected wall time per job: 1.13 s/update on the 3090 at microbatch 1 (LoRA 0.75 s).
-  V100 is expected at 1.6–2 s/update, about 10 min per write arm. A, B and C take
-  about 60 min each; D and E about 25 min each. All are well inside the 6,900 s
-  run budget.
+- Expected wall time per job, measured on the 3090 at microbatch 1:
+  - 1.13 s/update for write arms, 0.75 s/update for LoRA;
+  - Fisher pass 195 s;
+  - development evaluation 2.5–6 s.
+  The A100 should be at least as fast. On the 3090 scale, A, B and C take about
+  35 min each and D and E about 15 min each. A V100 at 2 s/update would need about
+  60 min for each of A, B and C. All fit the 6,900 s run budget.
+- Collection: `python campaigns/pilots/20261113-fault-paper-lr-tuning/collect.py <runs dir>`
+  tabulates arms and applies the selection rule (lowest final dev KL; within 1 %
+  the fewest write attempts; grid edges flagged).
 
 ## Current handoff
 
