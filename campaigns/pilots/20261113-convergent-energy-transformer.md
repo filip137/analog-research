@@ -304,3 +304,22 @@ unchanged. The output root is
 `/home/filip/analog-research/drn/results/convergent-energy-transformer/evidence`.
 The executing agent directly monitors the bounded run and verifies completion,
 artifact hashes, case coverage and all acceptance criteria.
+
+
+## Published BJT reference — 13 November
+
+The approved publication and pinned check completed. Both `energy-transformer`
+and `refactor/training-core` were pushed at
+`99143e7531612ec20780458e7d3c15837d0c9a00`. The source was clean in the native
+manifest. Bundle:
+`/home/filip/analog-research/drn/results/convergent-energy-transformer/evidence/20261113T150322.467298Z-82444872-00a83316`.
+All 12 acceptance checks and artifact-hash/completion inspection pass. Duration
+8.73 s; maximum transient discrepancy 1.3653e-6 V; maximum SPICE-derived EP
+relative error 2.8524e-5; loss 0.1237749663 -> 0.1139746266. All declared
+phases and parameter groups are present. This is the published BJT baseline.
+
+The user then requested replacing the BJT softmax with MOSFETs, referring to
+Abbott and Machta (arXiv:2610.12571). Use the ideal weak-inversion MOSFET bank
+in their equations (25)/(31) as the first staged replacement; preserve this
+BJT baseline and the energy architecture. The full paper's dyadic saddle-point
+learning architecture is not being substituted for our convergent model.
