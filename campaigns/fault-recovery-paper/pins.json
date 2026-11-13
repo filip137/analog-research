@@ -1,3 +1,10 @@
 {
-  "deployment": {"name": "fault-paper-deploy-271001-random3pct", "sha256": "611a0aaba97d491af9bcbfebe81e2192603ceacf43192036ee0962609a0f1ffc"}
+  "deployment": {
+    "name": "fault-paper-deploy-271001-random3pct",
+    "sha256": "611a0aaba97d491af9bcbfebe81e2192603ceacf43192036ee0962609a0f1ffc"
+  },
+  "b_scale": {
+    "name": "fault-paper-bscale-r16-3em3",
+    "sha256": "494f5c052004bf49a2c15622429e9ba40357e13daba54235c3e515844dd6c333"
+  }
 }
