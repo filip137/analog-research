@@ -95,3 +95,10 @@ and parameter gradient groups, programming steps and both invalid controls
 are present and pass. This completes the original circuit-design/KCL/EqProp
 implementation milestone (#32). The larger convergent multi-token demonstration
 continues in #36 on the user-requested `energy-transformer` branch.
+
+Closing checkpoint: the original implementation and this result record are
+merged into the published DRN trunk. The original merged branch/worktree and
+the completed detached source checkout were removed after checking for local
+changes; only generated Python caches existed in the original worktree. All
+readiness, failed and published evidence is retained. The convergent model's
+active worktree continues independently on `energy-transformer`.
