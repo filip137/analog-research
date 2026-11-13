@@ -908,6 +908,18 @@ EXPERIMENT_REGISTRY["analog_energy_transformer.v1"] = ExperimentDefinition(
 )
 
 
+from ebl.schema.convergent_energy_transformer import (
+    parse_config as _convergent_et_parse,
+    resolve_config as _convergent_et_resolve,
+)
+EXPERIMENT_REGISTRY["convergent_energy_transformer.v1"] = ExperimentDefinition(
+    experiment_id="convergent_energy_transformer.v1", schema_version=1,
+    description="Convergent multi-token Energy Transformer analog circuit and EP checks.",
+    supported_modes=(RunMode.CHARACTERIZE,),
+    parser=_convergent_et_parse, resolver=_convergent_et_resolve,
+)
+
+
 def list_definitions() -> Tuple[ExperimentDefinition, ...]:
     """Return definitions in stable identifier order."""
 

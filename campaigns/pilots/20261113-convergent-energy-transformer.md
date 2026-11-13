@@ -156,3 +156,39 @@ Owner: executing Codex agent. No active experiment processes at specification.
 The previous branch's merge/push approval is unresolved and is not inferred
 from selecting this new scientific direction. Prepare concrete changes and
 readiness evidence before any publication decision.
+
+
+## Implementation handoff — 13 November
+
+The user explicitly selected staged analog blocks first, then transistor
+circuits. The complete 4-token/2-head model and its explicit SPICE export are
+implemented. The mathematical model has 80 logical parameters and 20 RC state
+nodes. Normalization and multiplication are individual analog macros; matrix
+products are differential resistor-current sums and each softmax row uses BJTs.
+
+Eight initial model/circuit tests passed, including four SPICE transients and a
+SPICE-derived programming step. After CLI integration, 33 model/CLI/architecture
+tests passed; one pre-existing version-dependent test skipped, and the unchanged
+SPICE test was excluded from that second invocation. There was no GPU work.
+
+Two understood implementation/reference defects were preserved in the readiness
+history. The first netlist lacked a positive-rail input buffer, so a projection
+loaded the output capacitor; adding the specified buffer corrected the circuit.
+The ODE residual was sufficiently small for inference but could contaminate a
+finite-difference subtraction; only the independent FD reference now polishes
+its stationary root to 1e-12. No scientific case, EP beta, learning rate or
+acceptance threshold was changed. Failed attempt artifacts remain under
+/tmp/convergent-energy-transformer/spice-check-001/.
+
+Exact native readiness command, from this worktree with one CPU thread:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m ebl characterize --config examples/convergent_energy_transformer_circuit.json --output-dir /home/filip/analog-research/drn/results/convergent-energy-transformer/readiness
+```
+
+The strict config fixes the declared case and budget. The native bundle records
+all parameters/boundaries, source/tool identities, three free starts, all four
++/- beta pairs, six SPICE transients (three free, two nudged, one after update),
+all six parameter groups, independent implicit/FD references and the omitted-key
+negative control. It is local readiness, not a published-source evidence run or
+a held-out task-training study. The executing agent monitors it directly.
