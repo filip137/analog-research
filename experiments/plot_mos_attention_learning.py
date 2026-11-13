@@ -27,7 +27,7 @@ def main():
         np.testing.assert_array_equal(batch['target'],final['target'])
     out.mkdir(parents=True,exist_ok=False)
     with plt.rc_context({'font.size':10,'axes.spines.top':False,'axes.spines.right':False}):
-        fig,axes=plt.subplots(1,2,figsize=(10,4.1),layout='constrained')
+        fig,axes=plt.subplots(1,2,figsize=(10,4.1),constrained_layout=True)
         epochs=[row['epoch'] for row in history];losses=[row['train_mse'] for row in history]
         axes[0].semilogy(epochs,losses,color='#355C9B',lw=2,label='Measured SPICE EP')
         axes[0].axhline(np.mean(data['train_pairs'].mean(1)**2),color='#909090',ls='--',label='Zero predictor on training pairs')
