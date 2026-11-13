@@ -192,3 +192,96 @@ all parameters/boundaries, source/tool identities, three free starts, all four
 all six parameter groups, independent implicit/FD references and the omitted-key
 negative control. It is local readiness, not a published-source evidence run or
 a held-out task-training study. The executing agent monitors it directly.
+
+
+## Local readiness result — complete, 13 November
+
+Issue: https://github.com/filip137/on-chip-learning/issues/36.
+Source: d65e30d36df253f61268c2058b52cebc6c1b823e, clean in the manifest.
+Native bundle:
+`/home/filip/analog-research/drn/results/convergent-energy-transformer/readiness/20261113T143844.756988Z-82444872-4ca77d4b`.
+`python -m ebl runs inspect BUNDLE --verify-artifacts --require-complete` passed.
+All 12 frozen acceptance checks pass. All declared cases/phases are present;
+none was excluded. Native duration: 9.19 s; bundle size: 53,698,568 bytes.
+The two preserved pytest SPICE attempts plus this bundle total 98,867,803 bytes,
+within the declared 100 MB readiness allowance. Preparation/reading time and
+per-task token usage were not separately instrumented.
+
+| Measurement | Result |
+| --- | ---: |
+| Branch-current KCL max error | 1.37e-16 |
+| Independent energy/dissipation identity error | 2.22e-16 |
+| Maximum sampled energy increase (roundoff) | 1.07e-14 |
+| Numerical terminal residual | 3.54e-13 |
+| Free-state disagreement across three starts | 3.25e-13 |
+| SPICE maximum transient error | 1.37e-6 V |
+| SPICE maximum terminal-state error | 3.17e-12 V |
+| SPICE port-function error | 6.39e-11 V |
+| SPICE measured KCL residual | 3.67e-15 |
+| Worst centered EP relative L2 error, beta=0.005 | 2.83e-5 |
+| Worst SPICE-derived EP relative L2 error | 2.86e-5 |
+| Worst independent directional FD relative error | 2.07e-9 |
+| Minimum activation-coordinate Hessian eigenvalue | 0.5933 |
+| Minimum Hessian eigenvalue after programming | 0.5885 |
+| Single-example loss before / after EP update | 0.12377497 / 0.11397463 |
+
+The centered EP error decreases by approximately four whenever beta halves.
+All six parameter groups have nonzero reference gradients, including encoder,
+query and key. The omitted-key-feedback control breaks the prescribed force by
+2.95e-4 and the energy/dissipation identity by 9.36e-5. It is a contract-failure
+control, not a claim that this particular broken trajectory has positive energy
+slope everywhere. ReLU switching margin at the free equilibrium is 1.14e-4.
+
+The explicit prototype has 20 RC state nodes, 992 weight resistor instances,
+32 softmax BJTs, 192 multiplier macros, 16 normalized outputs and 24 rectifier
+macros. Positive and negative signal rails use 80 ideal buffers each. There
+are 80 logical trainable parameters (56 in attention/memory); physical copies
+are programmed together by the software controller. The very small equilibrium
+errors are properties of ideal matched simulation, not fabricated precision.
+
+Verdict: the complete multi-token, multi-head ideal circuit has the intended
+energy-decreasing dynamics, stable local equilibria and correct EP learning
+signals on this frozen readiness case. One measured-circuit update decreases
+its loss. This does not yet demonstrate dataset training, generalization,
+transistor-level realizability, useful attention at scale, or efficiency.
+
+## Scaling decision and next gated work
+
+For the direct fully parallel differential-resistor layout, let
+Wcore=2*H*head_width*D+M*D. The physical resistor count is
+4*N*Wcore+6*N*P*D, because forward and return projections and different token
+instances have distinct physical components. This count excludes summation,
+readout and leak resistors, amplifiers, wiring and the programming controller.
+Multiplier count is 3*H*N*N*head_width; softmax BJT count is H*N*N.
+
+| Candidate | Logical total parameters | State capacitors | Weight resistor instances | Multiplier macros |
+| --- | ---: | ---: | ---: | ---: |
+| Current N=4,D=4,H=2,a=2,M=6,P=1 | 80 | 20 | 992 | 192 |
+| Small N=16,D=64,H=4,a=16,M=256,P=4 | 26,112 | 1,088 | 1,597,440 | 49,152 |
+| Medium N=49,D=256,H=8,a=32,M=1024,P=16 | 413,952 | 13,328 | 78,274,560 | 1,843,968 |
+
+These counts make physical reuse/interconnect a research decision before
+claiming a medium-scale chip. A circuit-equivalent numerical run alone is not
+a full SPICE simulation at that size. Time multiplexing must come with a
+specified state-storage/update schedule and renewed energy/EP verification.
+
+Next work, in order:
+
+1. Publish the completed circuit implementation and run its pinned-source
+   evidence checkpoint. The trunk is clean and this branch is a fast-forward
+   descendant; no conflict resolution or user-file changes are needed.
+2. Prepare a strict small masked-image training pilot, initially the 26,112
+   parameter configuration above. Fix dataset/split/masks, initialization,
+   update count and wall/storage budgets before any substantial run. Measure
+   settling failures and EP bias as well as held-out loss, and include matched
+   exact-equilibrium-gradient, frozen, no-attention and trivial-fill controls.
+3. Use the small trained model to select and validate the physical array reuse
+   schedule and new transistor blocks. Scale to the medium configuration only
+   after task learning and the mapping/settling gates pass.
+
+Publication status: local branch and results are retained; no jobs are active.
+The prior automatic approval review requires explicit conversation approval
+before merging/pushing the shared DRN trunk. Selecting the convergent scientific
+variant and staged circuit detail was not treated as that publication approval.
+The requested small/mid-scale demonstration remains open. No dataset, GPU,
+remote-host or transistor-level run has been launched.
