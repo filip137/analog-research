@@ -1,0 +1,177 @@
+{
+ "experiment_id": "opt_cmo_drn_drift_regimes.v1",
+ "schema_version": 1,
+ "stage": "drift_regimes",
+ "device": "cuda:0",
+ "cpu_threads": 10,
+ "drift_regimes": {
+  "regime": "R0-G-cp10-map-base",
+  "seed": 391103,
+  "realization": 271003,
+  "source_sha256": "dfb9f22fa6a922952aeddd2f1c8f29b4a40e129fe0d2296f8343decbc309bcb9",
+  "corpus": "wikitext-2-raw-v1",
+  "corpus_sha256": "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01",
+  "sequence_length": 256,
+  "law": {
+   "rho_star": 0.335,
+   "persistent_share": 0.0,
+   "cmo_scale": 10.0,
+   "cmo_acceptance": 2.0,
+   "amplitude_sigma": 0.0,
+   "mean_us": null,
+   "spread_us": null,
+   "mean_exponent": 0.23,
+   "spread_exponent": 0.11,
+   "reference_seconds": 3600.0,
+   "program_min": 9.0,
+   "program_max": 88.2,
+   "drift_min": 5.0,
+   "drift_max": 150.0,
+   "time_dtype": "float64",
+   "coefficient_bins": [
+    [
+     0,
+     0.59,
+     2.35
+    ],
+    [
+     10,
+     0.02,
+     3.35
+    ],
+    [
+     20,
+     -0.43,
+     5.54
+    ],
+    [
+     30,
+     -0.29,
+     7.28
+    ],
+    [
+     40,
+     -4.51,
+     9.93
+    ],
+    [
+     50,
+     -3.04,
+     11.05
+    ],
+    [
+     65,
+     -2.45,
+     8.49
+    ],
+    [
+     80,
+     -2.52,
+     9.56
+    ],
+    [
+     100,
+     -1.03,
+     6.66
+    ],
+    [
+     115,
+     -0.68,
+     6.28
+    ],
+    [
+     130,
+     -0.87,
+     4.83
+    ],
+    [
+     145,
+     -1.01,
+     4.59
+    ],
+    [
+     160,
+     -0.88,
+     3.74
+    ]
+   ]
+  },
+  "deployment_attempts": 4,
+  "deployment_threshold": 0.7431,
+  "verify_seconds": 60.0,
+  "evaluation_seconds": [
+   0.0,
+   60.0,
+   900.0,
+   1800.0,
+   3600.0,
+   7200.0,
+   14400.0,
+   28800.0,
+   57600.0,
+   86400.0
+  ],
+  "evaluation": {
+   "split": "validation",
+   "start": 0,
+   "sequences": 64,
+   "sha256": "7411cf50b625e4c62f65d8e12bac538fd83c6dad3e4c74b29a9f2a6f5ad83191"
+  },
+  "evaluation_microbatch": 4,
+  "adaptation": {
+   "split": "train",
+   "seed": 20261104,
+   "sequences": 1024,
+   "probe_sequences": 16,
+   "steps": 300,
+   "batch": 8,
+   "microbatch": 8,
+   "sha256": "c919329dbe0d545d7614daf3d8f790881e944cd80ff53fff88fc19d9697f7762"
+  },
+  "forward_policy": {
+   "name": "settle4_grad4_eval8.v1",
+   "settle_sweeps": 4,
+   "gradient_sweeps": 4,
+   "evaluation_sweeps": 8
+  },
+  "arms": [
+   {
+    "label": "A0",
+    "method": "none"
+   },
+   {
+    "label": "A0-twin",
+    "method": "none",
+    "twin": true
+   },
+   {
+    "label": "A1e",
+    "method": "calibration",
+    "events": [
+     60.0,
+     900.0,
+     3600.0,
+     14400.0,
+     57600.0
+    ]
+   },
+   {
+    "label": "A1e-twin",
+    "method": "calibration",
+    "events": [
+     60.0,
+     900.0,
+     3600.0,
+     14400.0,
+     57600.0
+    ],
+    "twin": true
+   }
+  ],
+  "canary": false,
+  "mapping": {
+   "scale": 1.0,
+   "offset_us": 0.0
+  }
+ }
+}

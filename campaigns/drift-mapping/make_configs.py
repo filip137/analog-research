@@ -103,12 +103,33 @@ def exp003():
     return configs
 
 
+# exp-004: write-noise sensitivity, cmo_scale 10 under R0 and R0-G, base vs ratio3; A1 dropped.
+EXP004_SCALE = 10.0
+
+
+def exp004():
+    configs = {}
+    for realization in SEEDS:
+        for law in ('R0', 'R0-G'):
+            for label in ('base', 'ratio3'):
+                config = base(realization)
+                settings = config['drift_regimes']
+                settings['regime'] = f'{law}-cp10-map-{label}'
+                settings['law']['cmo_scale'] = EXP004_SCALE
+                if law == 'R0-G':
+                    settings['law'].update(mean_us=None, spread_us=None, coefficient_bins=copy.deepcopy(MEASURED))
+                settings['mapping'] = dict(EXP002[label])
+                settings['arms'] = [a for a in settings['arms'] if a['label'] != 'A1'] + copy.deepcopy(EXP002_ARMS)
+                configs[f'{law}-{label}-{realization}'] = config
+    return configs
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('experiment', choices=['exp-001', 'exp-002', 'exp-003'])
+    parser.add_argument('experiment', choices=['exp-001', 'exp-002', 'exp-003', 'exp-004'])
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
-    configs = {'exp-001': exp001, 'exp-002': exp002, 'exp-003': exp003}[args.experiment]()
+    configs = {'exp-001': exp001, 'exp-002': exp002, 'exp-003': exp003, 'exp-004': exp004}[args.experiment]()
     out = ROOT / 'configs' / args.experiment
     out.mkdir(parents=True, exist_ok=True)
     stale = []
