@@ -19,8 +19,10 @@ class DirectWriteAdam:
             raise ValueError('Expected a finite nonnegative direct Adam learning rate.')
         if schedule is not None:
             kind, warmup, total = schedule
-            if kind != 'warmup_cosine' or type(warmup) is not int or type(total) is not int or not 0 <= warmup < total:
-                raise ValueError('Expected a warmup_cosine schedule with 0 <= warmup < total updates.')
+            if (kind not in ('warmup_cosine', 'cosine_to_zero') or type(warmup) is not int or type(total) is not int
+                    or not 0 <= warmup < total or (kind == 'cosine_to_zero' and warmup != 0)):
+                raise ValueError('Expected a warmup_cosine schedule with 0 <= warmup < total updates '
+                                 'or a cosine_to_zero schedule without warm-up.')
             schedule = [kind, warmup, total]
         self.port = port
         self.learning_rate = float(learning_rate)
@@ -35,7 +37,10 @@ class DirectWriteAdam:
         """Learning rate of 1-based update ``step``: linear warm-up, then cosine to zero."""
         if self.schedule is None:
             return self.learning_rate
-        _, warmup, total = self.schedule
+        kind, warmup, total = self.schedule
+        if kind == 'cosine_to_zero':
+            # torch CosineAnnealingLR(T_max=total, eta_min=0): update k (1-based) uses epoch k-1.
+            return self.learning_rate * 0.5 * (1 + math.cos(math.pi * (step - 1) / total))
         if step <= warmup:
             return self.learning_rate * step / warmup
         return self.learning_rate * 0.5 * (1 + math.cos(math.pi * (step - warmup) / (total - warmup)))
@@ -103,16 +108,18 @@ class ThresholdedBoundedWriteAdam(DirectWriteAdam):
 
     state_names = (*DirectWriteAdam.state_names, 'pending')
 
-    def __init__(self, port, *, learning_rate, threshold_sigma=2.0):
-        super().__init__(port, learning_rate=learning_rate)
+    def __init__(self, port, *, learning_rate, threshold_sigma=2.0, schedule=None):
+        super().__init__(port, learning_rate=learning_rate, schedule=schedule)
         if threshold_sigma != 2.0:
             raise ValueError('Expected the declared 2-rho noisy write threshold.')
         self.threshold_sigma = float(threshold_sigma)
         self.pending = torch.zeros_like(self.first)
 
     def contract(self):
+        # Constant-LR contracts stay identical to checkpoints written before schedules existed.
         return ['cmo_drn.bounded_thresholded_adam.v1', self.learning_rate,
-                self.threshold_sigma, 'bounded_target_write_std', 'command_before_projection', 'ge']
+                self.threshold_sigma, 'bounded_target_write_std', 'command_before_projection', 'ge',
+                *([] if self.schedule is None else [self.schedule])]
 
     @torch.no_grad()
     def step(self, gradient):

@@ -1,0 +1,129 @@
+{
+  "experiment_id": "opt_cmo_drn_hwa.v1",
+  "schema_version": 1,
+  "stage": "fault_tuning",
+  "model": "facebook/opt-125m",
+  "analog_layers": 6,
+  "initialization": "full_span_quad.v1",
+  "device": "cuda:0",
+  "cpu_threads": 10,
+  "teacher_sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9",
+  "source_sha256": "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028",
+  "solver": {
+    "settling_iterations": 4,
+    "gradient_iterations": 4,
+    "voltage_amp": 5.0,
+    "current_amp": 0.1,
+    "input_gain": 100.0,
+    "token_chunk_size": 256,
+    "activation_checkpointing": true
+  },
+  "data": {
+    "corpus": "opt125m-synthetic-50m",
+    "sha256": "ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984",
+    "sequences": 195226,
+    "development_sequences": 256,
+    "sequence_length": 256,
+    "seed": 20261008,
+    "mapping_sequences": 1
+  },
+  "training": {
+    "arm": "std3",
+    "epochs": 5,
+    "max_updates": 0,
+    "effective_batch": 32,
+    "microbatch": 1,
+    "conductance_lr": 0.0003,
+    "calibration_lr": 0.0003,
+    "digital_lr": 1e-05,
+    "recipe": "A",
+    "warmup_updates": 245,
+    "schedule": "cosine",
+    "minimum_lr_factor": 0.2,
+    "seed": 41,
+    "max_wall_seconds": 6900,
+    "checkpoint_every": 512,
+    "retention": "best_latest_final"
+  },
+  "selection": {
+    "every_updates": 512,
+    "assignment_seeds": [
+      211001,
+      211002
+    ],
+    "fault_kinds": [
+      "none",
+      "random"
+    ],
+    "random_rate": 0.03
+  },
+  "deployment": {
+    "assignment_seed": 271001,
+    "fault_kind": "random",
+    "fault_rate": 0.03
+  },
+  "recovery": {
+    "arm": "learning",
+    "updates": 2048,
+    "learning_rate": 0.0001,
+    "threshold_sigma": 2.0,
+    "max_write_attempts": null,
+    "calibration_updates": 200,
+    "calibration_lr": 0.0001,
+    "checkpoint_every": 128,
+    "write_noise_factor": 1.0,
+    "development_every": 0,
+    "retain_final_optimizer": false,
+    "conductance_floor": "none",
+    "update_rule": "bounded_thresholded_adam",
+    "target_bounds": "gmin_gmax"
+  },
+  "fault_tuning": {
+    "corpus": "wikitext-2-raw-v1",
+    "corpus_sha256": "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01",
+    "sequence_length": 256,
+    "recovery_split": "train",
+    "recovery_seed": 20261104,
+    "recovery_sequences": 1024,
+    "recovery_sha256": "c919329dbe0d545d7614daf3d8f790881e944cd80ff53fff88fc19d9697f7762",
+    "samples_file": "teacher-samples8-c919329d-df73ce66.pt",
+    "samples_sha256": "df73ce6615be3cdd3005d2ca0b97c03131f9236ba481bc7250edde5ff66fb01a",
+    "samples_count": 8,
+    "samples_seed": 20365833,
+    "development_split": "validation",
+    "development_start": 0,
+    "development_sequences": 64,
+    "development_sha256": "7411cf50b625e4c62f65d8e12bac538fd83c6dad3e4c74b29a9f2a6f5ad83191",
+    "steps": 300,
+    "batch": 8,
+    "microbatch": 1,
+    "evaluation_microbatch": 1,
+    "order_seed": 20261104,
+    "schedule": "cosine_to_zero",
+    "development_every": 100,
+    "child_fraction": 0.1,
+    "fisher_batch": 8,
+    "lora_alpha": "rank",
+    "lora_seed": 20261113,
+    "arms": [
+      {
+        "label": "lora16-lr0.001",
+        "method": "lora",
+        "learning_rate": 0.001,
+        "rank": 16
+      },
+      {
+        "label": "lora16-lr0.003",
+        "method": "lora",
+        "learning_rate": 0.003,
+        "rank": 16
+      },
+      {
+        "label": "lora16-lr0.01",
+        "method": "lora",
+        "learning_rate": 0.01,
+        "rank": 16
+      }
+    ]
+  }
+}
