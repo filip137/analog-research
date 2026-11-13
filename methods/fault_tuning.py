@@ -25,6 +25,10 @@ starts from the same deployed state and trains on the same recovery data:
   thresholded write law on the adapter devices only; the adapter output is added
   digitally (the digital-LoRA path of the network, alpha/r = 1).
 
+Teacher samples are drawn in-job, or (``targets.file``) loaded from
+``<EBL_CORPUS_ROOT>/<file>.pt`` -- a stored draw of the same procedure, needed because the CUDA
+draw is GPU-specific. Either way the raw-bytes tensor hash must equal ``targets.sha256``.
+
 All arms: Adam (0.9/0.999, 1e-8), ``steps`` updates of ``batch`` sequences drawn
 with replacement from the recovery cohort by one fixed generator, cosine decay to
 zero without warm-up. Loss: mean negative log-likelihood of ``count`` fixed teacher
@@ -174,7 +178,11 @@ class FaultTuning:
             data[name] = d
         if data["recovery"]["seed"] is None or data["recovery"]["start"] != 0 or data["development"]["seed"] is not None:
             raise ValueError("Expected a seeded recovery selection and a contiguous development slice.")
-        t = _exact(raw["targets"], ("kind", "count", "seed", "draw_batch", "sha256"), "targets")
+        t = raw["targets"]
+        t = _exact(t, ("kind", "count", "seed", "draw_batch", "sha256") + (("file",) if isinstance(t, dict) and "file" in t else ()),
+                   "targets")
+        if "file" in t and (not isinstance(t["file"], str) or not t["file"] or "/" in t["file"]):
+            raise ValueError("Expected targets.file to name a pinned tensor beside the corpora.")
         if t["kind"] != "teacher_samples":
             raise ValueError("Expected fixed teacher samples as the training target.")
         _int(t["count"], "targets.count", 1), _int(t["seed"], "targets.seed"), _int(t["draw_batch"], "targets.draw_batch", 1)

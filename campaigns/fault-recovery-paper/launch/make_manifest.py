@@ -1,7 +1,8 @@
 """Jean Zay manifest of the fault-tuning screen units.
 
 usage: make_manifest.py <JZ source dir> <JZ root> <out.json>
-<JZ root>/inputs holds the corpora (symlinks), the pinned deployment and B scale.
+<JZ root>/inputs holds the corpora (symlinks), the pinned deployment and B scale, and (units a1-a3)
+a symlink to the DRN half's stored V100 teacher-sample draw (checked by tensor hash in the stage).
 """
 import json
 from pathlib import Path
@@ -30,7 +31,7 @@ def main(source, root, out):
             PINS["b_scale"]["name"]: PINS["b_scale"]["sha256"],
         },
         "units": {u: f"campaigns/fault-recovery-paper/lifecycles/opt125m-cmo-l6-fault-paper-tune-{u}.json"
-                  for u in ("j1", "j2", "j3")},
+                  for u in ("j1", "j2", "j3", "a1", "a2", "a3")},
     }
     Path(out).write_text(json.dumps(manifest, indent=2) + "\n")
     print(out)

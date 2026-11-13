@@ -305,7 +305,21 @@ def run(stage):
     ctx.recovery = ft.cohort(lc, cfg.recovery)
     ctx.development = ft.cohort(lc, cfg.development)
     t = cfg.targets
-    ctx.samples = ft.teacher_samples(network, ctx.recovery, t["count"], t["seed"], t["draw_batch"], stage.device)
+    if "file" in t:
+        # A stored draw of the same procedure (the draw is GPU-specific); accepted by tensor hash only.
+        root = os.environ.get("EBL_CORPUS_ROOT")
+        if not root:
+            raise ValueError("Expected EBL_CORPUS_ROOT to hold the pinned teacher samples.")
+        samples_path = Path(root) / f"{t['file']}.pt"
+        ctx.samples = torch.load(samples_path, map_location="cpu", weights_only=True)
+        if (not isinstance(ctx.samples, torch.Tensor) or ctx.samples.dtype != torch.int64
+                or tuple(ctx.samples.shape) != (len(ctx.recovery), lc.data.sequence_length - 1, t["count"])):
+            raise ValueError("Expected an int64 (sequences, length - 1, count) teacher-sample tensor.")
+        ctx.samples = ctx.samples.to(stage.device)
+        store.append_metric({"stage": "fault_tuning_samples_file", "path": str(samples_path.resolve()),
+                             "file_sha256": sha256_file(samples_path)})
+    else:
+        ctx.samples = ft.teacher_samples(network, ctx.recovery, t["count"], t["seed"], t["draw_batch"], stage.device)
     samples_sha256 = ft.raw_hash(ctx.samples)
     store.append_metric({"stage": "fault_tuning_samples", "samples_sha256": samples_sha256, "count": t["count"],
                          "seed": t["seed"]})

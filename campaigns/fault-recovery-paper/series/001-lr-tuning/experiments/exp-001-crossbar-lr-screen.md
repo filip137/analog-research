@@ -52,10 +52,13 @@ deployment is bit-unchanged.
 
 1. **Sample draw is GPU-specific.** `df73ce66…` was drawn on V100 (torch 2.5.0). The same
    procedure on the RTX 3090 gives `6bc43ffa…` (identical under torch 2.5.1 and 2.11), so
-   the tensor cannot be produced locally and no stored copy exists. The Jean Zay units
-   re-run the identical draw on V100/torch 2.5.0 in-job and **refuse to train unless the
-   hash equals `df73ce66…`** (bitwise reuse by hash). Local units (deploy, bscale, canary,
-   probe) declare the 3090 draw.
+   the tensor cannot be produced locally and no stored copy existed. The screen units
+   (`a1`–`a3`) load the V100 draw stored by the DRN half's draw job (Jean Zay 153094,
+   `drn-fault-paper-lr-tuning-20261113/runs-9efad55/samples-v100/teacher-samples8-c919329d-df73ce66.pt`,
+   written only if its hash is `df73ce66…`), run with `--dependency=afterok:153094`, and
+   **refuse to train unless the loaded tensor's raw-bytes hash is `df73ce66…`**. The
+   equivalent in-job V100 draw units (`j1`–`j3`) are kept for reruns. Local units
+   (deploy, bscale, canary, probe, canaryfile) declare the 3090 draw.
 2. **Analog-LoRA B scale (declared fallback).** From the r16 digital LoRA at 3e-3 run
    locally on the RTX 3090 on the pinned tuning deployment (unit `bscale`), which trains
    on the 3090 draw `6bc43ffa…` (point 1), not `df73ce66…`. Channels whose digital B row

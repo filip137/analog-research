@@ -8,7 +8,10 @@ Writes lifecycles/<id>.json. Units:
 - ``bscale``: the r16 digital LoRA at 3e-3 on that deployment (declared B-scale fallback).
 - ``canary``: every method for 4 steps (readiness only, not evidence).
 - ``probe``: full-length noisy, Child-Tuning_D and analog-LoRA arms at 3e-3 (timing/readiness only).
-- ``j1``..``j3``: the Jean Zay screen units (one V100 dev job each), all with the V100 sample draw ``df73ce66``.
+- ``j1``..``j3``: the Jean Zay screen units (one V100 dev job each, in-job V100 draw)
+- ``a1``..``a3``: the same arms, loading the stored V100 draw (any GPU) (``SAMPLES_FILE``,
+  written by the DRN half's V100 draw job only if its hash is ``df73ce66``)
+- ``canaryfile``: the stored-draw path on the 3090 (readiness only)., all with the V100 sample draw ``df73ce66``.
 
 Local units (3090) declare the 3090 draw of the same procedure (see the experiment note).
 """
@@ -32,6 +35,8 @@ SOURCE = "86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028"
 WIKITEXT = ("wikitext-2-raw-v1", "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01")
 SAMPLES_V100 = "df73ce6615be3cdd3005d2ca0b97c03131f9236ba481bc7250edde5ff66fb01a"   # recovery-targets exp-001/002, V100
 SAMPLES_3090 = "6bc43ffaa92134c39308b844aba562f97c396229976ab416cd2a452d9c338b4f"   # same procedure on the RTX 3090
+SAMPLES_FILE = "teacher-samples8-c919329d-df73ce66"
+SAMPLES_FILE_3090 = "teacher-samples8-c919329d-6bc43ffa-rtx3090"
 GRID = [1e-4, 3e-4, 1e-3, 3e-3, 1e-2]
 LORA_GRID = [1e-3, 3e-3, 1e-2]
 
@@ -57,7 +62,7 @@ UNITS = {
 
 
 def section(pins, unit):
-    local = unit in ("deploy", "bscale", "canary", "probe")
+    local = unit in ("deploy", "bscale", "canary", "probe", "canaryfile")
     analog = {"rank": 16, "b_scale": None if unit in ("deploy", "bscale") else pins.get("b_scale")}
     deployment = None if unit == "deploy" else pins.get("deployment")
     if unit == "deploy":
@@ -68,15 +73,23 @@ def section(pins, unit):
         unit_arms = HOLDS + [a[0] for a in (arms("onchip_noisy", [1e-3]), arms("onchip_noiseless", [1e-3]),
                                             arms("child_tuning_d", [1e-3], reserve_p=0.1),
                                             arms("digital_lora", [1e-3], rank=16), arms("analog_lora", [1e-3], rank=16))]
+    elif unit == "canaryfile":
+        unit_arms = HOLDS[:1] + arms("digital_lora", [1e-3], rank=16)
     elif unit == "probe":
         unit_arms = [arms("onchip_noisy", [3e-3])[0], arms("child_tuning_d", [3e-3], reserve_p=0.1)[0],
                      arms("analog_lora", [3e-3], rank=16)[0]]
     else:
-        unit_arms = UNITS[unit]
+        unit_arms = UNITS[unit.replace("a", "j")]
     if any(a["method"] == "analog_lora" for a in unit_arms) and analog["b_scale"] is None:
         raise SystemExit(f"{unit}: pin the analog-LoRA B scale first (pins.json b_scale).")
     if unit != "deploy" and deployment is None:
         raise SystemExit(f"{unit}: pin the deployment first (pins.json deployment).")
+    targets = {"kind": "teacher_samples", "count": 8, "seed": 20261104 + 104729, "draw_batch": 16,
+               "sha256": SAMPLES_3090 if local else SAMPLES_V100}
+    if unit.startswith("a"):
+        targets["file"] = SAMPLES_FILE
+    elif unit == "canaryfile":
+        targets["file"] = SAMPLES_FILE_3090
     return {
         "source_sha256": SOURCE,
         "assignment_seed": 271001,
@@ -87,12 +100,11 @@ def section(pins, unit):
         "development": {"corpus": WIKITEXT[0], "corpus_sha256": WIKITEXT[1], "split": "validation", "start": 0,
                         "sequences": 64, "seed": None,
                         "cohort_sha256": "7411cf50b625e4c62f65d8e12bac538fd83c6dad3e4c74b29a9f2a6f5ad83191"},
-        "targets": {"kind": "teacher_samples", "count": 8, "seed": 20261104 + 104729, "draw_batch": 16,
-                    "sha256": SAMPLES_3090 if local else SAMPLES_V100},
+        "targets": targets,
         "schedule": {"optimizer": "adam", "betas": [0.9, 0.999], "eps": 1e-8,
-                     "steps": 4 if unit == "canary" else 300, "batch": 8, "order_seed": 20261104,
+                     "steps": 4 if unit.startswith("canary") else 300, "batch": 8, "order_seed": 20261104,
                      "lr_schedule": "cosine_to_zero", "warmup_steps": 0,
-                     "development_every_steps": 2 if unit == "canary" else 50},
+                     "development_every_steps": 2 if unit.startswith("canary") else 50},
         "write_law": {"threshold_sigma": 2.0, "accumulate_updates": True, "max_write_attempts_per_device": None},
         "fisher": {"estimator": "mean_squared_batch_gradient", "batch": 8},
         "lora_seed": 271001,
@@ -122,7 +134,7 @@ def lifecycle(pins, unit):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pins", type=Path, default=HERE / "pins.json")
-    parser.add_argument("units", nargs="*", default=["deploy", "bscale", "canary", "probe", "j1", "j2", "j3"])
+    parser.add_argument("units", nargs="*", default=["deploy", "bscale", "canary", "probe", "canaryfile", "j1", "j2", "j3", "a1", "a2", "a3"])
     args = parser.parse_args()
     pins = json.loads(args.pins.read_text()) if args.pins.exists() else {}
     for unit in args.units:

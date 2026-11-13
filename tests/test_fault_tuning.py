@@ -148,3 +148,15 @@ def test_adapter_faults_have_their_own_stream_and_rate():
             assert torch.equal(own["matrices"][m.name][part], both["matrices"][m.name][part])
     devices = 2 * sum(m.size for m in adapters)
     assert own["receipt"]["failed_devices"] == round(0.03 * devices)
+
+
+def test_stored_sample_file_is_optional_and_named():
+    doc = _doc()
+    doc["fault_tuning"]["targets"]["file"] = "teacher-samples8-c919329d-df73ce66"
+    assert parse_lifecycle(doc).fault_tuning.targets["file"] == "teacher-samples8-c919329d-df73ce66"
+    doc["fault_tuning"]["targets"]["file"] = "../elsewhere"
+    with pytest.raises(Exception):
+        parse_lifecycle(doc)
+    a1 = parse_lifecycle(_doc("a1")).fault_tuning
+    j1 = parse_lifecycle(_doc("j1")).fault_tuning
+    assert a1.arms == j1.arms and a1.targets["sha256"] == j1.targets["sha256"]
