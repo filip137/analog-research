@@ -12,13 +12,22 @@ import torch
 from torch.nn import functional as F
 
 
+# Issue #27 selection controls. random_fixed: uniform positions drawn once per event
+# and reused, like importance. *_sampled: positions drawn with replacement from a
+# defensive mixture of the event score and uniform, redrawn each presentation, with
+# weights making the loss an unbiased estimate of the mean over all scored positions.
+SELECTION_MODES = ('random_fixed', 'importance_sampled', 'gradient_sampled')
+SAMPLED_MODES = ('importance_sampled', 'gradient_sampled')
+UNIFORM_MIX = .2
+
+
 def parse_mode(value):
     if value == 'full':
         return 'full', None
     if not isinstance(value, str) or value.count(':') != 1:
         raise ValueError('Expected full or random/importance/loss_only/context:<count>.')
     mode, count = value.split(':')
-    if mode not in ('random', 'importance', 'loss_only', 'context'):
+    if mode not in ('random', 'importance', 'loss_only', 'context', *SELECTION_MODES):
         raise ValueError('Unknown token backward mode.')
     if not count.isdigit() or str(int(count)) != count or int(count) < 1:
         raise ValueError('Expected a positive canonical token count.')
@@ -122,20 +131,27 @@ def sampled_loss(logits, states, count, positions=None):
     return -logits.log_softmax(-1).gather(-1, targets).mean()
 
 
-def importance_indices(network, q, hidden, count, samples, batch=1):
+def weighted_sampled_loss(logits, states, count, positions, weights):
+    """Per-position sampled NLL, weighted and summed, averaged over the batch rows."""
+    targets = take(states.samples[..., :count], positions)
+    nll = -logits.log_softmax(-1).gather(-1, targets).mean(-1)
+    return (nll * weights).sum() / nll.shape[0]
+
+
+def importance_scores(network, q, hidden, samples, batch=1, attention=True):
     """Recompute scores once per recovery event, without changing any weight.
 
     Earlier suffix layers need only a forward pass: the score is the gradient
     with respect to the input of the final layer, not a full parameter gradient.
+    Yields one score tensor per batch. attention=False keeps the gradient term only.
     """
     digital = network.teacher if network.digital is None else network.digital
     last = digital.layers[-1]
     k = len(network.mlp_norms)-1
-    out = []
     for states in hidden.split(batch):
         with torch.no_grad():
             z = full_hidden(network, states.student, q, stop_before_last=True)
-            attention = attention_importance(last, z)
+            received = attention_importance(last, z) if attention else None
         z = z.detach().requires_grad_(True)
         with torch.enable_grad():
             x = last.attention(z)
@@ -145,11 +161,38 @@ def importance_indices(network, q, hidden, count, samples, batch=1):
             gradient = torch.autograd.grad(loss, z)[0][:, :-1].abs().sum(-1)
         low, high = gradient.amin(-1, keepdim=True), gradient.amax(-1, keepdim=True)
         gradient = (gradient-low) / (high-low).clamp_min(torch.finfo(gradient.dtype).eps)
-        score = .7 * gradient + .3 * attention.log1p()
+        score = .7 * gradient + .3 * received.log1p() if attention else gradient
         if not bool(torch.isfinite(score).all()):
             raise FloatingPointError('Nonfinite importance scores.')
-        out.append(score.topk(count, dim=-1).indices.sort(-1).values)
-    return torch.cat(out)
+        yield score
+
+
+def importance_indices(network, q, hidden, count, samples, batch=1):
+    """exp-003's top-count positions of the combined score (selection unchanged)."""
+    return torch.cat([score.topk(count, dim=-1).indices.sort(-1).values
+                      for score in importance_scores(network, q, hidden, samples, batch)])
+
+
+def sampling_probabilities(scores, mix=UNIFORM_MIX):
+    """Defensive mixture of the per-sequence normalized score and uniform."""
+    scores = scores.clamp_min(0)
+    total = scores.sum(-1, keepdim=True)
+    uniform = torch.full_like(scores, 1. / scores.shape[-1])
+    shaped = torch.where(total > 0, scores / total.clamp_min(torch.finfo(scores.dtype).tiny), uniform)
+    return (1 - mix) * shaped + mix * uniform
+
+
+def draw_weighted(probabilities, count, generator):
+    """Draw count positions with replacement from one row; return unique positions and weights.
+
+    Position i drawn c_i times gets weight c_i / (count * L * p_i), so the weighted
+    sum of per-position losses is an unbiased estimate of their mean over all L.
+    """
+    length = probabilities.shape[-1]
+    draws = torch.multinomial(probabilities, count, replacement=True, generator=generator)
+    positions, counts = draws.unique(sorted=True, return_counts=True)
+    weights = counts.to(probabilities.dtype) / (count * length * probabilities[positions])
+    return positions, weights
 
 
 class SavedActivations:
@@ -192,6 +235,8 @@ def train(network, parameters, q, hidden, *, steps, batch, learning_rate, seed,
         raise ValueError('The token-backward comparison requires fixed sampled teacher targets.')
     if method not in ('full', 'context') and count >= hidden.sequence_length:
         raise ValueError('Selected positions must be scored positions, excluding the final token.')
+    if method in SAMPLED_MODES and microbatch != 1:
+        raise ValueError('Sampled selections have per-sequence lengths; use microbatch 1.')
     for p in network.parameters():
         p.requires_grad_(False)
     q = q.detach()
@@ -202,6 +247,12 @@ def train(network, parameters, q, hidden, *, steps, batch, learning_rate, seed,
     prep_start = time.monotonic()
     if device.type == 'cuda': torch.cuda.reset_peak_memory_stats(device)
     indices = importance_indices(network, q, hidden, count, target[1], batch=microbatch) if method == 'importance' else None
+    probabilities = None
+    if method in SAMPLED_MODES:
+        scores = torch.cat(list(importance_scores(network, q, hidden, target[1], batch=microbatch,
+                                                  attention=method == 'importance_sampled')))
+        probabilities = sampling_probabilities(scores.double().cpu())
+        del scores
     sync()
     prep_seconds, prep_peak = time.monotonic()-prep_start, peak()
     for p in parameters:
@@ -210,6 +261,12 @@ def train(network, parameters, q, hidden, *, steps, batch, learning_rate, seed,
     schedule = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, steps)
     generator = torch.Generator().manual_seed(seed)
     selector = torch.Generator().manual_seed(seed+72913)
+    if method == 'random_fixed':
+        indices = torch.stack([torch.randperm(hidden.sequence_length-1, generator=selector)[:count]
+                               for _ in range(len(hidden))]).sort(-1).values.to(device)
+    seen = torch.zeros(len(hidden), hidden.sequence_length-1, dtype=torch.bool)
+    presented = torch.zeros(len(hidden), dtype=torch.bool)
+    backward_total, max_weight = 0, 0.
     losses = []
     network.train()
     saved_peak = 0
@@ -223,8 +280,10 @@ def train(network, parameters, q, hidden, *, steps, batch, learning_rate, seed,
             if method in ('random', 'loss_only'):
                 chosen = torch.stack([torch.randperm(hidden.sequence_length-1, generator=selector)[:count]
                                       for _ in range(batch)]).sort(-1).values.to(device)
-            elif method == 'importance':
+            elif method in ('importance', 'random_fixed'):
                 chosen = indices[index]
+            elif method in SAMPLED_MODES:
+                draws = [draw_weighted(probabilities[i], count, selector) for i in index.tolist()]
             elif method == 'context':
                 n = hidden.sequence_length // count
                 if hidden.sequence_length % count or not hasattr(hidden, 'short_context'):
@@ -236,15 +295,32 @@ def train(network, parameters, q, hidden, *, steps, batch, learning_rate, seed,
             for begin in range(0, len(states), microbatch):
                 chunk = states[begin:begin+microbatch]
                 positions = None if chosen is None else chosen[begin:begin+microbatch]
+                weights = None
+                if method in SAMPLED_MODES:
+                    positions, weights = draws[begin]
+                    max_weight = max(max_weight, float(weights.max()))
+                    positions, weights = positions[None].to(device), weights[None].float().to(device)
+                if method != 'context':
+                    rows = index[begin:begin+microbatch].cpu()
+                    presented[rows] = True
+                    if positions is None:
+                        seen[rows] = True
+                    else:
+                        seen[rows[:, None], positions.cpu()] = True
+                    backward_total += (positions.numel() if method in ('random', 'importance', *SELECTION_MODES)
+                                       else len(chunk)*hidden.sequence_length)
                 audit = SavedActivations([*network.parameters(), *network.buffers(), q,
                                           chunk.student, chunk.samples])
                 with audit.context() if step in (0, 1) else contextlib.nullcontext():
-                    if method in ('random', 'importance'):
+                    if method in ('random', 'importance', *SELECTION_MODES):
                         logits = selected_logits(network, chunk.student, q, positions)
                     else:
                         logits = suffix_logits(network, chunk.student, q)
                         if positions is not None: logits = take(logits, positions)
-                    loss = sampled_loss(logits, chunk, target[1], positions)
+                    if weights is not None:
+                        loss = weighted_sampled_loss(logits, chunk, target[1], positions, weights)
+                    else:
+                        loss = sampled_loss(logits, chunk, target[1], positions)
                     if not bool(torch.isfinite(loss)):
                         raise FloatingPointError('Nonfinite token-backward loss.')
                     weight = len(chunk)/len(states)
@@ -259,7 +335,14 @@ def train(network, parameters, q, hidden, *, steps, batch, learning_rate, seed,
     for p in parameters: p.requires_grad_(False)
     scored = ((hidden.sequence_length//count)*(count-1) if method == 'context'
               else hidden.sequence_length-1 if method == 'full' else count)
-    return {'first_loss': sum(losses[:10])/min(10, len(losses)),
+    extra = {}
+    if method != 'context':
+        extra['distinct_trained_positions_per_presented_parent'] = float(seen[presented].sum(1).float().mean())
+        extra['presented_parents'] = int(presented.sum())
+    if method in SAMPLED_MODES:
+        extra.update(sampling_uniform_mix=UNIFORM_MIX, max_importance_weight=max_weight,
+                     mean_unique_positions=backward_total/(steps*batch))
+    return {**extra, 'first_loss': sum(losses[:10])/min(10, len(losses)),
             'last_loss': sum(losses[-10:])/min(10, len(losses)),
             'token_backward': mode, 'microbatch': microbatch,
             'selection_seconds': prep_seconds, 'selection_peak_allocated_bytes': prep_peak,
@@ -267,5 +350,6 @@ def train(network, parameters, q, hidden, *, steps, batch, learning_rate, seed,
             'selection_index_bytes': indices.numel()*indices.element_size() if indices is not None else 0,
             'training_seconds': seconds, 'training_peak_allocated_bytes': training_peak,
             'saved_activation_peak_bytes': saved_peak,
-            'scored_positions': steps*batch*scored,
-            'backward_positions': steps*batch*(hidden.sequence_length if method in ('full','loss_only','context') else count)}
+            'scored_positions': backward_total if method in SAMPLED_MODES else steps*batch*scored,
+            'backward_positions': (backward_total if method in SAMPLED_MODES else
+                                   steps*batch*(hidden.sequence_length if method in ('full','loss_only','context') else count))}
