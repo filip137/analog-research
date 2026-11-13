@@ -172,8 +172,20 @@ class DriftRegimes:
             _fail('Expected a corpus name.')
         _int(raw['sequence_length'], 'sequence_length', 2)
         law = raw['law']
-        _exact(law, RERAM_FAMILY_FIELDS, 'law')
+        # Optional measured bins (R0-G, drift-mapping exp-003): coefficient_bins replace the
+        # scalar mean_us and spread_us, which are then None. ReramFamily validates the table.
+        binned = 'coefficient_bins' in law
+        _exact(law, set(RERAM_FAMILY_FIELDS) | ({'coefficient_bins'} if binned else set()), 'law')
+        if binned:
+            bins = law['coefficient_bins']
+            if (not isinstance(bins, (list, tuple)) or not bins or law['mean_us'] is not None
+                    or law['spread_us'] is not None):
+                _fail('Expected nonempty law.coefficient_bins with mean_us and spread_us null.')
+            law = {**law, 'coefficient_bins': tuple(tuple(_float(v, 'law.coefficient_bins') for v in row)
+                                                    for row in bins)}
         for k, kind in RERAM_FAMILY_FIELDS.items():
+            if binned and k in ('mean_us', 'spread_us'):
+                continue
             if kind is float:
                 _float(law[k], f'law.{k}')
             elif law[k] not in ('float32', 'float64'):
@@ -231,6 +243,9 @@ class DriftRegimes:
         arms = tuple(parse_arm(a, ages[-1]) for a in raw['arms'])
         if len({a['label'] for a in arms}) != len(arms):
             _fail('Expected distinct arm labels.')
+        if binned and any(a['method'] in ('rewrite', 'precompensated', 'learning_newton') for a in arms):
+            # Their nominal deviation and fresh moments still use the scalar law in this backend.
+            _fail('Binned drift coefficients support only none, calibration and layernorm arms.')
         for a in arms:
             if a['method'] == 'layernorm' or a['method'] == 'learning_newton':
                 if a.get('batch_sequences', 1) > adaptation.sequences:

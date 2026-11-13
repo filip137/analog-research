@@ -211,3 +211,88 @@ def test_construction_can_count_as_the_first_verified_attempt():
     with pytest.raises(ValueError, match='first_written'):
         program_verify(c, torch.arange(10), c.target, attempts=2, threshold=.8, verify_seconds=60.,
                        first_written=True)
+
+
+# -- measured conductance bins (exp-004, R0-G) ----------------------------------------
+# The 28 October 25-h table: (lower_us, mean_us, spread_us) at a 1-h reference.
+MEASURED = ((0, .59, 2.35), (10, .02, 3.35), (20, -.43, 5.54), (30, -.29, 7.28), (40, -4.51, 9.93),
+            (50, -3.04, 11.05), (65, -2.45, 8.49), (80, -2.52, 9.56), (100, -1.03, 6.66),
+            (115, -.68, 6.28), (130, -.87, 4.83), (145, -1.01, 4.59), (160, -.88, 3.74))
+BINNED = dict(mean_us=None, spread_us=None, coefficient_bins=MEASURED)
+
+
+def expected_bin(g):
+    lower = [r[0] for r in MEASURED]
+    return [max(i for i, x in enumerate(lower) if x <= v) for v in g.tolist()]
+
+
+def test_coefficient_bins_validate_and_normalize():
+    law = ReramFamily(**{**BINNED, 'coefficient_bins': [list(r) for r in MEASURED]})
+    assert law.coefficient_bins == tuple(tuple(float(v) for v in r) for r in MEASURED)
+    assert ReramFamily(**{k: v for k, v in law.__dict__.items()}) == law
+    for bad in (dict(BINNED, mean_us=-2.), dict(BINNED, spread_us=3.),
+                dict(BINNED, coefficient_bins=((10, 0, 1), (5, 0, 1))),
+                dict(BINNED, coefficient_bins=((9.5, 0, 1),)),               # first edge above program_min
+                dict(BINNED, coefficient_bins=((0, 0, -1),)),
+                dict(BINNED, coefficient_bins=((0, 0),)),
+                dict(BINNED, coefficient_bins=((0, float('nan'), 1),)),
+                dict(mean_us=None)):                                          # no table and no scalar
+        with pytest.raises(ValueError):
+            ReramFamily(**bad)
+
+
+def test_bins_are_steps_over_lower_edges():
+    law = ReramFamily(**BINNED)
+    g = torch.tensor([9., 9.99, 10., 19.99, 20., 40., 49.99, 50., 64.99, 65., 80., 88.2, 160., 200.])
+    idx = expected_bin(g)
+    assert law.mean_at(g).tolist() == [MEASURED[i][1] for i in idx]
+    assert law.spread_at(g).tolist() == [MEASURED[i][2] for i in idx]
+    assert law.mean_at(g).dtype == torch.float64
+    assert ReramFamily().mean_at(g) == -2. and ReramFamily().spread_at(g) == 3.
+
+
+def test_each_device_drifts_with_the_bin_of_its_programmed_conductance():
+    g = torch.Generator().manual_seed(5)
+    target = 9 + 79.2 * torch.rand(50_000, generator=g)
+    c = ReramDriftCells(target, law=ReramFamily(**BINNED, **WIDE), seed=17, name='cell')
+    law, ids = c.law, torch.arange(50_000)
+    for episode in range(2):
+        start = c.clock
+        for age in (0.5, 60., 3600., 86400.):
+            value = c.advance(start + age)
+            u = age / 3600
+            idx = torch.tensor(expected_bin(c.anchor))           # bin of G_p (CMO endpoint), not of the target
+            m = torch.tensor([r[1] for r in MEASURED], dtype=torch.float64)[idx]
+            s = torch.tensor([r[2] for r in MEASURED], dtype=torch.float64)[idx]
+            expected = c.anchor + (m * u**law.mean_exponent).float() + (s * u**law.spread_exponent).float() * c.oracle_y()
+            torch.testing.assert_close(value, expected, rtol=0, atol=2e-4)
+        # A reset to a target in another bin takes the new bin's coefficients.
+        c.write(ids, (c.target + 23.).clamp(9., 88.2))
+
+
+def test_a_one_bin_table_is_the_scalar_law():
+    target = 9 + 79.2 * torch.rand(20_000, generator=torch.Generator().manual_seed(6))
+    scalar = ReramDriftCells(target, law=ReramFamily(), seed=17, name='cell')
+    table = ReramDriftCells(target, law=ReramFamily(mean_us=None, spread_us=None,
+                                                    coefficient_bins=((0., -2., 3.),)), seed=17, name='cell')
+    ids = torch.arange(20_000)
+    for c in (scalar, table):
+        program_verify(c, ids, c.target, attempts=4, threshold=.74, verify_seconds=60., first_written=True)
+    for t in (3600., 86400.):
+        assert torch.equal(scalar.advance(t), table.advance(t))
+    read = scalar.value()
+    assert torch.equal(scalar.verify_score(read, scalar.requested, 600.),
+                       table.verify_score(read, table.requested, 600.))
+
+
+def test_verify_score_uses_the_bin_of_the_requested_target():
+    target = torch.tensor([15., 45., 55., 70.])
+    c = ReramDriftCells(target, law=ReramFamily(**BINNED, cmo_scale=0., **WIDE), seed=17, name='cell')
+    read = c.advance(60.)
+    u = 60 / 3600
+    for k, i in enumerate(expected_bin(target)):
+        _, m, s = MEASURED[i]
+        z = (float(read[k]) - float(target[k]) - m * u**.23) / (s * u**.11)
+        assert float(c.verify_score(read, c.requested, 60.)[k]) == pytest.approx(z, rel=1e-5, abs=1e-5)
+    state = ReramDriftCells.restore(c.state_dict())
+    assert state.law == c.law and torch.equal(state.value(), c.value())

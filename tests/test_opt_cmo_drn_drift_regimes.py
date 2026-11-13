@@ -267,6 +267,31 @@ def test_tiny_screen_with_a_mapping(tmp_path):
     assert report['arms']['A1e-twin']['cost']['events'] == 5
 
 
+MEASURED = ((0, .59, 2.35), (10, .02, 3.35), (20, -.43, 5.54), (30, -.29, 7.28), (40, -4.51, 9.93),
+            (50, -3.04, 11.05), (65, -2.45, 8.49), (80, -2.52, 9.56), (100, -1.03, 6.66),
+            (115, -.68, 6.28), (130, -.87, 4.83), (145, -1.01, 4.59), (160, -.88, 3.74))
+BINNED_LAW = {**LAW, 'mean_us': None, 'spread_us': None, 'coefficient_bins': [list(r) for r in MEASURED]}
+
+
+def test_binned_law_parses_and_restricts_arms():
+    parsed = DriftRegimes.parse(settings_raw(law=dict(BINNED_LAW), arms=copy.deepcopy(ARMS[:3])))
+    law = ReramFamily(**parsed.law)
+    assert law.coefficient_bins[0] == (0., .59, 2.35) and law.mean_us is None
+    for bad_law in ({**BINNED_LAW, 'mean_us': -2.}, {**BINNED_LAW, 'coefficient_bins': []}):
+        with pytest.raises(ValueError):
+            DriftRegimes.parse(settings_raw(law=bad_law, arms=copy.deepcopy(ARMS[:3])))
+    with pytest.raises(ValueError):
+        DriftRegimes.parse(settings_raw(law=dict(BINNED_LAW), arms=[ARMS[4]]))
+
+
+def test_tiny_screen_with_the_binned_law_and_a_mapping(tmp_path):
+    spec = [ARMS[0], ARMS[1], ARMS[7]]
+    stage = tiny_stage(tmp_path, law=BINNED_LAW, arms_spec=spec)
+    stage.mapping = stage_module.remap(stage.model, {'scale': 2., 'offset_us': 0.})
+    report, _ = stage_module.run_screen(stage)
+    assert report['replay_exact'] and report['arms']['A0']['mean_teacher_kl'] > 0
+
+
 def test_tiny_readiness_reports_checks_and_timings(tmp_path):
     stage = tiny_stage(tmp_path)
     stage.config = SimpleNamespace(stage='readiness')

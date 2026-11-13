@@ -81,12 +81,34 @@ def exp002():
     return configs
 
 
+# exp-003: the measured 28 October 25-h table (R0-G, drift-regimes/drift-family.md), as in the
+# crossbar exp-004: (lower_us, mean_us, spread_us) at a 1-h reference.
+MEASURED = [[0, .59, 2.35], [10, .02, 3.35], [20, -.43, 5.54], [30, -.29, 7.28], [40, -4.51, 9.93],
+            [50, -3.04, 11.05], [65, -2.45, 8.49], [80, -2.52, 9.56], [100, -1.03, 6.66],
+            [115, -.68, 6.28], [130, -.87, 4.83], [145, -1.01, 4.59], [160, -.88, 3.74]]
+EXP003_MAPPINGS = ('base', 'ratio3', 'range4')
+
+
+def exp003():
+    configs = {}
+    for realization in SEEDS:
+        for label in EXP003_MAPPINGS:
+            config = base(realization)
+            settings = config['drift_regimes']
+            settings['regime'] = f'R0-G-map-{label}'
+            settings['law'].update(mean_us=None, spread_us=None, coefficient_bins=copy.deepcopy(MEASURED))
+            settings['mapping'] = dict(EXP002[label])
+            settings['arms'] += copy.deepcopy(EXP002_ARMS)
+            configs[f'{label}-{realization}'] = config
+    return configs
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('experiment', choices=['exp-001', 'exp-002'])
+    parser.add_argument('experiment', choices=['exp-001', 'exp-002', 'exp-003'])
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
-    configs = {'exp-001': exp001, 'exp-002': exp002}[args.experiment]()
+    configs = {'exp-001': exp001, 'exp-002': exp002, 'exp-003': exp003}[args.experiment]()
     out = ROOT / 'configs' / args.experiment
     out.mkdir(parents=True, exist_ok=True)
     stale = []
