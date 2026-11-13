@@ -71,6 +71,45 @@ def test_config_is_strict_and_registered():
         parse_config({**raw, 'solver': {'settling_iterations': 8}})
 
 
+def test_mapping_is_optional_and_strict():
+    absent = DriftRegimes.parse(settings_raw())
+    assert absent.mapping is None
+    mapped = DriftRegimes.parse(settings_raw(mapping={'scale': 2, 'offset_us': 0}))
+    assert mapped.mapping == {'scale': 2., 'offset_us': 0.}
+    for bad in ({'scale': 0., 'offset_us': 0.}, {'scale': .5, 'offset_us': 0.}, {'scale': 1.},
+                {'scale': 1., 'offset_us': 0., 'extra': 1}, None):
+        with pytest.raises(ValueError):   # DriftRegimes.parse fails with ValueError; parse_config wraps it
+            DriftRegimes.parse(settings_raw(mapping=bad) if bad is not None else {**settings_raw(), 'mapping': 'x'})
+
+
+def test_ratio_mapping_leaves_the_drn_equilibrium_unchanged():
+    model, _ = tiny_model()
+    model.requires_grad_(False)
+    torch.manual_seed(2)
+    x = torch.randn(5, model.blocks[0].bias2.numel())
+    for block in model.blocks:
+        g1, g2 = block.conductances(None)
+        before = block.analog(x, (g1, g2))
+        block.current_scale.mul_(2.5)
+        after = block.analog(x, (2.5 * g1, 2.5 * g2))
+        block.current_scale.div_(2.5)
+        torch.testing.assert_close(after, before, atol=1e-5, rtol=1e-4)
+
+
+def test_remap_scales_targets_bias_and_counts_saturation():
+    model, _ = tiny_model()
+    model.requires_grad_(False)
+    targets, _, _ = stage_module.physical_layout(model)
+    scales = [b.current_scale.clone() for b in model.blocks]
+    stats = stage_module.remap(model, {'scale': 2., 'offset_us': 0.})
+    mapped, _, _ = stage_module.physical_layout(model)
+    for t, m in zip(targets, mapped):
+        torch.testing.assert_close(m, (2 * t).clamp(max=G_MAX_US), atol=2e-4, rtol=1e-5)
+    assert stats['saturated_devices'] == sum(int((2 * t > G_MAX_US).sum()) for t in targets) > 0
+    assert all(torch.equal(b.current_scale, 2 * s) for b, s in zip(model.blocks, scales))
+    assert min(float(m.min()) for m in mapped) >= 18. - 1e-3
+
+
 def test_four_device_groups_hold_one_logical_weight():
     model, _ = tiny_model()
     targets, _, roles = stage_module.physical_layout(model)
@@ -210,6 +249,22 @@ def test_tiny_screen_runs_every_arm_with_pairing_and_reuse(tmp_path, law):
     # LayerNorm state is restored after the A3 arm.
     for norm in forward.layer_norms(stage.model):
         assert not any(p.requires_grad for p in norm.parameters())
+
+
+def test_tiny_screen_with_a_mapping(tmp_path):
+    early = [60.] + EVENTS
+    spec = [ARMS[0], ARMS[1], ARMS[7], {'label': 'A1e', 'method': 'calibration', 'events': early},
+            {'label': 'A1e-twin', 'method': 'calibration', 'events': early, 'twin': True}]
+    stage = tiny_stage(tmp_path, arms_spec=spec)
+    stage.mapping = stage_module.remap(stage.model, {'scale': 1.5, 'offset_us': 2.})
+    report, _ = stage_module.run_screen(stage)
+    assert report['replay_exact'] and report['source_unchanged']
+    assert min(float(t.min()) for t in stage.targets) >= 15.5 - 1e-3
+    import json
+    rows = json.loads((tmp_path / 'drift_regimes_measurements.json').read_text())
+    twin = [r['physical_sha256'] for r in rows if r['arm'] == 'A1e-twin']
+    assert len(set(twin)) == 1 and twin[0] == [r for r in rows if r['arm'] == 'A0-twin'][0]['physical_sha256']
+    assert report['arms']['A1e-twin']['cost']['events'] == 5
 
 
 def test_tiny_readiness_reports_checks_and_timings(tmp_path):

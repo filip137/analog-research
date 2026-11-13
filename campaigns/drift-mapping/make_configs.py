@@ -24,6 +24,25 @@ EXP001 = {
 }
 
 
+def offset_form(delta, k):
+    """9 + delta + c (G - 9), c = k (79.2 - delta) / 79.2, as {'scale', 'offset_us'}."""
+    c = k * (88.2 - 9.0 - delta) / (88.2 - 9.0)
+    return {'scale': c, 'offset_us': 9.0 + delta - 9.0 * c}
+
+
+# exp-002: deployment remappings G' = min(offset + scale G, G_max) under R0.
+EXP002 = {
+    'base': {'scale': 1.0, 'offset_us': 0.0},
+    'margin11': offset_form(11.0, 1),
+    'ratio2': {'scale': 2.0, 'offset_us': 0.0},
+    'ratio3': {'scale': 3.0, 'offset_us': 0.0},
+    'range4': offset_form(0.0, 4),
+}
+EARLY = [60.0, 900.0, 3600.0, 14400.0, 57600.0]
+EXP002_ARMS = [{'label': 'A1e', 'method': 'calibration', 'events': EARLY},
+               {'label': 'A1e-twin', 'method': 'calibration', 'events': EARLY, 'twin': True}]
+
+
 def base(realization):
     config = json.loads((BASE / f'screen-R0-{realization}-a.json').read_text())
     settings = config['drift_regimes']
@@ -49,12 +68,25 @@ def exp001():
     return configs
 
 
+def exp002():
+    configs = {}
+    for realization in SEEDS:
+        for label, mapping in EXP002.items():
+            config = base(realization)
+            settings = config['drift_regimes']
+            settings['regime'] = f'R0-map-{label}'
+            settings['mapping'] = dict(mapping)
+            settings['arms'] += copy.deepcopy(EXP002_ARMS)
+            configs[f'{label}-{realization}'] = config
+    return configs
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('experiment', choices=['exp-001'])
+    parser.add_argument('experiment', choices=['exp-001', 'exp-002'])
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
-    configs = {'exp-001': exp001}[args.experiment]()
+    configs = {'exp-001': exp001, 'exp-002': exp002}[args.experiment]()
     out = ROOT / 'configs' / args.experiment
     out.mkdir(parents=True, exist_ok=True)
     stale = []

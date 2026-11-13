@@ -21,7 +21,7 @@ EVENT_SECONDS = (900., 3600., 14400., 57600.)
 COMMON = {'label', 'method'}
 ARM_KEYS = {
     'none': (COMMON, {'twin'}),
-    'calibration': (COMMON | {'events'}, set()),
+    'calibration': (COMMON | {'events'}, {'twin'}),   # twin: calibrated no-drift reference (drift-mapping)
     'layernorm': (COMMON | {'events', 'learning_rate'}, set()),
     'rewrite': (COMMON | {'events', 'fraction', 'attempts', 'threshold'}, set()),
     'precompensated': (COMMON | {'events', 'fraction', 'attempts', 'threshold'}, set()),
@@ -152,10 +152,15 @@ class DriftRegimes:
     forward_policy: ForwardPolicy
     arms: tuple
     canary: bool = False
+    # Optional deployment remapping of the trained conductances (drift-mapping campaign):
+    # G' = min(offset_us + scale * G, G_max). Absent means the exp-003 mapping, unchanged.
+    mapping: Any = None
 
     @classmethod
     def parse(cls, raw):
         keys = {f for f in cls.__dataclass_fields__}
+        if 'mapping' not in raw:
+            keys.discard('mapping')
         _exact(raw, keys, 'drift_regimes')
         if not isinstance(raw['regime'], str) or not raw['regime']:
             _fail('Expected a regime label.')
@@ -177,6 +182,15 @@ class DriftRegimes:
             _fail('Expected rho_star in (0, 1] and persistent_share in [0, 1].')
         if not law['drift_min'] <= law['program_min'] < law['program_max'] <= law['drift_max']:
             _fail('The drift window must contain the programming window.')
+        mapping = raw.get('mapping')
+        if mapping is not None:
+            _exact(mapping, {'scale', 'offset_us'}, 'mapping')
+            scale, offset = _float(mapping['scale'], 'mapping.scale'), _float(mapping['offset_us'], 'mapping.offset_us')
+            if not scale > 0:
+                _fail('Expected a positive mapping.scale.')
+            if offset + scale * law['program_min'] < law['program_min'] - 1e-9:
+                _fail('The mapping must keep G_min-targeted devices inside the programming window.')
+            mapping = {'scale': scale, 'offset_us': offset}
         _int(raw['deployment_attempts'], 'deployment_attempts', 1)
         threshold = raw['deployment_threshold']
         if raw['deployment_attempts'] > 1 and not _float(threshold, 'deployment_threshold') > 0:
@@ -223,7 +237,7 @@ class DriftRegimes:
                     _fail('Fisher batch exceeds the adaptation cohort.')
         if type(raw['canary']) is not bool:
             _fail('Expected boolean canary.')
-        return cls(**{**raw, 'law': dict(law), 'evaluation_seconds': ages, 'evaluation': evaluation,
+        return cls(**{**raw, 'mapping': mapping, 'law': dict(law), 'evaluation_seconds': ages, 'evaluation': evaluation,
                       'adaptation': adaptation, 'forward_policy': policy, 'arms': arms,
                       'verify_seconds': float(raw['verify_seconds']),
                       'deployment_threshold': None if threshold is None else float(threshold)})

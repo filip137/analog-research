@@ -95,6 +95,27 @@ def physical_layout(model):
     return targets, names, roles
 
 
+@torch.no_grad()
+def remap(model, mapping):
+    """Deployment remapping G' = min(offset + scale G, G_max) of every DRN device, in place.
+
+    The bias current scales with ``scale``. With offset 0 and no saturation the DRN equilibrium is
+    unchanged: drive and node conductance sums both scale by ``scale`` and the +x/-x rails cancel any
+    offset in the drive. A nonzero offset changes node loading. Returns saturation statistics.
+    """
+    scale, offset = mapping['scale'], mapping['offset_us']
+    saturated = total = 0
+    for block in model.blocks:
+        for u in (block.u1, block.u2):
+            raw = offset + scale * (MID_US + HALF_RANGE_US * u.double())
+            saturated += int((raw > G_MAX_US).sum())
+            total += raw.numel()
+            u.copy_(((raw.clamp(max=G_MAX_US) - MID_US) / HALF_RANGE_US).to(u.dtype))
+        block.current_scale.mul_(scale)
+    return {'scale': scale, 'offset_us': offset, 'saturated_devices': saturated, 'devices': total,
+            'saturated_fraction': saturated / total}
+
+
 def bound_report(law, physical, names, roles, targets):
     per_matrix, totals = {}, {}
     for name, values, role, target in zip(names, physical, roles, targets):
@@ -183,6 +204,7 @@ class Stage:
         source = pinned_load(request.weights, settings.source_sha256)
         self.model = runtime.from_mapped(teacher, config, source).to(self.device).eval().requires_grad_(False)
         del source
+        self.mapping = None if settings.mapping is None else remap(self.model, settings.mapping)
         self.teacher = teacher.to(self.device).eval().requires_grad_(False)
         self.policy = forward.Policy(self.model, settings.forward_policy)
         self.policy.mode(False)
@@ -194,6 +216,8 @@ class Stage:
                          'adaptation_sha256': settings.adaptation.sha256, 'law': dict(settings.law),
                          'kappa': self.law.kappa, 'forward_policy': asdict(settings.forward_policy),
                          'canary': settings.canary}
+        if self.mapping is not None:
+            self.identity['mapping'] = self.mapping
 
     def prefixes(self):
         self.evaluation = forward.prefix_states(self.model, self.teacher, self.evaluation_tokens, self.device)
