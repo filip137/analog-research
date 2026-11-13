@@ -175,6 +175,9 @@ def _store(request):
 
 def run_train(request):
     c=request.spec
+    if c.stage=='fault_tuning':
+        from ebl.runtime.opt_cmo_drn.fault_tuning import run
+        return run(request)
     if c.stage=='drift_recovery':
         from ebl.runtime.opt_cmo_drn.drift_recovery import run
         return run(request)

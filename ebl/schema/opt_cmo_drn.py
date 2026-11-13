@@ -51,6 +51,12 @@ class Config:
     drift_recovery: object=None
 
 
+@dataclass(frozen=True)
+class FaultTuningConfig(Config):
+    """The fault-paper screen's own stage; a subclass keeps every older config digest unchanged."""
+    fault_tuning: object=None
+
+
 def _parse(cls,raw,path):
     if not isinstance(raw,Mapping):
         raise ConfigError(f'Expected {path} object. Provided value: {raw!r}.')
@@ -61,12 +67,17 @@ def _parse(cls,raw,path):
     defaults=cls()
     for key,value in raw.items():
         default=getattr(defaults,key)
-        if cls is Config and key=='drift_recovery':
+        if cls is FaultTuningConfig and key=='fault_tuning':
+            if value is not None:
+                from methods.config.fault_tuning import FaultTuning
+                try: value=FaultTuning.parse(value)
+                except ValueError as error: raise ConfigError(str(error)) from error
+        elif issubclass(cls,Config) and key=='drift_recovery':
             if value is not None:
                 from methods.maintenance.config import DriftRecovery
                 try: value=DriftRecovery.parse(value)
                 except ValueError as error: raise ConfigError(str(error)) from error
-        elif cls is Config and key=='retention':
+        elif issubclass(cls,Config) and key=='retention':
             if value is not None:
                 from ebl.schema.retention import Retention
                 try: value=Retention.parse(value)
@@ -93,13 +104,24 @@ def _parse(cls,raw,path):
 
 
 def parse_config(raw):
-    c=_parse(Config,raw,'config')
-    if c.experiment_id!=EXPERIMENT_ID or c.schema_version!=1 or c.stage not in ('prepare','hwa','deploy','recover','recovery_benchmark','retention','drift_recovery'):
+    c=_parse(FaultTuningConfig if isinstance(raw,Mapping) and 'fault_tuning' in raw else Config,raw,'config')
+    if c.experiment_id!=EXPERIMENT_ID or c.schema_version!=1 or c.stage not in ('prepare','hwa','deploy','recover','recovery_benchmark','retention','drift_recovery','fault_tuning'):
         raise ConfigError('Expected opt_cmo_drn_hwa.v1 schema 1 and a supported stage.')
     if (c.stage=='retention') != (c.retention is not None):
         raise ConfigError('The retention stage requires its explicit settings; other stages omit them.')
     if (c.stage=='drift_recovery') != (c.drift_recovery is not None):
         raise ConfigError('Custom drift recovery requires its explicit settings only on its native stage.')
+    if (c.stage=='fault_tuning') != (getattr(c,'fault_tuning',None) is not None):
+        raise ConfigError('Fault tuning requires its explicit settings only on its native stage.')
+    if getattr(c,'fault_tuning',None) is not None:
+        f=c.fault_tuning
+        if c.deployment.fault_kind!='random' or not 0<c.deployment.fault_rate<1:
+            raise ConfigError('Fault tuning reads a random-fault deployment.')
+        if (c.recovery.threshold_sigma!=2 or c.recovery.target_bounds!='gmin_gmax' or c.recovery.conductance_floor!='none'
+                or c.recovery.max_write_attempts is not None):
+            raise ConfigError('Fault tuning keeps the DRN 2-rho gate, bounded targets, no floor and no write cap.')
+        if f.recovery_sequences%f.fisher_batch:
+            raise ConfigError('Fisher batches must tile the recovery set.')
     if c.drift_recovery is not None:
         if c.deployment.fault_kind!='none' or c.deployment.fault_rate!=0:
             raise ConfigError('Custom recovery requires a fault-free deployment.')
