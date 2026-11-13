@@ -26,7 +26,8 @@ echo "START $name job=${SLURM_JOB_ID:-none} $(date -u +%FT%TZ)"
 if [ -z "$samples" ]; then
   samples=$out/corpora-${SLURM_JOB_ID:-local}
   mkdir -p "$samples"
-  EBL_CORPUS_ROOT=$CORPORA python campaigns/pilots/20261113-fault-paper-lr-tuning/draw_samples.py \
+  # The hwa runs that logged df73ce66 set no cuBLAS workspace; draw in the same environment.
+  env -u CUBLAS_WORKSPACE_CONFIG EBL_CORPUS_ROOT=$CORPORA python campaigns/pilots/20261113-fault-paper-lr-tuning/draw_samples.py \
     "$config" "$TEACHER" "$samples" || { echo "SAMPLES_REFUSED $(date -u +%FT%TZ)"; exit 3; }
 fi
 ln -sf "$CORPORA/wikitext-2-raw-v1.pt" "$samples/wikitext-2-raw-v1.pt"
