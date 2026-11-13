@@ -124,12 +124,42 @@ def exp004():
     return configs
 
 
+# exp-005: CMO-shaped drift. Spread s(G) = M (c0 + c1 G) at the 1-h reference, zero mean, as
+# 0.25-uS coefficient bins (midpoint) to 150 uS; write noise cmo_scale = M.
+CMO_2PCT = (0.0112185391, 0.01129027418)   # hardware.devices.cmo PROGRAMMING_SIGMA[2.0]
+EXP005_MULTIPLIERS = (3.0, 10.0, 30.0)
+EXP005_MAPPINGS = ('base', 'ratio2', 'ratio3')
+
+
+def cmo_bins(multiplier, step=0.25, top=150.0):
+    c0, c1 = CMO_2PCT
+    rows = [[k * step, 0.0, multiplier * (c0 + c1 * (k + 0.5) * step)] for k in range(int(round(top / step)))]
+    rows.append([top, 0.0, multiplier * (c0 + c1 * top)])
+    return rows
+
+
+def exp005():
+    configs = {}
+    for realization in SEEDS:
+        for m in EXP005_MULTIPLIERS:
+            for label in EXP005_MAPPINGS:
+                config = base(realization)
+                settings = config['drift_regimes']
+                settings['regime'] = f'CMO-M{m:g}-map-{label}'
+                settings['law'].update(cmo_scale=m, mean_us=None, spread_us=None, coefficient_bins=cmo_bins(m))
+                settings['mapping'] = dict(EXP002[label])
+                settings['arms'] = [a for a in settings['arms'] if a['label'] != 'A1'] + copy.deepcopy(EXP002_ARMS)
+                configs[f'M{m:g}-{label}-{realization}'] = config
+    return configs
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('experiment', choices=['exp-001', 'exp-002', 'exp-003', 'exp-004'])
+    parser.add_argument('experiment', choices=['exp-001', 'exp-002', 'exp-003', 'exp-004', 'exp-005'])
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
-    configs = {'exp-001': exp001, 'exp-002': exp002, 'exp-003': exp003, 'exp-004': exp004}[args.experiment]()
+    configs = {'exp-001': exp001, 'exp-002': exp002, 'exp-003': exp003, 'exp-004': exp004,
+               'exp-005': exp005}[args.experiment]()
     out = ROOT / 'configs' / args.experiment
     out.mkdir(parents=True, exist_ok=True)
     stale = []
