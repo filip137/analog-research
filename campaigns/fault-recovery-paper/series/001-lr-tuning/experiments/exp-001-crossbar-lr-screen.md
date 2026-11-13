@@ -85,11 +85,30 @@ deployment is bit-unchanged.
 ## Budget and execution
 
 - Target: Jean Zay V100-32G, `umg@v100`, `qos_gpu-dev`, 3 jobs, 1 h 30 limit each, held
-  with `--begin=2026-11-13T22:00:00`. Expected 10–30 min each (3090: 35–50 s per arm).
+  with `--begin=2026-11-13T22:00:00` and `--dependency=afterok:153094` (the V100 sample
+  draw). Expected 10–30 min each (3090: 35–50 s per arm; V100 unmeasured).
   Cap 6 V100-hours including one retry per understood operational failure.
-- Units: `j1` holds + noisy + noiseless (12 rows); `j2` Child-D + digital LoRA r16/r64 (11);
-  `j3` analog LoRA (5). Storage < 10 GB.
+- Units: `a1` holds + noisy + noiseless (12 rows); `a2` Child-D + digital LoRA r16/r64 (11);
+  `a3` analog LoRA (5). Storage < 10 GB.
 
 ## Current execution and monitoring handoff
 
-(see the coordinator's issue #39 comments; filled at launch below)
+Submitted 13 November 19:24 by the implementing agent; monitoring passes to the coordinator
+(issue #39). Nothing has run on Jean Zay yet.
+
+- **Source:** `a799b2e` (main), clean clone `$JZ/source-a799b2e/hwa` (receipt 2,401 files,
+  0 mismatches), `JZ=/lustre/fsn1/projects/rech/umg/ucy17uy/fault-paper-tuning-20261113`.
+  Launch dir `$JZ/launch-a799b2e/` (manifest, worker, run.slurm); plans prepared and dry-run.
+- **Inputs** (`$JZ/inputs`, `EBL_CORPUS_ROOT`): deployment `611a0aab…`, B scale `494f5c05…`,
+  WikiText and synthetic corpora (symlinks), teacher-sample symlink to the DRN draw output
+  (exists only after 153094 succeeds); teacher `2d74da66…` and std3 `86522e23…` at the
+  paths in the manifest.
+- **Jobs:** 161895 (`a1`), 161896 (`a2`), 161897 (`a3`), each `afterok:153094`, begin 22:00.
+- **Outputs:** `$JZ/runs-v1/<unit>/` (`runs/`, `complete.json` or `failed-<job>.json`);
+  logs `$JZ/runs-v1/slurm/fpt-<unit>-<job>.{out,err}`.
+- **Checks on completion:** `complete.json` per unit; `samples_sha256` = `df73ce66…`;
+  apparent hashes naive `fa18be12…`, fault-aware `63363396…`, adapter `49566ea2…` in every unit.
+- **If 153094 fails** (draw ≠ `df73ce66`), the three jobs never start
+  (DependencyNeverSatisfied); cancel them. Rerun option: units `j1`–`j3` draw in-job on V100.
+- Unused: an earlier staging `$JZ/launch-3e0a587`, `$JZ/source-3e0a587` and prepared plans
+  `$JZ/runs-v1/j1..j3/plan` (never submitted; the V100 queue was full at 16:46).
