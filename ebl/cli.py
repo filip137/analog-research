@@ -787,7 +787,9 @@ def _handler_result(handler: Handler, request: Any) -> int:
 
 
 def _default_train_handler(request: TrainRequest) -> Optional[int]:
-    if request.definition.experiment_id == "sparse_equilibrium_pilot.v1":
+    if request.definition.experiment_id == "mos_attention_learning.v1":
+        from ebl.runtime.mos_attention_learning import run_train
+    elif request.definition.experiment_id == "sparse_equilibrium_pilot.v1":
         from ebl.runtime.sparse_equilibrium import run_train
     elif request.definition.experiment_id == "opt_cmo_drn_hwa.v1":
         from ebl.runtime.opt_cmo_drn.runtime import run_train

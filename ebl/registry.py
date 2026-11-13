@@ -920,6 +920,16 @@ EXPERIMENT_REGISTRY["convergent_energy_transformer.v1"] = ExperimentDefinition(
 )
 
 
+from ebl.schema.mos_attention_learning import (
+    parse_config as _mos_learning_parse, resolve_config as _mos_learning_resolve,
+)
+EXPERIMENT_REGISTRY["mos_attention_learning.v1"] = ExperimentDefinition(
+    experiment_id="mos_attention_learning.v1", schema_version=1,
+    description="Native MOS attention with measured-SPICE equilibrium-propagation task learning.",
+    supported_modes=(RunMode.TRAIN,), parser=_mos_learning_parse, resolver=_mos_learning_resolve,
+)
+
+
 def list_definitions() -> Tuple[ExperimentDefinition, ...]:
     """Return definitions in stable identifier order."""
 

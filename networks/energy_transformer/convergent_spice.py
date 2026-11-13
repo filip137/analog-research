@@ -1,8 +1,8 @@
 """Explicit analog-block netlist for the convergent ET prototype.
 
-State RCs and differential weight resistors are explicit. Softmax defaults to
-matched ideal subthreshold MOSFET device macros; the BJT reference is selectable.
-Normalization, multiplication, rectification and buffers remain ideal.
+State RCs and differential weight resistors are explicit. Selectable attention
+uses native MOS product cells and a regulated BSIM3 current bank, or ideal
+reference blocks. Normalization, rectification and buffers remain ideal.
 No behavioral source implements the whole vector field or matrix product.
 """
 from dataclasses import dataclass
@@ -13,7 +13,7 @@ import numpy as np
 
 from networks.energy_transformer.convergent import Parameters, Boundary, ports
 from networks.energy_transformer.spice import THERMAL_VOLTAGE, TAIL_CURRENT, BJT_BETA
-from networks.energy_transformer import mosfet
+from networks.energy_transformer import mosfet, transistor
 
 G0 = 1e-4
 TIME_UNIT = 1e-3
@@ -21,20 +21,27 @@ TAUS = (1.,1.3)
 
 
 class Builder:
-    def __init__(self, softmax_device=mosfet.DEVICE):
-        if softmax_device not in ("bjt",mosfet.DEVICE):
+    def __init__(self, softmax_device=mosfet.DEVICE, multiplier="ideal"):
+        if softmax_device not in ("bjt",mosfet.DEVICE,transistor.SOFTMAX_DEVICE):
             raise ValueError("Unknown softmax device")
         self.softmax_device = softmax_device
-        self.lines = ["Convergent energy transformer -- ideal analog block prototype",
+        if multiplier not in ("ideal","mos_triode"):
+            raise ValueError("Unknown multiplier")
+        self.multiplier=multiplier
+        self.lines = ["Convergent energy transformer -- staged analog circuit",
             "* Quasistatic multiplier/normalizer/rectifier macros; finite bandwidth untested.",
             f"* softmax_device={softmax_device}", ".temp 27", "Vcc vcc 0 3"]
-        if softmax_device == mosfet.DEVICE:
+        if softmax_device == transistor.SOFTMAX_DEVICE:
+            self.lines += [".options reltol=1e-6 abstol=1e-18 vntol=1e-9 gmin=1e-18 method=gear maxord=2"]+transistor.softmax_model_lines()
+        elif softmax_device == mosfet.DEVICE:
             self.lines += [".options reltol=1e-9 abstol=1e-18 vntol=1e-10 gmin=1e-18 method=gear maxord=2",
                            f"Vmosbias mosbias 0 {mosfet.GATE_BIAS:.17g}"]+mosfet.subcircuit()
         else:
             self.lines += [".options reltol=1e-9 abstol=1e-14 vntol=1e-10 gmin=1e-15 method=gear maxord=2",
                            ".model qsoft NPN(IS=1e-15 BF=1e8 CJE=0 CJC=0 TF=0 TR=0)"]
         self.serial = 0
+        self.products=[]
+        if multiplier=="mos_triode": self.lines += transistor.model_lines()
         self.negatives = {}
         self.positives = {}
         self.banks = []
@@ -74,6 +81,7 @@ class Builder:
         return outputs
 
     def product(self,left,right):
+        if self.multiplier=="mos_triode": return transistor.product(self,left,right)
         out = self.name("product")
         self.lines.append(f"{self.name('Bmultiply')} {out} 0 V=V({left})*V({right})")
         return out
@@ -86,6 +94,8 @@ class Builder:
         return out
 
     def softmax(self,scores,kappa):
+        if self.softmax_device == transistor.SOFTMAX_DEVICE:
+            return transistor.softmax_bank(self,scores,kappa)
         emitter = self.name("emitter")
         tail = mosfet.TAIL_CURRENT if self.softmax_device == mosfet.DEVICE else TAIL_CURRENT
         self.lines.append(f"{self.name('Itail')} {emitter} 0 {tail:.17g}")
@@ -112,14 +122,14 @@ class Builder:
         return outputs
 
 
-def export_netlist(parameters, boundary, nudge=0., initial=None, *, softmax_device=mosfet.DEVICE):
+def export_netlist(parameters, boundary, nudge=0., initial=None, *, softmax_device=mosfet.DEVICE, multiplier="ideal", terminal_only=False, duration=80.):
     p,b = parameters,boundary.checked(parameters,nudge)
     n,d = p.shape
     h,a,_ = p.query.shape
     patch = p.output_shape[1]
     initial = np.zeros(p.size) if initial is None else initial
     z0,y0 = p.split(initial)
-    net = Builder(softmax_device)
+    net = Builder(softmax_device,multiplier)
     z = np.array([[f"z_{i}_{j}" for j in range(d)] for i in range(n)])
     y = np.array([[f"y_{i}_{j}" for j in range(patch)] for i in range(n)])
     g=[]; enc=[]; pos=[]
@@ -182,9 +192,14 @@ def export_netlist(parameters, boundary, nudge=0., initial=None, *, softmax_devi
         for node,drive in zip(y[i],dy): net.lines.append(f"{net.name('Goutput')} 0 {node} {drive} 0 {G0:.17g}")
         drivez.append(dz); drivey.append(dy)
     groups={"z":z,"y":y,"g":g,"q":q,"k":k,"p":probabilities,"r":np.array(rectified),"token_drive":np.array(drivez),"output_drive":np.array(drivey)}
-    if softmax_device == mosfet.DEVICE:
+    if softmax_device in (mosfet.DEVICE,transistor.SOFTMAX_DEVICE):
         groups["softmax_sources"]=np.array([bank["source"] for bank in net.banks]).reshape(h,n)
         groups["softmax_gates"]=np.array([bank["gates"] for bank in net.banks]).reshape(h,n,n)
+        groups["softmax_drains"]=np.array([bank["drains"] for bank in net.banks]).reshape(h,n,n)
+    if multiplier=="mos_triode":
+        for key in ("left","right","output"):
+            groups["product_"+key]=np.array([cell[key] for cell in net.products])
+    if softmax_device == mosfet.DEVICE:
         # The ideal exponential macro lacks a compact model's Newton limiting.
         # Seed algebraic voltages consistently with the prescribed RC initial
         # states; this changes no component law or physical initial state.
@@ -206,10 +221,24 @@ def export_netlist(parameters, boundary, nudge=0., initial=None, *, softmax_devi
             initial_values.update(zip(bank["gates"],gates))
             initial_values.update({node:mosfet.DRAIN_VOLTAGE for node in bank["drains"]})
         net.lines += [f".ic V({node})={float(value):.17g}" for node,value in initial_values.items()]
+    if softmax_device == transistor.SOFTMAX_DEVICE:
+        # Constrain only RC states during the bias solve; SPICE initializes all
+        # compact-model charges consistently before releasing these constraints.
+        for node,value in zip(np.r_[z.ravel(),y.ravel()],initial):
+            net.lines.append(f".ic V({node})={float(value):.17g}")
     vectors=[f"v({node})" for nodes in groups.values() for node in nodes.ravel()]
-    step,stop=TIME_UNIT/20,80*TIME_UNIT
+    if not np.isfinite(duration) or duration<=0: raise ValueError("Expected positive duration")
+    step,stop=TIME_UNIT*(1. if terminal_only else .05),duration*TIME_UNIT
     net.lines += [".control","set noaskquit","set numdgt=15","set wr_singlescale","set wr_vecnames",
-                  f"tran {step:.17g} {stop:.17g} 0 {step:.17g} uic","wrdata waveform.tsv "+" ".join(vectors),"quit",".endc",".end"]
+                  f"tran {step:.17g} {stop:.17g} 0 {step:.17g}"+("" if softmax_device==transistor.SOFTMAX_DEVICE else " uic")]
+    if terminal_only:
+        net.lines += ["let finaltime = time[length(time)-1]"]
+        for i,vector in enumerate(vectors): net.lines.append(f"let endpoint{i} = {vector}[length(time)-1]")
+        net.lines += ["setscale finaltime"]
+        net.lines += ["wrdata waveform.tsv finaltime "+" ".join(f"endpoint{i}" for i in range(len(vectors)))]
+    else:
+        net.lines += ["wrdata waveform.tsv "+" ".join(vectors)]
+    net.lines += ["quit",".endc",".end"]
     return "\n".join(net.lines)+"\n",{name:nodes.shape for name,nodes in groups.items()}
 
 
@@ -220,10 +249,10 @@ class SpiceTrace:
     ports: dict
 
 
-def run_spice(parameters,boundary,directory,*,executable="ngspice",nudge=0.,initial=None,timeout=30,softmax_device=mosfet.DEVICE):
+def run_spice(parameters,boundary,directory,*,executable="ngspice",nudge=0.,initial=None,timeout=30,softmax_device=mosfet.DEVICE,multiplier="ideal",terminal_only=False,duration=80.):
     directory=Path(directory).resolve()
     directory.mkdir(parents=True,exist_ok=False)
-    text,shapes=export_netlist(parameters,boundary,nudge,initial,softmax_device=softmax_device)
+    text,shapes=export_netlist(parameters,boundary,nudge,initial,softmax_device=softmax_device,multiplier=multiplier,terminal_only=terminal_only,duration=duration)
     (directory/"circuit.cir").write_text(text)
     executable=shutil.which(str(executable))
     if executable is None: raise FileNotFoundError("ngspice executable not found")
@@ -232,10 +261,12 @@ def run_spice(parameters,boundary,directory,*,executable="ngspice",nudge=0.,init
     waveform=directory/"waveform.tsv"
     if not waveform.is_file(): raise RuntimeError(f"SPICE did not produce waveform: {directory}")
     data=np.loadtxt(waveform,skiprows=1,ndmin=2)
+    # Scalar vectors carry a dummy SPICE scale column before explicit finaltime.
+    if terminal_only: data=data[:,1:]
     expected=1+sum(np.prod(shape) for shape in shapes.values())
-    if data.shape[1]!=expected or data.shape[0]<100 or not np.isfinite(data).all():
+    if data.shape[1]!=expected or data.shape[0]<(1 if terminal_only else 100) or not np.isfinite(data).all():
         raise RuntimeError("Incomplete or nonfinite SPICE waveform")
-    if abs(data[-1,0]-80*TIME_UNIT)>1e-10 or np.any(np.diff(data[:,0])<=0):
+    if abs(data[-1,0]-duration*TIME_UNIT)>1e-10 or np.any(np.diff(data[:,0])<=0):
         raise RuntimeError("Incomplete SPICE time coverage")
     values={};offset=1
     for name,shape in shapes.items():

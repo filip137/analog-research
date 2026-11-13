@@ -1,0 +1,15 @@
+{
+  "experiment_id": "mos_attention_learning.v1",
+  "schema_version": 1,
+  "case": "three_token_masked_mean",
+  "epochs": 200,
+  "beta": 0.005,
+  "learning_rate": 0.003,
+  "train_seed": 3100,
+  "test_seed": 3102,
+  "train_count": 12,
+  "test_count": 32,
+  "wall_seconds": 1800,
+  "spice_timeout": 30,
+  "spice_executable": "/home/filip/analog-research/drn/results/analog-energy-transformer/tools/ngspice-39.3/bin/ngspice"
+}
