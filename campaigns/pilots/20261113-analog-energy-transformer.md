@@ -47,3 +47,27 @@ Tool: ngspice 39.3, built locally and retained at
 DRN trunk. Its binary hash and version are captured in every bundle. Both
 negative controls are reported separately: frozen compensation changes the
 force, and unequal softmax RCs can make the nominal energy increase.
+
+Local verification result: source `841f499bd3566294439db0e1320f150a31002442`
+was clean in all three readiness manifests. All cases pass, with 18 SPICE
+transients, 24 numerical nudged equilibria, three programming steps, and all
+five gradient groups checked (W/c are empty in softmax-only). Artifact hashing
+and completion validation passed. Runs took 10.06 s and indexed 63.34 MB.
+Worst SPICE transient error: 2.512e-6 V; centered SPICE gradient error: 5.148e-5
+relative. The post-update loss falls in all three cases with input a fixed.
+Readiness root: `results/analog-energy-transformer/exp-001/readiness/` under
+the DRN trunk. Exact bundle names and interpretation are in the shared
+campaign's `results/exp-001-readiness.md`.
+
+Publication gate: automatic approval review rejected the shared-trunk merge
+and push twice, including after the policy's standing permission was quoted.
+It requires explicit confirmation in this conversation. The user was asked;
+no approval is assumed. No active jobs remain. Preserve the local branch and
+readiness evidence; do not call the experiment closed or promote these runs
+to the pinned already-pushed evidence class. Next action is publication
+approval, the pinned evidence run, and the closing git checkpoint.
+
+The figure generator `experiments/energy_transformer/figures.py` reads completed
+bundles without mutating them. Its plotting environment is separate from the
+numerical runtime. The circuit still has ideal active macros and a software
+programming controller; finite-bandwidth/device/writer hardware is not validated.
