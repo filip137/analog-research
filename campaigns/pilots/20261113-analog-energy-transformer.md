@@ -26,5 +26,24 @@ Branch `drn/20261113-analog-energy-transformer`. The executing agent owns direct
 monitoring through semantic completion and bundle validation. No large-model,
 GPU or remote training is authorized by this first implementation.
 
-Status: design derived and specification frozen; implementation pending.
-The launch checkpoint will record the exact config/command and pushed SHA.
+Status: implementation ready. Circuit/numerical/SPICE tests passed; 25 existing
+CLI/architecture tests passed with one version-dependent skip. A one-case CLI
+smoke and artifact-hash inspection passed. The full run will use a clean pushed
+launch commit, with three native bundles under the declared result root.
+
+The learning step uses the SPICE phase readouts, holds input a fixed and
+checks the updated circuit with SPICE. This adds one transient per case to
+the initial specification (18 total), within the same ten-minute/100-MB budget.
+All original decision thresholds remain unchanged.
+
+Exact launch command, from the pinned checkout:
+
+```bash
+python -m ebl characterize --config examples/analog_energy_transformer_circuit.json --output-dir /home/filip/analog-research/drn/results/analog-energy-transformer/exp-001/evidence
+```
+
+Tool: ngspice 39.3, built locally and retained at
+`results/analog-energy-transformer/tools/ngspice-39.3/bin/ngspice` under the
+DRN trunk. Its binary hash and version are captured in every bundle. Both
+negative controls are reported separately: frozen compensation changes the
+force, and unequal softmax RCs can make the nominal energy increase.

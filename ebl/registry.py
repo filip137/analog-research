@@ -896,6 +896,18 @@ EXPERIMENT_REGISTRY['sparse_equilibrium_pilot.v1'] = ExperimentDefinition(
 )
 
 
+from ebl.schema.analog_energy_transformer import (
+    parse_config as _energy_attention_parse,
+    resolve_config as _energy_attention_resolve,
+)
+EXPERIMENT_REGISTRY["analog_energy_transformer.v1"] = ExperimentDefinition(
+    experiment_id="analog_energy_transformer.v1", schema_version=1,
+    description="Ideal signed reciprocal softmax circuit and equilibrium-propagation verification.",
+    supported_modes=(RunMode.CHARACTERIZE,),
+    parser=_energy_attention_parse, resolver=_energy_attention_resolve,
+)
+
+
 def list_definitions() -> Tuple[ExperimentDefinition, ...]:
     """Return definitions in stable identifier order."""
 
