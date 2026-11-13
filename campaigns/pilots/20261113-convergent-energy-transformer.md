@@ -304,3 +304,156 @@ unchanged. The output root is
 `/home/filip/analog-research/drn/results/convergent-energy-transformer/evidence`.
 The executing agent directly monitors the bounded run and verifies completion,
 artifact hashes, case coverage and all acceptance criteria.
+
+
+## Published BJT reference — 13 November
+
+The approved publication and pinned check completed. Both `energy-transformer`
+and `refactor/training-core` were pushed at
+`99143e7531612ec20780458e7d3c15837d0c9a00`. The source was clean in the native
+manifest. Bundle:
+`/home/filip/analog-research/drn/results/convergent-energy-transformer/evidence/20261113T150322.467298Z-82444872-00a83316`.
+All 12 acceptance checks and artifact-hash/completion inspection pass. Duration
+8.73 s; maximum transient discrepancy 1.3653e-6 V; maximum SPICE-derived EP
+relative error 2.8524e-5; loss 0.1237749663 -> 0.1139746266. All declared
+phases and parameter groups are present. This is the published BJT baseline.
+
+The user then requested replacing the BJT softmax with MOSFETs, referring to
+Abbott and Machta (arXiv:2610.12571). Use the ideal weak-inversion MOSFET bank
+in their equations (25)/(31) as the first staged replacement; preserve this
+BJT baseline and the energy architecture. The full paper's dyadic saddle-point
+learning architecture is not being substituted for our convergent model.
+
+
+## MOSFET replacement: predeclared contract
+
+User-requested device change, 13 November. Primary source:
+https://arxiv.org/pdf/2610.12571, section 2.5 equation (25), section 3.2
+figure 6/equation (31), and appendix E's explicit ideal-device limitation.
+Only the softmax device implementation changes. The frozen token case, weights,
+energy, both attention return paths, nudges, learning rate and scientific
+thresholds remain unchanged.
+
+Use an ideal three-terminal weak-inversion MOSFET device law:
+
+    Ids = I0 exp((Vg-Vth)/(n VT)) [exp(-Vs/VT)-exp(-Vd/VT)].
+
+Devices in one bank have a common source, equal clamped drain voltages and a
+fixed current sink. Thus the bracket is common and Ids_i/Itail is exactly
+softmax(Vg_i/(n VT)) in this ideal model. Set
+Vg_i=Vbias+kappa*n*VT*score_i to preserve our original softmax(kappa*score).
+The derived activation, energy and EP statistics are unchanged. The full
+paper's dyadic saddle-point architecture is not imported.
+
+Declared constants: VT=0.026 V, n=1.5, Vth=0.7 V, I0=1e-8 A (the paper's
+ideal-law parameters); Vbias=0.7 V, common drain=3 V, tail=1e-9 A. Tail<I0
+keeps even a winner-take-all branch below the paper's specified current bound.
+Check Vg<Vth+n*min(Vs,Vd) on every saved transient sample. Ideal current
+readout amplification converts these nA currents back to the existing
+normalized voltage ports; this is not a power estimate.
+
+Implementation uses a named three-terminal SPICE subcircuit with a behavioral
+channel-current law. It is an ideal MOSFET device model, not a foundry BSIM/EKV
+card or a silicon measurement. The old explicit BJT option stays selectable
+as `bjt`; the new default is `mosfet_weak_inversion`. The matched BJT config
+is `examples/convergent_energy_transformer_bjt_reference.json`.
+
+Verification: standalone equal/dominant logits, common-mode shift and a
+centered finite-difference Jacobian versus diag(p)-p*p^T; then the existing
+complete circuit/gradient/learning checks. Require weak-inversion margin>0,
+maximum branch current/I0<1, current-law and tail-fraction error<1e-6.
+Retain failures. No tuning of initial weights, nudges, learning rate or
+scientific tolerances to obtain a pass. Absolute current solver tolerance
+becomes 1e-18 A for the nA device law (the BJT path retains its old settings).
+
+Budget for this replacement: one CPU thread, <=10 minutes combined checks,
+<=200 MB including proportional test artifacts and one <=100 MB native bundle.
+No dataset/GPU/remote run. Owner: executing Codex agent, direct monitoring.
+Native output: /home/filip/analog-research/drn/results/convergent-energy-transformer/mosfet/evidence/.
+The published BJT bundle remains the matched reference; do not rerun or
+relabel it. Commit/push the passing implementation before the pinned native
+MOSFET characterization, under the user's publication approval.
+
+### MOSFET readiness and numerical startup
+
+The standalone bank passes equal/dominant-logit, common-mode and Jacobian
+checks. The first full-circuit attempt failed during Newton startup; the
+ideal exponential behavioral device has no compact-model voltage limiting.
+Seeding only the source/gate and normalization nodes still failed because
+the clamped drain/supply nodes had inconsistent initial guesses. Seeding all
+of those algebraic nodes consistently with the prescribed RC initial state
+resolved the failure. The RC initial states and all component laws are
+unchanged; the simulator still computes the transient and equilibria.
+Failures remain in `/tmp/convergent-energy-transformer/mosfet-test-001` and
+`mosfet-test-002`; the successful waveforms remain in `mosfet-test-003` and
+`mosfet-test-004`. The third attempt's terminal pytest output was lost at a
+context boundary, so the full-circuit test was repeated once with a saved log.
+
+Readiness verification: ten mathematical/schema/netlist/standalone-bank tests
+passed before the startup fix. The complete MOSFET circuit/gradient/update
+test, ownership import checks, lazy CLI imports and public CLI tests then
+passed together: 20 passed in 8.18 s. Log:
+`/tmp/convergent-energy-transformer/mosfet-test-004-pytest.log`.
+CPU only; the PyTorch CUDA-driver warning does not affect this CPU execution.
+The readiness artifacts occupy about 104 MiB, within the combined 200 MB
+allowance with room for the single bounded native evidence bundle.
+
+Native launch, from a clean detached checkout of the next published commit:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 /home/filip/miniconda3/bin/python -m ebl characterize --config examples/convergent_energy_transformer_circuit.json --output-dir /home/filip/analog-research/drn/results/convergent-energy-transformer/mosfet/evidence
+```
+
+Expected runtime: tens of seconds, hard limit 600 seconds. The executing
+agent owns direct monitoring through artifact-hash validation and scientific
+review. No task-training or finite-bandwidth hardware claim follows from this
+characterization.
+
+### Published MOSFET evidence and current handoff
+
+Implementation source `457ff5ca6ea65e941362f62d1e110876f9317e7e` was pushed
+on `energy-transformer` and `refactor/training-core` before execution. The
+native manifest records that exact source with `dirty=false`. Evidence:
+`/home/filip/analog-research/drn/results/convergent-energy-transformer/mosfet/evidence/20261113T152306.656808Z-3aa61c4a-e3fccb6d`.
+Process exit 0; all 14 acceptance checks pass. Native completion and full
+artifact-hash inspection pass. Coverage is complete for the frozen prototype:
+three starts, eight numerical nudges, six SPICE transients, all six parameter
+groups and one programming update. Native execution took 10.97 s and indexed
+75,131,783 bytes; readiness plus evidence files total 182,673,998 bytes.
+Preparation/reading/handoff time and token attribution are not separately
+instrumented. No jobs remain active.
+
+| Measurement | MOSFET result |
+| --- | ---: |
+| Maximum transient discrepancy | 1.3639e-6 V |
+| Maximum equilibrium discrepancy | 1.8583e-12 V |
+| Maximum per-group SPICE EP relative error | 2.8524e-5 |
+| Loss before / after update | 0.123774966281 / 0.113974626633 |
+| Minimum weak-inversion margin, saved samples | 0.1437567 V |
+| Maximum branch current / I0 | 0.0250704 |
+| Maximum current-law residual / tail | 4.0636e-14 |
+| Maximum tail-fraction sum error | 5.9953e-15 |
+
+The ideal MOSFET bank preserves the intended softmax, both attention return
+paths, energy descent and EP statistics on this complete frozen case. The
+matched BJT evidence above gives the same practical loss and gradient results.
+These are exact-law circuit checks with deliberately ideal active blocks;
+their tiny discrepancies do not establish fabricated-device accuracy, speed
+or power. The standalone dominant-logit test exercises a wider softmax range
+than this four-token case, whose attention remains close to uniform.
+
+Current implementation: 20 RC state nodes, 992 differential weight resistor
+instances, 32 ideal weak-inversion MOSFET device instances, 192 ideal product
+macros, 16 normalized activation outputs and 24 ideal rectifiers. Mean,
+variance, square root/division, buffers, current readouts and nudging sources
+remain ideal. Phase statistics and tied-weight programming use software.
+The BJT reference remains selectable; no foundry model is claimed.
+
+The completed pinned source checkouts were removed after validation; source
+commits and immutable bundles remain. The active development worktree is
+`/home/filip/analog-research/worktrees/drn-20261113-convergent-energy-transformer`
+on `energy-transformer`. The original primitive milestone (#32) is complete
+and its merged worktree has been removed. The broader small/mid-scale
+demonstration (#36) remains open. Next is to specify the small task-training
+pilot and physical reuse mapping, followed by realistic transistor/bandwidth
+checks under a declared protocol; no further run is launched by this result.

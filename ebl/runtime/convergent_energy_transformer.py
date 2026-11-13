@@ -9,6 +9,7 @@ from networks.energy_transformer.convergent import (PARAMETERS,pilot_case,force,
     simulate,energy,torch_energy,dissipation,ports,loss)
 from networks.energy_transformer.convergent_spice import run_spice
 from networks.energy_transformer.spice import executable_identity
+from networks.energy_transformer import mosfet
 from methods.convergent_energy_transformer import (eqprop,phase_gradient,
     implicit_gradient,finite_difference_directions,update)
 
@@ -41,6 +42,7 @@ def characterize(config,store,executable,deadline):
     metrics={"numerical_residual":0.,"start_disagreement":0.,"energy_increase":0.,
              "kcl_error":0.,"dissipation_error":0.,"spice_state_error":0.,
              "spice_transient_error":0.,"spice_port_error":0.,"spice_kcl_residual":0.}
+    device_metrics=[]
     free=None
     tau=np.r_[np.ones(p.position.size),np.full(np.prod(p.output_shape),1.3)]
     for index,start in enumerate(starts):
@@ -75,7 +77,9 @@ def characterize(config,store,executable,deadline):
     phases += [("minus",-best,free),("plus",best,free)]
     measured={}
     for name,nudge,start in phases:
-        trace=run_spice(p,b,root/name,executable=executable,nudge=nudge,initial=start,timeout=remaining())
+        trace=run_spice(p,b,root/name,executable=executable,nudge=nudge,initial=start,timeout=remaining(),softmax_device=config.softmax_device)
+        if config.softmax_device==mosfet.DEVICE:
+            device_metrics.append(mosfet.operating_metrics(trace.ports["softmax_sources"],trace.ports["softmax_gates"],trace.ports["p"]))
         numerical=simulate(p,b,nudge,initial=start,times=trace.time)
         metrics["spice_state_error"]=max(metrics["spice_state_error"],float(np.max(np.abs(trace.states[-1]-numerical.states[-1]))))
         metrics["spice_transient_error"]=max(metrics["spice_transient_error"],float(np.max(np.abs(trace.states-numerical.states))))
@@ -91,7 +95,9 @@ def characterize(config,store,executable,deadline):
     metrics["spice_gradient"]=errors(estimate,reference)
     gradients.update({f"spice_{name}":v for name,v in estimate.items()})
     changed=update(p,estimate,config.learning_rate)
-    after=run_spice(changed,b,root/"after-update",executable=executable,timeout=remaining())
+    after=run_spice(changed,b,root/"after-update",executable=executable,timeout=remaining(),softmax_device=config.softmax_device)
+    if config.softmax_device==mosfet.DEVICE:
+        device_metrics.append(mosfet.operating_metrics(after.ports["softmax_sources"],after.ports["softmax_gates"],after.ports["p"]))
     after_reference=simulate(changed,b).states[-1]
     _,after_eig=implicit_gradient(changed,after_reference,b)
     metrics["updated_hessian_eigenvalue"]=after_eig
@@ -118,12 +124,23 @@ def characterize(config,store,executable,deadline):
         "learning":metrics["loss_after"]<metrics["loss_before"] and metrics["updated_state_error"]<=1e-5,
         "negative_control":negative["missing_key_force_error"]>1e-5 and negative["missing_key_dissipation_error"]>1e-6,
     }
+    if device_metrics:
+        metrics["mosfet"]={
+            "weak_inversion_margin":min(v["weak_inversion_margin"] for v in device_metrics),
+            "maximum_branch_current_over_i0":max(v["maximum_branch_current_over_i0"] for v in device_metrics),
+            "current_law_error_over_tail":max(v["current_law_error_over_tail"] for v in device_metrics),
+            "tail_fraction_error":max(v["tail_fraction_error"] for v in device_metrics),
+        }
+        m=metrics["mosfet"]
+        checks["mosfet_operating_domain"]=m["weak_inversion_margin"]>0 and m["maximum_branch_current_over_i0"]<1
+        checks["mosfet_current_law"]=m["current_law_error_over_tail"]<1e-6 and m["tail_fraction_error"]<1e-6
     np.savez_compressed(root/"gradients.npz",**gradients)
     np.savez_compressed(root/"updated.npz",**{name:getattr(changed,name) for name in PARAMETERS})
     result={"schema":"convergent-energy-transformer.result.v1","passed":all(checks.values()),"checks":checks,
             "metrics":metrics,"negative_control":negative,"coverage":{"tokens":4,"heads":2,"logical_parameters":sum(getattr(p,k).size for k in PARAMETERS),
             "free_starts":3,"numerical_nudges":2*len(config.betas),"spice_transients":6,"learning_updates":1,"parameter_groups":list(PARAMETERS)},
-            "claim_boundary":"Ideal analog-block circuit; software phase-statistic/programming controller; single-example readiness, no task training or transistor validation."}
+            "softmax_device":config.softmax_device,
+            "claim_boundary":"Ideal analog-block circuit; MOSFET option uses a three-terminal analytic subthreshold device law, not a foundry compact model. Software phase-statistic/programming controller; single-example check, no task training or silicon validation."}
     atomic_write_json(root/"summary.json",result)
     return result
 
@@ -137,7 +154,7 @@ def run_characterize(request):
         input_artifacts=[{"path":str(executable),"sha256":sha256_file(executable)}],resume_capability="unsupported")
     print(f"RUN_DIR={store.run_dir}",flush=True)
     try:
-        atomic_write_json(store.run_dir/"artifacts"/"environment.json",{"spice_executable":str(executable),"spice_version":version,"numpy":np.__version__,"stage":"readiness"})
+        atomic_write_json(store.run_dir/"artifacts"/"environment.json",{"spice_executable":str(executable),"spice_version":version,"numpy":np.__version__,"softmax_device":c.softmax_device,"stage":"circuit_characterization"})
         result=characterize(c,store,executable,deadline)
         artifacts=[store.artifact_record(path,kind="circuit_readiness") for path in sorted((store.run_dir/"artifacts").rglob("*")) if path.is_file()]
         if sum(a.size_bytes for a in artifacts)>100_000_000: raise RuntimeError("Artifact budget exceeded")

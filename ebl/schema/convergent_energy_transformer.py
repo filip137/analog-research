@@ -11,6 +11,7 @@ class Config:
     experiment_id: str = EXPERIMENT_ID
     schema_version: int = 1
     case: str = "four_token_two_head"
+    softmax_device: str = "mosfet_weak_inversion"
     betas: tuple = (.04,.02,.01,.005)
     learning_rate: float = .05
     wall_seconds: int = 600
@@ -29,6 +30,8 @@ def parse_config(raw):
     if c.experiment_id!=EXPERIMENT_ID or type(c.schema_version) is not int or c.schema_version!=1:
         raise ConfigError("Expected convergent_energy_transformer.v1 schema 1")
     if c.case!="four_token_two_head": raise ConfigError("Unknown frozen circuit case")
+    if c.softmax_device not in ("bjt","mosfet_weak_inversion"):
+        raise ConfigError("Expected bjt or mosfet_weak_inversion")
     if not 1<=len(c.betas)<=4 or any(type(x) not in (int,float) or not math.isfinite(x) or not 0<x<=.05 for x in c.betas):
         raise ConfigError("Expected one to four positive finite nudges <=0.05")
     if len(set(c.betas))!=len(c.betas): raise ConfigError("Duplicate nudges")

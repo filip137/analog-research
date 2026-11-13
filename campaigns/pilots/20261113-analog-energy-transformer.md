@@ -71,3 +71,34 @@ The figure generator `experiments/energy_transformer/figures.py` reads completed
 bundles without mutating them. Its plotting environment is separate from the
 numerical runtime. The circuit still has ideal active macros and a software
 programming controller; finite-bandwidth/device/writer hardware is not validated.
+
+
+## Published-source verification — 13 November
+
+The user explicitly approved publication and pinned CPU verification. The
+implementation is published on `energy-transformer` and integrated into
+`refactor/training-core`. Clean launch source:
+`99143e7531612ec20780458e7d3c15837d0c9a00`. All three previously specified
+cases passed the unchanged full characterization from a detached checkout
+of that already-pushed source. Native completion and artifact-hash verification
+passed for every bundle below. Original readiness runs remain unchanged.
+
+| Case | Evidence bundle | Transient error (V) | SPICE EP relative error | Loss before / after |
+| --- | --- | ---: | ---: | --- |
+| mixed_relu | `20261113T150403.948501Z-363fe0cf-dad88653` | 2.51e-06 | 3.38e-05 | 0.18040144 / 0.16588997 |
+| active_relu | `20261113T150407.691214Z-c2dc952f-445f8305` | 1.76e-06 | 5.15e-05 | 0.23679287 / 0.19972072 |
+| softmax_only | `20261113T150411.204773Z-8fbbbca6-6b8b0709` | 1.76e-06 | 3.29e-05 | 0.19526474 / 0.18116940 |
+
+Bundles are under `/home/filip/analog-research/drn/results/analog-energy-transformer/exp-001/evidence/`.
+All three cases, 18 SPICE transients, eight numerical nudges per case, input
+and parameter gradient groups, programming steps and both invalid controls
+are present and pass. This completes the original circuit-design/KCL/EqProp
+implementation milestone (#32). The larger convergent multi-token demonstration
+continues in #36 on the user-requested `energy-transformer` branch.
+
+Closing checkpoint: the original implementation and this result record are
+merged into the published DRN trunk. The original merged branch/worktree and
+the completed detached source checkout were removed after checking for local
+changes; only generated Python caches existed in the original worktree. All
+readiness, failed and published evidence is retained. The convergent model's
+active worktree continues independently on `energy-transformer`.

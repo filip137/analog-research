@@ -2,6 +2,7 @@
   "experiment_id": "convergent_energy_transformer.v1",
   "schema_version": 1,
   "case": "four_token_two_head",
+  "softmax_device": "mosfet_weak_inversion",
   "betas": [0.04, 0.02, 0.01, 0.005],
   "learning_rate": 0.05,
   "wall_seconds": 600,
