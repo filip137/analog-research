@@ -46,6 +46,7 @@ def main():
     parser.add_argument('unit')
     parser.add_argument('--prepare', action='store_true')
     args = parser.parse_args()
+    args.manifest = args.manifest.resolve()
     m = read(args.manifest)
     if args.unit not in m['units']:
         raise ValueError(f'Unknown unit {args.unit!r}.')
