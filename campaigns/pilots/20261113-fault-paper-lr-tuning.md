@@ -152,6 +152,40 @@ Analog LoRA is crossbar only (DRN deferred).
   tabulates arms and applies the selection rule (lowest final dev KL; within 1 %
   the fewest write attempts; grid edges flagged).
 
-## Current handoff
+## Current handoff (13 November, 16:46 CET)
 
-Filled in at launch (commit, staging path, job IDs).
+- **Launch commit** `9efad55278e9b7352bd0a6053238fc3b6e5fd591`, merged into
+  `refactor/training-core` and pushed.
+- **Staged source:**
+  `/lustre/fsn1/projects/rech/umg/ucy17uy/drn-fault-paper-lr-tuning-20261113/source-9efad55/`
+  (read-only, with `source_snapshot.json`).
+- **Outputs:** `/lustre/fsn1/projects/rech/umg/ucy17uy/drn-fault-paper-lr-tuning-20261113/runs-9efad55/`.
+  - samples: `samples-v100/` (file plus receipt);
+  - runs: `<config>/run/`;
+  - logs: `slurm/<config>-<job>.out`.
+- **Deployment input:** `inputs/deployed-3pct-271001.pt`, SHA-256
+  `159848f78478722ecddd465241a1042bee3f08cee841c17fad502c9d588d8cca` (local copy:
+  `results/fault-paper-lr-tuning/local/deploy-1/run/checkpoints/deployed.pt`).
+- **Jobs**, all `--begin=2026-11-13T22:00:00`:
+
+  | Job | ID | Resources | Contents |
+  | --- | --- | --- | --- |
+  | draw | 153094 | V100 dev, 20 min | reproduce and verify `df73ce66` |
+  | A | 153096 | A100 dev, 2 h, afterok:153094 | naive hold, fault-aware hold, noisy at five rates |
+  | B | 153097 | A100 dev, 2 h, afterok:153094 | noiseless at five rates |
+  | C | 153098 | A100 dev, 2 h, afterok:153094 | Child-D Fisher, then five rates |
+  | D | 153099 | A100 dev, 2 h, afterok:153094 | LoRA r16 at 1e-3, 3e-3, 1e-2 |
+  | E | 153100 | A100 dev, 2 h, afterok:153094 | LoRA r64 at 1e-3, 3e-3, 1e-2 |
+
+- **Expected completion:** roughly 22:05 for the draw, then A–C by about 23:00
+  and D–E by about 22:30, if the queue starts them promptly.
+- **Failure handling.** If the draw prints a different hash, job 153094 fails
+  and A–E remain `DependencyNeverSatisfied`; cancel them with
+  `scancel 153096 153097 153098 153099 153100`. That outcome means `df73ce66`
+  cannot be reproduced on this hardware and needs a user decision; do not
+  substitute another draw.
+- **Inspect:** `squeue -u $USER`, `tail slurm/*.out`, and `python -m ebl runs
+  inspect <run> --verify-artifacts --require-complete` from the staged source.
+  Then run `collect.py runs-9efad55`.
+- **Owner:** the user, or the agent the user assigns; no automatic monitor is
+  attached.
