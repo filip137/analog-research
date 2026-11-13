@@ -285,3 +285,22 @@ before merging/pushing the shared DRN trunk. Selecting the convergent scientific
 variant and staged circuit detail was not treated as that publication approval.
 The requested small/mid-scale demonstration remains open. No dataset, GPU,
 remote-host or transistor-level run has been launched.
+
+
+## Publication authorization and branch — 13 November
+
+The user approved the merge/push and pinned CPU verification, and requested a
+new branch named energy transformer. The Git-compatible branch is
+`energy-transformer`, created from `afdd832` in the existing isolated worktree.
+It is the current development branch; the earlier `drn/` branch names remain
+historical provenance. The explicit branch-name request overrides the normal
+`drn/<id>` naming convention for this direction.
+
+Publish `energy-transformer` and fast-forward `refactor/training-core` to the
+same reviewed source. Run the unchanged strict circuit config from a detached
+checkout of the published launch commit, with one CPU thread, <=600 seconds
+and <=100 MB for this evidence bundle. The prior readiness bundles stay
+unchanged. The output root is
+`/home/filip/analog-research/drn/results/convergent-energy-transformer/evidence`.
+The executing agent directly monitors the bounded run and verifies completion,
+artifact hashes, case coverage and all acceptance criteria.
