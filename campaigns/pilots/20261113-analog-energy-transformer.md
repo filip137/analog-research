@@ -6,7 +6,7 @@ The user requested a campaign, circuit design, proof that KCL decreases its
 energy, then implementation. The scientific record is owned by the shared
 study's [analog-energy-transformer campaign](https://github.com/filip137/on-chip-learning/tree/main/campaigns/analog-energy-transformer).
 The circuit design and frozen decision rules are in `circuit-design.md` and
-`experiments/exp-001.md` there (initially local).
+`series/001-ideal-circuit/experiments/exp-001-circuit.md` there (initially local).
 
 Implement a new, explicitly ideal circuit family. Do not alter the existing
 perfect-diode model or use a measured-device claim. Code: `networks/energy_transformer/`
@@ -57,7 +57,7 @@ Worst SPICE transient error: 2.512e-6 V; centered SPICE gradient error: 5.148e-5
 relative. The post-update loss falls in all three cases with input a fixed.
 Readiness root: `results/analog-energy-transformer/exp-001/readiness/` under
 the DRN trunk. Exact bundle names and interpretation are in the shared
-campaign's `results/exp-001-readiness.md`.
+campaign's `series/001-ideal-circuit/results/exp-001-readiness.md`.
 
 Publication gate: automatic approval review rejected the shared-trunk merge
 and push twice, including after the policy's standing permission was quoted.
