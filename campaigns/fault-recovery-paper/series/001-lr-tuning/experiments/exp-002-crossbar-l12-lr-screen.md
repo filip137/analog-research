@@ -1,6 +1,6 @@
 # exp-002 (crossbar): learning-rate screen with all 12 MLPs analog, 3 % random stuck devices, tuning chip 271001
 
-State: implemented; deployment being pinned (handoff below). Branch: `exp/fault-paper-tuning-l12`.
+State: screen complete and collected on `nom-cool-1` (14 November 2026); interpretation pending. Branch: `exp/fault-paper-tuning-l12`.
 
 **Authorization (user, 14 November 2026):** the 12-MLP version of the exp-001 screen, run
 locally on the RTX 3090 `nom-cool-1` (idle at start; one GPU, arms sequential).
