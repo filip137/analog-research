@@ -76,12 +76,46 @@ Child-D arms issue no writes within 4 steps (threshold gate, as expected); noise
 ~201.7M device writes per 4 steps; analog LoRA writes only at 3e-2 within 4 steps. Peak
 allocated GPU memory 6.5 GB (nvidia-smi 8.2 GB) — well within the 24 GB 3090. ~3 min total.
 
+## Collected screen (launch commit `ca1d470`; result interpretation belongs to the on-chip-learning record)
+
+Units `s1`–`s3` complete, each `runs inspect --verify-artifacts --require-complete` valid; every
+unit logs samples `df73ce66…` and apparent hashes naive `0c6140f9…`, fault-aware `06bd5454…`,
+adapter `263bbf76…` (`launch/summarize_l12.py`, saved as `ROOT/logs/summary-l12.json`).
+Wall time 11:57:53–12:22:53 (25 min); ~53 s per noisy/noiseless arm, ~55 s Child-D (+17 s Fisher),
+~37 s digital LoRA, ~39 s analog LoRA. Peak allocated 6.5 GB (nvidia-smi 8.9 GB). Runs 5.9 GB.
+
+Dev KL: clean 0.20412, naive hold 0.43616, fault-aware hold 0.21912. Final dev KL (bold = selected):
+
+| Arm | 1e-4 | 3e-4 | 1e-3 | 3e-3 | 1e-2 | 3e-2 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Noisy | 0.21912 | 0.18602 | **0.17641** | 0.19375 | 0.31046 | |
+| Noiseless | 0.16250 | 0.15501 | **0.15576** | 0.17869 | 0.29287 | |
+| Child-D p=0.1 | 0.21912 | 0.18651 | 0.17740 | **0.16942** | 0.18838 | |
+| Digital LoRA r16 | 0.16765 | 0.16204 | **0.15967** | 0.17381 | 0.21601 | |
+| Digital LoRA r64 | 0.16202 | **0.15802** | 0.16128 | 0.19362 | 4.01935 | |
+| Analog LoRA r16 | 0.21916 | 0.21497 | 0.18655 | 0.16727 | **0.16119** | 0.16337 |
+
+No selection is at a grid edge. Tie rule applied once: noiseless 3e-4 (0.15501) and 1e-3 (0.15576)
+are within 1 %; 1e-3 has 225,675 fewer healthy writes (15,498,489,228 vs 15,498,714,903; dense
+writes make the counts nearly equal), so 1e-3 is selected. Every trained arm except the zero-write
+ones ends below the clean source KL (0.204): WikiText recovery training also adapts the source.
+
+Write cost at the selected rates (300 steps):
+
+| Arm | Healthy writes | Stuck attempts | Touched devices | Max/device | Out-of-range |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Noisy 1e-3 | 5,807,378 | 180,941 | 5,676,941 | 3 | 785,856 |
+| Noiseless 1e-3 | 15,498,489,228 | 479,664,756 | 51,776,649 | 300 | 909,874 |
+| Child-D 3e-3 | 6,100,002 | 189,777 | 3,963,569 | 10 | 754,185 (mask 5,662,320; 0 outside) |
+| Analog LoRA 1e-2 (adapter tiles) | 10,775,207 | 333,124 | 1,355,667 | 31 | 69,443 (adapter) |
+| Digital LoRA r16 1e-3, r64 3e-4 | 0 | 0 | 0 | 0 | 722,958 (base at deployment) |
+
 ## Current execution and monitoring handoff
 
-Owner: the implementing agent (monitoring until the screen ends).
+Complete; nothing running on `nom-cool-1`. Interpretation and issue updates: the coordinator (#37, #39).
 
-- **Screen:** units `s1` → `s2` → `s3` in one detached chain on `nom-cool-1`, started
-  2026-11-14 11:57:53 from `src-ca1d470` (clean clone of `ca1d470`), `launch/run_local_l12.sh UNIT ROOT`.
+- **Screen:** units `s1` → `s2` → `s3` in one detached chain on `nom-cool-1`, ran
+  2026-11-14 11:57:53–12:22:53 from `src-ca1d470` (clean clone of `ca1d470`), `launch/run_local_l12.sh UNIT ROOT`.
 - **Logs:** `ROOT/logs/{s1,s2,s3}.log`, `screen.start`/`screen.end`, GPU sampler `gpu-mem.log`.
 - **Runs:** `ROOT/runs/<unit>/opt125m-cmo-l12-fault-paper-tune-<unit>/stages/standard_hwa_model__271001/local/fault_tuning__standard_hwa_model__271001/attempt-001/runs/*/`.
 - **Checks:** every unit inspected with `--verify-artifacts --require-complete`; `launch/summarize_l12.py ROOT`
