@@ -14,6 +14,12 @@ Writes lifecycles/<id>.json. Units:
 - ``canaryfile``: the stored-draw path on the 3090 (readiness only)., all with the V100 sample draw ``df73ce66``.
 
 Local units (3090) declare the 3090 draw of the same procedure (see the experiment note).
+
+exp-002 (12 MLPs, local RTX 3090 ``nom-cool-1``; note ``EXP2_NOTE``): units ``l12-deploy``,
+``l12-bscale``, ``l12-canary`` (every screen arm for 4 steps) and ``l12-s1``..``l12-s3`` (the
+screen). Only the depth (``analog_decoder_layers`` 12), the 12-MLP std3 source and the extended
+grids differ from exp-001; every l12 unit loads the stored V100 draw ``df73ce66`` (no 3090 draw).
+Their pins are ``pins.json["l12"]``.
 """
 from __future__ import annotations
 
@@ -39,6 +45,12 @@ SAMPLES_FILE = "teacher-samples8-c919329d-df73ce66"
 SAMPLES_FILE_3090 = "teacher-samples8-c919329d-6bc43ffa-rtx3090"
 GRID = [1e-4, 3e-4, 1e-3, 3e-3, 1e-2]
 LORA_GRID = [1e-3, 3e-3, 1e-2]
+# exp-002 (12 MLPs): the 12-MLP std3-recipe fit of drift-all-mlps; exp-001's grids plus their edge extensions.
+EXP2_NOTE = "campaigns/fault-recovery-paper/series/001-lr-tuning/experiments/exp-002-crossbar-l12-lr-screen.md"
+EXP2_PREFIX = "opt125m-cmo-l12-fault-paper-tune"
+EXP2_SOURCE = "ed53b6cbe2a7315f364291c7142ee2826c6ca4a44c21a2d5d25190b8c90569b0"
+EXP2_LORA_GRID = GRID
+EXP2_ALORA_GRID = GRID + [3e-2]
 
 
 def lr_tag(value):
@@ -59,6 +71,35 @@ UNITS = {
            + arms("digital_lora", LORA_GRID, rank=64)),
     "j3": arms("analog_lora", GRID, rank=16),
 }
+
+
+EXP2_UNITS = {
+    "s1": HOLDS + arms("onchip_noisy", GRID) + arms("onchip_noiseless", GRID),
+    "s2": (arms("child_tuning_d", GRID, reserve_p=0.1) + arms("digital_lora", EXP2_LORA_GRID, rank=16)
+           + arms("digital_lora", EXP2_LORA_GRID, rank=64)),
+    "s3": arms("analog_lora", EXP2_ALORA_GRID, rank=16),
+}
+
+
+def section_l12(pins, unit):
+    """exp-002: exp-001's section with the 12-MLP source, the stored V100 draw and the extended grids."""
+    pins = pins.get("l12", {})
+    name = unit.removeprefix("l12-")
+    if name not in ("deploy", "bscale", "canary", *EXP2_UNITS):
+        raise SystemExit(f"Unknown exp-002 unit {unit}.")
+    doc = section({"deployment": pins.get("deployment"), "b_scale": pins.get("b_scale")},
+                  name if name in ("deploy", "bscale") else "a1")
+    doc["source_sha256"] = EXP2_SOURCE
+    doc["targets"] = {"kind": "teacher_samples", "count": 8, "seed": 20261104 + 104729, "draw_batch": 16,
+                      "sha256": SAMPLES_V100, "file": SAMPLES_FILE}
+    if name == "canary":
+        doc["arms"] = [a for unit_arms in EXP2_UNITS.values() for a in unit_arms]
+        doc["schedule"] = {**doc["schedule"], "steps": 4, "development_every_steps": 2}
+    elif name in EXP2_UNITS:
+        doc["arms"] = EXP2_UNITS[name]
+    if any(a["method"] == "analog_lora" for a in doc["arms"]) and doc["analog_lora"]["b_scale"] is None:
+        raise SystemExit(f"{unit}: pin the analog-LoRA B scale first (pins.json l12.b_scale).")
+    return doc
 
 
 def section(pins, unit):
@@ -126,7 +167,17 @@ def lifecycle(pins, unit):
                                 "rate_ppm": 30000}]
     doc["onchip"] = None
     doc.pop("transfer_tests", None)
-    doc["fault_tuning"] = section(pins, unit)
+    if unit.startswith("l12-"):
+        doc["lifecycle_id"] = f"{EXP2_PREFIX}-{unit.removeprefix('l12-')}"
+        doc["question"]["text"] = ("Which learning rate does each crossbar recovery arm select at 3 % random stuck "
+                                   "devices with all 12 MLPs analog (tuning assignment 271001, final development "
+                                   "teacher KL)?")
+        doc["question"]["decision"] = ("Fault-recovery paper series 001, 12 MLPs: per-arm learning rates for the "
+                                       "paper seeds. " + EXP2_NOTE)
+        doc["network"]["analog_decoder_layers"] = 12
+        doc["fault_tuning"] = section_l12(pins, unit)
+    else:
+        doc["fault_tuning"] = section(pins, unit)
     parse_lifecycle(copy.deepcopy(doc))
     return doc
 

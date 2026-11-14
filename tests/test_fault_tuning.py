@@ -160,3 +160,37 @@ def test_stored_sample_file_is_optional_and_named():
     a1 = parse_lifecycle(_doc("a1")).fault_tuning
     j1 = parse_lifecycle(_doc("j1")).fault_tuning
     assert a1.arms == j1.arms and a1.targets["sha256"] == j1.targets["sha256"]
+
+
+def test_l12_units_change_only_depth_source_and_grids():
+    """exp-002 (12 MLPs): every other setting equals exp-001's stored-draw units."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("make_fpt", ROOT / "campaigns/fault-recovery-paper/make_lifecycles.py")
+    make = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(make)
+    pins = {"l12": {"deployment": {"name": "d", "sha256": "1" * 64}, "b_scale": {"name": "b", "sha256": "2" * 64}}}
+    six = _doc("a1")
+    labels = []
+    for unit in ("l12-s1", "l12-s2", "l12-s3"):
+        doc = make.lifecycle(pins, unit)
+        lc = parse_lifecycle(copy.deepcopy(doc))
+        assert lc.network.analog_decoder_layers == 12
+        ft12, ft6 = doc["fault_tuning"], six["fault_tuning"]
+        assert ft12["source_sha256"] == make.EXP2_SOURCE and ft12["targets"] == ft6["targets"]
+        for key in set(ft6) - {"source_sha256", "deployment", "analog_lora", "arms"}:
+            assert ft12[key] == ft6[key], key
+        for key in set(six) - {"lifecycle_id", "question", "network", "fault_tuning"}:
+            assert doc[key] == six[key], key
+        assert {k: v for k, v in doc["network"].items() if k != "analog_decoder_layers"} == \
+            {k: v for k, v in six["network"].items() if k != "analog_decoder_layers"}
+        labels += [a["label"] for a in ft12["arms"]]
+    rates = {}
+    for label in labels:
+        arm, _, tag = label.rpartition("-")
+        rates.setdefault(arm, []).append(tag)
+    grid = ["1em4", "3em4", "1em3", "3em3", "1em2"]
+    assert rates.pop("hold") == ["naive"] and rates.pop("hold-fault") == ["aware"]
+    assert rates == {"noisy": grid, "noiseless": grid, "childd": grid, "dlora-r16": grid, "dlora-r64": grid,
+                     "alora-r16": grid + ["3em2"]}
+    canary = make.lifecycle(pins, "l12-canary")["fault_tuning"]
+    assert [a["label"] for a in canary["arms"]] == labels and canary["schedule"]["steps"] == 4
