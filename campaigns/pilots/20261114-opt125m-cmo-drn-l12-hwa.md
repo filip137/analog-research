@@ -55,4 +55,22 @@ that is the user's decision.
 
 ## Handoff
 
-Status 2026-11-14: code, tests and configs committed; readiness next.
+- Launch commit `9e1c024` (merged into `refactor/training-core` and pushed).
+- Local pinned checkout: `results/opt125m-cmo-drn-l12-hwa-v1/source-9e1c024`.
+- Remote root on loulou: `/home/filip/analog-research/opt-cmo-drn-l12-v1/`.
+  - `source-9e1c024/` is a read-only `git archive` export with `source_snapshot.json`
+    (`bfcca578…`, from `campaigns/drift-regimes/launch/make_receipt.py`).
+    `ebl.lifecycle.staging` cannot stage this run: its root resolves to `ebl/`
+    (on-chip-learning #41).
+  - `inputs/ed53b6cb….pt`: the 12-MLP source, read-only, hash checked.
+  - The teacher and corpus are the existing `opt-cmo-exp1/inputs/` files, hashes checked.
+- Queue job specs: `results/opt125m-cmo-drn-l12-hwa-v1/jobs/`. The shared run-watch
+  queue owns execution and validation.
+- Inspect a job: `python3 ~/.codex/skills/run-watch/scripts/gpu_queue.py status <id>`.
+
+| Job | State | Notes |
+| --- | --- | --- |
+| `opt-cmo-drn-l12-prepare-v1` | complete, validated | 10.6 s. Mapped `f1961b3f…` (1.18 GB). Clean development KL 0.1266 over 256 sequences (PPL 8.19). All denominators ≥ 240. Max voltage 12.9 in layer 0 against ≤ 8.4 in the other blocks (6-MLP: ≤ 5.1). |
+| `opt-cmo-drn-l12-hwa-readiness-v1` | cancelled before launch | malformed `validate_argv` in the spec; never ran |
+| `opt-cmo-drn-l12-hwa-readiness-v2` | running | two std3 updates with full selection |
+| `opt-cmo-drn-l12-hwa-std3-v1` | prepared | submit after readiness passes; budget from the measured throughput |
