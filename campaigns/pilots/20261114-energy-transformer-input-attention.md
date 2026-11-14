@@ -623,3 +623,71 @@ separates full coverage and numerical checks from promotion; partial data cannot
 be called complete. The current runtime handoff contains exact commands and
 artifact paths. Next milestone: warm-up/gradient qualification, then full EP
 and BPTT coverage and final gradient gate.
+
+
+## Corrected comparison terminal review —14 November,22:55UTC
+
+`singular-002` completed all seven first-attempt cases in1033.43seconds
+(17.22minutes), before the unchanged22:55:15.365UTC hard deadline. Both
+smokes,250-update warm-up,8x8 cap qualification at32/64/128 with512/1024
+references, both2,000-update full arms and final8x8 gradient diagnostic are
+terminal. The selected cap is32. Each full arm covers10,000test images,
+5,000validation images and all three256-image probes. All seven native
+full-artifact-hash inspection receipts are valid with no errors; the
+assigned independent CPU collector passes all31 checks with no failed checks.
+No task worker remains. No GPU work, retries or scientific changes were added
+during terminal collection.
+
+Pinned launch source remains `c0df4ab99ed19c954acb8d36104edec6055dec07`.
+Final EP checkpoint SHA256:
+`fa7df3d08716eb812297e5f6bf9537e211ec77b0e5cfa4065d5868f72f9ec23a`.
+Warm-up checkpoint SHA256:
+`03dd7044dc7b60c7d1c6b4f86c4b34c8c02f17116a7808161102cd6569b8c32c`.
+Paired initial tensors, dataset/cohorts and final sampling/masking RNGs match;
+projection is the declared intervention relative to the retained radial pair.
+Prior1241.37s benchmark and588.64s partial attempt remain charged, giving
+2863.44s across these three roots; earlier campaign debits are not reset.
+Their combined outputs occupy approximately322MB, below the aggregate2GB
+ceiling. The launcher receipt, rather than inner training time, determines
+this attempt's1033.43s debit. No allowance correction or extension was needed.
+
+| Model | Test MSE | Uniform probe penalty | Training seconds |
+| --- | ---: | ---: | ---: |
+| Singular clip, EP |0.0533348291|0.787130%|432.27|
+| Singular clip, matched BPTT |0.0533306156|0.787358%|258.68|
+| Radial limit, EP |0.0544708864|0.191259%|429.95|
+| Radial limit, matched BPTT |0.0544720605|0.191232%|249.02|
+| Old recurrent, EP |0.0544174788|0.010169%|321.39|
+| Old recurrent, matched BPTT |0.0544183724|0.010106%|196.29|
+| Digital reference |0.0422274134|38.099749%|7.02|
+
+Final EP/BPTT cosine minima are0.9999956037 globally and0.9999960055 across
+the required Q/K/V/output groups; all-group minimum is0.9998441123.
+EP/reference minima are0.9999955978 globally and0.9999959985 for required
+groups. Qualified512/1024 references and the same gradient cohort are retained.
+The EP/BPTT test gap is0.007901%, supporting numerical agreement.
+
+All required figures were directly inspected with the image tool:
+`analysis/validation-detail.png`, `weight-ranks.png` and `reconstructions.png`.
+The first shows nearly coincident EP/BPTT update curves, improving over the
+radial/recurrent controls while remaining above digital. The second shows
+final memory stable rank57.09 and query-head ranks11.08–11.53 for singular
+EP, compared with approximately1 under radial projection; matched BPTT tracks
+these trajectories closely. Reconstructions across all six shown examples
+are similar for EP/BPTT, with substantial blur/ambiguity remaining in missing
+regions. `analysis/figure-review.json` records exact inspected image hashes
+and observations. `analysis/review.json`, `comparison.md` and
+`weight-ranks.json` hold the full evidence under the explicit `singular-002`
+root above.
+
+Verdict: complete coverage and numerical validity, but **do not promote**.
+Singular clipping improves EP test MSE1.9895% over old EP (2.0856% over radial
+EP), below the frozen5% requirement. Its0.7871% uniform-attention penalty is
+below the required1%. Broader learned directions and stronger attention
+(mean maximum0.074395, normalized entropy0.944194) support a real effect of
+projection, but it is insufficient under the original decision rule. One seed
+and ideal circuit simulation limit generalization; GPU costs are not analog
+hardware measurements. No retuning, new experiments or budget extensions are
+part of this review. The watcher may stop this run after this complete,
+scientifically negative result; the broader improvement objective remains
+unresolved.
