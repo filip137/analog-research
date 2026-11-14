@@ -6,7 +6,7 @@ and does not assert that its terminal states are equilibria.
 """
 import time
 import torch
-from networks.energy_transformer.gpu import Equilibrium, EquilibriumError, NAMES, check_domain
+from networks.energy_transformer.gpu import Equilibrium, EquilibriumError, check_domain
 
 
 def relax(model,x,target,mask,steps,beta=0.,initial=None,*,differentiate=False,
@@ -16,6 +16,7 @@ def relax(model,x,target,mask,steps,beta=0.,initial=None,*,differentiate=False,
     with torch.enable_grad() if differentiate else torch.no_grad():
         z=x.new_zeros((len(x),model.tokens,model.width)) if initial is None else initial.z.detach().clone()
         y=torch.zeros_like(target) if initial is None else initial.y.detach().clone()
+        context=model.prepare(x)
         maximum=x.new_tensor(0.);increase=x.new_tensor(0.)
         margins=x.new_full((3,),float("inf"))
         allowance=8*torch.finfo(x.dtype).eps
@@ -27,7 +28,7 @@ def relax(model,x,target,mask,steps,beta=0.,initial=None,*,differentiate=False,
         for step in range(steps):
             if step%16==0 and deadline is not None and time.monotonic()>=deadline:
                 raise TimeoutError('Finite-time phase deadline reached')
-            v=model.ports(z,y,attention)
+            v=model.ports(z,y,attention,context=context)
             dz,dy=model.force(v,x,target,mask,beta)
             with torch.no_grad():
                 maximum=torch.maximum(maximum,torch.maximum(v['q'].abs().amax(),v['k'].abs().amax()))
@@ -35,6 +36,7 @@ def relax(model,x,target,mask,steps,beta=0.,initial=None,*,differentiate=False,
                     raise EquilibriumError('Nonfinite finite-time state')
                 domain=check_domain(model,v,f'Finite-time phase beta={beta:g}, iteration={step}')
                 if domain is not None:
+                    maximum=torch.maximum(maximum,domain['maximum_operand'].amax())
                     current=torch.stack([domain[key].amin() for key in
                                          ('triode_margin','drain_margin','weak_inversion_margin')])
                     margins=torch.minimum(margins,current)
@@ -42,7 +44,7 @@ def relax(model,x,target,mask,steps,beta=0.,initial=None,*,differentiate=False,
                 dt=base_dt.clone()
                 cycle_reduced=torch.zeros(len(x),device=x.device,dtype=torch.bool)
                 for _ in range(20):
-                    candidate=model.ports(z+dt*dz,y+dt*dy/1.3,attention)
+                    candidate=model.ports(z+dt*dz,y+dt*dy/1.3,attention,context=context)
                     new_energy=model.energy(candidate,x,target,mask,beta,attention)
                     accepted=torch.isfinite(new_energy)&(new_energy<=energy+allowance*(1+energy.abs()))
                     if cycle_guard and prev_z is not None:
@@ -66,7 +68,7 @@ def relax(model,x,target,mask,steps,beta=0.,initial=None,*,differentiate=False,
                 increase=torch.maximum(increase,(new_energy-energy).max())
             if cycle_guard:prev_z,prev_y=z,y
             z,y=z+dt*dz,y+dt*dy/1.3
-        v=model.ports(z,y,attention)
+        v=model.ports(z,y,attention,context=context)
         with torch.no_grad():
             dz,dy=model.force(v,x,target,mask,beta)
             residual=torch.maximum(dz.abs().amax(),dy.abs().amax()).item()
@@ -75,6 +77,7 @@ def relax(model,x,target,mask,steps,beta=0.,initial=None,*,differentiate=False,
                 raise EquilibriumError('Invalid final finite-time circuit state')
             domain=check_domain(model,v,f'Final finite-time phase beta={beta:g}, iteration={steps}')
             if domain is not None:
+                maximum=torch.maximum(maximum,domain['maximum_operand'].amax())
                 current=torch.stack([domain[key].amin() for key in
                                      ('triode_margin','drain_margin','weak_inversion_margin')])
                 margins=torch.minimum(margins,current)
@@ -93,7 +96,7 @@ def finite_ep(model,x,target,mask,steps,*,beta=.005,deadline=None):
     plus=relax(model,x,target,mask,steps,beta,initial=free,deadline=deadline)
     minus=relax(model,x,target,mask,steps,-beta,initial=free,deadline=deadline)
     high,low=model.statistics(plus.ports,x),model.statistics(minus.ports,x)
-    gradient={name:(high[name]-low[name])/(2*beta*mask.sum()) for name in NAMES}
+    gradient={name:(high[name]-low[name])/(2*beta*mask.sum()) for name,_ in model.named_parameters()}
     return gradient,(free,plus,minus)
 
 
@@ -116,15 +119,18 @@ def bptt_gradient(model,x,target,mask,steps,*,deadline=None):
 
 
 def agreement(estimate,reference):
+    if set(estimate)!=set(reference):
+        raise ValueError('Gradient parameter groups differ')
+    names=tuple(estimate)
     def compare(a,b):
         a,b=a.double().flatten(),b.double().flatten()
         an,bn=a.norm().item(),b.norm().item()
         return {'cosine':(torch.dot(a,b)/(an*bn)).item() if min(an,bn)>1e-14 else None,
                 'relative_l2':(a-b).norm().item()/bn if bn>1e-14 else None,
                 'norm_ratio':an/bn if bn>1e-14 else None,'estimate_l2':an,'reference_l2':bn}
-    return {'global':compare(torch.cat([estimate[n].flatten() for n in NAMES]),
-                             torch.cat([reference[n].flatten() for n in NAMES])),
-            'groups':{name:compare(estimate[name],reference[name]) for name in NAMES}}
+    return {'global':compare(torch.cat([estimate[n].flatten() for n in names]),
+                             torch.cat([reference[n].flatten() for n in names])),
+            'groups':{name:compare(estimate[name],reference[name]) for name in names}}
 
 
 def select_cap(rows,caps,batches,threshold=.9):

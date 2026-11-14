@@ -5,8 +5,8 @@ import time
 import torch
 from ebl.runtime.store import RunStore,atomic_write_json,sha256_file
 from ebl.schema.base import ConfigError
-from ebl.schema.energy_transformer_mnist import CASES
-from ebl.runtime.energy_transformer_mnist import strict_fp32
+from ebl.schema.energy_transformer_mnist import CASES, parse_config as parse_training_config
+from ebl.runtime.energy_transformer_mnist import strict_fp32, build_model
 from networks.energy_transformer.gpu import EnergyNetwork,EquilibriumError
 from networks.energy_transformer.mnist import load_raw,batch
 from networks.energy_transformer.finite_time import bptt_gradient,finite_ep,agreement,select_cap
@@ -30,10 +30,7 @@ def measured(call):
 
 def evaluate(config,store,payload,cohort,images,deadline):
     n,d,patch=CASES[config.case]
-    model=EnergyNetwork(n,d,patch**2,device='cuda',seed=payload['config']['seed'],epsilon=payload['config']['epsilon'],
-                        device_domain=payload['config'].get('device_domain','declared4'),
-                        solver_dt=payload['config'].get('solver_dt',.5),
-                        solver_rule=payload['config'].get('solver_rule','energy_backtracking'))
+    model=build_model(parse_training_config(payload['config']))
     model.load_state_dict(payload['model'])
     original={name:p.detach().clone() for name,p in model.named_parameters()}
     count=config.batches*config.batch_size
@@ -108,7 +105,7 @@ def run_validate(request):
     payload=torch.load(weights,map_location='cpu',weights_only=False)
     if payload.get('schema')!='energy-transformer-mnist.checkpoint.v1' or type(payload.get('step')) is not int or payload['step']<1:
         raise ConfigError('Use an explicit checkpoint after at least one trained update, not initialization')
-    if payload['config']['case']!=config.case or payload['config']['arm']!='energy_ep':
+    if payload['config']['case']!=config.case or payload['config']['arm'] not in ('energy_ep','energy_bp'):
         raise ConfigError('Checkpoint case/architecture mismatch')
     cohort_path=weights.parent.parent/'artifacts/cohorts.pt'
     cohort=torch.load(cohort_path,map_location='cpu',weights_only=False)

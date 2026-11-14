@@ -105,7 +105,8 @@ def check_domain(model, v, context=''):
         if not torch.isfinite(maximum) or maximum > 4:
             raise EquilibriumError(f'{context}: operand={maximum.item():.9g} outside declared [-4,4] range')
         return None
-    values = mos_domain(v)
+    domain = getattr(model, 'device_margins', mos_domain)
+    values = domain(v)
     if not values['valid'].all():
         bad = (~values['valid']).nonzero()[0,0].item()
         details = ', '.join(f'{key}={value[bad].item():.9g}'
@@ -136,7 +137,10 @@ class EnergyNetwork(nn.Module):
                                                        requires_grad=False))
         initialize(self, seed)
 
-    def ports(self, z, y, attention='normal'):
+    def prepare(self, x):
+        return None
+
+    def ports(self, z, y, attention='normal', *, context=None):
         g, s = normalize(z, self.epsilon)
         q = torch.einsum('bnd,had->bhna', g, self.query)
         k = torch.einsum('bnd,had->bhna', g, self.key)

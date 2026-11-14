@@ -12,8 +12,9 @@ from ebl.schema.base import ConfigError
 from ebl.schema.energy_transformer_mnist import CASES
 from networks.energy_transformer.gpu import EnergyNetwork, DigitalNetwork, EquilibriumError, settle, ep_gradient
 from networks.energy_transformer.mnist import load_raw, hidden_masks, batch
-from networks.energy_transformer.finite_time import relax, finite_ep
+from networks.energy_transformer.finite_time import relax, finite_ep, bptt_gradient
 from networks.energy_transformer.contractive import initialize_shared, project
+from networks.energy_transformer.input_attention import InputAttentionNetwork, project as project_input_attention
 
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -23,6 +24,25 @@ def strict_fp32():
     torch.backends.cuda.matmul.allow_tf32=False
     torch.backends.cudnn.allow_tf32=False
     torch.set_default_dtype(torch.float32)
+
+
+def build_model(config, device='cuda'):
+    n,d,patch=CASES[config.case]
+    cls=(DigitalNetwork if config.arm=='digital_bp' else
+         InputAttentionNetwork if config.energy_architecture=='input_conditioned' else EnergyNetwork)
+    kwargs=dict(tokens=n,width=d,patch_width=patch**2,heads=4,seed=config.seed,epsilon=config.epsilon,device=device)
+    if config.arm!='digital_bp':
+        kwargs.update(device_domain=config.device_domain,solver_dt=config.solver_dt,solver_rule=config.solver_rule)
+    return cls(**kwargs)
+
+
+def initialize_model(model, config):
+    return (project_input_attention(model,config.beta) if config.initialization=='input_attention_v1'
+            else initialize_shared(model,config.initialization,config.beta))
+
+
+def core_parameter_count(model):
+    return sum(p.numel() for name,p in model.named_parameters() if name not in ('encoder','decoder','position'))
 
 
 def save_checkpoint(path,model,optimizer,config,step,train_seconds,order_gen,mask_gen):
@@ -37,7 +57,7 @@ def save_checkpoint(path,model,optimizer,config,step,train_seconds,order_gen,mas
 
 def restore_checkpoint(path,model,optimizer,config,order_gen,mask_gen):
     payload=torch.load(path,map_location='cpu',weights_only=False)
-    if payload['schema']!='energy-transformer-mnist.checkpoint.v1' or {'phase_mode':'settled','device_domain':'declared4','solver_dt':.5,'solver_rule':'energy_backtracking','initialization':'standard','recurrent_constraint':'none',**payload['config']}!=asdict(config):
+    if payload['schema']!='energy-transformer-mnist.checkpoint.v1' or {'energy_architecture':'recurrent','phase_mode':'settled','device_domain':'declared4','solver_dt':.5,'solver_rule':'energy_backtracking','initialization':'standard','recurrent_constraint':'none',**payload['config']}!=asdict(config):
         raise ConfigError('Resume requires the identical scientific configuration')
     model.load_state_dict(payload['model']);optimizer.load_state_dict(payload['optimizer'])
     order_gen.set_state(payload['order_rng']);mask_gen.set_state(payload['mask_rng'])
@@ -55,7 +75,12 @@ def predict(model,x,target,mask,config,deadline,attention='normal'):
         else:
             phase=settle(model,x,target,mask,tolerance=config.residual_tolerance,
                          max_steps=config.max_steps,deadline=deadline,attention=attention)
-        return phase.y,{'residual':phase.residual,'iterations':phase.iterations.float().mean().item(),
+        p=phase.ports['p']
+        attention_metrics={} if attention=='zero' else {
+            'attention_mean_max':p.amax(-1).mean().item(),
+            'attention_normalized_entropy':(-(p*p.clamp_min(torch.finfo(p.dtype).tiny).log()).sum(-1).mean()/math.log(model.tokens)).item(),
+            'attention_l1_from_uniform':(p-1/model.tokens).abs().sum(-1).mean().item()}
+        return phase.y,{**attention_metrics,'residual':phase.residual,'iterations':phase.iterations.float().mean().item(),
                         'maximum_operand':phase.maximum_operand,'minimum_triode_margin':phase.minimum_triode_margin,
                         'minimum_drain_margin':phase.minimum_drain_margin,
                         'minimum_weak_inversion_margin':phase.minimum_weak_inversion_margin,
@@ -69,7 +94,7 @@ def evaluate(model,images,masks,patch,config,deadline,*,initial=None,mean_image=
     if initial is not None: sums['initial']=0.
     if mean_image is not None: sums['mean_image']=0.
     pixels=0.;count=0;worst=0.;iterations=0.;examples=[];failure=None
-    device_minima={};maximum_operand=0.;cycle_reductions=0
+    device_minima={};maximum_operand=0.;cycle_reductions=0;attention_sums={}
     for start in range(0,len(images),config.batch_size):
         if time.monotonic()>=deadline:
             break
@@ -96,6 +121,8 @@ def evaluate(model,images,masks,patch,config,deadline,*,initial=None,mean_image=
             if diag.get(key) is not None:
                 device_minima[key]=min(device_minima.get(key,float('inf')),diag[key])
         cycle_reductions+=diag.get('cycle_reductions',0)
+        for key in ('attention_mean_max','attention_normalized_entropy','attention_l1_from_uniform'):
+            if key in diag: attention_sums[key]=attention_sums.get(key,0.)+len(im)*diag[key]
         if not examples:
             examples={k:v[:16].cpu() for k,v in predictions.items()}
             examples.update(target=target[:16].cpu(),mask=mask[:16].cpu(),inputs=x[:16].cpu())
@@ -103,7 +130,8 @@ def evaluate(model,images,masks,patch,config,deadline,*,initial=None,mean_image=
     return {'count':count,'requested':len(images),'complete':count==len(images),'mse':mse,
             'psnr':{key:-10*math.log10(max(value,1e-30)) for key,value in mse.items()},
             'worst_residual':worst,'mean_iterations':iterations/max(count,1),'failure':failure,
-            'maximum_operand':maximum_operand,'cycle_reductions':cycle_reductions,**device_minima},examples
+            'maximum_operand':maximum_operand,'cycle_reductions':cycle_reductions,**device_minima,
+            **{key:value/max(count,1) for key,value in attention_sums.items()}},examples
 
 
 def train(config,store,images,ids,resume=None):
@@ -114,12 +142,8 @@ def train(config,store,images,ids,resume=None):
     if os.environ.get('EBL_CASE_DEADLINE_UNIX'):
         deadline=min(deadline,started+max(0,float(os.environ['EBL_CASE_DEADLINE_UNIX'])-time.time()-5))
     n,d,patch=CASES[config.case]
-    cls=EnergyNetwork if config.arm=='energy_ep' else DigitalNetwork
-    kwargs=dict(tokens=n,width=d,patch_width=patch**2,heads=4,seed=config.seed,epsilon=config.epsilon,device='cuda')
-    if config.arm=='energy_ep':
-        kwargs.update(device_domain=config.device_domain,solver_dt=config.solver_dt,solver_rule=config.solver_rule)
-    model=cls(**kwargs);initial=cls(**kwargs)
-    initialization_report=initialize_shared(model,config.initialization,config.beta)
+    model=build_model(config);initial=build_model(config)
+    initialization_report=initialize_model(model,config)
     initial.load_state_dict(model.state_dict())
     optimizer=torch.optim.Adam(model.parameters(),lr=config.learning_rate)
     order_gen=torch.Generator().manual_seed(3101)
@@ -131,9 +155,9 @@ def train(config,store,images,ids,resume=None):
     atomic_write_json(artifacts/'initialization.json',{'policy':config.initialization,'projection':initialization_report})
     torch.save({'ids':ids,'validation_masks':validation_masks,'test_masks':test_masks},artifacts/'cohorts.pt')
     atomic_write_json(artifacts/'environment.json',{'torch':torch.__version__,'gpu':torch.cuda.get_device_name(),
-                      'precision':'fp32','tf32':False,'amp':False,'core_parameters':6*d*d,
+                      'precision':'fp32','tf32':False,'amp':False,'core_parameters':core_parameter_count(model),
                       'total_parameters':sum(p.numel() for p in model.parameters()),
-                      'model':config.arm,'dtype':str(next(model.parameters()).dtype)})
+                      'model':config.arm,'energy_architecture':config.energy_architecture,'dtype':str(next(model.parameters()).dtype)})
     step=0;prior_train=0.
     if resume is not None:
         step,prior_train=restore_checkpoint(resume,model,optimizer,config,order_gen,mask_gen)
@@ -158,8 +182,11 @@ def train(config,store,images,ids,resume=None):
         x,target,mask=batch(images['train'][selection],hidden,patch)
         optimizer.zero_grad(set_to_none=True)
         try:
-            if config.arm=='energy_ep':
-                if config.phase_mode=='fixed_steps':
+            if config.arm in ('energy_ep','energy_bp'):
+                if config.arm=='energy_bp':
+                    gradients,phase=bptt_gradient(model,x,target,mask,config.max_steps,deadline=training_deadline)
+                    phases=(phase,)
+                elif config.phase_mode=='fixed_steps':
                     gradients,phases=finite_ep(model,x,target,mask,config.max_steps,beta=config.beta,deadline=training_deadline)
                 else:
                     gradients,phases=ep_gradient(model,x,target,mask,beta=config.beta,
@@ -184,13 +211,14 @@ def train(config,store,images,ids,resume=None):
             if not all(p.grad is not None and torch.isfinite(p.grad).all() for p in model.parameters()):
                 raise EquilibriumError('Nonfinite parameter gradient')
             optimizer.step()
-            if config.recurrent_constraint == 'contractive_blocks_v1':
-                certificate=project(model,beta=config.beta)
-                last_diag.update(constraint_scale=certificate['scale'],
-                                 constraint_scales=certificate['scales'],
-                                 recurrent_bounds={k:certificate['after'][k] for k in ('attention','memory','decoder')},
+            if config.recurrent_constraint != 'none':
+                projector=project_input_attention if config.recurrent_constraint=='input_attention_v1' else project
+                certificate=projector(model,beta=config.beta)
+                last_diag.update(recurrent_bounds={k:certificate['after'][k] for k in ('attention','memory','decoder')},
                                  recurrent_bound=certificate['after']['normalized_total'],
                                  contraction_radius=certificate['after']['contraction_radius'])
+                if 'scale' in certificate:
+                    last_diag.update(constraint_scale=certificate['scale'],constraint_scales=certificate['scales'])
         except TimeoutError:
             stop='training_time_limit';break
         except EquilibriumError as error:
@@ -211,11 +239,11 @@ def train(config,store,images,ids,resume=None):
             store.append_metric({'stage':'validation_probe','step':step,'train_seconds':train_seconds,**probe})
     train_seconds=prior_train+time.monotonic()-training_started
     save_checkpoint(checkpoints/'final.pt',model,optimizer,config,step,train_seconds,order_gen,mask_gen)
-    result={'phase_mode':config.phase_mode,'max_steps':config.max_steps,
+    result={'energy_architecture':config.energy_architecture,'phase_mode':config.phase_mode,'max_steps':config.max_steps,
             'initialization':config.initialization,'recurrent_constraint':config.recurrent_constraint,
             'device_domain':config.device_domain,'solver_dt':config.solver_dt,'solver_rule':config.solver_rule,'arm':config.arm,'case':config.case,'stop_reason':stop,'failure':failure,'updates':step,
             'train_seconds':train_seconds,'peak_memory_bytes':torch.cuda.max_memory_allocated(),
-            'total_parameters':sum(p.numel() for p in model.parameters()),'core_parameters':6*d*d,
+            'total_parameters':sum(p.numel() for p in model.parameters()),'core_parameters':core_parameter_count(model),
             'last_training_diagnostics':last_diag,'evaluation':{},
             'claim_boundary':'FP32 GPU simulation of ideal circuit equations and digital Adam; no SPICE, PDK, silicon, analog time or power measurements.'}
     # Final test and initialization are evaluated on exactly the same accepted prefix.
