@@ -13,4 +13,5 @@ digital LoRA, analog LoRA and Child-Tuning_D?
 
 ## Series
 
-- [001 — learning-rate tuning at 3 %](series/001-lr-tuning/experiments/exp-001-crossbar-lr-screen.md)
+- [001 — learning-rate tuning at 3 %](series/001-lr-tuning/experiments/exp-001-crossbar-lr-screen.md);
+  [exp-002, all 12 MLPs analog](series/001-lr-tuning/experiments/exp-002-crossbar-l12-lr-screen.md)
