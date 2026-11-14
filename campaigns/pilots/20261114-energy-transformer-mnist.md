@@ -654,3 +654,40 @@ Worst residuals0.43008/0.65369 remain finite-time diagnostics. This corrected-po
 replay is separately labelled and does not rewrite the failed historical bundle.
 The checkpoint hash and parameters remain unchanged. Gate duration25.40seconds;
 source hashes and full evidence are in diagnostic-001/production-repair-gate.json.
+
+
+### Repair launch and ownership
+
+Fresh 49-token repair training launched at **17:53:48 UTC** on 14 November,
+from published commit `2dcba89256b4a036bf4567f95bd4a6bcfa67791b`, pinned at
+`/home/filip/analog-research/drn/results/energy-transformer-repair/source-2dcba89`.
+Result root: `results/energy-transformer-repair/training-001/`. Supervisor PID
+2427421, initial child PID 2427432; native run
+`more_tokens-energy_ep/attempt-01/20261114T175351.310637Z-3398fa6d-df6e4d2d`.
+The exact command and absolute **19:53:48 UTC** ceiling are in launch.json.
+The log is supervisor.log. The 1,500-second training and 2,100-second case limits
+are unchanged. Initial throughput is about 0.55 seconds per update, projecting
+18–20 minutes for 2,000 updates; all physical margins are positive.
+
+Launch verification saw steps 1 to 26 and metric bytes 6,146 to 15,209. All five
+intended completed arms are reused. The source gate passed 41 targeted tests,
+with three SPICE/environment skips, plus exact GPU gradient parity and the full
+read-only evaluation described above. No startup failure or retry occurred.
+
+Persistent run-watch owns monitoring: PID **2428383**, configuration
+`training-001/watch.json`, operational instructions `training-001/handoff.md`,
+state `training-001/watch-state/`. Its first real observation confirmed a live
+worker, GPU allocation, 110,018 native metric bytes and no probe or log errors.
+Checks run every 300 seconds, with bounded Sol incident dispatch. Five initial
+terminal rows count reused results; the new case must also complete.
+
+The completion assignment includes the native final-checkpoint gradient replay,
+using the exact new final.pt and the published more_tokens diagnostic recipe.
+It must verify the production 128-step comparison on all three minibatches against
+same-length BPTT and a qualified long reference, inspect artifacts, and report
+all parameter groups. The watchdog records `goal_outcome=repair_verified` only
+when coverage and fidelity pass, otherwise `goal_outcome=needs_repair`. It does
+not change or complete the overarching goal. The coordinator owns further
+scientific corrections under the user's instruction to continue through failures.
+No chat notification callback is configured; evidence and local watch state are
+preserved. The active goal must not be closed merely because this run terminates.
