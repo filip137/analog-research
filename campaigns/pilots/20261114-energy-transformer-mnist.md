@@ -427,3 +427,45 @@ incident dispatch, with the coordinator responsible for interpretation. The
 45-minute stall limit and explicit hard deadline apply. No remote target,
 shared-trunk publication or GPU-wide settings change is included. Feature-branch
 publication and pinned execution follow the recorded shared-trunk review exception.
+
+
+### Capped64 launch and monitoring handoff
+
+Launched 14 November at 16:46:57 UTC from clean published feature commit
+`d3222895d75af837df6628ccfa67d7bd22e90b8e` (composition commit `eed01ee`).
+Pinned checkout:
+`/home/filip/analog-research/drn/results/energy-transformer-mnist/source-capped64`.
+The launch contract is stored in capped64-001/launch.json, including the exact
+command, PID and hard deadline **18:46:57 UTC**. Supervisor PID 2390137; first
+child PID 2390156. The actual supervisor log is `supervisor.log`. Initial small
+native bundle:
+`small-energy_ep/attempt-01/20261114T164659.941086Z-0718d744-5989ea79`.
+
+Sol verified metrics growth twice (steps 52 to 82; 20,954 to 38,858 bytes), then
+continued growth to 100,658 bytes. The coordinator independently verified both
+GPU processes, growing native metrics, exactly [64,64,64] phase iterations and
+roughly 0.211 seconds per update (303 images/s). Domain margin was positive,
+about 0.611. Residuals around 2.3e-4 and nonsettled flags are permitted finite-time
+diagnostics; they are not relabelled converged. No startup failure or retry.
+18 focused tests passed before launch. All three reused BP native bundles pass
+independent artifact-hash/completeness inspection; their saved configurations
+exactly match the expected BP recipes, including seed, data, precision, batch,
+optimizer settings and 2,000 updates.
+
+Persistent monitoring is armed: watchdog PID **2391340**, configuration
+`capped64-001/watch.json`, state `capped64-001/watch-state/`, operational handoff
+`capped64-001/handoff.md`. First real observations at 16:48 UTC confirmed a live
+supervisor, GPU worker, growing metric bytes (207,271 to 213,853), no probe/log
+errors and no incident. Sole monitoring owner is now run-watch, with 300-second
+checks, 2,700-second stall threshold and bounded GPT-6.1 Sol incident/completion
+review (300 seconds per invocation, at most two per incident and six per day).
+The root's initial terminal_cases=3 counts the reused BP rows; completion needs
+all six rows and terminal result/analysis, not this count alone. Expected duration
+from measured early throughput is approximately 25 minutes for three cases and
+evaluation, subject to later solver cost; the hard two-hour ceiling is unchanged.
+
+The completion handoff requires native evidence and coverage review, fixed-cohort
+matched-update comparisons, final-test and attention-ablation interpretation,
+`analysis/review.json`, and a result append/commit on this feature branch. It must
+preserve all attempts, budgets and shared-trunk restrictions. Chat notification
+is not configured; watcher status and result records are the delivery surface.
