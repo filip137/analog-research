@@ -469,3 +469,63 @@ matched-update comparisons, final-test and attention-ablation interpretation,
 `analysis/review.json`, and a result append/commit on this feature branch. It must
 preserve all attempts, budgets and shared-trunk restrictions. Chat notification
 is not configured; watcher status and result records are the delivery surface.
+
+### Capped64 terminal review — 14 November 2026
+
+The supervisor finished at 17:08:54 UTC, charging 1,316.31 seconds of the
+7,200-second allowance. Supervisor and last child are absent. Exactly six
+terminal rows are preserved: three explicitly reused digital BP bundles and
+three new EP bundles, one attempt each. Independent `ebl runs inspect
+--verify-artifacts --require-complete --json` passes all six bundles, including
+resolved-config digests and declared artifact hashes. Saved recipes, declared
+science, identical cohort artifact hash, native summaries, update counts and
+retained initial/final/intermediate checkpoints were reconciled. Native manifests
+record clean EP source `d3222895d75af837df6628ccfa67d7bd22e90b8e`.
+The full review and inspection receipts are in
+`results/energy-transformer-mnist/capped64-001/analysis/review.json`.
+All original outputs and source checkouts are retained.
+
+Small and reference EP both reach 2,000 updates and complete 5,000 validation,
+10,000 test and 256 examples per attention probe. At the same 2,000 updates,
+test MSE is respectively **0.0638694 / 0.0640147**, versus digital BP
+**0.0524059 / 0.0461110**. EP improves over initialization (0.236340 / 0.236224)
+and the mean-image baseline (0.0673463), but trails BP. On the common fixed
+256-example validation cohort at update 2,000, EP/BP MSE is
+0.0645230/0.0533840 (small) and 0.0651446/0.0472646 (reference).
+
+More_tokens stops scientifically at **1,633 updates** because a finite-time
+phase leaves the declared triode domain. Final validation/test and normal
+attention probe have zero completed examples; coverage remains explicitly
+partial. At the latest common fixed-cohort checkpoint, update 1,500, EP MSE
+0.0520096 trails BP 0.0450571. BP reaches 2,000 updates with test MSE 0.0419638;
+there is no EP final-test score or matched final-checkpoint comparison.
+Uniform/zero attention probes retain 256 examples each (MSE 0.0515984/0.162909),
+but the failed normal probe prevents interpreting that pair as a normal-attention
+advantage. No retry or scientific adjustment was made.
+
+Small/reference normal, uniform and zero attention probe MSEs are respectively
+0.064523/0.072262/0.111892 and 0.065145/0.074465/0.140456. These interventions
+support a limited benefit from normal attention at those two checkpoints;
+they do not establish useful attention generally or at transformer scale.
+Every recorded successful EP training update uses exactly [64,64,64] phase
+iterations; minimum recorded training triode margins are 0.3041/0.3744/0.3078
+for small/reference/more_tokens. The later domain failure remains valid despite
+positive margins on preceding completed updates. Residuals remain nonzero and
+phases are not relabelled settled.
+
+EP training seconds / peak allocated MiB are 427.37/23.49, 454.77/32.57 and
+358.22/112.94; reused BP costs are 6.86/19.85, 7.50/21.75 and 6.91/31.71.
+Measured launcher case receipts are 459.59, 487.32 and 363.49 seconds, all below
+2,100 seconds, with no retry or budget correction. Simulator timing and memory
+are not analog circuit latency, power or hardware-efficiency evidence. Sparse
+probe times do not imply identical wall-time budgets.
+
+Verdict: this exploratory one-seed pilot trains small/reference but underperforms
+matched BP; reliable training across all three sizes is not established because
+more_tokens leaves the domain. All six terminal outcomes are reviewed, while
+scientific coverage remains five fully evaluated rows out of six. No measured
+device, SPICE, PDK, silicon or mid-scale performance claim follows. Further
+seeds, solver changes or domain investigations require a new scientific
+assignment. This closes monitoring for capped64-001 only; broader issue 36
+remains open. Feature-branch publication only; shared trunk is untouched and
+no chat notification delivery is claimed.
