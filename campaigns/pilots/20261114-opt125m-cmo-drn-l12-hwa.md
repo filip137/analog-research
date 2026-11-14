@@ -72,5 +72,25 @@ that is the user's decision.
 | --- | --- | --- |
 | `opt-cmo-drn-l12-prepare-v1` | complete, validated | 10.6 s. Mapped `f1961b3f…` (1.18 GB). Clean development KL 0.1266 over 256 sequences (PPL 8.19). All denominators ≥ 240. Max voltage 12.9 in layer 0 against ≤ 8.4 in the other blocks (6-MLP: ≤ 5.1). |
 | `opt-cmo-drn-l12-hwa-readiness-v1` | cancelled before launch | malformed `validate_argv` in the spec; never ran |
-| `opt-cmo-drn-l12-hwa-readiness-v2` | running | two std3 updates with full selection |
-| `opt-cmo-drn-l12-hwa-std3-v1` | prepared | submit after readiness passes; budget from the measured throughput |
+| `opt-cmo-drn-l12-hwa-readiness-v2` | complete, validated | 87.9 s. Update 3.11/2.97 s; peak CUDA 7.66 GB. One selection (4 cases × 256 sequences) takes 33 s. Checkpoints 3.3 s; training state 4.72 GB, weights 1.18 GB. No projected surrogate cells; all gradient groups finite. |
+| `opt-cmo-drn-l12-hwa-std3-v1` | running on loulou since 2026-11-14 ~12:00 CET, attempt `1117173377ae49d8894596b371e506b7` | five-pass std3; 3.0 s per update, peak 7.66 GB; queue expected 95,000 s, budget 158,000 s |
+
+Initial programmed selection, step 0 (development KL):
+
+| Assignment | Nominal | Random 3 % |
+| --- | --- | --- |
+| 211001 | 0.1271 | 0.3420 |
+| 211002 | 0.1282 | 0.2623 |
+
+The mean, 0.2149, is the score HWA must improve on. For 6 MLPs the mapped
+initialization scored 0.1716 and std3 ended at 0.0720.
+
+Projection: 30,505 × ~3.0 s plus 60 selections × 33 s plus checkpoints ≈ 94,000 s
+(26 h). Expected completion is Sunday 15 November, around 14:00 CET. Charged so far:
+prepare 11 s and readiness 88 s.
+
+Monitoring: the shared queue owns the run and detects stale progress after 1,200 s.
+The run resumes exactly from `latest.pt`.
+- Progress: `run/metrics.jsonl` on loulou (`update` and `selection` events).
+- Escalate to on-chip-learning #37 if the queue reports `attention` or the
+  selected KL stops improving over the initial 0.2149.
