@@ -1,0 +1,22 @@
+{
+  "arm": "energy_ep",
+  "batch_size": 64,
+  "beta": 0.005,
+  "case": "small",
+  "dataset_root": "/home/filip/datasets/mnist",
+  "epsilon": 0.5,
+  "evaluation_count": 10000,
+  "experiment_id": "energy_transformer_mnist.v1",
+  "learning_rate": 0.003,
+  "max_steps": 64,
+  "phase_mode": "fixed_steps",
+  "precision": "fp32",
+  "probe_count": 256,
+  "residual_tolerance": 1e-06,
+  "schema_version": 1,
+  "seed": 20261114,
+  "train_seconds": 1500,
+  "updates": 2000,
+  "validation_count": 5000,
+  "wall_seconds": 2100
+}

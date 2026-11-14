@@ -314,3 +314,62 @@ handoff is needed, use run-watch with bounded dispatch and preserve one owner.
 Scientific failures are evidence; only understood operational failures may retry
 within the allowance. Commit code/tests/configs before delegation and record
 handles/results below. Shared trunk remains untouched.
+
+### Iteration diagnostic results — 14 November 2026
+
+GPT-6.1Sol executed and monitored the three cases from clean published
+commit9fc5477. All completed first attempt; aggregate supervisor wall54.653s,
+within1800s. All native completeness/hash inspections passed, the saved24-image
+cohorts were tensor-identical, and all input checkpoint hashes remained unchanged.
+The43targeted implementation/regression tests passed before launch. No optimizer
+updates occurred. Results/receipts:
+`/home/filip/analog-research/drn/results/energy-transformer-iterations/20261114-001/`.
+Native runs are small/20261114T134047.470377Z-af10027e-83d8a08c,
+reference/20261114T134105.771512Z-3385e7fd-648ec0a8 and
+more_tokens/20261114T134123.609858Z-7d41d030-4029804f.
+
+The long-unroll references qualified on every batch:512/1024gradient cosine
+was essentially1, relativeL2<=7.62e-8 and residual<=2.384e-7. Common passing
+caps under the predeclared GLOBAL criterion are32,64,96,128. Thus32 is the
+smallest tested global selection, preserved in native selected-config artifacts.
+
+| Case | T | Min EP/BPTT | Min EP/reference | Min BPTT/reference |
+| --- | ---: | ---: | ---: | ---: |
+| small |32|0.98297|0.99771|0.96956|
+| reference |32|0.99592|0.99993|0.99524|
+| more_tokens |32|0.99011|0.99990|0.98873|
+| small |64|0.99968|0.99992|0.99940|
+| reference |64|0.99999|1.00000|0.99999|
+| more_tokens |64|0.99997|0.99999|0.99998|
+
+**Recommendation:64iterations per phase**, using the stronger group-level
+check on already measured caps. At32, small-model encoder EP/reference cosine
+falls to0.80528 (relativeL2up to0.59290), and encoder BPTT/reference falls to
+0.05752 despite high whole-gradient cosine. More-token key BPTT/reference also
+falls to0.87815. At64, every group in every batch and every comparison exceeds
+0.9: worst0.98036 (small encoder BPTT/reference). EP/reference itself exceeds
+0.9984 for every group; small encoder relativeL2is<=0.06421. This recommendation
+is separate from, and does not rewrite, the predeclared global32selection.
+
+Prospective configs: `examples/energy_transformer_mnist/capped64/` for small,
+reference and more_tokens. They use phase_mode=fixed_steps,max_steps=64. The
+schema enforces a128ceiling in fixed-step mode.64means192serial centered-EP
+iterations (64free,+64positive,+64negative), a64fold reduction in the former
+4096per-phase maximum; actual speedup versus adaptive convergence was not
+measured by this diagnostic. EP32time was0.107–0.108s per8-example batch, EP64
+about0.21s. Peak tensor memory EP/BPTT32(MiB):19.09/29.39,21.18/39.85,
+32.84/90.33. These are GPU simulator costs, not physical circuit timing.
+
+Very short trajectories can mislead: at8steps the more-token EP/reference
+cosine is−0.41674 while EP/same-lengthBPTTis0.97564. Finite-length agreement
+alone is insufficient. The initial target0.9 was therefore checked against a
+stable longer reference as well. Inspect `analysis/selection.json`,
+`recommendation.json`, `comparison.md` and `gradient-agreement.png`/`.svg`.
+Solid curves show worst batch; faint dashed curves show mean batch.
+
+All measured triode margins remained positive, max operand<=1.368. Small
+positive FP32 energy increments remain roundoff diagnostics, not a strict
+descent claim. Evidence covers these three checkpoints after250updates and
+24validation examples, not all later training states or the unqualified wider
+model. Further full training with the64step recipes is not part of this read-only
+diagnostic. Issue36 remains open for the larger analog-transformer objective.
