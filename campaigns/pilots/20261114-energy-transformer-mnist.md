@@ -373,3 +373,57 @@ descent claim. Evidence covers these three checkpoints after250updates and
 24validation examples, not all later training states or the unqualified wider
 model. Further full training with the64step recipes is not part of this read-only
 diagnostic. Issue36 remains open for the larger analog-transformer objective.
+
+
+## Authorized continuation: 64-step training — 14 November 2026
+
+The user explicitly instructed us to launch the prepared training continuation.
+Run fresh training from the declared initialization for small, reference and
+more_tokens, using the published capped64 recipes. All free and positive/negative
+phases run exactly 64 iterations; this is finite-time approximate EP, with 192
+serial state updates per training update. The 1e-6 residual remains a diagnostic,
+not a stopping gate. Preserve all other scientific settings: GPU FP32, seed
+20261114, batch 64, beta 0.005, Adam learning rate 0.003, ideal perfect-diode/MOS
+model, data splits and masks. No new sweep or retuning is authorized by recovery.
+
+Question: does the shortened solver train reliably across the three qualified
+sizes, and how does its masked-image error compare with matched digital attention?
+Target 2,000 updates per case, 5,000-example final validation and 10,000-example
+test evaluation, with the existing 256-example fixed validation probes and
+attention ablations. Report actual update/evaluation coverage; budget/domain
+stops remain scientific results. Compare fixed-cohort scores at common update
+counts, and final test scores only with the update counts stated.
+
+Reuse the three completed digital_bp native bundles referenced in
+`results/energy-transformer-mnist/benchmark-003/coverage.json`, after checking
+case/config identities and native artifact integrity. Reuse is explicit, with
+no mutation or new BP training. Wider is excluded because its early-training
+checkpoint was not qualified by the cap diagnostic. The original settled runs
+remain separate historical evidence.
+
+Execution: local RTX 3090 only, through the public EBL train CLI, in the clean
+pinned checkout of the next published feature-branch launch commit. Composition:
+`python -m experiments.run_energy_transformer_mnist --capped64-from
+/home/filip/analog-research/drn/results/energy-transformer-mnist/benchmark-003/coverage.json
+--output-root /home/filip/analog-research/drn/results/energy-transformer-mnist/capped64-001
+--readiness /home/filip/analog-research/drn/results/energy-transformer-mnist/readiness/gradient-device-checks.json --charged-readiness-seconds 0`.
+Interpreter: `/home/filip/miniconda3/envs/py312/bin/python`. Existing numerical
+readiness and the 43 passing finite-time/diagnostic tests are reused unchanged;
+only the new composition gets proportional focused verification. A retained
+supervisor CUDA context prevents the previously observed cold-worker issue.
+
+Budget: at most 7,200 seconds from this launch, at most 2,100 seconds per case,
+including 1,500 seconds training and all startup/retry costs. Storage allowance
+500 MB per case plus plots. Keep native checkpoints and every attempt. Permit
+only the existing bounded retry for a CUDA initialization failure before any
+training metric; no silent scientific retry. The supervisor enforces deadlines.
+
+Root: `results/energy-transformer-mnist/capped64-001/`, containing worker.pid,
+child.pid, status.json, coverage.json, metrics.jsonl, run.log and result.json;
+native cases retain hashes, receipts, summaries and checkpoints. Comparison plots
+and tables go in analysis/. Sol owns launch and two initial semantic progress
+checks; the verified run-watch service then owns 300-second checks and bounded
+incident dispatch, with the coordinator responsible for interpretation. The
+45-minute stall limit and explicit hard deadline apply. No remote target,
+shared-trunk publication or GPU-wide settings change is included. Feature-branch
+publication and pinned execution follow the recorded shared-trunk review exception.
