@@ -825,3 +825,27 @@ admission. The observer window spans at most these120minutes, while the native
 launcher enforces the shorter precise execution deadline in admission.json and
 launch.json. Exactly one owner/PID transfers from admission to execution;
 there is no simultaneous shared-queue or second-watch ownership.
+
+
+## Explorer owner verified —2026-11-14T23:40:33.283567+00:00
+
+Prepared source is `4e02231` (clean pinned checkout
+`/home/filip/analog-research/drn/results/energy-transformer-input-attention/source-4e02231`).
+Output root is
+`/home/filip/analog-research/drn/results/energy-transformer-input-attention/explorer-001`.
+Supervisor/admission PID2709312 and persistent watcher2709401 are verified live.
+State at handoff: **running**; current heartbeat 2026-11-14T23:40:32.143669+00:00.
+The prior sparse-attention process is unrelated and has not been signalled or
+modified. GPU execution deadline: 2026-11-15T01:10:14.801917+00:00.
+The observer window ends2026-11-15T01:38:34.194767UTC; that includes at most
+30minutes of capacity waiting and does not authorize120minutes of computation.
+
+All103 readiness tests pass. The same PID execs from admission to the public
+scientific composition; `supervisor.pid` remains the watch identity. Watch
+status confirms a real observation with zero probe failures. There is no
+second queue/watch owner. Runtime handoff and watch.json under this output root
+name exact cases, source, artifacts, recovery boundaries and collection commands.
+The bounded incident owner is authorized for understood operational repairs and
+final independent collection/visual review, not merely failure notification.
+Parent retains scientific reporting; terminal evidence will be committed in this
+same note. No final task-performance claim is available at launch.
