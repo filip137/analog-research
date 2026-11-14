@@ -1,0 +1,255 @@
+{
+  "data": {
+    "corpus": {
+      "name": "opt125m-synthetic-50m",
+      "sha256": "ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984"
+    },
+    "data_seed": 20261008,
+    "development_sequences": 256,
+    "evaluation": "development",
+    "hwa_sequences": 195226,
+    "max_examples": 0,
+    "recovery_sequences": 8192,
+    "sequence_length": 256,
+    "test_sequences": 0
+  },
+  "defects": {
+    "arrays_per_die": 48,
+    "cases": [
+      {
+        "array_concentration": null,
+        "die_concentration": null,
+        "kind": "random",
+        "rate_ppm": 30000
+      }
+    ],
+    "persistence": "permanent",
+    "placement": "hierarchical_die_array"
+  },
+  "deployment": {
+    "calibration": "output_gain_mlp_layer_norm_mlp_bias",
+    "encoding": "active_reference_pair",
+    "read_noise": 0.0,
+    "scaling": "per_output_channel_absmax",
+    "tile_size": 256
+  },
+  "devices": {
+    "assignment_seeds": [
+      271001,
+      271002,
+      271003,
+      271004,
+      271005
+    ],
+    "endpoint_seed_offset": 10000,
+    "model": "aihwkit_1.1.0_reram_cmo",
+    "noise_scale": 1.0,
+    "selection_seeds": [
+      211001,
+      211002
+    ],
+    "technology": "cmo"
+  },
+  "fault_tuning": {
+    "analog_lora": {
+      "b_scale": {
+        "name": "fault-paper-l12-bscale-r16-3em3",
+        "sha256": "e1aa6c11f21ebc3f0143b4815044d2e5c906c77cfe129a00480f931f2415c508"
+      },
+      "rank": 16
+    },
+    "arms": [
+      {
+        "label": "hold-naive",
+        "method": "hold_naive"
+      },
+      {
+        "label": "hold-fault-aware",
+        "method": "hold_fault_aware"
+      },
+      {
+        "label": "noisy-1em4",
+        "learning_rate": 0.0001,
+        "method": "onchip_noisy"
+      },
+      {
+        "label": "noisy-3em4",
+        "learning_rate": 0.0003,
+        "method": "onchip_noisy"
+      },
+      {
+        "label": "noisy-1em3",
+        "learning_rate": 0.001,
+        "method": "onchip_noisy"
+      },
+      {
+        "label": "noisy-3em3",
+        "learning_rate": 0.003,
+        "method": "onchip_noisy"
+      },
+      {
+        "label": "noisy-1em2",
+        "learning_rate": 0.01,
+        "method": "onchip_noisy"
+      },
+      {
+        "label": "noiseless-1em4",
+        "learning_rate": 0.0001,
+        "method": "onchip_noiseless"
+      },
+      {
+        "label": "noiseless-3em4",
+        "learning_rate": 0.0003,
+        "method": "onchip_noiseless"
+      },
+      {
+        "label": "noiseless-1em3",
+        "learning_rate": 0.001,
+        "method": "onchip_noiseless"
+      },
+      {
+        "label": "noiseless-3em3",
+        "learning_rate": 0.003,
+        "method": "onchip_noiseless"
+      },
+      {
+        "label": "noiseless-1em2",
+        "learning_rate": 0.01,
+        "method": "onchip_noiseless"
+      }
+    ],
+    "assignment_seed": 271001,
+    "deployment": {
+      "name": "fault-paper-l12-deploy-271001-random3pct",
+      "sha256": "03af2f12921c6ded1dd4f033c29b5ba61f116bfd494cb03f7075255e66e8044d"
+    },
+    "development": {
+      "cohort_sha256": "7411cf50b625e4c62f65d8e12bac538fd83c6dad3e4c74b29a9f2a6f5ad83191",
+      "corpus": "wikitext-2-raw-v1",
+      "corpus_sha256": "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01",
+      "seed": null,
+      "sequences": 64,
+      "split": "validation",
+      "start": 0
+    },
+    "fault_rewrite": {
+      "detection": "verify",
+      "roles": "pair",
+      "seed": 241016,
+      "threshold_sigma": 5.0
+    },
+    "fisher": {
+      "batch": 8,
+      "estimator": "mean_squared_batch_gradient"
+    },
+    "lora_seed": 271001,
+    "recovery": {
+      "cohort_sha256": "c919329dbe0d545d7614daf3d8f790881e944cd80ff53fff88fc19d9697f7762",
+      "corpus": "wikitext-2-raw-v1",
+      "corpus_sha256": "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01",
+      "seed": 20261104,
+      "sequences": 1024,
+      "split": "train",
+      "start": 0
+    },
+    "schedule": {
+      "batch": 8,
+      "betas": [
+        0.9,
+        0.999
+      ],
+      "development_every_steps": 50,
+      "eps": 1e-08,
+      "lr_schedule": "cosine_to_zero",
+      "optimizer": "adam",
+      "order_seed": 20261104,
+      "steps": 300,
+      "warmup_steps": 0
+    },
+    "source_sha256": "ed53b6cbe2a7315f364291c7142ee2826c6ca4a44c21a2d5d25190b8c90569b0",
+    "targets": {
+      "count": 8,
+      "draw_batch": 16,
+      "file": "teacher-samples8-c919329d-df73ce66",
+      "kind": "teacher_samples",
+      "seed": 20365833,
+      "sha256": "df73ce6615be3cdd3005d2ca0b97c03131f9236ba481bc7250edde5ff66fb01a"
+    },
+    "write_law": {
+      "accumulate_updates": true,
+      "max_write_attempts_per_device": null,
+      "threshold_sigma": 2.0
+    }
+  },
+  "hwa": {
+    "arms": [
+      {
+        "corruption": null,
+        "digital_learning_rate": 1e-05,
+        "id": "standard_hwa_model",
+        "method": "hwa",
+        "noise_strength": 1.0,
+        "scope": "model",
+        "selection_cases": [
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "none",
+            "rate_ppm": 0
+          },
+          {
+            "array_concentration": null,
+            "die_concentration": null,
+            "kind": "random",
+            "rate_ppm": 30000
+          }
+        ]
+      }
+    ],
+    "augment": false,
+    "batch_size": 32,
+    "epochs": 100,
+    "learning_rate": 0.005,
+    "lr_decay": 1.0,
+    "lr_milestones": [],
+    "lr_schedule": {
+      "kind": "cosine_warmup_decay",
+      "min_factor": 0.2,
+      "total_steps": 25600,
+      "warmup_steps": 205
+    },
+    "noise_model": "additive_gaussian_weight",
+    "noise_scaling": "output_channel_abs_max",
+    "noise_std": 0.03,
+    "objective": "teacher_kl",
+    "optimizer": "adam",
+    "seed": 41,
+    "selection": {
+      "every_epochs": 2,
+      "extension_epochs": 0
+    },
+    "sequences_per_epoch": 8192
+  },
+  "lifecycle_id": "opt125m-cmo-l12-fault-paper-tune-s1",
+  "network": {
+    "analog_decoder_layers": 12,
+    "family": "opt_mlp_suffix",
+    "model": "facebook/opt-125m"
+  },
+  "onchip": null,
+  "program_verify": {
+    "acceptance_percent": 2.0,
+    "method": "gaussian_endpoint",
+    "relaxation": {
+      "model": "none"
+    }
+  },
+  "question": {
+    "decision": "Fault-recovery paper series 001, 12 MLPs: per-arm learning rates for the paper seeds. campaigns/fault-recovery-paper/series/001-lr-tuning/experiments/exp-002-crossbar-l12-lr-screen.md",
+    "evidence_class": "exploratory_model_based",
+    "primary_metric": "teacher_kl",
+    "text": "Which learning rate does each crossbar recovery arm select at 3 % random stuck devices with all 12 MLPs analog (tuning assignment 271001, final development teacher KL)?"
+  },
+  "schema": "crossbar_lifecycle",
+  "schema_version": 1
+}

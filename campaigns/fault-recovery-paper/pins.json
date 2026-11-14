@@ -11,6 +11,10 @@
     "deployment": {
       "name": "fault-paper-l12-deploy-271001-random3pct",
       "sha256": "03af2f12921c6ded1dd4f033c29b5ba61f116bfd494cb03f7075255e66e8044d"
+    },
+    "b_scale": {
+      "name": "fault-paper-l12-bscale-r16-3em3",
+      "sha256": "e1aa6c11f21ebc3f0143b4815044d2e5c906c77cfe129a00480f931f2415c508"
     }
   }
 }
