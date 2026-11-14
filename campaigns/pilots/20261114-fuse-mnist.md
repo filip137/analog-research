@@ -97,3 +97,15 @@ and every parameter-group cosine>.99 and relative L2<5%, stable isolated FP64
 reference equilibria, and unchanged checkpoint. The full held-out test still
 requires10000 images and5000 validation images. Do not conflate native bundle
 completion with these scientific acceptance conditions.
+
+## Live handoff
+
+Published launch source763e486, pinned at
+`/home/filip/analog-research/drn/results/fuse-mnist/source-763e486`.
+Supervisor2552221 launched20:18UTC; first child2552266 made verified metric
+progress past550updates. All22 affected tests pass. Persistent run-watch2552599
+is armed with60s observations and bounded final/incident review; its initial
+observations confirm the exact supervisor, GPU child and growing native metrics.
+Monitor config `results/fuse-mnist/watch.json`, handoff/status/worker PID and
+watch state under `benchmark-001/`. Hard deadline is in launch.json. Root owns
+figures and scientific interpretation; no chat callback is configured.
