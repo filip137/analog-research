@@ -120,8 +120,9 @@ def parse_config(raw):
         raise ConfigError('Fault tuning requires its explicit settings only on its native stage.')
     if getattr(c,'fault_tuning',None) is not None:
         f=c.fault_tuning
-        if c.deployment.fault_kind!='random' or not 0<c.deployment.fault_rate<1:
-            raise ConfigError('Fault tuning reads a random-fault deployment.')
+        nominal=c.deployment.fault_kind=='none' and c.deployment.fault_rate==0
+        if not nominal and (c.deployment.fault_kind!='random' or not 0<c.deployment.fault_rate<1):
+            raise ConfigError('Fault tuning reads a random-fault or a fault-free (0 %) deployment.')
         if (c.recovery.threshold_sigma!=2 or c.recovery.target_bounds!='gmin_gmax' or c.recovery.conductance_floor!='none'
                 or c.recovery.max_write_attempts is not None):
             raise ConfigError('Fault tuning keeps the DRN 2-rho gate, bounded targets, no floor and no write cap.')

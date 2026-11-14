@@ -219,3 +219,39 @@ def test_microbatching_gives_the_batch_mean_gradient(cpu_threads):
         grads.append(u.grad.clone())
         u.requires_grad_(False)
     torch.testing.assert_close(grads[0], grads[1], atol=1e-6, rtol=1e-4)
+
+
+def test_rate_screen_configs_are_current_and_differ_only_in_fault_case_and_arms():
+    import subprocess, sys
+    script = ROOT / 'campaigns/pilots/20261114-fault-paper-rates/make_configs.py'
+    subprocess.run([sys.executable, str(script), '--check'], check=True, cwd=ROOT)
+    rates_dir = ROOT / 'examples' / 'opt_cmo_drn' / 'fault_paper_rates'
+    reference = json.loads((CONFIGS / 'job-b-noiseless.json').read_text())
+    cases = {'r00': ('none', 0.0), 'r01': ('random', 0.01), 'r05': ('random', 0.05), 'x03': ('random', 0.03)}
+    for path in sorted(rates_dir.glob('*.json')):
+        raw = json.loads(path.read_text())
+        c = parse_config(raw)
+        kind, rate = cases[path.stem.split('-')[1] if path.stem.startswith('deploy') else path.stem.split('-')[0]]
+        assert (c.deployment.assignment_seed, c.deployment.fault_kind, c.deployment.fault_rate) == (271001, kind, rate)
+        if c.stage == 'fault_tuning':
+            a, b = copy_without(reference, 'arms'), copy_without(raw, 'arms')
+            a['deployment'] = b['deployment']
+            if path.stem == 'x03-child30':
+                assert b['fault_tuning'].pop('child_fraction') == 0.3
+                a['fault_tuning'].pop('child_fraction')
+            assert a == b
+
+
+def copy_without(raw, key):
+    out = json.loads(json.dumps(raw))
+    out['fault_tuning'].pop(key)
+    return out
+
+
+def test_fault_tuning_accepts_a_fault_free_deployment_but_not_a_fault_free_random_case():
+    raw = json.loads((CONFIGS / 'job-b-noiseless.json').read_text())
+    raw['deployment'] = {'assignment_seed': 271001, 'fault_kind': 'none', 'fault_rate': 0.0}
+    assert parse_config(raw).deployment.fault_kind == 'none'
+    raw['deployment'] = {'assignment_seed': 271001, 'fault_kind': 'random', 'fault_rate': 0.0}
+    with pytest.raises(ConfigError):
+        parse_config(raw)
