@@ -1024,3 +1024,50 @@ unchanged. This tests whether halving dt1 to0.5 is unnecessarily slow for the
 remaining modes. Exploratory copied-source evidence goes under
 `results/energy-transformer-repair/step-repair-001/`; no production change or new
 training is justified until that diagnosis passes.
+
+
+### Step-size probe passes static checks but fails training readiness
+
+On training-002's unchanged final checkpoint, dt1.5 passes all eight validation
+minibatches: global minimum EP/BPTT0.991841, EP/reference0.999701 and
+BPTT/reference0.993137. Every parameter group exceeds0.96989, all long references
+qualify, and physical guards remain positive. Production parity is bit-identical
+on all eight batches; the proposed constructor/schema/recipe changes pass48
+tests with3 optional environment skips.
+
+The mandatory training continuation rejects this candidate. Restoring the exact
+step1750 model, Adam and RNG, and changing only dt, produces a bad update at1758:
+EP norm0.802065 versus BPTT0.097815, cosine0.757742, and Adam update norm0.627544.
+Training sample42143 (batch position33) dominates, with positive/negative state
+separation L2=9.268. After33 successful updates, attempted1784 violates the drain
+condition (operand6.00646). No fresh full training was launched. The unpromoted
+patch and recipe are archived under `step-repair-001/`, and production source
+was restored to the committed implementation. Original checkpoints are unchanged.
+
+Dense traces show a slow nonlinear transition, not a near period-two cycle.
+For the dominant sample at dt1.5, two-step displacement is approximately twice
+one-step displacement in the free phase, while the nudges make large, unequally
+delayed transitions. All three tested nominal steps eventually settle the full
+minibatch and nudges by1024, with residuals below5.73e-6 and positive margins.
+Thus tuning the cycle detector or relaxing physical/reference thresholds would
+not address this cause. Evidence: `step-repair-001/production-gate/` and
+`state-characterization-001/`; the latter is state evidence, not gradient
+reference qualification.
+
+The next isolated prototype uses safeguarded Anderson acceleration to solve the
+same circuit equilibrium equations within128 outer updates. It mixes five recent
+force-map outputs using regularized residual minimization, accepts acceleration
+only under the existing energy allowance and physical-domain checks, and falls
+back to a damped Euler step. BPTT differentiates the mixing coefficients; only
+discrete branch choices are held locally constant. Twelve directional finite
+differences across all six parameter groups pass on a tiny FP64 CPU mathematical
+fixture (maximum absolute error9.6e-12); research probes remain GPU FP32.
+
+This is GPU equilibrium-solver acceleration, not a claim of accelerated physical
+RC transients. Because the model is nonlinear, qualification must also compare
+accelerated states against long original-flow solves and test stability under
+original-flow continuation, to reject an unintended unstable stationary point.
+Both recorded bad training states and the complete final validation cohort are
+required before any training readiness run. Prototype and probes stay outside
+production under `results/energy-transformer-repair/acceleration-001/`. The goal
+remains active and no acceptance condition has been weakened.
