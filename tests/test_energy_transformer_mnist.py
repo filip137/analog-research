@@ -105,3 +105,16 @@ def test_checkpoint_restores_rng_optimizer_and_next_step(tmp_path):
     opt.zero_grad();m(x).square().sum().backward();opt.step()
     for name,p in m.named_parameters():torch.testing.assert_close(p,expected[name],rtol=0,atol=0)
     with pytest.raises(ConfigError):restore_checkpoint(path,m,opt,replace(c,case='wider'),a,b)
+
+
+def test_recovery_only_allows_cuda_failure_before_training(tmp_path):
+    import json
+    from experiments.run_energy_transformer_mnist import early_cuda_failure
+    row={'run_dir':str(tmp_path),'outcome':'execution_failure'}
+    status=tmp_path/'status.json'
+    status.write_text(json.dumps({'error':{'message':'This benchmark requires CUDA; CPU fallback is disabled'}}))
+    assert early_cuda_failure(row)
+    metrics=tmp_path/'metrics.jsonl';metrics.write_text(json.dumps({'stage':'train','step':1})+'\n')
+    assert not early_cuda_failure(row)
+    metrics.unlink();status.write_text(json.dumps({'error':{'message':'Unsettled phase'}}))
+    assert not early_cuda_failure(row)

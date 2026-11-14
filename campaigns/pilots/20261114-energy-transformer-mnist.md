@@ -107,3 +107,29 @@ Readiness accounting: conservatively debit300seconds for tests, small CUDA check
 startup and smokes (including the failed attempt). Detailed native durations are
 in `results/energy-transformer-mnist/readiness/accounting.json`; this debit is
 part of, not additional to, the six-hour ceiling.
+
+## Launch and operational recovery (14 November)
+
+Published initial implementation2e766d2. Automatic approval review rejected
+merging/pushing shared `refactor/training-core` because it considered that
+broader than explicit branch authorization. The safe alternative is evidence
+from a clean pinned checkout of the published `energy-transformer` commit;
+shared integration remains pending. Do not retry that rejected action.
+
+First sweep `benchmark-001` started11:42:58UTC, absolute deadline17:37:58UTC.
+Native bundles confirm clean source2e766d2. Six cases failed before any update
+with CUDA driver initialization failure. Detached/foreground CUDA probes then
+passed; the49-token EP case started and reached382 updates with accepted
+residuals and falling training MSE. This is not a held-out result. Preserve its
+execution and the subsequent digital case. The original watcher recorded the
+incident and was stopped while the root agent owned diagnosis.
+
+Recovery adds a tested, narrowly bounded path: only a CUDA initialization
+failure with zero recorded training updates may retry. Scientific/domain/
+settling failures never retry. `--retry-from <prior-root>` waits for the live
+predecessor, reuses its terminal science, preserves all failed bundles and
+debits prior wall time and each case's already consumed allowance. It retains
+the original absolute deadline. At most two attempts in the recovery sweep;
+no new science or extra GPU allowance. The new watchdog retains the original
+watch-state dispatch history and budget; it owns the queued recovery and final
+review.58 distinct targeted tests passed,4 SPICE/environment checks skipped.
