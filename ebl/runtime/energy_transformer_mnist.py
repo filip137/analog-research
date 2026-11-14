@@ -13,6 +13,7 @@ from ebl.schema.energy_transformer_mnist import CASES
 from networks.energy_transformer.gpu import EnergyNetwork, DigitalNetwork, EquilibriumError, settle, ep_gradient
 from networks.energy_transformer.mnist import load_raw, hidden_masks, batch
 from networks.energy_transformer.finite_time import relax, finite_ep
+from networks.energy_transformer.contractive import initialize_shared, project
 
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -36,7 +37,7 @@ def save_checkpoint(path,model,optimizer,config,step,train_seconds,order_gen,mas
 
 def restore_checkpoint(path,model,optimizer,config,order_gen,mask_gen):
     payload=torch.load(path,map_location='cpu',weights_only=False)
-    if payload['schema']!='energy-transformer-mnist.checkpoint.v1' or {'phase_mode':'settled','device_domain':'declared4','solver_dt':.5,'solver_rule':'energy_backtracking',**payload['config']}!=asdict(config):
+    if payload['schema']!='energy-transformer-mnist.checkpoint.v1' or {'phase_mode':'settled','device_domain':'declared4','solver_dt':.5,'solver_rule':'energy_backtracking','initialization':'standard','recurrent_constraint':'none',**payload['config']}!=asdict(config):
         raise ConfigError('Resume requires the identical scientific configuration')
     model.load_state_dict(payload['model']);optimizer.load_state_dict(payload['optimizer'])
     order_gen.set_state(payload['order_rng']);mask_gen.set_state(payload['mask_rng'])
@@ -118,6 +119,8 @@ def train(config,store,images,ids,resume=None):
     if config.arm=='energy_ep':
         kwargs.update(device_domain=config.device_domain,solver_dt=config.solver_dt,solver_rule=config.solver_rule)
     model=cls(**kwargs);initial=cls(**kwargs)
+    initialization_report=initialize_shared(model,config.initialization,config.beta)
+    initial.load_state_dict(model.state_dict())
     optimizer=torch.optim.Adam(model.parameters(),lr=config.learning_rate)
     order_gen=torch.Generator().manual_seed(3101)
     mask_gen=torch.Generator().manual_seed(3102)
@@ -125,6 +128,7 @@ def train(config,store,images,ids,resume=None):
     test_masks=hidden_masks(10000,torch.Generator().manual_seed(3104))
     mean_image=images['train'][ids['train']].float().mean(0)
     artifacts=store.run_dir/'artifacts';checkpoints=store.run_dir/'checkpoints'
+    atomic_write_json(artifacts/'initialization.json',{'policy':config.initialization,'projection':initialization_report})
     torch.save({'ids':ids,'validation_masks':validation_masks,'test_masks':test_masks},artifacts/'cohorts.pt')
     atomic_write_json(artifacts/'environment.json',{'torch':torch.__version__,'gpu':torch.cuda.get_device_name(),
                       'precision':'fp32','tf32':False,'amp':False,'core_parameters':6*d*d,
@@ -180,6 +184,13 @@ def train(config,store,images,ids,resume=None):
             if not all(p.grad is not None and torch.isfinite(p.grad).all() for p in model.parameters()):
                 raise EquilibriumError('Nonfinite parameter gradient')
             optimizer.step()
+            if config.recurrent_constraint == 'contractive_blocks_v1':
+                certificate=project(model,beta=config.beta)
+                last_diag.update(constraint_scale=certificate['scale'],
+                                 constraint_scales=certificate['scales'],
+                                 recurrent_bounds={k:certificate['after'][k] for k in ('attention','memory','decoder')},
+                                 recurrent_bound=certificate['after']['normalized_total'],
+                                 contraction_radius=certificate['after']['contraction_radius'])
         except TimeoutError:
             stop='training_time_limit';break
         except EquilibriumError as error:
@@ -201,6 +212,7 @@ def train(config,store,images,ids,resume=None):
     train_seconds=prior_train+time.monotonic()-training_started
     save_checkpoint(checkpoints/'final.pt',model,optimizer,config,step,train_seconds,order_gen,mask_gen)
     result={'phase_mode':config.phase_mode,'max_steps':config.max_steps,
+            'initialization':config.initialization,'recurrent_constraint':config.recurrent_constraint,
             'device_domain':config.device_domain,'solver_dt':config.solver_dt,'solver_rule':config.solver_rule,'arm':config.arm,'case':config.case,'stop_reason':stop,'failure':failure,'updates':step,
             'train_seconds':train_seconds,'peak_memory_bytes':torch.cuda.max_memory_allocated(),
             'total_parameters':sum(p.numel() for p in model.parameters()),'core_parameters':6*d*d,

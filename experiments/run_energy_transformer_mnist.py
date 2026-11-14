@@ -55,8 +55,8 @@ def capped64_baselines(path):
     return chosen
 
 
-def repair_reuse(path):
-    """Reuse completed, unchanged science; rerun only the failed 49-token case."""
+def repair_reuse(path, *, fresh_digital=False):
+    """Reuse completed science; replace both 49-token arms when initialization changes."""
     rows=__import__('json').loads(path.read_text())
     chosen=capped64_baselines(path)
     for case in ('small','reference'):
@@ -66,7 +66,7 @@ def repair_reuse(path):
                 or not matches[0].get('summary',{}).get('coverage_complete')):
             raise RuntimeError(f'Missing complete EP case to preserve: {case}')
         chosen.append({**matches[0],'reused_from':str(path)})
-    return chosen
+    return [r for r in chosen if r['case']!='more_tokens'] if fresh_digital else chosen
 
 
 def main():
@@ -77,6 +77,7 @@ def main():
     parser.add_argument('--capped64-from',type=Path,help='Run three capped EP configs and reuse completed BP coverage')
     parser.add_argument('--repair-from',type=Path,help='Repair 49-token training and reuse five completed arms')
     parser.add_argument('--repair-config',type=Path,help='Explicit published 49-token repair recipe')
+    parser.add_argument('--repair-digital-config',type=Path,help='Fresh matched 49-token BP recipe when shared initialization changes')
     args=parser.parse_args()
     if sum(v is not None for v in (args.capped64_from,args.retry_from,args.repair_from))>1:
         parser.error('Select one composition/recovery mode')
@@ -87,8 +88,18 @@ def main():
         repair_spec=parse_config(json.loads(args.repair_config.read_text()))
         if repair_spec.case!='more_tokens' or repair_spec.arm!='energy_ep':
             parser.error('Repair composition requires the declared 49-token energy EP case')
+    if args.repair_digital_config is not None:
+        if not repaired or args.repair_config is None:
+            parser.error('A fresh paired BP run requires --repair-from and --repair-config')
+        digital_spec=parse_config(json.loads(args.repair_digital_config.read_text()))
+        if digital_spec.arm!='digital_bp' or digital_spec.case!='more_tokens':
+            parser.error('Paired repair requires the declared 49-token digital case')
+        for field in ('case','seed','epsilon','batch_size','learning_rate','updates','initialization',
+                      'evaluation_count','validation_count','probe_count'):
+            if getattr(repair_spec,field)!=getattr(digital_spec,field):
+                parser.error(f'Fresh EP/BP pair differs on {field}')
     bounded=repaired or args.capped64_from is not None
-    baseline_rows=repair_reuse(args.repair_from) if repaired else capped64_baselines(args.capped64_from) if args.capped64_from else []
+    baseline_rows=repair_reuse(args.repair_from,fresh_digital=args.repair_digital_config is not None) if repaired else capped64_baselines(args.capped64_from) if args.capped64_from else []
     expected_cases=6 if bounded else 8
     root=args.output_root.resolve();root.mkdir(parents=True,exist_ok=True)
     gate=json.loads(args.readiness.read_text())
@@ -133,7 +144,7 @@ def main():
                           'charged_readiness_seconds':args.charged_readiness_seconds,**extra})
     try:
         for case in (('more_tokens',) if repaired else ('small','reference','more_tokens') if bounded else ('small','reference','wider','more_tokens')):
-            for arm in (('energy_ep',) if bounded else ('energy_ep','digital_bp')):
+            for arm in (('energy_ep','digital_bp') if args.repair_digital_config is not None else ('energy_ep',) if bounded else ('energy_ep','digital_bp')):
                 active=f'{case}-{arm}';status('running')
                 prior=previous.get((case,arm))
                 if prior and prior['outcome']=='terminal':
@@ -146,6 +157,8 @@ def main():
                 folder=root/active;folder.mkdir()
                 config_root=ROOT/'examples/energy_transformer_mnist'
                 config=args.repair_config.resolve() if repaired and args.repair_config else (config_root/'repaired128' if repaired else config_root/'capped64' if bounded else config_root)/f'{active}.json'
+                if arm=='digital_bp' and args.repair_digital_config is not None:
+                    config=args.repair_digital_config.resolve()
                 case_begin=time.monotonic()
                 allowance=min(2100-(prior.get('wall_seconds',0) if prior else 0),remaining)
                 attempts=[]

@@ -266,6 +266,7 @@ class DigitalNetwork(nn.Module):
         super().__init__()
         self.tokens,self.width,self.patch_width = tokens,width,patch_width
         self.epsilon = epsilon
+        self.heads, self.initial_seed = heads, seed
         self.kappa = 1/math.sqrt(width//heads)
         shapes = {'query':(heads,width//heads,width),'key':(heads,width//heads,width),
                   'value':(heads,width//heads,width),'output':(width,width),

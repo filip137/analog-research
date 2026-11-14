@@ -1,0 +1,7 @@
+{
+  "experiment_id": "energy_transformer_mnist.v1",
+  "case": "more_tokens",
+  "arm": "digital_bp",
+  "initialization": "contractive_blocks_v1",
+  "recurrent_constraint": "none"
+}

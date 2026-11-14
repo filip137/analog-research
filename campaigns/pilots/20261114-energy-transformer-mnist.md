@@ -1071,3 +1071,130 @@ Both recorded bad training states and the complete final validation cohort are
 required before any training readiness run. Prototype and probes stay outside
 production under `results/energy-transformer-repair/acceleration-001/`. The goal
 remains active and no acceptance condition has been weakened.
+
+
+### Numerical acceleration rejected; constrain recurrence instead
+
+Safeguarded Anderson passes the earlier period-two example but fails the later
+nonlinear transition: its hardest free state still has residual0.44038 at128,
+and EP/BPTT cosine0.28339. Quantized spectral Euler improves single-example
+settling and gradients, but selects a different stable equilibrium from the long
+original flow. Its corresponding eight-example batch has EP/BPTT cosine-0.37645
+and EP/reference0.07674. Both prototypes are rejected before fresh training.
+Evidence remains under `acceleration-001/probe-001/` and
+`acceleration-001/spectral-probe-001/`; elapsed GPU probe times are44.69 and33.43 s.
+The issue is now multiple learned equilibria and slow transitions, not merely
+the integrator's stability interval.
+
+The next authorized repair changes the feasible recurrent weights, explicitly,
+while retaining the same circuit energy, device laws and local EP statistics.
+For head h let a_h and b_h be the spectral norms of its query/key maps, D the
+state width, N the token count, and kappa the score scale. Define
+
+$$
+C_h=\min(N,\exp(2\kappa D a_hb_h)),\qquad
+L_A=\sum_h\left[2a_hb_h\sqrt{C_h}
++2\kappa D a_h^2b_h^2(1+C_h)\right].
+$$
+
+Because normalized token vectors have norm at most sqrt(D), softmax row entries
+are at most C_h/N, column sums at most C_h, and ||P_h||_2 <= sqrt(C_h).
+Bounding the bilinear and softmax-covariance Hessian terms gives L_A as an
+operator-norm bound for attention's positive interaction potential. Perfect-diode
+memory adds ||U||_2 squared. Eliminating the quadratic output at the worst
+negative nudge adds ||W_out||_2 squared/(1-beta). The normalization Legendre
+potential has Hessian at least sqrt(epsilon) on the centered subspace. Thus
+
+$$
+L_A+\lVert U\rVert_2^2+
+\frac{\lVert W_{out}\rVert_2^2}{1-\beta}
+\leq0.7\sqrt{\epsilon}
+$$
+
+makes the free and nudged energies strongly convex in normalized states, giving
+a unique equilibrium. The joint dt1 fixed-point update has a two-block norm
+majorant with Perron radius at most0.858611, a contraction in a weighted product
+norm. This is not a claim of Euclidean contraction or a device-domain guarantee;
+physical MOS guards remain mandatory.
+
+After each ordinary EP/Adam update, project query, key, memory and decoder by
+the largest common scale at most1 satisfying this bound. Encoder and position
+remain unrestricted drives. GPU FP32 spectral norms and a1e-4 interior margin
+account for numerical enforcement. This digital programming constraint changes
+the optimization feasible set; it does not add trainable parameters, replace EP
+with backpropagation, or change the circuit's scalar energy. Initialization also
+needs projection, so a promoted run requires a fresh digital baseline with the
+same shared initial query/key/decoder weights. Historical controls remain intact.
+
+The isolated helper and tiny FP64 mathematical fixture are in `contractive-001/`.
+Independent analytic review supports the bound; measured required common scales
+are approximately0.681 at initialization and0.199 at the unconstrained final
+checkpoint. Projected-checkpoint GPU fidelity, short fresh task training and
+production tests are still required before promotion. The goal remains active.
+
+
+### Separate contraction budgets preserve learning capacity
+
+The projected hardest saved minibatch passes: EP128/BPTT128 cosine0.999999998,
+all512/1024 reference checks qualify, maximum phase residual2.38e-7, and the
+128-step state agrees with long original flow on the same projected weights.
+This is an explicit changed-weight function, not a repair of the old checkpoint's
+predictions. Physical guards remain positive.
+
+A fresh250-update common-projection readiness run is stable and passes all eight
+gradient minibatches at32,64 and128, but does not yet beat the mean-image task
+baseline: fixed256 validation MSE0.0718226 versus0.0686153. Repeated memory
+updates shrink every recurrent map together; validation query/key operands fall
+to0.05498. This motivates independent block constraints, preserving the same
+additive total bound0.7. Allocate normalized Hessian budgets0.2 to attention,
+0.2 to memory and0.3 to the decoder Schur-complement term. Query/key are scaled
+jointly only when their attention bound exceeds its budget; memory and decoder
+are projected separately. Encoder/position remain unrestricted. One saturated
+block can no longer erase another block's learned weights.
+
+Production names this explicit policy `contractive_blocks_v1`. EP uses it at
+initialization and after each local-EP/Adam update; paired digital BP uses only
+the same shared initial maps and remains unconstrained during training. The
+existing bounded composition supports a fresh49-token EP/BP pair, preserving
+only the four compatible completed small/reference arms. Defaults and older
+checkpoint configurations retain their original behavior. No recurrent circuit
+force, energy or local gradient-statistic formula has changed.
+
+The revised mathematical/initialization/checkpoint/schema/EP suite passes55 tests,
+with3 optional environment skips. An isolated second250-update readiness run is
+in progress under `contractive-001/readiness-002/`. At update50, fixed-cohort
+validation MSE0.0677507 beats its mean-image baseline0.0686153; initial MSE was
+0.236299. This is provisional learning evidence. Full readiness,32/64/128 final
+gradient comparisons, production parity and public-CLI smoke checks precede a
+fresh2000-update launch. All failed candidates and costs remain recorded.
+
+
+### Separate-budget readiness passes; select32 steps
+
+The fresh250-update block-constrained run completes with fixed256 validation
+MSE0.0579754, versus initialization0.236299 and mean image0.0686153. All eight
+trained-checkpoint minibatches pass the three global cosine comparisons and
+512/1024 reference qualification at32,64 and128 steps. Minimum global EP/BPTT
+is approximately0.999999135; the minimum parameter-group cosine is0.999966.
+At32 steps, maximum free residual is8.64e-7. Thus32 is the smallest tested
+passing cap and is selected for the new full run, below the user's128 ceiling.
+
+The same256-example attention probes give normal0.0579754, uniform0.0579889
+and zero0.0617570. Disabling attention worsens error6.52%; normal versus uniform
+differs only0.023%, so this establishes useful cross-token aggregation but not
+strong content-selective routing. The maximum measured normalized recurrence
+bound is0.699937 and the Perron radius0.803529. Every physical guard passes.
+The main readiness took195.81 s, the extra cap sweep5.63 s, and attention probes
+approximately4 s. All research computation remains GPU FP32.
+
+Two-update public-CLI smoke runs also complete for both arms, including small
+held-out/probe coverage, artifact-hash inspection and exact matching of all five
+shared initial maps. Production circuit-equation ASTs remain unchanged. The
+fresh full pair will use `examples/energy_transformer_mnist/contractive32/`,
+2,000 updates, the same seed/batches/data/masks/Adam/beta, and32 steps per EP
+phase with the original dt1 energy backtracking. Four small/reference arms are
+reused; the49-token digital arm is freshly trained because initialization changed.
+The final diagnostic is `examples/energy_transformer_iterations/contractive32/`.
+It must qualify every one of the64 saved validation examples in eight batches
+using the production32-step solver, with unchanged reference and cosine gates.
+A successful readiness or full task run alone does not complete the goal.

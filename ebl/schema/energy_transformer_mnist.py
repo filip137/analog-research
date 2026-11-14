@@ -16,6 +16,8 @@ class Config:
     device_domain: str='declared4'
     solver_dt: float=.5
     solver_rule: str="energy_backtracking"
+    initialization: str="standard"
+    recurrent_constraint: str="none"
     seed: int=20261114
     updates: int=2000
     batch_size: int=64
@@ -58,6 +60,14 @@ def parse_config(raw):
         raise ConfigError('Unknown finite-time step selection rule')
     if (c.device_domain!='declared4' or c.solver_dt!=.5 or c.solver_rule!='energy_backtracking') and (c.arm!='energy_ep' or c.phase_mode!='fixed_steps'):
         raise ConfigError('Physical-domain/full-step repair requires finite-time energy EP')
+    if c.initialization not in ('standard','contractive_blocks_v1') or c.recurrent_constraint not in ('none','contractive_blocks_v1'):
+        raise ConfigError('Unknown initialization or recurrent constraint')
+    if c.recurrent_constraint == 'contractive_blocks_v1':
+        if (c.arm != 'energy_ep' or c.initialization != 'contractive_blocks_v1'
+                or c.phase_mode != 'fixed_steps' or c.device_domain != 'physical' or c.solver_dt != 1.):
+            raise ConfigError('Contraction requires paired initialization, physical finite-time EP and dt1')
+    if c.initialization == 'contractive_blocks_v1' and c.arm == 'energy_ep' and c.recurrent_constraint != 'contractive_blocks_v1':
+        raise ConfigError('Paired energy initialization requires its declared recurrent constraint')
     if c.phase_mode=='fixed_steps' and c.max_steps>128:
         raise ConfigError('Finite-time phase cap cannot exceed 128')
     if c.wall_seconds<=c.train_seconds or type(c.seed) is not int or not 0<=c.seed<2**32:

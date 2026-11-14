@@ -155,6 +155,8 @@ def test_repair_reuses_only_completed_science(tmp_path):
     path.write_text(json.dumps(rows));chosen=repair_reuse(path)
     assert len(chosen)==5
     assert ('more_tokens','energy_ep') not in {(r['case'],r['arm']) for r in chosen}
+    paired=repair_reuse(path,fresh_digital=True)
+    assert {(r['case'],r['arm']) for r in paired}=={(c,a) for c in ('small','reference') for a in ('energy_ep','digital_bp')}
     rows[0]['summary']['coverage_complete']=False;path.write_text(json.dumps(rows))
     with pytest.raises(RuntimeError,match='small'):repair_reuse(path)
 
