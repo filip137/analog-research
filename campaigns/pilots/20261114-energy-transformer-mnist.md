@@ -4,12 +4,12 @@ Issue: https://github.com/filip137/on-chip-learning/issues/36
 Branch: `energy-transformer`. Exploratory GPU simulation, one seed.
 User authorized implementation and the six-GPU-hour plan on 14 November 2026.
 
-Current repair status: all three declared EP sizes and their digital baselines
-have completed 2,000 updates and full evaluation. The 49-token EP test MSE is
-0.0525082 versus digital BP 0.0419638. Final 128-step gradient acceptance still
-fails (worst EP/BPTT cosine 0.864108), so the overall goal remains active and
-settling repair continues. See the latest result below; earlier protocols and
-failed attempts remain historical evidence.
+Current repair status: fresh 49-token EP and matched digital training are running
+from `e5a4969`, with independent recurrent-weight constraints and32 iterations
+per EP phase. A250-update readiness run passes every trained-gradient batch at
+32/64/128 steps and learns beyond the mean-image baseline. Earlier runs completed
+all task coverage but failed final gradient fidelity; those results remain below.
+The goal stays active until the fresh full run and final qualification pass.
 
 ## Frozen question and comparison
 
@@ -1198,3 +1198,36 @@ The final diagnostic is `examples/energy_transformer_iterations/contractive32/`.
 It must qualify every one of the64 saved validation examples in eight batches
 using the production32-step solver, with unchanged reference and cosine gates.
 A successful readiness or full task run alone does not complete the goal.
+
+
+### Fresh constrained full pair launched
+
+Published launch source is `e5a49690370f204ed738b2aa91637f705e25cc89`, clean and
+pinned at `results/energy-transformer-repair/source-e5a4969`. Production parity
+is exact for initialization, trained weights, one deterministic Adam perturbation
+and EP32/BPTT32 vectors; the checkpoint remains unchanged. The selected32-step
+public-CLI smoke passes both arms, full small evaluation and native artifact
+inspection, with all five shared initial maps bit-identical.
+
+Training root: `results/energy-transformer-repair/training-003`. Supervisor2520826
+and EP worker2520855 launched at19:41:15 UTC on14 November. The exact command,
+config paths, readiness evidence and deadline are in `launch.json`. Training
+retains1500 s per arm and2100 s per case; the7200 s composition deducts419.699 s
+of readiness, giving21:34:16 UTC as its hard outer deadline. Earlier failed
+attempts/probes remain charged to the same aggregate six-hour repair allowance.
+The 49-token BP arm is fresh; four completed small/reference arms are reused.
+
+At the parent check, EP had passed691 updates with32 steps in every phase,
+residual5.07e-7, normalized recurrence bound0.699930 and positive physical
+margins, at roughly0.16 s/update. This is progress, not final acceptance.
+Persistent watcher2521814 is armed with60-second checks appropriate to this
+roughly six-minute run. It has verified host process/GPU evidence and metric
+growth twice, inherits the prior dispatch history without resetting its budget,
+and owns final native32-step diagnostics unless the parent explicitly takes over.
+
+The independent checker is `training-003/analysis/verify-final.py`. It verifies
+all six arms and full held-out/probe coverage, exact32-step new phases, all
+contraction certificates, matched initialization/RNG/cohorts, unchanged circuit
+equations, prior small/reference final gradients, an independent stored-weight
+norm check, all eight final gradient/reference gates and native artifact hashes.
+The parent retains figure review, interpretation and overall goal completion.
