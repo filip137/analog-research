@@ -32,6 +32,26 @@ def equal(a,b):
     return a==b
 
 
+
+def weight_ranks(runs):
+    result={}
+    torch.set_num_threads(1)
+    for name,run in runs.items():
+        records=[]
+        for file in ('initial.pt',*(f'step-{step:04d}.pt' for step in range(250,2001,250))):
+            path=run/'checkpoints'/file
+            if not path.exists():continue
+            payload=load(path);groups={}
+            for group in ('query','key','value','output','memory','ff1','ff2','decoder'):
+                if group not in payload['model']:continue
+                values=torch.linalg.svdvals(payload['model'][group].double())
+                stable=values.square().sum(-1)/values[...,0].square()
+                groups[group]={'stable_rank':stable.tolist(),'singular_values':values.tolist()}
+            records.append({'step':payload['step'],'path':str(path),'sha256':sha256_file(path),'groups':groups})
+        result[name]=records
+    return result
+
+
 def collect(root,old_root):
     terminal=read(root/'result.json')
     new={r['name']:Path(r['run_dir']) for r in read(root/'coverage.json') if r.get('run_dir')}
@@ -127,6 +147,9 @@ def collect(root,old_root):
         seconds=terminal['seconds'],storage_bytes=sum(p.stat().st_size for p in root.rglob('*') if p.is_file()),
         inspection_paths=[str(p) for p in inspection_paths],
         limits='One seed, MNIST completion, ideal circuit equations. Parameter count and fixed input features change between architectures; only within-architecture EP/BPTT is a matched learning-rule comparison. GPU costs are simulator costs.')
+    ranks=weight_ranks(runs)
+    atomic_write_json(out/'weight-ranks.json',ranks)
+    review['weight_rank_artifact']=str(out/'weight-ranks.json')
     atomic_write_json(out/'review.json',review)
     labels={'new_ep':'Input attention / EP','new_bp':'Input attention / BPTT',
             'old_ep':'Recurrent attention / EP','old_bp':'Recurrent attention / BPTT','digital':'Digital reference'}
@@ -144,6 +167,30 @@ def collect(root,old_root):
     fig.suptitle('49-token FP32 comparison — one seed, ideal circuit simulation')
     for suffix in ('png','svg'):fig.savefig(out/f'validation.{suffix}',dpi=160)
     plt.close(fig)
+    detail,ax=plt.subplots(1,2,figsize=(12,4.5),layout='constrained')
+    rank_fig,rank_ax=plt.subplots(1,2,figsize=(12,4.5),layout='constrained')
+    for name in runs:
+        points=[p for p in validation_points(histories[name],summaries[name]) if p['step']>=250]
+        color,style=styles[name]
+        for axis,key in zip(ax,('step','seconds')):
+            axis.plot([p[key] for p in points],[p['mse'] for p in points],linestyle=style,
+                      marker='.',color=color,label=labels[name])
+        for axis,group in zip(rank_ax,('ff1' if name=='digital' else 'memory','query')):
+            records=ranks[name]
+            axis.plot([r['step'] for r in records],
+                      [np.mean(r['groups'][group]['stable_rank']) for r in records],
+                      linestyle=style,marker='.',color=color,label=labels[name])
+    for axis in (*ax,*rank_ax):axis.grid(alpha=.2);axis.legend(fontsize=8)
+    ax[0].set(xlabel='Training updates',ylabel='Fixed 256-image probe MSE')
+    ax[1].set(xlabel='Measured training seconds',ylabel='Fixed 256-image probe MSE')
+    detail.suptitle('Validation detail — measured points from update250 onward')
+    rank_ax[0].set(xlabel='Training updates',ylabel='Stable rank',title='Memory / digital FF1')
+    rank_ax[1].set(xlabel='Training updates',ylabel='Mean head stable rank',title='Query maps')
+    rank_fig.suptitle('Strong learned directions: squared Frobenius norm / squared spectral norm')
+    for suffix in ('png','svg'):
+        detail.savefig(out/f'validation-detail.{suffix}',dpi=160)
+        rank_fig.savefig(out/f'weight-ranks.{suffix}',dpi=160)
+    plt.close(detail);plt.close(rank_fig)
     # Identical examples and masks, with no outcome-dependent image selection.
     examples={name:load(runs[name]/'artifacts/reconstructions.pt') for name in ('old_ep','new_ep','new_bp')}
     checks['reconstruction_cohort_equal']=all(torch.equal(v[k],examples['old_ep'][k])

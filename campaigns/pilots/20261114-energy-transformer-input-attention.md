@@ -2,9 +2,11 @@
 
 Issue: https://github.com/filip137/on-chip-learning/issues/36
 Branch: `energy-transformer`, continuing the user's explicitly named branch.
-Status: user authorized the bounded comparison on14November2026 after
-reviewing the prepared prototype. Launch preparation is complete; source will
-be pinned before GPU execution. The improvement goal remains active.
+Status: the first comparison is complete and independently verified. The
+input-conditioned attention candidate fails the predeclared quality/routing
+promotion rule. EP and matched BPTT agree. A singular-value clipping follow-up
+is implemented and awaiting explicit authorization. The improvement goal
+remains active; no successful capacity improvement is claimed yet.
 
 ## Question and existing evidence
 
@@ -256,11 +258,11 @@ commit/push the feature source and stage a clean pinned launch checkout. Shared
 trunk publication remains separately pending after the earlier approval-review
 rejection; do not retry it under this pilot. One owner must monitor actual
 native metrics and checkpoints and inspect final bundles with artifact hashes.
-No GPU handles, launch commit or live monitoring assignment exist yet.
+The actual launch source, handles and completed execution are recorded below.
 
 Current owner: root. The user replied "yes" to the explicit one-hour
-comparison request. Next action: launch and execute through evidence collection
-and interpretation. This preparation
+comparison request; that comparison has now been collected and reviewed.
+The next proposed projection control awaits its own authorization. This preparation
 does not establish a performance improvement and does not complete the active
 improvement goal. The new pilot remains open; the old repair stays complete.
 
@@ -339,9 +341,8 @@ The input-attention EP arm completed2,000updates and full held-out coverage:
 test MSE0.0544708864, versus old EP0.0544174788. Its uniform-attention penalty
 is0.191259%, below the1% target. Matched BPTT also completed and reached
 0.0544720605, effectively the same result. The current candidate does not
-meet the predeclared promotion rule. The remaining old-model BPTT and final
-gradient diagnostic must still finish; do not call the original comparison
-fully reviewed before those artifacts and the independent audit exist.
+meet the predeclared promotion rule. The old-model BPTT control, final gradient diagnostic and independent audit
+subsequently passed; the complete comparison is recorded below.
 
 Read-only final-weight analysis identifies another capacity limitation. Define
 stable rank as ||M||F^2/||M||2^2 (a continuous effective dimension, not exact
@@ -394,3 +395,59 @@ extension, independent seed, extra hyperparameter setting or silent scientific
 retry is included. The current pipeline continues unchanged while the user
 reviews this proposal. Further task runs require the user's explicit answer;
 automatic goal continuation is not run authorization.
+
+
+## Verified first comparison —21:04UTC
+
+All eight native cases completed on their first attempts in1241.37seconds
+(20.69minutes), with artifact-hash inspection. All three full arms completed
+2,000updates,10,000test images,5,000validation images and three256-image
+attention probes. Reused old EP/digital controls retain their original native
+identities. The independent audit passes all23 checks, including exact paired
+initial maps, identical datasets/cohorts/final sampling and masking RNGs,
+FP32 finite weights, every training constraint and physical margin, final
+checkpoint identity and gradient qualification. No gate was relaxed.
+
+| Model | Parameters | Test MSE | Uniform penalty | Training seconds |
+| --- | ---: | ---: | ---: | ---: |
+| Input attention, EP |38,976|0.0544708864|0.191259%|429.95|
+| Input attention, matched BPTT |38,976|0.0544720605|0.191232%|249.02|
+| Old recurrent attention, EP |30,784|0.0544174788|0.010169%|321.39|
+| Old recurrent attention, matched BPTT |30,784|0.0544183724|0.010106%|196.29|
+| Digital reference |30,784|0.0422274134|38.099749%|7.02|
+
+The new EP result is0.0981% worse than old EP, and differs from its own BPTT
+control by only0.00216%. Zero attention worsens its probe MSE25.99%, whereas
+uniform attention worsens it only0.191%: the value path supplies useful global
+information, but selective routing adds little. Mean maximum attention is
+0.039778 and normalized entropy0.987847. These are one-seed results; the
+different architectures/parameter counts are not an isolated causal comparison.
+GPU timing/memory remains simulator cost, not an analog hardware claim.
+
+Final32-step EP/BPTT minimum cosine is0.99999979047 globally and0.99999969054
+over Q/K/V/output; all-group minimum is0.99998794380. EP/reference minima are
+0.99999979061/0.99999972087. Every512/1024 reference qualifies. Final EP
+checkpoint SHA256 is `50b00328d14ffdc1c87ce838c568532d020e73c15876728421a5538b998d4e8a`.
+New EP's maximum training residual is9.54e-7; minimum triode/drain/weak margins
+are0.57457/0.21333/0.15285V. Maximum normalized bound0.699945 and contraction
+radius0.803534 stay within the declared limits. The old BPTT control has a
+maximum residual1.19e-6, slightly above the historical stopping tolerance;
+fixed-cap execution does not claim every phase reached that tolerance.
+
+Evidence root:
+`/home/filip/analog-research/drn/results/energy-transformer-input-attention/benchmark-001/analysis/`.
+`review.json` contains all checks/identities; `comparison.md` the table;
+`weight-ranks.json` records hashed checkpoint spectra at initialization and
+every250updates. Validation, detailed validation, weight-rank and reconstruction
+figures were visually inspected: EP/BPTT curves/reconstructions overlap, both
+constrained architectures plateau above the digital reference, and memory/query
+stable ranks collapse near1 early in training. This supports, but does not
+causally prove, the projection mechanism proposed above.
+
+Verdict: do not promote this architecture under the frozen rule. Numerical EP
+quality is not the present bottleneck; fixing how the programming constraint
+preserves multiple directions is the next controlled question. The existing
+watcher reached terminal verification and was stopped after collection; no
+task workers remain. Runtime storage was approximately124MB before final
+additional figures, below2GB. The original21:43:14.786UTC deadline remains
+unchanged for any separately approved follow-up. No new task has launched.
