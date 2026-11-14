@@ -135,6 +135,27 @@ def evaluate(model,images,masks,patch,config,deadline,*,initial=None,mean_image=
             **{key:value/max(count,1) for key,value in attention_sums.items()}},examples
 
 
+def training_budget(config, deadline, training_started, prior_train, probe_seconds, probe):
+    """Reserve evaluation from measured work, without extending either allowance."""
+    if probe.get('complete') and probe.get('count',0)>0 and math.isfinite(probe_seconds) and probe_seconds>0:
+        # Test evaluates both the trained model and its initialization; validation
+        # and each of the three ablations evaluate one model. The existing probe
+        # supplies throughput without adding a calibration run. Keep 3x headroom.
+        prediction_examples=2*config.evaluation_count+config.validation_count+3*config.probe_count
+        reserve=max(10.,3*probe_seconds*prediction_examples/probe['count'])
+        source='initial_probe_throughput_3x'
+    else:
+        reserve=600. if config.wall_seconds>600 else 1.
+        source='incomplete_probe_fallback'
+    remaining_train=max(0.,config.train_seconds-prior_train)
+    cutoff=min(deadline-reserve,training_started+remaining_train)
+    return cutoff,dict(evaluation_reserve_seconds=reserve,reserve_source=source,
+        initial_probe_seconds=probe_seconds,initial_probe_count=probe.get('count',0),
+        remaining_wall_seconds=max(0.,deadline-training_started),
+        remaining_training_allowance_seconds=remaining_train,
+        usable_training_seconds=max(0.,cutoff-training_started))
+
+
 def train(config,store,images,ids,resume=None):
     strict_fp32()
     if not torch.cuda.is_available():
@@ -165,12 +186,16 @@ def train(config,store,images,ids,resume=None):
     else:
         save_checkpoint(checkpoints/'initial.pt',model,optimizer,config,0,0.,order_gen,mask_gen)
     val_images=images['train'][ids['validation']]
+    torch.cuda.synchronize()
+    probe_started=time.monotonic()
     probe,unused=evaluate(model,val_images[:config.probe_count],validation_masks[:config.probe_count],
                           patch,config,deadline,mean_image=mean_image)
+    torch.cuda.synchronize()
+    probe_seconds=time.monotonic()-probe_started
     store.append_metric({'stage':'initial_validation','step':step,**probe})
     training_started=time.monotonic()
-    training_deadline=min(deadline-600 if config.wall_seconds>600 else deadline-1,
-                          training_started+max(0,config.train_seconds-prior_train))
+    training_deadline,budget=training_budget(config,deadline,training_started,prior_train,probe_seconds,probe)
+    atomic_write_json(artifacts/'budget.json',budget)
     stop='updates';failure=None;last_diag={};train_seconds=prior_train
     torch.cuda.reset_peak_memory_stats()
     while step<config.updates:

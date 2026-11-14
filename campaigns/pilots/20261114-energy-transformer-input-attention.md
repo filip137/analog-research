@@ -518,3 +518,69 @@ root; `status.json`, `coverage.json`, `metrics.jsonl`, `supervisor.log` and nati
 metrics/checkpoints are progress evidence. Final collection uses the prepared
 reviewer with the original radial and digital/control roots. Next check:
 warm-up completion and32/64/128 qualification, then full-arm progress.
+
+
+## Partial result and operational budgeting defect —22:24UTC review
+
+The follow-up terminated at21:34UTC after588.64seconds. EP completed1,341 of
+2,000updates; BPTT completed0. Both arms still completed10,000test and
+5,000validation images, but this is incomplete training coverage and the
+final gradient gate did not run. Preserve `result.json` as written: its
+`scientific_checks_failed` label conflates this operational budget stop with
+scientific failure. No numerical divergence was reported.
+
+Cause: the runtime always reserved600seconds for final evaluation whenever
+configured wall time exceeded600seconds, even after the shared absolute deadline
+shortened a case. EP stopped when that reserve began; BPTT then had no permitted
+training interval. EP evaluation plus setup actually took23.89seconds. The whole
+pipeline exited with554.74seconds left in the original window. The watcher
+correctly detected incomplete coverage at21:34:19, but its overly restricted
+handoff returned a blocked decision to root instead of repairing the operational
+fault. Root did not act before expiry. This is an execution/supervision failure,
+not evidence that the proposed model failed numerically. The stale watcher has
+now been stopped after reviewing terminal evidence.
+
+Verified partial evidence (`singular-001/analysis/partial-review.json`): all seven
+checks pass for matching initial maps, configurations except projection,
+cohorts, sampling/masking RNGs at the common1,250-update checkpoint, native
+inspections, all1,341 physical/contraction records and finite FP32 final weights.
+At1,250updates the fixed256-image validation MSE is0.053901407 with singular
+clipping versus0.054899889 with radial scaling:1.8187% lower error at equal
+updates. The partial final checkpoint has test MSE0.053574972, with full test
+coverage, and uniform-attention penalty0.7534%. No full matched EP/BPTT quality
+claim or promotion is supported. The250-update32-step gradient gate did pass:
+minimum global EP/BPTT cosine0.999995953, Q/K/V/output minimum0.999997398;
+512/1024 references qualify. These are not final-checkpoint gradient results.
+
+The projection intervention prevents the observed rank collapse: partial final
+memory stable rank54.83, Q/K roughly8.8–10.5 and values5.2–7.2, compared with
+approximately1 in the radial baseline. The saved trajectories show the same
+difference at matched update counts. The effective-rank increase yields a modest
+quality gain so far; it does not establish digital-baseline competitiveness.
+`partial-progress.png/svg` was visually inspected; `partial-weight-ranks.json`
+retains hashed checkpoint spectra. Final partial EP checkpoint SHA256:
+`e0f84c1488caefa0b745011995e4071414f15305475fd672570a41ea71708a2c`.
+
+Operational repair: reserve final evaluation using the already-required initial
+probe's measured throughput, scaled to the actual requested evaluation work
+(including both trained and initial test forwards), with3x headroom and a10second
+floor. Log the estimate and available time in native `artifacts/budget.json`.
+Keep both the absolute wall deadline and remaining cumulative training allowance
+binding. Incomplete probes retain the conservative fallback. Classify time-limit
+incompletion as `budget_incomplete`, separately from failed science. All64
+relevant tests pass, including the reproduced580second-remaining failure,
+slow-evaluation safety, charged prior training time and explicit-only extension.
+No repaired GPU execution has launched after the expired window.
+
+Prepared recovery: one fresh identical serial comparison under `singular-002`,
+including proportional smokes, the250-update qualification, both2,000-update
+arms and final gradient gate. Fresh paired training avoids ambiguous replay of
+a final checkpoint saved after a timed-out phase may have consumed its next
+sampling/masking draws. Preserve and charge `singular-001`; do not call it a
+replicate or overwrite it. The public composition now supports an explicitly
+recorded `--approved-deadline-unix` extension and `--charge-root` for retained
+attempts. Without an explicit extension, the expired original deadline remains
+binding. Proposed new allowance:20minutes on the same local RTX3090, within the
+original aggregate6h/2GB ceilings; this time extension awaits user authorization.
+The next watcher handoff must permit understood operational repairs within that
+allowance rather than referring every fault back to an inactive root.

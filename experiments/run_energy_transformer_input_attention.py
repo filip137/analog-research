@@ -53,6 +53,23 @@ def full_cases(configs,cap,variant):
     return cases
 
 
+def select_deadline(start,seconds,requested,prior,approved_extension=None):
+    inherited=prior['deadline_unix'] if prior else float('inf')
+    if approved_extension is not None:
+        if prior is None or approved_extension<=max(start,inherited):
+            raise ValueError('An approved extension must explicitly advance the prior deadline into the future')
+        inherited=approved_extension
+    return min(start+seconds,requested or float('inf'),inherited)
+
+
+def comparison_outcome(trained,complete,gradient_passed):
+    if complete and gradient_passed:
+        return 'comparison_collected'
+    if any(r.get('summary',{}).get('stop_reason')=='training_time_limit' for r in trained.values()):
+        return 'budget_incomplete'
+    return 'scientific_checks_failed'
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output-root', type=Path, required=True)
@@ -60,6 +77,8 @@ def main():
     parser.add_argument('--deadline-unix', type=float)
     parser.add_argument('--variant',choices=('radial','singular_clip'),default='radial')
     parser.add_argument('--prior-root',type=Path)
+    parser.add_argument('--approved-deadline-unix',type=float,help='Explicitly authorized extension; omitted preserves the prior absolute deadline')
+    parser.add_argument('--charge-root',type=Path,action='append',default=[],help='Retained prior attempts charged to the same storage/accounting budget')
     args = parser.parse_args()
     if not 60 <= args.seconds <= 3600:
         raise ValueError('This comparison has at most one additional hour')
@@ -67,19 +86,19 @@ def main():
         parser.error('Singular clipping requires the explicit prior comparison and its remaining deadline')
     prior=prior_comparison(args.prior_root.resolve()) if args.prior_root is not None else None
     configs=CONFIGS/'singular_clip' if prior else CONFIGS
+    charged=[dict(root=str(p.resolve()),seconds=json.loads((p/'result.json').read_text())['seconds']) for p in args.charge_root]
     root = args.output_root.resolve()
     root.mkdir(parents=True, exist_ok=True)
     if (root/'worker.pid').exists():
         raise RuntimeError('Preserve existing attempts; never duplicate an identity')
     begin = time.monotonic()
-    deadline = min(time.time()+args.seconds, args.deadline_unix or float('inf'),
-                   prior['deadline_unix'] if prior else float('inf'))
+    deadline = select_deadline(time.time(),args.seconds,args.deadline_unix,prior,args.approved_deadline_unix)
     if deadline <= time.time():
         raise TimeoutError('Original allowance has expired')
     (root/'worker.pid').write_text(str(os.getpid()))
     atomic_write_json(root/'launch.json', dict(pid=os.getpid(), started=now(),
         deadline=datetime.fromtimestamp(deadline, timezone.utc).isoformat(),
-        deadline_unix=deadline, variant=args.variant, prior_comparison=prior, source_commit=subprocess.check_output(
+        deadline_unix=deadline, approved_deadline_unix=args.approved_deadline_unix, charged_attempts=charged, variant=args.variant, prior_comparison=prior, source_commit=subprocess.check_output(
             ['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(), command=sys.argv))
     rows = []
     active = None
@@ -149,14 +168,14 @@ def main():
         print(json.dumps({k:v for k,v in row.items() if k not in ('attempts','summary','command')}),flush=True)
         if row['outcome'] != 'terminal':
             raise RuntimeError(f'Operational failure in {name}; preserve attempts and diagnose')
-        storage_roots={root,Path(prior['root'])} if prior else {root}
+        storage_roots=({root,Path(prior['root'])} if prior else {root})|{Path(v['root']) for v in charged}
         if sum(p.stat().st_size for base in storage_roots for p in base.rglob('*') if p.is_file()) > 2_000_000_000:
             raise RuntimeError('Declared two-GB output allowance exceeded')
         return row
 
     def finish(outcome, **extra):
         atomic_write_json(root/'result.json',dict(outcome=outcome,cases=rows,
-            seconds=time.monotonic()-begin,deadline_unix=deadline,variant=args.variant,prior_comparison=prior,**extra))
+            seconds=time.monotonic()-begin,deadline_unix=deadline,approved_deadline_unix=args.approved_deadline_unix,charged_attempts=charged,variant=args.variant,prior_comparison=prior,**extra))
         status('complete',outcome=outcome)
 
     try:
@@ -192,7 +211,7 @@ def main():
                 'validate',Path(trained['input-energy_ep']['run_dir'])/'checkpoints/final.pt')
         complete = all(r.get('summary',{}).get('coverage_complete') for r in trained.values())
         gradient_passed = final is not None and qualified_cap(final['summary'])==cap
-        finish('comparison_collected' if complete and gradient_passed else 'scientific_checks_failed',
+        finish(comparison_outcome(trained,complete,gradient_passed),
                selected_cap=cap,full_training_coverage=complete,final_gradient_passed=gradient_passed)
     except BaseException as error:
         status('failed',error=repr(error))

@@ -92,3 +92,15 @@ def test_followup_reuses_old_control_and_inherits_original_deadline(tmp_path):
     result['final_gradient_passed']=False
     (tmp_path/'result.json').write_text(json.dumps(result))
     with pytest.raises(ValueError,match='verified'):prior_comparison(tmp_path)
+
+
+def test_deadline_extension_is_explicit_and_still_bounded():
+    from experiments.run_energy_transformer_input_attention import select_deadline
+    prior={'deadline_unix':1500.}
+    assert select_deadline(1000.,3600,None,prior)==1500.
+    assert select_deadline(1600.,3600,None,prior)==1500.  # Expired stays expired.
+    assert select_deadline(1600.,1200,None,prior,2800.)==2800.
+    assert select_deadline(1600.,1200,2400.,prior,2800.)==2400.
+    assert select_deadline(1600.,1200,None,prior,5000.)==2800.
+    with pytest.raises(ValueError):select_deadline(1600.,1200,None,prior,1500.)
+    with pytest.raises(ValueError):select_deadline(1600.,1200,None,None,2800.)

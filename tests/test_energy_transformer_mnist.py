@@ -179,3 +179,30 @@ def test_stabilized_recipe_preserves_training_science_except_integrator_rule():
     c=parse_config(revised)
     assert c.solver_rule=='cycle_backtracking'
     assert {k:v for k,v in revised.items() if k!='solver_rule'}==previous
+
+
+def test_short_remaining_window_uses_measured_evaluation_cost():
+    from ebl.runtime.energy_transformer_mnist import training_budget
+    config=Config()
+    # Reproduce the incident: 580 s left previously meant zero training because
+    # of a fixed 600 s reserve. A 0.2 s/256-example probe leaves >519 s to train.
+    cutoff,report=training_budget(config,1580.,1000.,0.,.2,{'complete':True,'count':256})
+    assert 1519.<cutoff<1520.
+    assert report['evaluation_reserve_seconds']==pytest.approx(60.39375)
+    assert report['reserve_source']=='initial_probe_throughput_3x'
+    assert cutoff<1580.
+    # The same repair must preserve charged training time and slow evaluation.
+    limited,_=training_budget(config,1580.,1000.,1495.,.2,{'complete':True,'count':256})
+    assert limited==1005.
+    slow,report=training_budget(config,1580.,1000.,0.,2.,{'complete':True,'count':256})
+    assert slow<1000. and report['usable_training_seconds']==0.
+    fallback,report=training_budget(config,1580.,1000.,0.,.2,{'complete':False,'count':128})
+    assert fallback==980. and report['reserve_source']=='incomplete_probe_fallback'
+
+
+def test_budget_stop_is_not_classified_as_failed_science():
+    from experiments.run_energy_transformer_input_attention import comparison_outcome
+    arms={'ep':{'summary':{'stop_reason':'training_time_limit'}}}
+    assert comparison_outcome(arms,False,False)=='budget_incomplete'
+    assert comparison_outcome({},False,False)=='scientific_checks_failed'
+    assert comparison_outcome({},True,True)=='comparison_collected'
