@@ -61,6 +61,12 @@ estimator and seeds are unchanged.
   fault-aware `06bd5454…`, adapter `263bbf76…`; fault identity `4e01b48f…`, adapter fault identity
   `3132d761…`. Dev KL: clean 0.2041, naive 0.4362, fault-aware 0.2191. ~30 s per build, peak 6.2 GB.
 
+- **Analog-LoRA B scale** `fault-paper-l12-bscale-r16-3em3`, SHA-256
+  `e1aa6c11f21ebc3f0143b4815044d2e5c906c77cfe129a00480f931f2415c508`, from unit `bscale` at `9412191`
+  (`launch/make_b_scale.py`; the r16 digital LoRA at 3e-3 on `03af2f12`, samples `df73ce66`; its
+  final dev KL 0.1738, ~40 s). 24 matrices; per-matrix median 0.055–0.079, max 0.218; 2,116 fc1
+  channels with B exactly zero (dead units) → 1e-12 at load.
+
 ## Current execution and monitoring handoff
 
-Owner: the implementing agent. Next: unit `bscale`.
+Owner: the implementing agent. Next: `canary`, then `s1`–`s3`.
