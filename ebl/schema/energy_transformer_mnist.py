@@ -15,6 +15,7 @@ class Config:
     phase_mode: str='settled'
     device_domain: str='declared4'
     solver_dt: float=.5
+    solver_rule: str="energy_backtracking"
     seed: int=20261114
     updates: int=2000
     batch_size: int=64
@@ -53,7 +54,9 @@ def parse_config(raw):
         raise ConfigError('Expected declared4 or physical MOS domain policy')
     if type(c.solver_dt) not in (int,float) or c.solver_dt not in (.5,1.):
         raise ConfigError('Qualified solver steps are .5 and 1')
-    if (c.device_domain!='declared4' or c.solver_dt!=.5) and (c.arm!='energy_ep' or c.phase_mode!='fixed_steps'):
+    if c.solver_rule not in ('energy_backtracking','cycle_backtracking'):
+        raise ConfigError('Unknown finite-time step selection rule')
+    if (c.device_domain!='declared4' or c.solver_dt!=.5 or c.solver_rule!='energy_backtracking') and (c.arm!='energy_ep' or c.phase_mode!='fixed_steps'):
         raise ConfigError('Physical-domain/full-step repair requires finite-time energy EP')
     if c.phase_mode=='fixed_steps' and c.max_steps>128:
         raise ConfigError('Finite-time phase cap cannot exceed 128')

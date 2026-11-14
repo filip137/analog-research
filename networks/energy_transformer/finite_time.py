@@ -19,6 +19,11 @@ def relax(model,x,target,mask,steps,beta=0.,initial=None,*,differentiate=False,
         maximum=x.new_tensor(0.);increase=x.new_tensor(0.)
         margins=x.new_full((3,),float("inf"))
         allowance=8*torch.finfo(x.dtype).eps
+        cycle_guard=model.solver_rule=='cycle_backtracking'
+        prev_z=prev_y=None
+        base_dt=x.new_full((len(x),1,1),model.solver_dt)
+        reductions=torch.zeros((),device=x.device,dtype=torch.long)
+        minimum_dt=x.new_tensor(model.solver_dt)
         for step in range(steps):
             if step%16==0 and deadline is not None and time.monotonic()>=deadline:
                 raise TimeoutError('Finite-time phase deadline reached')
@@ -34,16 +39,32 @@ def relax(model,x,target,mask,steps,beta=0.,initial=None,*,differentiate=False,
                                          ('triode_margin','drain_margin','weak_inversion_margin')])
                     margins=torch.minimum(margins,current)
                 energy=model.energy(v,x,target,mask,beta,attention)
-                dt=x.new_full((len(x),1,1),model.solver_dt)
+                dt=base_dt.clone()
+                cycle_reduced=torch.zeros(len(x),device=x.device,dtype=torch.bool)
                 for _ in range(20):
                     candidate=model.ports(z+dt*dz,y+dt*dy/1.3,attention)
                     new_energy=model.energy(candidate,x,target,mask,beta,attention)
                     accepted=torch.isfinite(new_energy)&(new_energy<=energy+allowance*(1+energy.abs()))
+                    if cycle_guard and prev_z is not None:
+                        nz,ny=z+dt*dz,y+dt*dy/1.3
+                        one=torch.maximum((nz-z).abs().amax((1,2)),(ny-y).abs().amax((1,2)))
+                        two=torch.maximum((nz-prev_z).abs().amax((1,2)),(ny-prev_y).abs().amax((1,2)))
+                        # Reject a near return to the preceding state while a
+                        # meaningful one-step oscillation remains. The same
+                        # energy check still applies to every accepted step.
+                        cycling=(two < .1*one)&(one>1e-6)
+                        cycle_reduced |= cycling
+                        accepted &= ~cycling
                     if accepted.all():break
                     dt=torch.where(accepted[:,None,None],dt,dt*.5)
                 else:
                     raise EquilibriumError('Finite-time energy backtracking failed')
+                if cycle_guard:
+                    base_dt=torch.where(cycle_reduced[:,None,None],torch.minimum(base_dt,dt),base_dt)
+                    reductions+=cycle_reduced.sum()
+                minimum_dt=torch.minimum(minimum_dt,dt.amin())
                 increase=torch.maximum(increase,(new_energy-energy).max())
+            if cycle_guard:prev_z,prev_y=z,y
             z,y=z+dt*dz,y+dt*dy/1.3
         v=model.ports(z,y,attention)
         with torch.no_grad():
@@ -61,7 +82,8 @@ def relax(model,x,target,mask,steps,beta=0.,initial=None,*,differentiate=False,
         return Equilibrium(z,y,v,torch.full((len(x),),steps,device=x.device,dtype=torch.long),
                            residual,m,margins[0].item() if domain is not None else .7-.1*m,increase.item(),
                            margins[1].item() if domain is not None else None,
-                           margins[2].item() if domain is not None else None)
+                           margins[2].item() if domain is not None else None,
+                           int(reductions.item()),minimum_dt.item())
 
 
 @torch.no_grad()

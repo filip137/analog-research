@@ -116,7 +116,7 @@ def check_domain(model, v, context=''):
 
 class EnergyNetwork(nn.Module):
     def __init__(self, tokens=16, width=32, patch_width=49, heads=4, seed=20261114,
-                 epsilon=.5, device='cpu', dtype=torch.float32, device_domain='declared4', solver_dt=.5):
+                 epsilon=.5, device='cpu', dtype=torch.float32, device_domain='declared4', solver_dt=.5, solver_rule='energy_backtracking'):
         super().__init__()
         self.tokens, self.width, self.patch_width = tokens, width, patch_width
         self.heads, self.epsilon = heads, epsilon
@@ -124,7 +124,10 @@ class EnergyNetwork(nn.Module):
             raise ValueError('Unknown MOS domain policy')
         if not math.isfinite(solver_dt) or not 0 < solver_dt <= 1.:
             raise ValueError('Solver step must be in (0,1]')
+        if solver_rule not in ('energy_backtracking','cycle_backtracking'):
+            raise ValueError('Unknown finite-time step selection rule')
         self.device_domain, self.solver_dt = device_domain, solver_dt
+        self.solver_rule = solver_rule
         self.kappa = 1/math.sqrt(width//heads)
         shapes = ((heads,width//heads,width),)*2 + ((4*width,width),
                   (width,2*patch_width),(patch_width,width),(tokens,width))
@@ -192,6 +195,8 @@ class Equilibrium:
     energy_increase: float
     minimum_drain_margin: float | None = None
     minimum_weak_inversion_margin: float | None = None
+    cycle_reductions: int = 0
+    minimum_step_size: float | None = None
 
 
 @torch.no_grad()

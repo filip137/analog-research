@@ -76,10 +76,17 @@ def main():
     parser.add_argument('--retry-from',type=Path)
     parser.add_argument('--capped64-from',type=Path,help='Run three capped EP configs and reuse completed BP coverage')
     parser.add_argument('--repair-from',type=Path,help='Repair 49-token training and reuse five completed arms')
+    parser.add_argument('--repair-config',type=Path,help='Explicit published 49-token repair recipe')
     args=parser.parse_args()
     if sum(v is not None for v in (args.capped64_from,args.retry_from,args.repair_from))>1:
         parser.error('Select one composition/recovery mode')
     repaired=args.repair_from is not None
+    if args.repair_config is not None:
+        if not repaired:parser.error('--repair-config requires --repair-from')
+        from ebl.schema.energy_transformer_mnist import parse_config
+        repair_spec=parse_config(json.loads(args.repair_config.read_text()))
+        if repair_spec.case!='more_tokens' or repair_spec.arm!='energy_ep':
+            parser.error('Repair composition requires the declared 49-token energy EP case')
     bounded=repaired or args.capped64_from is not None
     baseline_rows=repair_reuse(args.repair_from) if repaired else capped64_baselines(args.capped64_from) if args.capped64_from else []
     expected_cases=6 if bounded else 8
@@ -138,7 +145,7 @@ def main():
                     rows.append({'case':case,'arm':arm,'outcome':'global_budget_exhausted'});continue
                 folder=root/active;folder.mkdir()
                 config_root=ROOT/'examples/energy_transformer_mnist'
-                config=(config_root/'repaired128' if repaired else config_root/'capped64' if bounded else config_root)/f'{active}.json'
+                config=args.repair_config.resolve() if repaired and args.repair_config else (config_root/'repaired128' if repaired else config_root/'capped64' if bounded else config_root)/f'{active}.json'
                 case_begin=time.monotonic()
                 allowance=min(2100-(prior.get('wall_seconds',0) if prior else 0),remaining)
                 attempts=[]

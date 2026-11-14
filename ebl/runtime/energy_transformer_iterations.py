@@ -17,7 +17,8 @@ ROOT=Path(__file__).resolve().parents[2]
 def phase_record(phase):
     return {'iterations':phase.iterations.max().item(),'residual':phase.residual,
             'maximum_operand':phase.maximum_operand,'minimum_triode_margin':phase.minimum_triode_margin,
-            'energy_increase':phase.energy_increase}
+            'energy_increase':phase.energy_increase,'cycle_reductions':phase.cycle_reductions,
+            'minimum_step_size':phase.minimum_step_size}
 
 
 def measured(call):
@@ -31,7 +32,8 @@ def evaluate(config,store,payload,cohort,images,deadline):
     n,d,patch=CASES[config.case]
     model=EnergyNetwork(n,d,patch**2,device='cuda',seed=payload['config']['seed'],epsilon=payload['config']['epsilon'],
                         device_domain=payload['config'].get('device_domain','declared4'),
-                        solver_dt=payload['config'].get('solver_dt',.5))
+                        solver_dt=payload['config'].get('solver_dt',.5),
+                        solver_rule=payload['config'].get('solver_rule','energy_backtracking'))
     model.load_state_dict(payload['model'])
     original={name:p.detach().clone() for name,p in model.named_parameters()}
     count=config.batches*config.batch_size

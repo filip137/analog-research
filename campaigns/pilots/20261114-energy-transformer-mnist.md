@@ -752,9 +752,12 @@ final check. It establishes whether the correction preserves gradient agreement
 during learning, rather than relying solely on the final checkpoint. Native
 output is `training-001/gradient-midpoint/`; exact command and PID are recorded
 in `gradient-midpoint-launch.json`. This check takes no optimizer step and leaves
-training unchanged. It runs on the same local GPU concurrently with our training,
-so reported training wall time includes this short diagnostic's contention.
-The existing training context guard is active. Diagnostic runtime is bounded at
+training unchanged. Authoritative timestamps subsequently established that training had ended
+at 18:05:14 UTC, before this diagnostic launched at 18:06:07 UTC. Therefore the
+runs did not overlap, training timing includes no midpoint-diagnostic contention,
+and the replay did not cause the training failure. The launch-time assumption
+that training and its context guard were still live was incorrect; the receipt
+is `training-001/analysis/midpoint-timing.json`. Diagnostic runtime is bounded at
 600 seconds and charged to the repair allowance. The coordinator owns this short
 check; run-watch retains ownership of training and its final diagnostic.
 
@@ -783,3 +786,86 @@ The incident decision is blocked for parent scientific review. The parent retain
 the active objective and corrective decisions. No training settings, physical
 gates or budgets changed; no identical retry or fresh allowance was granted.
 This run does not verify the repair.
+
+
+### Second repair: reject numerical period-two oscillations
+
+The first repaired training attempt ended after 1,189 updates with a genuine
+negative drain margin. Its complete evidence is retained. The new 1,000-update
+checkpoint passes the strengthened 64-example gradient check: worst global
+EP/BPTT 0.9999117, EP/reference 0.9998167, BPTT/reference 0.9999821, all eight
+references qualified, and native artifact inspection passed. Thus the later
+failure needs a causal explanation rather than weakening the fidelity gate.
+
+Exact replay from the native step-1000 checkpoint reproduces every loss and
+operand maximum through step 1,189 bit-for-bit, and the same failure on attempted
+update 1,190. The first major gradient anomaly is update 1,166: gradient L2 jumps
+from 0.01702 to 0.79693, query/key gradient norms from 0.00339/0.00309 to
+0.47448/0.49348, and the Adam parameter update from 0.05275 to 0.71737. EP/BPTT128
+cosine is 0.04304 and the EP norm is 38.79 times BPTT. Adam momentum then sustains
+large updates, degrading loss and eventually exceeding the physical drain range.
+
+The dominant example is training ID 4202 (batch position 9). Free and positive
+phases oscillate while the negative phase settles faster, creating a spurious
+contrast. Other examples show near-exact period-two cycles: one-step differences
+about 0.33 and two-step differences below 6e-7 through 1,024 steps. Energy decrease
+alone does not guarantee a useful numerical settling rate near Euler's stability
+boundary. Strict zero energy allowance caused FP32 backtracking failures; reducing
+the step resolves the observed oscillation.
+
+The supported correction retains the existing energy backtracking but rejects a
+candidate when its distance from the preceding state is less than 0.1 times its
+distance from the current state, while the latter exceeds 1e-6. Distances are
+per-example maximum absolute differences over both z and y. The rejected
+candidate is recomputed from the unchanged current state with half the step;
+that example retains the reduced nominal step for the remainder of the phase.
+The phase cap stays 128. No learning-rate, beta, optimizer, gradient clipping,
+state clipping, weight projection or energy change is introduced.
+
+On the exact full 64-example anomalous training batch, this cycle-aware solver
+gives global EP128/BPTT128 0.998051, EP/reference 0.999657 and BPTT/reference
+0.998655. Every parameter-group cosine exceeds 0.98869. The long reference now
+qualifies (512/1024 cosine 0.999998806, relative L2 0.001639, final residual
+4.77e-7). EP norm is 0.018956 versus BPTT 0.018853. Physical margins remain
+positive. The full-batch free residual at 128 is 0.002667, so this is still a
+finite-time approximation. The dominant example's step halves at iteration 14
+and its free residual reaches 4.77e-7.
+
+All replay checkpoints, exact batches, norms, solver sources and traces are under
+`results/energy-transformer-repair/instability-001/`; the causal replay took
+111.90 seconds. Production adds explicit `solver_rule=cycle_backtracking` and
+telemetry for cycle rejections and minimum step size. Historical default remains
+`energy_backtracking`. The corrected recipe is
+`examples/energy_transformer_mnist/stabilized128/more_tokens-energy_ep.json`.
+A short diagnostic continuation through the original failure point must pass
+before a new fresh 2,000-update evidence run. The same full evaluation and
+64-example final gradient requirements remain active.
+
+
+Production cycle-guard readiness passes: EP128 and BPTT128 are bit-identical to
+the copied diagnostic solver on the full anomalous batch. A separate corrected
+fork starts from the exact before-update-1166 state and completes 100 updates
+through 1265 with identical Adam/RNG and only the solver rule changed. Gradient
+L2 stays at or below 0.04943, Adam update L2 at or below 0.15041, and loss stays
+0.04488–0.06055. All physical guards pass (minimum triode 0.43753 V, drain
+0.14933 V, weak inversion 0.09260 V); maximum operand is 3.01336. The solver
+records 3,011 cycle reductions and minimum accepted step 0.5. Runtime is
+73.90 seconds, with about 0.648 seconds per update.
+
+On the final next training batch, global EP/BPTT128 is 0.953335, EP/reference
+0.999947 and BPTT/reference 0.953740; the 512/1024 reference qualifies. Position
+EP/BPTT and BPTT/reference are about 0.66, while every EP/reference group exceeds
+0.99980. This is a passing global check with a stated finite-unroll group
+limitation. The original checkpoint hash is unchanged. Full evidence:
+`instability-001/cycle/production-gate/summary.json` and its fork checkpoints/log.
+
+Proceed with a fresh 2,000-update stabilized run under
+`results/energy-transformer-repair/training-002/`, using the explicit published
+`examples/energy_transformer_mnist/stabilized128/more_tokens-energy_ep.json`.
+Command: the existing repair composition with `--repair-from` pointing to
+capped64-001/coverage.json, `--repair-config` pointing to that stabilized recipe,
+and the unchanged readiness receipt. Preserve all five completed arms. Keep the
+1,500-second training/2,100-second case limits, which the measured throughput
+supports, and charge the first failed attempt plus diagnostics to the six-hour
+repair allowance. The new run needs complete evaluation and the same 64-example
+final gradient qualification before the goal can pass its completion audit.

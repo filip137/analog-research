@@ -28,10 +28,11 @@ def test_exact_cap_and_matching_forward_for_ep_bptt():
     assert all(not value.requires_grad for gradient in (ep,bp) for value in gradient.values())
 
 
-@pytest.mark.parametrize('solver_dt', [.5,1.])
-def test_bptt_matches_finite_differences_of_same_truncated_map(solver_dt):
+@pytest.mark.parametrize('solver_dt,solver_rule', [(.5,'energy_backtracking'),(1.,'energy_backtracking'),(1.,'cycle_backtracking')])
+def test_bptt_matches_finite_differences_of_same_truncated_map(solver_dt,solver_rule):
     model,x,target,mask=case()
     model.solver_dt=solver_dt
+    model.solver_rule=solver_rule
     model.device_domain='physical' if solver_dt==1 else 'declared4'
     gradient,_=bptt_gradient(model,x,target,mask,16)
     gen=torch.Generator().manual_seed(11)
@@ -142,3 +143,57 @@ def test_final_repair_diagnostic_includes_original_failure_cohort():
     assert c.case=='more_tokens' and c.iterations==(128,)
     assert c.batches*c.batch_size==64  # Includes the original failing validation position 35.
     assert c.reference_steps==(512,1024) and c.threshold==.9
+
+
+def test_cycle_guard_resolves_real_energy_network_period_two_within_cap():
+    import math
+    model=EnergyNetwork(1,4,2,heads=1,dtype=torch.float64,
+                        device_domain='physical',solver_dt=1.)
+    for p in model.parameters():p.zero_()
+    # Opposite Q/K maps create a stable continuous-time mode whose Euler
+    # multiplier is near -1. Non-increasing energy alone permits oscillation.
+    a=math.sqrt(math.sqrt(model.epsilon)/2)
+    model.query[0].copy_(torch.eye(4,dtype=torch.float64)*a)
+    model.key.copy_(-model.query)
+    model.position[0,0]=.01;model.position[0,1]=-.01
+    x=torch.zeros(1,1,4,dtype=torch.float64)
+    target=torch.zeros(1,1,2,dtype=torch.float64);mask=torch.ones_like(target)
+    before={k:v.clone() for k,v in model.state_dict().items()}
+    cycling=relax(model,x,target,mask,128)
+    assert cycling.residual>1e-3 and cycling.cycle_reductions==0
+    model.solver_rule='cycle_backtracking'
+    repaired=relax(model,x,target,mask,128)
+    assert repaired.residual<1e-10 and repaired.cycle_reductions>0
+    assert repaired.minimum_step_size<=.5
+    assert repaired.energy_increase<1e-10
+    assert all(torch.equal(v,before[k]) for k,v in model.state_dict().items())
+    assert repaired.minimum_triode_margin>0 and repaired.minimum_drain_margin>0
+    torch.testing.assert_close(repaired.y,cycling.y,atol=0,rtol=0)
+
+
+def test_bptt_finite_difference_through_active_cycle_rejection():
+    import math
+    model=EnergyNetwork(1,4,2,heads=1,dtype=torch.float64,device_domain='physical',
+                        solver_dt=1.,solver_rule='cycle_backtracking')
+    for p in model.parameters():p.zero_()
+    a=math.sqrt(math.sqrt(model.epsilon)/2)
+    model.query[0].copy_(torch.eye(4,dtype=torch.float64)*a);model.key.copy_(-model.query)
+    model.position[0,0]=.01;model.position[0,1]=-.01
+    model.decoder[0,0]=.02;model.decoder[0,1]=-.02
+    x=torch.zeros(1,1,4,dtype=torch.float64)
+    target=torch.full((1,1,2),.2,dtype=torch.float64);mask=torch.ones_like(target)
+    gradient,phase=bptt_gradient(model,x,target,mask,32)
+    assert phase.cycle_reductions>0
+    gen=torch.Generator().manual_seed(92)
+    for name in ('query','key','decoder','position'):
+        p=getattr(model,name);base=p.clone()
+        direction=torch.randn(p.shape,dtype=p.dtype,generator=gen);direction/=direction.norm()
+        costs=[]
+        for sign in (-1,1):
+            p.copy_(base+sign*1e-6*direction)
+            state=relax(model,x,target,mask,32)
+            assert state.cycle_reductions==phase.cycle_reductions
+            costs.append((.5*(mask*(state.y-target).square()).sum()/mask.sum()).item())
+        p.copy_(base)
+        finite=(costs[1]-costs[0])/2e-6
+        assert finite==pytest.approx((gradient[name]*direction).sum().item(),rel=1e-3,abs=1e-9)

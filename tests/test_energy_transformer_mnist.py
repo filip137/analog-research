@@ -163,6 +163,17 @@ def test_repair_options_are_explicit_and_do_not_relax_historical_protocol():
     assert parse_config({}).device_domain=='declared4'
     c=parse_config({'phase_mode':'fixed_steps','max_steps':128,'device_domain':'physical','solver_dt':1.})
     assert c.max_steps==128 and c.solver_dt==1
-    for invalid in ({'solver_dt':2},{'device_domain':'disabled'}, {'device_domain':'physical'},
+    for invalid in ({'solver_dt':2},{'device_domain':'disabled'}, {'device_domain':'physical'}, {'solver_rule':'unbounded'},
                     {'arm':'digital_bp','phase_mode':'fixed_steps','device_domain':'physical'}):
         with pytest.raises(ConfigError):parse_config(invalid)
+
+
+def test_stabilized_recipe_preserves_training_science_except_integrator_rule():
+    import json
+    from pathlib import Path
+    root=Path(__file__).resolve().parents[1]/'examples/energy_transformer_mnist'
+    previous=json.loads((root/'repaired128/more_tokens-energy_ep.json').read_text())
+    revised=json.loads((root/'stabilized128/more_tokens-energy_ep.json').read_text())
+    c=parse_config(revised)
+    assert c.solver_rule=='cycle_backtracking'
+    assert {k:v for k,v in revised.items() if k!='solver_rule'}==previous
