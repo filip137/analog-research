@@ -1,0 +1,5 @@
+{
+  "experiment_id": "fuse_mnist.v1",
+  "case": "small",
+  "kernel": "linear"
+}

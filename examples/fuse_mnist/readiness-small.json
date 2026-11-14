@@ -1,0 +1,10 @@
+{
+  "experiment_id": "fuse_mnist.v1",
+  "case": "small",
+  "updates": 25,
+  "probe_count": 8,
+  "evaluation_count": 16,
+  "validation_count": 16,
+  "train_seconds": 90,
+  "wall_seconds": 120
+}

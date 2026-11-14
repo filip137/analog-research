@@ -952,6 +952,14 @@ EXPERIMENT_REGISTRY["energy_transformer_iterations.v1"] = ExperimentDefinition(
 )
 
 
+from ebl.schema.fuse_mnist import parse_config as _fuse_mnist_parse, resolve_config as _fuse_mnist_resolve
+EXPERIMENT_REGISTRY["fuse_mnist.v1"] = ExperimentDefinition(
+    experiment_id="fuse_mnist.v1", schema_version=1,
+    description="FP32 reciprocal two-terminal fuse EP on masked MNIST.",
+    supported_modes=(RunMode.TRAIN,), parser=_fuse_mnist_parse, resolver=_fuse_mnist_resolve,
+)
+
+
 def list_definitions() -> Tuple[ExperimentDefinition, ...]:
     """Return definitions in stable identifier order."""
 

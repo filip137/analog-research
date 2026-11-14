@@ -787,7 +787,9 @@ def _handler_result(handler: Handler, request: Any) -> int:
 
 
 def _default_train_handler(request: TrainRequest) -> Optional[int]:
-    if request.definition.experiment_id == "energy_transformer_mnist.v1":
+    if request.definition.experiment_id == "fuse_mnist.v1":
+        from ebl.runtime.fuse_mnist import run_train
+    elif request.definition.experiment_id == "energy_transformer_mnist.v1":
         from ebl.runtime.energy_transformer_mnist import run_train
     elif request.definition.experiment_id == "mos_attention_learning.v1":
         from ebl.runtime.mos_attention_learning import run_train
