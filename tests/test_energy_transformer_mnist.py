@@ -118,3 +118,16 @@ def test_recovery_only_allows_cuda_failure_before_training(tmp_path):
     assert not early_cuda_failure(row)
     metrics.unlink();status.write_text(json.dumps({'error':{'message':'Unsettled phase'}}))
     assert not early_cuda_failure(row)
+
+
+def test_comparison_uses_only_complete_fixed_validation_cohort():
+    from experiments.plot_energy_transformer_mnist import validation_points
+    history=[{'stage':'initial_validation','step':0,'complete':True,'count':256,'mse':{'model':.2}},
+             {'stage':'validation_probe','step':250,'complete':False,'count':128,'mse':{'model':.01}},
+             {'stage':'train','step':251,'mse':.001}]
+    summary={'updates':382,'train_seconds':130.,'evaluation':{
+        'validation':{'complete':True,'count':5000,'mse':{'model':.04}},
+        'ablation_normal':{'complete':True,'count':256,'mse':{'model':.05}}}}
+    points=validation_points(history,summary)
+    assert [p['step'] for p in points]==[0,382]
+    assert [p['mse'] for p in points]==[.2,.05]

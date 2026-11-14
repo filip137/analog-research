@@ -186,3 +186,11 @@ is configured; durable status/artifacts are the notification surface.
 The implementing agent may yield with this verified monitoring/review handoff.
 The completion agent records findings in this note and pushes only the feature
 branch. Keep issue36 open for the broader analog-transformer objective.
+
+Analysis also extracts fixed256-image validation probes at shared update
+counts and plots their recorded wall times; incomplete probes and full5k
+validation scores are excluded from that matched cohort. Sparse checkpoint
+times are not advertised as identical wall budgets.59 distinct targeted tests
+passed,4 SPICE/environment checks skipped. At closeout rerender the derived
+comparison with the current feature-branch `experiments.plot_energy_transformer_mnist`
+module; the pinned runtime source and raw native bundles remain unchanged.
