@@ -905,3 +905,30 @@ EP/BP comparison; only `solver_rule` differs from training-001. Receipt:
 PID 2458617 after carrying forward its predecessor's dispatch timestamp, retaining
 the aggregate invocation budget. Its host identity and running observation were
 reverified; training was unaffected. No completion claim follows from this audit.
+
+
+### In-progress acceptance audit
+
+A source-level AST comparison against the original capped64 commit confirms that
+initialization, normalization, perfect-diode and ideal MOS identities, all
+energy-model ports/forces/energy/statistics, local EP statistics, BPTT gradient
+calculation and digital model equations are unchanged. The repair changes device
+validation and numerical step selection. The current requirements audit is
+`training-002/analysis/acceptance-audit-in-progress.json`; it explicitly leaves
+the goal incomplete.
+
+The five reused arms each retain full training/evaluation coverage. Small and
+reference final-2000 checkpoint hashes still match the late diagnostic's before
+and after identities. At their production64 cap, all three eight-example
+minibatches pass the three global cosine comparisons and reference qualification.
+This verifies the sampled late-checkpoint requirement for those two models; it
+does not claim all-example or all-training-step gradient agreement. The new
+49-token final model still requires the stronger64-example check.
+
+At the audit, fresh training-002 had completed505 updates, every phase stayed at
+128, and every recorded physical margin was positive. Training, final evaluation
+and final fidelity remain pending. A separate diagnostic figure,
+`instability-001/cycle-repair-diagnosis.png` and `.svg`, visualizes the original
+gradient spike, Adam update, device excursion and corrected100-update fork.
+Its reproducible script and source traces are retained beside it. This is a
+failure-mechanism figure, not a plot of the ongoing fresh training run.
