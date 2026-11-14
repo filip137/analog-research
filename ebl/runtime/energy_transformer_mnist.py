@@ -36,7 +36,7 @@ def save_checkpoint(path,model,optimizer,config,step,train_seconds,order_gen,mas
 
 def restore_checkpoint(path,model,optimizer,config,order_gen,mask_gen):
     payload=torch.load(path,map_location='cpu',weights_only=False)
-    if payload['schema']!='energy-transformer-mnist.checkpoint.v1' or {'phase_mode':'settled',**payload['config']}!=asdict(config):
+    if payload['schema']!='energy-transformer-mnist.checkpoint.v1' or {'phase_mode':'settled','device_domain':'declared4','solver_dt':.5,**payload['config']}!=asdict(config):
         raise ConfigError('Resume requires the identical scientific configuration')
     model.load_state_dict(payload['model']);optimizer.load_state_dict(payload['optimizer'])
     order_gen.set_state(payload['order_rng']);mask_gen.set_state(payload['mask_rng'])
@@ -55,7 +55,9 @@ def predict(model,x,target,mask,config,deadline,attention='normal'):
             phase=settle(model,x,target,mask,tolerance=config.residual_tolerance,
                          max_steps=config.max_steps,deadline=deadline,attention=attention)
         return phase.y,{'residual':phase.residual,'iterations':phase.iterations.float().mean().item(),
-                        'maximum_operand':phase.maximum_operand,'minimum_triode_margin':phase.minimum_triode_margin}
+                        'maximum_operand':phase.maximum_operand,'minimum_triode_margin':phase.minimum_triode_margin,
+                        'minimum_drain_margin':phase.minimum_drain_margin,
+                        'minimum_weak_inversion_margin':phase.minimum_weak_inversion_margin}
     return model(x,attention),{}
 
 
@@ -65,6 +67,7 @@ def evaluate(model,images,masks,patch,config,deadline,*,initial=None,mean_image=
     if initial is not None: sums['initial']=0.
     if mean_image is not None: sums['mean_image']=0.
     pixels=0.;count=0;worst=0.;iterations=0.;examples=[];failure=None
+    device_minima={};maximum_operand=0.
     for start in range(0,len(images),config.batch_size):
         if time.monotonic()>=deadline:
             break
@@ -86,13 +89,18 @@ def evaluate(model,images,masks,patch,config,deadline,*,initial=None,mean_image=
             sums[key]+=((value-target).square()*mask).sum().item()/.8**2
         pixels+=mask.sum().item();count+=len(im)
         worst=max(worst,diag.get('residual',0.));iterations+=len(im)*diag.get('iterations',0.)
+        maximum_operand=max(maximum_operand,diag.get('maximum_operand',0.))
+        for key in ('minimum_triode_margin','minimum_drain_margin','minimum_weak_inversion_margin'):
+            if diag.get(key) is not None:
+                device_minima[key]=min(device_minima.get(key,float('inf')),diag[key])
         if not examples:
             examples={k:v[:16].cpu() for k,v in predictions.items()}
             examples.update(target=target[:16].cpu(),mask=mask[:16].cpu(),inputs=x[:16].cpu())
     mse={key:value/pixels for key,value in sums.items()} if pixels else {}
     return {'count':count,'requested':len(images),'complete':count==len(images),'mse':mse,
             'psnr':{key:-10*math.log10(max(value,1e-30)) for key,value in mse.items()},
-            'worst_residual':worst,'mean_iterations':iterations/max(count,1),'failure':failure},examples
+            'worst_residual':worst,'mean_iterations':iterations/max(count,1),'failure':failure,
+            'maximum_operand':maximum_operand,**device_minima},examples
 
 
 def train(config,store,images,ids,resume=None):
@@ -105,6 +113,8 @@ def train(config,store,images,ids,resume=None):
     n,d,patch=CASES[config.case]
     cls=EnergyNetwork if config.arm=='energy_ep' else DigitalNetwork
     kwargs=dict(tokens=n,width=d,patch_width=patch**2,heads=4,seed=config.seed,epsilon=config.epsilon,device='cuda')
+    if config.arm=='energy_ep':
+        kwargs.update(device_domain=config.device_domain,solver_dt=config.solver_dt)
     model=cls(**kwargs);initial=cls(**kwargs)
     optimizer=torch.optim.Adam(model.parameters(),lr=config.learning_rate)
     order_gen=torch.Generator().manual_seed(3101)
@@ -157,6 +167,9 @@ def train(config,store,images,ids,resume=None):
                            'maximum_operand':max(p.maximum_operand for p in phases),
                            'minimum_triode_margin':min(p.minimum_triode_margin for p in phases),
                            'maximum_energy_increase':max(p.energy_increase for p in phases)}
+                if config.device_domain=='physical':
+                    last_diag.update(minimum_drain_margin=min(p.minimum_drain_margin for p in phases),
+                                     minimum_weak_inversion_margin=min(p.minimum_weak_inversion_margin for p in phases))
             else:
                 prediction=model(x)
                 (.5*((prediction-target).square()*mask).sum()/mask.sum()).backward()
@@ -183,7 +196,8 @@ def train(config,store,images,ids,resume=None):
             store.append_metric({'stage':'validation_probe','step':step,'train_seconds':train_seconds,**probe})
     train_seconds=prior_train+time.monotonic()-training_started
     save_checkpoint(checkpoints/'final.pt',model,optimizer,config,step,train_seconds,order_gen,mask_gen)
-    result={'phase_mode':config.phase_mode,'max_steps':config.max_steps,'arm':config.arm,'case':config.case,'stop_reason':stop,'failure':failure,'updates':step,
+    result={'phase_mode':config.phase_mode,'max_steps':config.max_steps,
+            'device_domain':config.device_domain,'solver_dt':config.solver_dt,'arm':config.arm,'case':config.case,'stop_reason':stop,'failure':failure,'updates':step,
             'train_seconds':train_seconds,'peak_memory_bytes':torch.cuda.max_memory_allocated(),
             'total_parameters':sum(p.numel() for p in model.parameters()),'core_parameters':6*d*d,
             'last_training_diagnostics':last_diag,'evaluation':{},

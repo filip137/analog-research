@@ -55,16 +55,34 @@ def capped64_baselines(path):
     return chosen
 
 
+def repair_reuse(path):
+    """Reuse completed, unchanged science; rerun only the failed 49-token case."""
+    rows=__import__('json').loads(path.read_text())
+    chosen=capped64_baselines(path)
+    for case in ('small','reference'):
+        matches=[r for r in rows if r['case']==case and r['arm']=='energy_ep']
+        if (len(matches)!=1 or matches[0]['outcome']!='terminal'
+                or not matches[0].get('integrity_passed')
+                or not matches[0].get('summary',{}).get('coverage_complete')):
+            raise RuntimeError(f'Missing complete EP case to preserve: {case}')
+        chosen.append({**matches[0],'reused_from':str(path)})
+    return chosen
+
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--output-root',type=Path,required=True)
     parser.add_argument('--readiness',type=Path,required=True)
     parser.add_argument('--charged-readiness-seconds',type=float,required=True)
     parser.add_argument('--retry-from',type=Path)
     parser.add_argument('--capped64-from',type=Path,help='Run three capped EP configs and reuse completed BP coverage')
+    parser.add_argument('--repair-from',type=Path,help='Repair 49-token training and reuse five completed arms')
     args=parser.parse_args()
-    if args.capped64_from and args.retry_from:parser.error('Capped training cannot use old eight-case recovery')
-    baseline_rows=capped64_baselines(args.capped64_from) if args.capped64_from else []
-    expected_cases=6 if args.capped64_from else 8
+    if sum(v is not None for v in (args.capped64_from,args.retry_from,args.repair_from))>1:
+        parser.error('Select one composition/recovery mode')
+    repaired=args.repair_from is not None
+    bounded=repaired or args.capped64_from is not None
+    baseline_rows=repair_reuse(args.repair_from) if repaired else capped64_baselines(args.capped64_from) if args.capped64_from else []
+    expected_cases=6 if bounded else 8
     root=args.output_root.resolve();root.mkdir(parents=True,exist_ok=True)
     gate=json.loads(args.readiness.read_text())
     if not gate['passed']:raise RuntimeError('FP32 numerical readiness failed')
@@ -85,7 +103,7 @@ def main():
                               'predecessor_stage':previous_status.get('stage')})
             time.sleep(10)
         previous,prior_seconds,prior_deadline=previous_coverage(predecessor)
-    begin=time.monotonic();deadline=begin+(7200 if args.capped64_from else 21600)-args.charged_readiness_seconds-prior_seconds
+    begin=time.monotonic();deadline=begin+(7200 if bounded else 21600)-args.charged_readiness_seconds-prior_seconds
     if prior_deadline:
         deadline=min(deadline,begin+datetime.fromisoformat(prior_deadline).timestamp()-time.time())
     # Keep one CUDA context alive between workers. On this host, cold worker
@@ -107,8 +125,8 @@ def main():
                           'elapsed_seconds':time.monotonic()-begin,
                           'charged_readiness_seconds':args.charged_readiness_seconds,**extra})
     try:
-        for case in (('small','reference','more_tokens') if args.capped64_from else ('small','reference','wider','more_tokens')):
-            for arm in (('energy_ep',) if args.capped64_from else ('energy_ep','digital_bp')):
+        for case in (('more_tokens',) if repaired else ('small','reference','more_tokens') if bounded else ('small','reference','wider','more_tokens')):
+            for arm in (('energy_ep',) if bounded else ('energy_ep','digital_bp')):
                 active=f'{case}-{arm}';status('running')
                 prior=previous.get((case,arm))
                 if prior and prior['outcome']=='terminal':
@@ -120,7 +138,7 @@ def main():
                     rows.append({'case':case,'arm':arm,'outcome':'global_budget_exhausted'});continue
                 folder=root/active;folder.mkdir()
                 config_root=ROOT/'examples/energy_transformer_mnist'
-                config=(config_root/'capped64' if args.capped64_from else config_root)/f'{active}.json'
+                config=(config_root/'repaired128' if repaired else config_root/'capped64' if bounded else config_root)/f'{active}.json'
                 case_begin=time.monotonic()
                 allowance=min(2100-(prior.get('wall_seconds',0) if prior else 0),remaining)
                 attempts=[]

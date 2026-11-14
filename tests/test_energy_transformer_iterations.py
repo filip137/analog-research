@@ -28,8 +28,12 @@ def test_exact_cap_and_matching_forward_for_ep_bptt():
     assert all(not value.requires_grad for gradient in (ep,bp) for value in gradient.values())
 
 
-def test_bptt_matches_finite_differences_of_same_truncated_map():
-    model,x,target,mask=case();gradient,_=bptt_gradient(model,x,target,mask,16)
+@pytest.mark.parametrize('solver_dt', [.5,1.])
+def test_bptt_matches_finite_differences_of_same_truncated_map(solver_dt):
+    model,x,target,mask=case()
+    model.solver_dt=solver_dt
+    model.device_domain='physical' if solver_dt==1 else 'declared4'
+    gradient,_=bptt_gradient(model,x,target,mask,16)
     gen=torch.Generator().manual_seed(11)
     for name in NAMES:
         p=getattr(model,name);base=p.clone();direction=torch.randn(p.shape,dtype=p.dtype,generator=gen)
@@ -90,3 +94,41 @@ def test_public_validate_configs_and_finite_training_prediction():
     result,diagnostic=predict(model,x,target,mask,TrainingConfig(phase_mode='fixed_steps',max_steps=8),None)
     assert diagnostic['iterations']==8 and diagnostic['residual']>1e-6
     assert not result.requires_grad
+
+
+def test_physical_domain_accepts_valid_products_beyond_old_guard_and_rejects_bad_voltages():
+    from networks.energy_transformer.gpu import mos_domain,check_domain,EquilibriumError,triode_product
+    model,_,_,_=case()
+    q=torch.full((1,1,3,1),4.2,dtype=torch.float64)
+    k=torch.full_like(q,4.1)
+    logits=q@k.transpose(-1,-2)
+    v={'q':q,'k':k,'p':logits.softmax(-1),'logits':logits}
+    with pytest.raises(EquilibriumError,match='operand='):check_domain(model,v,'test')
+    model.device_domain='physical';d=check_domain(model,v,'test')
+    # Independently enumerate every device polarity and score/return product.
+    margins=[];drains=[]
+    for left,right in ((4.2,4.1),(1/3,4.2),(1/3,4.1)):
+        for sg in (-1,1):
+            for sd in (-1,1):
+                gate=1.5+sg*.05*left;drain=.3+sd*.05*right
+                margins.append(gate-.5-drain);drains.append(drain)
+        actual=triode_product(torch.tensor(left,dtype=torch.float64),torch.tensor(right,dtype=torch.float64))
+        assert actual.item()==pytest.approx(left*right,abs=1e-11)
+    assert d['triode_margin'].item()==pytest.approx(min(margins))
+    assert d['drain_margin'].item()==pytest.approx(min(drains))
+    assert d['weak_inversion_margin'].item()>0
+    v['q']=torch.full_like(q,6.1)
+    with pytest.raises(EquilibriumError,match='drain_margin='):check_domain(model,v,'test')
+    v['q']=q;v['logits']=torch.full_like(logits,140.)
+    with pytest.raises(EquilibriumError,match='weak_inversion_margin='):check_domain(model,v,'test')
+
+
+def test_full_step_repair_keeps_energy_force_and_reports_physical_margins():
+    model,x,target,mask=case();model.device_domain='physical';model.solver_dt=1.
+    ep,phases=finite_ep(model,x,target,mask,128)
+    bp,phase=bptt_gradient(model,x,target,mask,128)
+    assert agreement(ep,bp)['global']['cosine']>.999
+    for p in phases:
+        assert p.minimum_triode_margin>0 and p.minimum_drain_margin>0 and p.minimum_weak_inversion_margin>0
+        assert p.energy_increase<1e-10
+    torch.testing.assert_close(phase.y,phases[0].y,atol=0,rtol=0)

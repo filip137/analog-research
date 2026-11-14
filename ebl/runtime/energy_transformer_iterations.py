@@ -29,7 +29,9 @@ def measured(call):
 
 def evaluate(config,store,payload,cohort,images,deadline):
     n,d,patch=CASES[config.case]
-    model=EnergyNetwork(n,d,patch**2,device='cuda',seed=payload['config']['seed'],epsilon=payload['config']['epsilon'])
+    model=EnergyNetwork(n,d,patch**2,device='cuda',seed=payload['config']['seed'],epsilon=payload['config']['epsilon'],
+                        device_domain=payload['config'].get('device_domain','declared4'),
+                        solver_dt=payload['config'].get('solver_dt',.5))
     model.load_state_dict(payload['model'])
     original={name:p.detach().clone() for name,p in model.named_parameters()}
     count=config.batches*config.batch_size
@@ -102,8 +104,8 @@ def run_validate(request):
     guard=torch.empty(1,device='cuda')
     config=request.spec;weights=Path(request.weights).resolve()
     payload=torch.load(weights,map_location='cpu',weights_only=False)
-    if payload.get('schema')!='energy-transformer-mnist.checkpoint.v1' or payload.get('step')!=250:
-        raise ConfigError('Use the explicit checkpoint after 250 trained updates, not initialization')
+    if payload.get('schema')!='energy-transformer-mnist.checkpoint.v1' or type(payload.get('step')) is not int or payload['step']<1:
+        raise ConfigError('Use an explicit checkpoint after at least one trained update, not initialization')
     if payload['config']['case']!=config.case or payload['config']['arm']!='energy_ep':
         raise ConfigError('Checkpoint case/architecture mismatch')
     cohort_path=weights.parent.parent/'artifacts/cohorts.pt'

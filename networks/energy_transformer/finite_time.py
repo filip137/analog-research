@@ -6,7 +6,7 @@ and does not assert that its terminal states are equilibria.
 """
 import time
 import torch
-from networks.energy_transformer.gpu import Equilibrium, EquilibriumError, NAMES
+from networks.energy_transformer.gpu import Equilibrium, EquilibriumError, NAMES, check_domain
 
 
 def relax(model,x,target,mask,steps,beta=0.,initial=None,*,differentiate=False,
@@ -17,6 +17,7 @@ def relax(model,x,target,mask,steps,beta=0.,initial=None,*,differentiate=False,
         z=x.new_zeros((len(x),model.tokens,model.width)) if initial is None else initial.z.detach().clone()
         y=torch.zeros_like(target) if initial is None else initial.y.detach().clone()
         maximum=x.new_tensor(0.);increase=x.new_tensor(0.)
+        margins=x.new_full((3,),float("inf"))
         allowance=8*torch.finfo(x.dtype).eps
         for step in range(steps):
             if step%16==0 and deadline is not None and time.monotonic()>=deadline:
@@ -27,10 +28,13 @@ def relax(model,x,target,mask,steps,beta=0.,initial=None,*,differentiate=False,
                 maximum=torch.maximum(maximum,torch.maximum(v['q'].abs().amax(),v['k'].abs().amax()))
                 if not torch.isfinite(dz).all() or not torch.isfinite(dy).all():
                     raise EquilibriumError('Nonfinite finite-time state')
-                if maximum>4:
-                    raise EquilibriumError('Finite-time phase left the declared triode domain')
+                domain=check_domain(model,v,f'Finite-time phase beta={beta:g}, iteration={step}')
+                if domain is not None:
+                    current=torch.stack([domain[key].amin() for key in
+                                         ('triode_margin','drain_margin','weak_inversion_margin')])
+                    margins=torch.minimum(margins,current)
                 energy=model.energy(v,x,target,mask,beta,attention)
-                dt=x.new_full((len(x),1,1),.5)
+                dt=x.new_full((len(x),1,1),model.solver_dt)
                 for _ in range(20):
                     candidate=model.ports(z+dt*dz,y+dt*dy/1.3,attention)
                     new_energy=model.energy(candidate,x,target,mask,beta,attention)
@@ -46,11 +50,18 @@ def relax(model,x,target,mask,steps,beta=0.,initial=None,*,differentiate=False,
             dz,dy=model.force(v,x,target,mask,beta)
             residual=torch.maximum(dz.abs().amax(),dy.abs().amax()).item()
             maximum=torch.maximum(maximum,torch.maximum(v['q'].abs().amax(),v['k'].abs().amax()))
-            if not torch.isfinite(z).all() or not torch.isfinite(y).all() or maximum>4:
+            if not torch.isfinite(z).all() or not torch.isfinite(y).all():
                 raise EquilibriumError('Invalid final finite-time circuit state')
+            domain=check_domain(model,v,f'Final finite-time phase beta={beta:g}, iteration={steps}')
+            if domain is not None:
+                current=torch.stack([domain[key].amin() for key in
+                                     ('triode_margin','drain_margin','weak_inversion_margin')])
+                margins=torch.minimum(margins,current)
             m=maximum.item()
         return Equilibrium(z,y,v,torch.full((len(x),),steps,device=x.device,dtype=torch.long),
-                           residual,m,.7-.1*m,increase.item())
+                           residual,m,margins[0].item() if domain is not None else .7-.1*m,increase.item(),
+                           margins[1].item() if domain is not None else None,
+                           margins[2].item() if domain is not None else None)
 
 
 @torch.no_grad()

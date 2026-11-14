@@ -529,3 +529,128 @@ seeds, solver changes or domain investigations require a new scientific
 assignment. This closes monitoring for capped64-001 only; broader issue 36
 remains open. Feature-branch publication only; shared trunk is untouched and
 no chat notification delivery is claimed.
+
+
+## Active repair objective — 14 November 2026
+
+The user explicitly instructed us to keep the goal active, resolve failures and
+continue until the model works. This supersedes the preceding pilot's instruction
+to stop and seek a new scientific assignment after failure. It authorizes focused
+cause analysis, justified circuit/solver/training corrections, new validation and
+retraining within this same analog-energy-transformer objective. The failure is
+retained as evidence; completion of that subprocess is not completion of the goal.
+
+Success requires the three declared sizes to finish training and full held-out
+evaluation, useful improvement over initialization/mean-image, explicit matched
+digital comparisons, and approximately 0.9 or better EP/BPTT gradient agreement
+on trained checkpoints with production phases capped at 128. Preserve a stated
+scalar energy and reciprocal forces, ideal diode memory, physically valid ideal
+MOS mapping, GPU FP32 and honest simulator-versus-circuit limits. Do not disable a
+domain check or clip state without deriving the corresponding model. Retain the
+historical fixed64 runs and unchanged baselines. The broader small/mid-scale
+objective remains active; no completion claim follows from a failure report.
+
+First diagnostic: replay small/reference final2000 and more_tokens step1500/final1633
+on the identical saved24 validation examples (3 batches of8), read-only. Trace the
+first rejected q/k values and actual MOS voltage/margin equations; distinguish the
+conservative operand bound4 from true device-law failure. Compare late EP/BPTT at
+64 and128, with qualified long references where valid. Sol owns this bounded
+10-minute local-GPU diagnostic under results/energy-transformer-repair/diagnostic-001.
+The coordinator owns code/model repair and interpretation. Input/checkpoint hashes
+are preserved and checked; any trace beyond the old guard is labelled diagnostic,
+not valid historical-model evaluation.
+
+Working resource allowance for focused repairs and evaluation is at most six
+local RTX3090 hours, with individual diagnostics/runs bounded and all attempts
+charged. Expected first repair validation is minutes; three2000-update training
+cases are tens of minutes. No remote hosts or shared-trunk mutation. Before each
+new evidence run, record exact changed scientific choices, config/source and the
+acceptance checks here; publish the authorized feature branch and use its pinned
+checkout. Understood failures trigger diagnosis and continuation within this
+objective, rather than asking again for routine corrective work.
+
+
+### Failure diagnosis and first supported repair
+
+Read-only replay identifies a conservative software cutoff, not a demonstrated
+physical transistor failure. At final1633, first64 validation crosses |k|=4 at
+free iteration63 (zero-based), sample35 / MNIST trainID50082, head3/token32/
+component10: k=4.003088. First64 test crosses at iteration38, sample/testID13,
+head3/token39/component10: k=4.020101. Final maxima are4.026628/4.173181.
+Tracing these full64 trajectories gives positive physical score/return domain
+margins: validation minimumtriode0.32341V, drain0.09867V, weak-inversion0.11472V;
+test0.30336V,0.09134V,0.12077V. The summed P-transpose-Q return current reaches
+11.97, but is not an individual product-cell operand and must not be bounded as
+one. Each return device multiplies one probability by one Q/K component.
+
+The new explicit `device_domain=physical` policy uses the existing device biases
+and gains, with NO changes to logical energy, forces, weights or state values.
+For the four-device score cell, Vg=1.5 +/-0.05q, Vd=0.3 +/-0.05k and Vth=0.5.
+All token pairs within each head/component require
+`0.7-0.05*(max_token(abs(q))+max_token(abs(k)))>0`. Individual probability-Q/K
+return products additionally require the conservative sum bound
+`0.7-0.05*(max(abs(p))+max(abs(q),abs(k)))>0`. Both return directions require
+`0.3-0.05*max(abs(q),abs(k))>0`. The weak-inversion bank uses its exact stable
+log-source equation and requires positive threshold margin. All accepted states,
+including final states, are checked; failures now record phase/iteration, sample,
+actual operand and every margin. No domain guard is disabled and no state is
+clipped. Historical `declared4` remains the default for historical configs.
+
+A separate late-gradient problem is confirmed. On identical first24 validation
+examples (3x8), old64/.5 minimum global EP/BPTT cosines are0.99431(small2000),
+0.99849(reference2000),0.98930(more_tokens1500), but0.47555(more_tokens1633).
+Old128/.5 improves the last to0.90159 but BPTT/reference falls to0.89456 and one
+512/1024 reference fails qualification. This is finite-trajectory disagreement,
+not evidence of zero/vanished gradients.
+
+The focused corrective probe uses nominal Euler step1.0 instead of0.5, retaining
+per-example energy backtracking, the same reciprocal dynamics and tau_y=1.3.
+At128iterations on final1633 it passes the predeclared global rule on all3batches:
+minimum EP/BPTT0.975025, EP/reference0.992244, BPTT/reference0.955585. All512/1024
+references qualify (cosine>=0.999999976, relativeL2<=0.00031768, residual<=4.768e-7).
+Q/K cosines exceed0.99038 across all comparisons. Every EP/BPTT group exceeds
+0.91597 and every EP/reference group0.96102; BPTT/reference position has a0.80091
+exception, so this is not an all-groups/all-comparisons claim.64steps atdt1 still
+fails the global rule. Therefore select128/dt1 for the repair; the user ceiling128
+is respected. Finite-time phases remain approximate, not relabelled equilibria.
+
+Diagnostic provenance, unchanged checkpoint hashes, original/copied solver source,
+saved gradients and exact traces are retained under
+`results/energy-transformer-repair/diagnostic-001/`; original diagnostic took63.6s
+and the dt1follow-up15.73s, plus short traces, within the declared allowance.
+
+Repair evidence: fresh more_tokens training from the original initialization,
+2,000updates, beta0.005, Adam0.003, FP32,128iterations/phase, nominaldt1,
+physicaldevicechecks. Config:
+`examples/energy_transformer_mnist/repaired128/more_tokens-energy_ep.json`.
+Reuse small/reference capped64 EP and all three digital arms after their verified
+completion; these are separate explicitly labelled solver configurations, not a
+claim that all arms use128. Neither successful run needs replacement to repair49
+-token coverage. Evaluate all10,000test and5,000validation examples and attention
+probes; then run the native trained-checkpoint gradient diagnostic on the repaired
+final model. A failed evaluation or fidelity check keeps the overall goal active
+and triggers the next focused correction within the authorized resource allowance.
+
+Composition command from the next clean published pinned feature commit:
+`python -m experiments.run_energy_transformer_mnist --repair-from
+/home/filip/analog-research/drn/results/energy-transformer-mnist/capped64-001/coverage.json
+--output-root /home/filip/analog-research/drn/results/energy-transformer-repair/training-001
+--readiness /home/filip/analog-research/drn/results/energy-transformer-mnist/readiness/gradient-device-checks.json
+--charged-readiness-seconds 0`. Training cap1,500seconds; case wall2,100seconds;
+composition ceiling7,200seconds remains within the six-hour repair allowance.
+Retain250-update checkpoints and failed attempts. Native schema now accepts any
+explicit trained checkpoint for replay and restores its declared solver/device
+policy; initialization remains forbidden in that diagnostic.
+
+
+Production repair gate: all3minibatch EP128 and BPTT128 gradient vectors are
+bit-identical to the saved dt1diagnostic (maximum absolute difference0). Read-only
+replay of old final1633 under physical policy, originaldt0.5/T64, now completes
+5,000validation and10,000test examples: MSE0.05207266/0.05144100, maxoperand
+4.24529/4.31232, minimumtriode0.29804/0.29142V, drain0.08774/0.08438V and weak
+inversion0.09712/0.09582V. Thus the earlier missing evaluation was caused by the
+conservative bound, not a violation anywhere in these complete replay cohorts.
+Worst residuals0.43008/0.65369 remain finite-time diagnostics. This corrected-policy
+replay is separately labelled and does not rewrite the failed historical bundle.
+The checkpoint hash and parameters remain unchanged. Gate duration25.40seconds;
+source hashes and full evidence are in diagnostic-001/production-repair-gate.json.

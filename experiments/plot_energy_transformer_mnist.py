@@ -27,9 +27,10 @@ def validation_points(history,summary):
 def summarize(root):
     rows=json.loads((root/'coverage.json').read_text());out=root/'analysis';out.mkdir(exist_ok=True)
     comparisons=[]
-    fig,axes=plt.subplots(4,2,figsize=(11,14),layout='constrained')
-    vf,va=plt.subplots(4,2,figsize=(11,14),layout='constrained')
-    for i,case in enumerate(('small','reference','wider','more_tokens')):
+    cases=[case for case in ('small','reference','wider','more_tokens') if any(r['case']==case for r in rows)]
+    fig,axes=plt.subplots(len(cases),2,figsize=(11,3.5*len(cases)),layout='constrained',squeeze=False)
+    vf,va=plt.subplots(len(cases),2,figsize=(11,3.5*len(cases)),layout='constrained',squeeze=False)
+    for i,case in enumerate(cases):
         byarm={}
         for row in rows:
             if row['case']!=case or not row.get('run_dir'):continue

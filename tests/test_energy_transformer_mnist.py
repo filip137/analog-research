@@ -143,3 +143,26 @@ def test_capped64_reuses_only_three_valid_bp_baselines(tmp_path):
     assert [(r['case'],r['arm']) for r in chosen]==[(c,'digital_bp') for c in ('small','reference','more_tokens')]
     rows[1]['integrity_passed']=False;path.write_text(json.dumps(rows))
     with pytest.raises(RuntimeError,match='small'):capped64_baselines(path)
+
+
+def test_repair_reuses_only_completed_science(tmp_path):
+    import json
+    from experiments.run_energy_transformer_mnist import repair_reuse
+    path=tmp_path/'coverage.json'
+    rows=[{'case':c,'arm':a,'outcome':'terminal','integrity_passed':True,
+           'summary':{'coverage_complete':not(c=='more_tokens' and a=='energy_ep')}}
+          for c in ('small','reference','more_tokens') for a in ('energy_ep','digital_bp')]
+    path.write_text(json.dumps(rows));chosen=repair_reuse(path)
+    assert len(chosen)==5
+    assert ('more_tokens','energy_ep') not in {(r['case'],r['arm']) for r in chosen}
+    rows[0]['summary']['coverage_complete']=False;path.write_text(json.dumps(rows))
+    with pytest.raises(RuntimeError,match='small'):repair_reuse(path)
+
+
+def test_repair_options_are_explicit_and_do_not_relax_historical_protocol():
+    assert parse_config({}).device_domain=='declared4'
+    c=parse_config({'phase_mode':'fixed_steps','max_steps':128,'device_domain':'physical','solver_dt':1.})
+    assert c.max_steps==128 and c.solver_dt==1
+    for invalid in ({'solver_dt':2},{'device_domain':'disabled'}, {'device_domain':'physical'},
+                    {'arm':'digital_bp','phase_mode':'fixed_steps','device_domain':'physical'}):
+        with pytest.raises(ConfigError):parse_config(invalid)

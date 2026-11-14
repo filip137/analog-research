@@ -13,6 +13,8 @@ class Config:
     case: str='small'
     precision: str='fp32'
     phase_mode: str='settled'
+    device_domain: str='declared4'
+    solver_dt: float=.5
     seed: int=20261114
     updates: int=2000
     batch_size: int=64
@@ -47,6 +49,12 @@ def parse_config(raw):
             raise ConfigError(f'Out-of-budget {name}')
     if c.phase_mode not in ('settled','fixed_steps'):
         raise ConfigError('Expected settled or fixed_steps phase mode')
+    if c.device_domain not in ('declared4','physical'):
+        raise ConfigError('Expected declared4 or physical MOS domain policy')
+    if type(c.solver_dt) not in (int,float) or c.solver_dt not in (.5,1.):
+        raise ConfigError('Qualified solver steps are .5 and 1')
+    if (c.device_domain!='declared4' or c.solver_dt!=.5) and (c.arm!='energy_ep' or c.phase_mode!='fixed_steps'):
+        raise ConfigError('Physical-domain/full-step repair requires finite-time energy EP')
     if c.phase_mode=='fixed_steps' and c.max_steps>128:
         raise ConfigError('Finite-time phase cap cannot exceed 128')
     if c.wall_seconds<=c.train_seconds or type(c.seed) is not int or not 0<=c.seed<2**32:

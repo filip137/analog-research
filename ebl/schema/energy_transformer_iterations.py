@@ -31,7 +31,7 @@ def parse_config(raw):
     c=Config(**data)
     if c.experiment_id!=EXPERIMENT_ID or type(c.schema_version) is not int or c.schema_version!=1:
         raise ConfigError('Unknown iteration diagnostic schema')
-    if c.case not in ('small','reference','more_tokens'):raise ConfigError('Expected a model with 250 trained updates')
+    if c.case not in ('small','reference','more_tokens'):raise ConfigError('Expected a declared trained model size')
     if not c.iterations or any(type(t) is not int or not 1<=t<=128 for t in c.iterations) or tuple(sorted(set(c.iterations)))!=c.iterations:
         raise ConfigError('Candidate phase caps must increase and stay within 128')
     if c.reference_steps!=(512,1024):raise ConfigError('Reference qualification is frozen at 512 versus 1024')

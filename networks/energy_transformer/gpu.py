@@ -65,12 +65,66 @@ def weak_bank(logits):
     return currents/tail, source, margin
 
 
+@torch.no_grad()
+def mos_domain(v):
+    """Physical conditions of every ideal attention multiplier and softmax bank.
+
+    QK uses gate=1.5 +/- .05*q, drain=.3 +/- .05*k, Vth=.5.
+    Returns multiply individual probabilities by k or q; P.T@Q is a SUM
+    of product currents feeding a linear resistor projection, not a multiplier
+    operand. Include q as a drain operand in the reciprocal return path.
+    Each returned value has one entry per example.
+    """
+    qa, ka = v['q'].abs(), v['k'].abs()
+    qm, km = qa.amax((1,2,3)), ka.amax((1,2,3))
+    pm = v['p'].abs().amax((1,2,3))
+    maximum = torch.maximum(qm, km)
+    # All query/key token pairs share a head and component.
+    score_sum = (qa.amax(-2)+ka.amax(-2)).amax((1,2))
+    return_sum = pm+maximum  # Conservative bound on individual p*q and p*k.
+    triode = .7-.05*torch.maximum(score_sum, return_sum)
+    drain = .3-.05*maximum
+    vt, n = .026, 1.5
+    logsum = torch.logsumexp(v['logits'], -1)
+    source = -vt*torch.logaddexp(math.log(.1)-logsum,
+                                torch.full_like(logsum, -3/vt))
+    # With fixed drain=3V, weak inversion requires positive threshold margin.
+    weak = (n*(torch.minimum(source, torch.full_like(source,3.))
+                -vt*v['logits'].amax(-1))).amin((1,2))
+    valid = (torch.isfinite(maximum) & torch.isfinite(weak)
+             & (triode > 0) & (drain > 0) & (weak > 0))
+    return dict(maximum_operand=maximum, triode_margin=triode,
+                drain_margin=drain, weak_inversion_margin=weak, valid=valid)
+
+
+@torch.no_grad()
+def check_domain(model, v, context=''):
+    """Keep the historical conservative domain explicit; report real violations."""
+    if model.device_domain == 'declared4':
+        maximum = torch.maximum(v['q'].abs().amax(),v['k'].abs().amax())
+        if not torch.isfinite(maximum) or maximum > 4:
+            raise EquilibriumError(f'{context}: operand={maximum.item():.9g} outside declared [-4,4] range')
+        return None
+    values = mos_domain(v)
+    if not values['valid'].all():
+        bad = (~values['valid']).nonzero()[0,0].item()
+        details = ', '.join(f'{key}={value[bad].item():.9g}'
+                            for key,value in values.items() if key != 'valid')
+        raise EquilibriumError(f'{context}: MOS device-domain violation at batch example {bad}: {details}')
+    return values
+
+
 class EnergyNetwork(nn.Module):
     def __init__(self, tokens=16, width=32, patch_width=49, heads=4, seed=20261114,
-                 epsilon=.5, device='cpu', dtype=torch.float32):
+                 epsilon=.5, device='cpu', dtype=torch.float32, device_domain='declared4', solver_dt=.5):
         super().__init__()
         self.tokens, self.width, self.patch_width = tokens, width, patch_width
         self.heads, self.epsilon = heads, epsilon
+        if device_domain not in ('declared4', 'physical'):
+            raise ValueError('Unknown MOS domain policy')
+        if not math.isfinite(solver_dt) or not 0 < solver_dt <= 1.:
+            raise ValueError('Solver step must be in (0,1]')
+        self.device_domain, self.solver_dt = device_domain, solver_dt
         self.kappa = 1/math.sqrt(width//heads)
         shapes = ((heads,width//heads,width),)*2 + ((4*width,width),
                   (width,2*patch_width),(patch_width,width),(tokens,width))
@@ -136,6 +190,8 @@ class Equilibrium:
     maximum_operand: float
     minimum_triode_margin: float
     energy_increase: float
+    minimum_drain_margin: float | None = None
+    minimum_weak_inversion_margin: float | None = None
 
 
 @torch.no_grad()
