@@ -221,3 +221,46 @@ def test_iteration_selection_cannot_hide_bad_routing_in_a_good_global_cosine():
     assert parse_config({'required_groups':list(required)}).required_groups==required
     for invalid in (['query','query'],['unknown'],[1]):
         with pytest.raises(ConfigError):parse_config({'required_groups':invalid})
+
+
+def test_sharp_attention_is_possible_within_the_actual_input_voltage_range():
+    m=InputAttentionNetwork(dtype=torch.float64)
+    x=torch.zeros(1,49,32,dtype=torch.float64)
+    x[:,:24,:16]=-.4;x[:,:24,16:]=1.;x[:,0,:16]=.4
+    f=m.fixed_features(x)
+    query=f[0,48]/f[0,48].norm()
+    key=f[0,0]-f[0,1:].mean(0);key/=key.norm()
+    with torch.no_grad():
+        m.query.zero_();m.key.zero_();m.query[0,0]=.5*query;m.key[0,0]=.5*key
+    report=project(m)['after']
+    ports=m.ports(torch.zeros(1,49,64,dtype=torch.float64),
+                  torch.zeros(1,49,16,dtype=torch.float64),context=m.prepare(x))
+    # Constructed, untrained patches: 24 visible and25 hidden tokens. This is
+    # a representability test, not a claim about learned MNIST routing.
+    assert ports['p'][0,0,48,0]>.45
+    assert report['normalized_total']<=.7
+    assert check_domain(m,ports)['valid'].all()
+
+
+def test_prepared_pipeline_requires_complete_group_qualification_and_fixed_configs():
+    import json
+    from pathlib import Path
+    from experiments.run_energy_transformer_input_attention import qualified_cap
+    from ebl.registry import resolve_experiment_config
+    from ebl.schema.base import RunMode
+    valid=dict(coverage_complete=True,reference_valid=True,selected_cap=32,
+               required_groups=['query','key','value','output'])
+    assert qualified_cap(valid)==32
+    for change in ({'coverage_complete':False},{'reference_valid':False},
+                   {'selected_cap':None},{'required_groups':[]}):
+        assert qualified_cap({**valid,**change}) is None
+    root=Path(__file__).resolve().parents[1]/'examples/energy_transformer_mnist/input_attention'
+    for path in root.rglob('*.json'):
+        raw=json.loads(path.read_text())
+        mode=RunMode.VALIDATE if raw['experiment_id']=='energy_transformer_iterations.v1' else RunMode.TRAIN
+        resolve_experiment_config(path,mode)
+    for cap in (32,64,128):
+        ep=json.loads((root/f'caps/{cap}/input-energy_ep.json').read_text())
+        bp=json.loads((root/f'caps/{cap}/input-energy_bp.json').read_text())
+        assert ep['max_steps']==bp['max_steps']==cap
+        assert {k:v for k,v in ep.items() if k!='arm'}=={k:v for k,v in bp.items() if k!='arm'}

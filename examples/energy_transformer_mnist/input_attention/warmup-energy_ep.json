@@ -18,7 +18,7 @@
   "train_seconds": 600,
   "updates": 250,
   "validation_count": 256,
-  "wall_seconds": 900,
+  "wall_seconds": 1200,
   "device_domain": "physical",
   "solver_dt": 1.0,
   "solver_rule": "energy_backtracking",

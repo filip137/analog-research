@@ -2,8 +2,9 @@
 
 Issue: https://github.com/filip137/on-chip-learning/issues/36
 Branch: `energy-transformer`, continuing the user's explicitly named branch.
-Status: implemented mathematical prototype and prepared comparison; no GPU
-task run has launched for this pilot. The improvement goal remains active.
+Status: user authorized the bounded comparison on14November2026 after
+reviewing the prepared prototype. Launch preparation is complete; source will
+be pinned before GPU execution. The improvement goal remains active.
 
 ## Question and existing evidence
 
@@ -143,7 +144,7 @@ adds `energy_bp`, which backpropagates through exactly the same energy model,
 solver and projection policy as its EP partner. Attention concentration,
 normalized entropy and distance from uniform are recorded during evaluation.
 
-The affected mathematical/runtime suite passes53 tests. The new tests cover
+The affected mathematical/runtime suite passes55 tests. The new tests cover
 the energy/force identity, every parameter derivative, actual loss finite
 differences for Q/K/V/O, EP/BPTT agreement, covariance-Hessian bound, weighted
 contraction, added MOS operand guards, exact paired initialization and strict
@@ -191,7 +192,7 @@ count and input features, so their comparison is not an isolated causal test
 of one added matrix. The within-architecture EP/BPTT pair is the training-rule
 control.
 
-## Prepared experiment, pending run authorization
+## Authorized experiment
 
 Question: does the added capacity improve learned reconstruction and routing
 while retaining the user's trained-state gradient criterion?
@@ -225,12 +226,13 @@ training; if neither improves, the architecture hypothesis is unsupported.
 One seed and one task remain exploratory. Retrieval and larger models are
 follow-ups, not silently included extra experiments.
 
-Prepared configs, all under `examples/energy_transformer_mnist/input_attention/`:
+Frozen candidate configs, all under `examples/energy_transformer_mnist/input_attention/`:
 
 - `warmup-energy_ep.json`:250 updates,128 steps, limited development evaluation.
 - `gradient-selection.json`:public `energy_transformer_iterations.v1` validation.
 - `input-energy_ep.json`, `input-energy_bp.json`:provisional32-step full pair;
-  both must be frozen to the selected cap before their launch commit.
+  the launcher selects the already committed `caps/32`, `caps/64` or `caps/128`
+  pair after qualification. Each has a matching final diagnostic config.
 - `recurrent-energy_bp.json`:same old32-step architecture, now trained with BP.
 
 Use `python -m ebl train --config <config> --output-dir <case-root>` and
@@ -239,7 +241,7 @@ Use `python -m ebl train --config <config> --output-dir <case-root>` and
 in native bundles. Proposed output root:
 `/home/filip/analog-research/drn/results/energy-transformer-input-attention/`.
 
-Proposed additional allowance: at most60 minutes on the local RTX3090,
+User-authorized additional allowance: at most60 minutes on the local RTX3090,
 including smokes, warm-up, diagnostics, full cases and operational retries;
 charge it against the remaining prior six-hour campaign allowance, do not
 reset the old debit (<3.14 hours). Expected duration is20–45 minutes, an
@@ -249,15 +251,40 @@ runner; never prune failed attempts. No remote GPU or concurrent sharing of
 an occupied GPU. Use a common absolute deadline through the existing runtime
 deadline interface; no per-case budget reset.
 
-Before substantial execution: obtain authorization for this changed scientific
-comparison; inspect live GPU occupancy; run proportional GPU FP32 smokes;
+Before substantial execution: inspect live GPU occupancy; run proportional GPU FP32 smokes;
 commit/push the feature source and stage a clean pinned launch checkout. Shared
 trunk publication remains separately pending after the earlier approval-review
 rejection; do not retry it under this pilot. One owner must monitor actual
 native metrics and checkpoints and inspect final bundles with artifact hashes.
 No GPU handles, launch commit or live monitoring assignment exist yet.
 
-Current owner: root. Next action: review/authorize the prepared comparison,
-then execute through evidence collection and interpretation. This preparation
+Current owner: root. The user replied "yes" to the explicit one-hour
+comparison request. Next action: launch and execute through evidence collection
+and interpretation. This preparation
 does not establish a performance improvement and does not complete the active
 improvement goal. The new pilot remains open; the old repair stays complete.
+
+
+## Launch preparation and bounded-input capacity check
+
+A stronger constructed witness now uses only the actual input voltage range:
+24 visible tokens with pixel values in[-0.4,0.4] and indicator1,25 hidden
+tokens with pixel/indicator0. Explicit norm-capped Q/K maps give probability
+0.4707368 from a hidden query to a selected visible token, versus uniform
+0.0204082. The normalized curvature certificate is0.4557171, contraction
+radius0.5397969; triode/drain/weak-inversion margins are0.51959/0.18772/0.11919V.
+This is an untrained mathematical witness, not a sampled MNIST image or the
+benchmark's exact coarse-region mask distribution. It removes the earlier
+out-of-range-amplitude caveat for representability, not the need for learning.
+
+`experiments.run_energy_transformer_input_attention` serially invokes the
+public CLI for two GPU smokes,250-update warm-up, trained gradient selection,
+three full arms and the final EP gradient check. It retains a tiny CUDA context
+between children, writes PID/status/native metric growth/coverage, enforces one
+absolute deadline, verifies native artifacts and permits only the existing
+zero-update CUDA initialization retry. Other operational failures stop for
+diagnosis; failed scientific qualification prevents full training. The warm-up
+has600s training/1200s total to preserve the runner's600s evaluation reserve;
+this does not extend the common3600s ceiling. All possible caps and full-pair
+configs are committed before launch. The root monitor owns scientific review;
+run-watch owns deterministic process/artifact observations and bounded incidents.
