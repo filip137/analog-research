@@ -4,6 +4,13 @@ Issue: https://github.com/filip137/on-chip-learning/issues/36
 Branch: `energy-transformer`. Exploratory GPU simulation, one seed.
 User authorized implementation and the six-GPU-hour plan on 14 November 2026.
 
+Current repair status: all three declared EP sizes and their digital baselines
+have completed 2,000 updates and full evaluation. The 49-token EP test MSE is
+0.0525082 versus digital BP 0.0419638. Final 128-step gradient acceptance still
+fails (worst EP/BPTT cosine 0.864108), so the overall goal remains active and
+settling repair continues. See the latest result below; earlier protocols and
+failed attempts remain historical evidence.
+
 ## Frozen question and comparison
 
 Can the convergent energy model learn MNIST completion with FP32 centered EP,
@@ -977,3 +984,43 @@ appears at822. Evidence: `training-002/analysis/precycle-trajectory-parity.json`
 The cost/storage audit is in `training-002/analysis/cost-storage-in-progress.json`:
 316.6 MB native evidence and2.21 GB including pinned sources at its timestamp,
 with all attempts retained and conservative charged time below the allowance.
+
+
+### Training-002: complete task coverage, final fidelity still fails
+
+The stabilized 49-token case completes2,000 updates in1,315.43 seconds. The
+composition including evaluation/analysis takes1,412.39 seconds. Full test10,000
+MSE is0.0525082, validation5,000 is0.0528774; every physical guard passes. Test
+minimum triode/drain/weak-inversion margins are0.38649/0.13775/0.089854 V.
+The normal/uniform/zero256-example probe MSEs are0.0531737/0.0932550/0.1957501.
+The mean-image test MSE is0.0673463 and matched digital BP is0.0419638.
+All six native comparison arms now have full2000-update and evaluation coverage.
+
+This is not numerical acceptance. The read-only final diagnostic uses the exact
+final checkpoint SHA39f53c6a32814cb363a1ba30abcdfd41979486bfa297bda3a7f2df17d102b029
+and all64 saved validation examples in eight batches. It completes in44.75 seconds,
+with unchanged checkpoint and valid artifact hashes. Minimum global cosines are
+EP128/BPTT128=0.864108, EP128/reference=0.967091 and BPTT128/reference=0.864132.
+Batch3 fails EP/BPTT and BPTT/reference; batch6 also fails BPTT/reference.
+References0/1 have residual1.04904e-5, slightly above the fixed1e-5 threshold;
+reference7 has512/1024 relative gradient difference0.01609, above0.01. No gate
+was relaxed. All EP/reference parameter groups exceed0.91492, but truncated
+BPTT has substantial group discrepancies. Forward maps match exactly.
+
+Worst128-step full-test residual is2.42916, so task coverage must not be described
+as complete equilibrium settling. The findings point to remaining free-trajectory
+truncation error; they are distinct from the earlier execution/domain failures.
+The parent visually reviewed validation curves and paired reconstruction figures.
+`training-002/analysis/final-gradient-review.json`, `parent-verification.json`
+and `review.json` retain the failed acceptance with `goal_outcome=needs_repair`.
+The overall goal stays active. The persistent monitor was stopped after terminal
+training and an acknowledged parent/Sol completion handoff; it did not stop jobs.
+
+Next is a bounded read-only numerical probe at nominal dt1.5, then1.25 only if
+needed, retaining the same energy/cycle backtracking and128 outer-update cap.
+Check the failing minibatches first and then the complete64-example cohort if
+supported. Keep physical guards, FP32, beta and all fidelity/reference thresholds
+unchanged. This tests whether halving dt1 to0.5 is unnecessarily slow for the
+remaining modes. Exploratory copied-source evidence goes under
+`results/energy-transformer-repair/step-repair-001/`; no production change or new
+training is justified until that diagnosis passes.
