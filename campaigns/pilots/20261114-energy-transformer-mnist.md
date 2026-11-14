@@ -744,3 +744,16 @@ three and historical recipes are unchanged. Training continues from pinned
 commit with identical network/solver equations, and will record its separate
 source identity. Native input hashes and the exact trained final.pt remain
 required. The monitoring handoff is updated before this diagnostic starts.
+
+
+A read-only midpoint check is also launched on the exact new `step-1000.pt`,
+using the same published 64-example/128-step diagnostic recipe and source as the
+final check. It establishes whether the correction preserves gradient agreement
+during learning, rather than relying solely on the final checkpoint. Native
+output is `training-001/gradient-midpoint/`; exact command and PID are recorded
+in `gradient-midpoint-launch.json`. This check takes no optimizer step and leaves
+training unchanged. It runs on the same local GPU concurrently with our training,
+so reported training wall time includes this short diagnostic's contention.
+The existing training context guard is active. Diagnostic runtime is bounded at
+600 seconds and charged to the repair allowance. The coordinator owns this short
+check; run-watch retains ownership of training and its final diagnostic.
