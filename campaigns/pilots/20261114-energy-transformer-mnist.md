@@ -149,3 +149,40 @@ workers as an operational guard; it changes no science. Driver/context memory
 is additional to reported model tensor peaks. A subsequent recovery may reuse
 all terminal cases and retry remaining initialization failures within the
 original17:37:58UTC deadline. All attempts/dispatch history remain preserved.
+
+## Current durable handoff (11:57 UTC)
+
+Scientific implementation commit2e766d2; bounded recovery399a2d2; CUDA-context
+guard83a00fb. All are published on `energy-transformer`. Shared trunk remains
+unchanged because automatic approval review rejected its merge/push.
+
+Active sweep002: PID2184836 (authoritative PID in its worker.pid), execution
+session35034; clean source399a2d2. Final recovery003: PID2189095, session54673;
+clean source83a00fb, queued until002 exits. Check current handles rather than
+assuming these remain live. Root003 reuses all terminal science from002,
+which already reuses the49-token EP result from001.
+
+Canonical watcher:
+`/home/filip/analog-research/drn/results/energy-transformer-mnist/benchmark-001/watch.json`
+now watches `energy-transformer-mnist-003`. Watcher PID2189788, dispatch enabled,
+five-minute polls; its first real observation saw queued process2189095 and
+advancing predecessor metric bytes. Prior incident/dispatch history retained
+in benchmark-001/watch-state; first configuration archived. No pending incident
+agent at handoff. Next scheduled check is approximately12:02UTC.
+
+Read current progress/status in benchmark-003/status.json and the detailed
+monitor/recovery/review contract in benchmark-003/handoff.md. Expected final
+comparison: benchmark-003/analysis/comparison.md and comparison.json. Original
+absolute deadline remains14Nov17:37:58UTC (18:37:58Paris), all startup failures
+and retries debit the original allowance. Only zero-update CUDA startup errors
+may retry; stopped scientific runs remain final evidence. A review must state
+actual update/test counts and compare matched cases, not different widths.
+
+Small digital completed2000updates, full testMSE0.0524059. This is not a matched
+comparison against the49-token EP result. Reference EP is still active; wider
+and remaining paired coverage are not yet reported. No automatic chat callback
+is configured; durable status/artifacts are the notification surface.
+
+The implementing agent may yield with this verified monitoring/review handoff.
+The completion agent records findings in this note and pushes only the feature
+branch. Keep issue36 open for the broader analog-transformer objective.
