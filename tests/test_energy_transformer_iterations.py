@@ -71,7 +71,7 @@ def test_selection_requires_all_batches_and_a_qualified_reference():
 
 def test_candidate_caps_and_training_mode_are_bounded():
     from ebl.schema.energy_transformer_mnist import parse_config as training
-    for change in ({'iterations':[256]},{'iterations':[16,8]},{'batches':4},{'threshold':.8},{'case':'wider'}):
+    for change in ({'iterations':[256]},{'iterations':[16,8]},{'batches':9},{'threshold':.8},{'case':'wider'}):
         with pytest.raises(ConfigError):parse_config({**asdict(Config()),**change})
     assert training({'phase_mode':'fixed_steps','max_steps':128}).max_steps==128
     with pytest.raises(ConfigError):training({'phase_mode':'fixed_steps','max_steps':129})
@@ -132,3 +132,13 @@ def test_full_step_repair_keeps_energy_force_and_reports_physical_margins():
         assert p.minimum_triode_margin>0 and p.minimum_drain_margin>0 and p.minimum_weak_inversion_margin>0
         assert p.energy_increase<1e-10
     torch.testing.assert_close(phase.y,phases[0].y,atol=0,rtol=0)
+
+
+def test_final_repair_diagnostic_includes_original_failure_cohort():
+    import json
+    from pathlib import Path
+    path=Path(__file__).resolve().parents[1]/'examples/energy_transformer_iterations/repaired128/more_tokens-final.json'
+    c=parse_config(json.loads(path.read_text()))
+    assert c.case=='more_tokens' and c.iterations==(128,)
+    assert c.batches*c.batch_size==64  # Includes the original failing validation position 35.
+    assert c.reference_steps==(512,1024) and c.threshold==.9

@@ -35,7 +35,7 @@ def parse_config(raw):
     if not c.iterations or any(type(t) is not int or not 1<=t<=128 for t in c.iterations) or tuple(sorted(set(c.iterations)))!=c.iterations:
         raise ConfigError('Candidate phase caps must increase and stay within 128')
     if c.reference_steps!=(512,1024):raise ConfigError('Reference qualification is frozen at 512 versus 1024')
-    for name,upper in (('batches',3),('batch_size',8),('wall_seconds',600)):
+    for name,upper in (('batches',8),('batch_size',8),('wall_seconds',600)):
         v=getattr(c,name)
         if type(v) is not int or not 1<=v<=upper:raise ConfigError(f'Invalid {name}')
     if c.beta!=.005 or c.threshold!=.9:raise ConfigError('Frozen beta .005 and target cosine .9')

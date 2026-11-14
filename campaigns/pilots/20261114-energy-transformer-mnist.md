@@ -724,3 +724,23 @@ Current requirements and authoritative evidence:
 No pending item is treated as completed merely because a process is running or
 an earlier checkpoint passed. The active goal continues until this audit is
 satisfied or further corrections are needed.
+
+
+### Final fidelity check covers the original failing example
+
+The final gradient audit is extended from the historical first 24 validation
+examples to the entire first 64-example validation batch. This includes position
+35 (MNIST training ID 50082), which triggered the original operating-range error
+and was absent from the earlier gradient cohort. Use eight batches of eight,
+only the production candidate 128, the unchanged 512/1024 reference qualification,
+and the same 0.9 global threshold on every minibatch. This is a stronger check,
+not a change to training or a new cap sweep. The original three batches remain
+included. Recipe:
+`examples/energy_transformer_iterations/repaired128/more_tokens-final.json`.
+
+The schema now permits at most eight minibatches; the original default remains
+three and historical recipes are unchanged. Training continues from pinned
+2dcba89. The completion diagnostic will run from the newly published diagnostic
+commit with identical network/solver equations, and will record its separate
+source identity. Native input hashes and the exact trained final.pt remain
+required. The monitoring handoff is updated before this diagnostic starts.
