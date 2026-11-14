@@ -832,7 +832,9 @@ def _default_linspace_handler(request: LinspaceRequest) -> Optional[int]:
 
 
 def _default_validate_handler(request: ValidateRequest) -> Optional[int]:
-    if request.definition.experiment_id == "opt_cmo_drn_hwa.v1":
+    if request.definition.experiment_id == "energy_transformer_iterations.v1":
+        from ebl.runtime.energy_transformer_iterations import run_validate
+    elif request.definition.experiment_id == "opt_cmo_drn_hwa.v1":
         from ebl.runtime.opt_cmo_drn.runtime import run_validate
     elif request.definition.experiment_id == "small_drn.v1":
         from ebl.runtime.small_network.runtime import run_validate

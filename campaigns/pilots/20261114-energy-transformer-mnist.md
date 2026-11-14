@@ -259,3 +259,58 @@ requires a new assignment; no retuning or rerun follows from these stops.
 Issue36 stays open. Shared trunk integration remains prohibited by the earlier
 review rejection; only this feature-branch review is published. The experiment
 worktree and pinned source remain retained rather than claiming trunk closeout.
+
+## New assignment: iteration/gradient fidelity on trained models
+
+The user requested a cap around128iterations, choosing a smaller cap if EP/BPTT
+gradient cosine reaches about0.9, measured after some training. The user also
+explicitly requested GPT-6.1Sol to run and monitor the simulations after the
+implementation and to return first results. This is new authorization beyond
+the completed benchmark review; shared-trunk publication remains unapproved.
+
+Use the existing250-update EP checkpoints for small, reference and49-token
+models. Wider has only6updates and is excluded from this matched early-training
+diagnostic. Use identical first24saved validation examples/masks, three batches
+of8; hash checkpoints, cohorts and raw IDX files. Read-only: no optimizer writes
+or additional MNIST training. FP32, beta.005, tau1/1.3, dt.5 with the same
+energy-backtracking rule and ideal device-domain guards.
+
+Candidates T=8,16,32,64,96,128, applied to each phase: T free plus T positive
+and T negative steps (3T serial). Finite-time EP uses both nudges from the same
+free state and explicitly permits non-settled terminal states. BPTT differentiates
+the exact same T-step free dynamics from zero; discrete accepted line-search
+choices are treated as locally constant. Initial states are not detached in
+BPTT's free trajectory. Existing strict settled mode remains unchanged.
+
+The comparison reference is1024-step BPTT, qualified against512steps: global
+cosine>=.999, relative L2<=.01 and final residual<=1e-5 (FP32 reference floor).
+These longer runs are diagnostic references, never production iteration caps.
+If reference qualification fails, do not select a cap. Report per-group cosine,
+relative L2 and norm ratios for all six parameter groups, residuals, domain
+margins, energy-roundoff increases, GPU time and tensor memory. Global agreement
+can hide errors in small parameter groups; inspect Q/K separately in the review.
+
+Select the smallest tested T with global EP/BPTT_T, EP/reference and
+BPTT_T/reference cosine all>=.9 on every batch. Select a common cap only from
+the intersection of passing caps across all three cases, not from initialization
+or an average that hides a failed batch. No qualifying cap<=128 is a valid
+negative outcome; do not expand candidate caps or change beta silently.
+
+Public interface: `python -m ebl validate --config
+examples/energy_transformer_iterations/<case>.json --weights <explicit
+step-0250.pt> --output-dir <result-root>/<case>`. Source from a clean pinned
+published feature commit. Root:
+`/home/filip/analog-research/drn/results/energy-transformer-iterations/20261114-001/`.
+Budget<=30localRTX3090minutes,600seconds per case, including understood startup
+retries; retain all attempts. No remote host or new SPICE. Outputs are native
+RunStore bundles, checkpoint/cohort identities, saved gradients, curves, plots
+and cap-selection JSON. Each qualifying case emits a prospective training
+configuration with `phase_mode=fixed_steps`, `max_steps<=128`; do not train it
+automatically during this diagnostic.
+
+The executing Sol agent owns launch verification, progress, completion inspection
+and first-results reporting. Short runs remain directly supervised; if a durable
+handoff is needed, use run-watch with bounded dispatch and preserve one owner.
+Scientific failures are evidence; only understood operational failures may retry
+within the allowance. Commit code/tests/configs before delegation and record
+handles/results below. Shared trunk remains untouched.

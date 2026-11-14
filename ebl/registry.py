@@ -941,6 +941,17 @@ EXPERIMENT_REGISTRY["energy_transformer_mnist.v1"] = ExperimentDefinition(
 )
 
 
+
+from ebl.schema.energy_transformer_iterations import (
+    parse_config as _et_iterations_parse, resolve_config as _et_iterations_resolve,
+)
+EXPERIMENT_REGISTRY["energy_transformer_iterations.v1"] = ExperimentDefinition(
+    experiment_id="energy_transformer_iterations.v1", schema_version=1,
+    description="FP32 iteration cap and EP/BPTT gradient agreement on a trained checkpoint.",
+    supported_modes=(RunMode.VALIDATE,), parser=_et_iterations_parse, resolver=_et_iterations_resolve,
+)
+
+
 def list_definitions() -> Tuple[ExperimentDefinition, ...]:
     """Return definitions in stable identifier order."""
 

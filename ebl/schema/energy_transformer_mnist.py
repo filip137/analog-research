@@ -12,6 +12,7 @@ class Config:
     arm: str='energy_ep'
     case: str='small'
     precision: str='fp32'
+    phase_mode: str='settled'
     seed: int=20261114
     updates: int=2000
     batch_size: int=64
@@ -44,6 +45,10 @@ def parse_config(raw):
                        ('validation_count',5000),('probe_count',256)):
         if type(getattr(c,name)) is not int or not 1<=getattr(c,name)<=upper:
             raise ConfigError(f'Out-of-budget {name}')
+    if c.phase_mode not in ('settled','fixed_steps'):
+        raise ConfigError('Expected settled or fixed_steps phase mode')
+    if c.phase_mode=='fixed_steps' and c.max_steps>128:
+        raise ConfigError('Finite-time phase cap cannot exceed 128')
     if c.wall_seconds<=c.train_seconds or type(c.seed) is not int or not 0<=c.seed<2**32:
         raise ConfigError('Invalid seed or training/evaluation budget')
     for name,value in (('learning_rate',.003),('beta',.005),('epsilon',.5),('residual_tolerance',1e-6)):

@@ -12,6 +12,7 @@ from ebl.schema.base import ConfigError
 from ebl.schema.energy_transformer_mnist import CASES
 from networks.energy_transformer.gpu import EnergyNetwork, DigitalNetwork, EquilibriumError, settle, ep_gradient
 from networks.energy_transformer.mnist import load_raw, hidden_masks, batch
+from networks.energy_transformer.finite_time import relax, finite_ep
 
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -35,7 +36,7 @@ def save_checkpoint(path,model,optimizer,config,step,train_seconds,order_gen,mas
 
 def restore_checkpoint(path,model,optimizer,config,order_gen,mask_gen):
     payload=torch.load(path,map_location='cpu',weights_only=False)
-    if payload['schema']!='energy-transformer-mnist.checkpoint.v1' or payload['config']!=asdict(config):
+    if payload['schema']!='energy-transformer-mnist.checkpoint.v1' or {'phase_mode':'settled',**payload['config']}!=asdict(config):
         raise ConfigError('Resume requires the identical scientific configuration')
     model.load_state_dict(payload['model']);optimizer.load_state_dict(payload['optimizer'])
     order_gen.set_state(payload['order_rng']);mask_gen.set_state(payload['mask_rng'])
@@ -48,8 +49,11 @@ def restore_checkpoint(path,model,optimizer,config,order_gen,mask_gen):
 @torch.no_grad()
 def predict(model,x,target,mask,config,deadline,attention='normal'):
     if isinstance(model,EnergyNetwork):
-        phase=settle(model,x,target,mask,tolerance=config.residual_tolerance,
-                     max_steps=config.max_steps,deadline=deadline,attention=attention)
+        if config.phase_mode=='fixed_steps':
+            phase=relax(model,x,target,mask,config.max_steps,deadline=deadline,attention=attention)
+        else:
+            phase=settle(model,x,target,mask,tolerance=config.residual_tolerance,
+                         max_steps=config.max_steps,deadline=deadline,attention=attention)
         return phase.y,{'residual':phase.residual,'iterations':phase.iterations.float().mean().item(),
                         'maximum_operand':phase.maximum_operand,'minimum_triode_margin':phase.minimum_triode_margin}
     return model(x,attention),{}
@@ -139,11 +143,15 @@ def train(config,store,images,ids,resume=None):
         optimizer.zero_grad(set_to_none=True)
         try:
             if config.arm=='energy_ep':
-                gradients,phases=ep_gradient(model,x,target,mask,beta=config.beta,
-                    tolerance=config.residual_tolerance,max_steps=config.max_steps,deadline=training_deadline)
+                if config.phase_mode=='fixed_steps':
+                    gradients,phases=finite_ep(model,x,target,mask,config.max_steps,beta=config.beta,deadline=training_deadline)
+                else:
+                    gradients,phases=ep_gradient(model,x,target,mask,beta=config.beta,
+                        tolerance=config.residual_tolerance,max_steps=config.max_steps,deadline=training_deadline)
                 for name,p in model.named_parameters(): p.grad=gradients[name]
                 prediction=phases[0].y
-                last_diag={'phase_iterations':[p.iterations.float().mean().item() for p in phases],
+                last_diag={'phase_mode':config.phase_mode,'all_phases_settled':all(p.residual<=config.residual_tolerance for p in phases),
+                           'phase_iterations':[p.iterations.float().mean().item() for p in phases],
                            'phase_max_iterations':[p.iterations.max().item() for p in phases],
                            'residual':max(p.residual for p in phases),
                            'maximum_operand':max(p.maximum_operand for p in phases),
@@ -175,7 +183,7 @@ def train(config,store,images,ids,resume=None):
             store.append_metric({'stage':'validation_probe','step':step,'train_seconds':train_seconds,**probe})
     train_seconds=prior_train+time.monotonic()-training_started
     save_checkpoint(checkpoints/'final.pt',model,optimizer,config,step,train_seconds,order_gen,mask_gen)
-    result={'arm':config.arm,'case':config.case,'stop_reason':stop,'failure':failure,'updates':step,
+    result={'phase_mode':config.phase_mode,'max_steps':config.max_steps,'arm':config.arm,'case':config.case,'stop_reason':stop,'failure':failure,'updates':step,
             'train_seconds':train_seconds,'peak_memory_bytes':torch.cuda.max_memory_allocated(),
             'total_parameters':sum(p.numel() for p in model.parameters()),'core_parameters':6*d*d,
             'last_training_diagnostics':last_diag,'evaluation':{},
