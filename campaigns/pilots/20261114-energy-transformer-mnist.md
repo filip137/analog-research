@@ -896,3 +896,12 @@ these costs are included in measured runtime. This is a numerical integration
 repair to the GPU simulator; the underlying continuous circuit energy and forces
 remain unchanged. Final training, full held-out evaluation and all eight final
 gradient minibatches must pass before the repair is considered verified.
+
+
+The fresh-run matching audit also passes: initial weights, data-order/mask RNG
+and complete cohort records exactly match the earlier independently audited
+EP/BP comparison; only `solver_rule` differs from training-001. Receipt:
+`training-002/analysis/matched-inputs.json`. The monitor was restarted as
+PID 2458617 after carrying forward its predecessor's dispatch timestamp, retaining
+the aggregate invocation budget. Its host identity and running observation were
+reverified; training was unaffected. No completion claim follows from this audit.
