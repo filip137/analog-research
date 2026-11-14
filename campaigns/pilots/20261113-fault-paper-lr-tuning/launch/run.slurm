@@ -33,7 +33,8 @@ if [ -z "$samples" ]; then
   env -u CUBLAS_WORKSPACE_CONFIG EBL_CORPUS_ROOT=$CORPORA python campaigns/pilots/20261113-fault-paper-lr-tuning/draw_samples.py \
     "$config" "$TEACHER" "$corpora" || { echo "SAMPLES_REFUSED $(date -u +%FT%TZ)"; exit 3; }
 else
-  ln -s "$samples"/teacher-samples8-*.pt "$corpora/" || exit 3
+  # No trailing slash: on Jean Zay Lustre, `ln -s f dir/` fails with ENOENT on a fresh directory.
+  ln -s "$samples"/teacher-samples8-*.pt "$corpora" || exit 3
 fi
 ln -s "$CORPORA/wikitext-2-raw-v1.pt" "$corpora/wikitext-2-raw-v1.pt"
 echo "SAMPLES_READY $corpora $(date -u +%FT%TZ)"
