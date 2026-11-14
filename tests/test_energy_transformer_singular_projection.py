@@ -72,3 +72,23 @@ def test_ep_gradient_agreement_after_singular_projection():
     result=agreement(ep,bp)
     assert result['global']['cosine']>.99999
     assert all(v['cosine']>.99999 for v in result['groups'].values())
+
+
+
+def test_followup_reuses_old_control_and_inherits_original_deadline(tmp_path):
+    import json
+    from experiments.run_energy_transformer_input_attention import full_cases,prior_comparison
+    (tmp_path/'analysis').mkdir()
+    launch={'deadline_unix':12345.,'source_commit':'verified-source'}
+    result={'outcome':'comparison_collected','full_training_coverage':True,
+            'final_gradient_passed':True,'deadline_unix':12345.,'seconds':1241.}
+    (tmp_path/'launch.json').write_text(json.dumps(launch))
+    (tmp_path/'result.json').write_text(json.dumps(result))
+    (tmp_path/'analysis/review.json').write_text(json.dumps({'verdict':{'numerical_and_coverage_pass':True}}))
+    prior=prior_comparison(tmp_path)
+    assert prior['deadline_unix']==12345. and prior['seconds']==1241.
+    assert [n for n,p in full_cases(tmp_path,32,'singular_clip')]==['input-energy_ep','input-energy_bp']
+    assert len(full_cases(tmp_path,32,'radial'))==3
+    result['final_gradient_passed']=False
+    (tmp_path/'result.json').write_text(json.dumps(result))
+    with pytest.raises(ValueError,match='verified'):prior_comparison(tmp_path)

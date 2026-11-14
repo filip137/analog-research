@@ -27,26 +27,59 @@ def qualified_cap(summary):
     return summary['selected_cap']
 
 
+
+def prior_comparison(root):
+    """A follow-up inherits the actual prior deadline; it cannot buy a new hour."""
+    launch=json.loads((root/'launch.json').read_text())
+    result=json.loads((root/'result.json').read_text())
+    review=json.loads((root/'analysis/review.json').read_text())
+    if (result.get('outcome')!='comparison_collected' or not result.get('full_training_coverage')
+            or not result.get('final_gradient_passed')
+            or not review.get('verdict',{}).get('numerical_and_coverage_pass')):
+        raise ValueError('Reuse requires a completed, numerically verified comparison')
+    if result['deadline_unix']!=launch['deadline_unix']:
+        raise ValueError('Prior deadline identity is inconsistent')
+    return dict(root=str(root.resolve()),deadline_unix=launch['deadline_unix'],
+                source_commit=launch['source_commit'],seconds=result['seconds'])
+
+
+def full_cases(configs,cap,variant):
+    if cap not in (32,64,128) or variant not in ('radial','singular_clip'):
+        raise ValueError('Unknown frozen comparison')
+    cases=[('input-energy_ep',configs/f'caps/{cap}/input-energy_ep.json'),
+           ('input-energy_bp',configs/f'caps/{cap}/input-energy_bp.json')]
+    if variant=='radial':
+        cases.append(('recurrent-energy_bp',configs/'recurrent-energy_bp.json'))
+    return cases
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output-root', type=Path, required=True)
     parser.add_argument('--seconds', type=int, default=3600)
     parser.add_argument('--deadline-unix', type=float)
+    parser.add_argument('--variant',choices=('radial','singular_clip'),default='radial')
+    parser.add_argument('--prior-root',type=Path)
     args = parser.parse_args()
     if not 60 <= args.seconds <= 3600:
         raise ValueError('This comparison has at most one additional hour')
+    if (args.variant=='singular_clip')!=(args.prior_root is not None):
+        parser.error('Singular clipping requires the explicit prior comparison and its remaining deadline')
+    prior=prior_comparison(args.prior_root.resolve()) if args.prior_root is not None else None
+    configs=CONFIGS/'singular_clip' if prior else CONFIGS
     root = args.output_root.resolve()
     root.mkdir(parents=True, exist_ok=True)
     if (root/'worker.pid').exists():
         raise RuntimeError('Preserve existing attempts; never duplicate an identity')
     begin = time.monotonic()
-    deadline = min(time.time()+args.seconds, args.deadline_unix or float('inf'))
+    deadline = min(time.time()+args.seconds, args.deadline_unix or float('inf'),
+                   prior['deadline_unix'] if prior else float('inf'))
     if deadline <= time.time():
         raise TimeoutError('Original allowance has expired')
     (root/'worker.pid').write_text(str(os.getpid()))
     atomic_write_json(root/'launch.json', dict(pid=os.getpid(), started=now(),
         deadline=datetime.fromtimestamp(deadline, timezone.utc).isoformat(),
-        deadline_unix=deadline, source_commit=subprocess.check_output(
+        deadline_unix=deadline, variant=args.variant, prior_comparison=prior, source_commit=subprocess.check_output(
             ['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(), command=sys.argv))
     rows = []
     active = None
@@ -116,13 +149,14 @@ def main():
         print(json.dumps({k:v for k,v in row.items() if k not in ('attempts','summary','command')}),flush=True)
         if row['outcome'] != 'terminal':
             raise RuntimeError(f'Operational failure in {name}; preserve attempts and diagnose')
-        if sum(p.stat().st_size for p in root.rglob('*') if p.is_file()) > 2_000_000_000:
+        storage_roots={root,Path(prior['root'])} if prior else {root}
+        if sum(p.stat().st_size for base in storage_roots for p in base.rglob('*') if p.is_file()) > 2_000_000_000:
             raise RuntimeError('Declared two-GB output allowance exceeded')
         return row
 
     def finish(outcome, **extra):
         atomic_write_json(root/'result.json',dict(outcome=outcome,cases=rows,
-            seconds=time.monotonic()-begin,deadline_unix=deadline,**extra))
+            seconds=time.monotonic()-begin,deadline_unix=deadline,variant=args.variant,prior_comparison=prior,**extra))
         status('complete',outcome=outcome)
 
     try:
@@ -135,13 +169,13 @@ def main():
         atomic_write_json(root/'supervisor-gpu.json',dict(pid=os.getpid(),
             gpu=torch.cuda.get_device_name(),context_guard_bytes=guard.numel()*4))
         for arm in ('energy_ep','energy_bp'):
-            smoke = run_native(f'smoke-{arm}',CONFIGS/f'smoke-{arm}.json')
+            smoke = run_native(f'smoke-{arm}',configs/f'smoke-{arm}.json')
             if not smoke.get('summary',{}).get('coverage_complete'):
                 finish('smoke_scientific_stop'); return
-        warmup = run_native('warmup-energy_ep',CONFIGS/'warmup-energy_ep.json')
+        warmup = run_native('warmup-energy_ep',configs/'warmup-energy_ep.json')
         if not warmup.get('summary',{}).get('coverage_complete'):
             finish('warmup_scientific_stop'); return
-        qualification = run_native('gradient-selection',CONFIGS/'gradient-selection.json',
+        qualification = run_native('gradient-selection',configs/'gradient-selection.json',
             'validate',Path(warmup['run_dir'])/'checkpoints/final.pt')
         cap = qualified_cap(qualification['summary'])
         if cap is None:
@@ -150,14 +184,11 @@ def main():
             checkpoint=str(Path(warmup['run_dir'])/'checkpoints/final.pt'),
             diagnostic=qualification['run_dir']))
         trained = {}
-        for name, config in (
-                ('input-energy_ep',CONFIGS/f'caps/{cap}/input-energy_ep.json'),
-                ('input-energy_bp',CONFIGS/f'caps/{cap}/input-energy_bp.json'),
-                ('recurrent-energy_bp',CONFIGS/'recurrent-energy_bp.json')):
+        for name, config in full_cases(configs,cap,args.variant):
             trained[name] = run_native(name,config)
         final = None
         if trained['input-energy_ep'].get('summary',{}).get('coverage_complete'):
-            final = run_native('gradient-final',CONFIGS/f'caps/{cap}/gradient-final.json',
+            final = run_native('gradient-final',configs/f'caps/{cap}/gradient-final.json',
                 'validate',Path(trained['input-energy_ep']['run_dir'])/'checkpoints/final.pt')
         complete = all(r.get('summary',{}).get('coverage_complete') for r in trained.values())
         gradient_passed = final is not None and qualified_cap(final['summary'])==cap

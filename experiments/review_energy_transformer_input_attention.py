@@ -52,22 +52,27 @@ def weight_ranks(runs):
     return result
 
 
-def collect(root,old_root):
+def collect(root,old_root,radial_root=None):
     terminal=read(root/'result.json')
     new={r['name']:Path(r['run_dir']) for r in read(root/'coverage.json') if r.get('run_dir')}
     old={r['arm']:Path(r['run_dir']) for r in read(old_root/'coverage.json') if r['case']=='more_tokens'}
-    required=('input-energy_ep','input-energy_bp','recurrent-energy_bp','gradient-selection','gradient-final')
+    required=('input-energy_ep','input-energy_bp','gradient-selection','gradient-final')
     if not all(name in new for name in required):
         raise RuntimeError('Full comparison not collected; inspect the retained partial/negative result')
+    radial={r['name']:Path(r['run_dir']) for r in read(radial_root/'coverage.json') if r.get('run_dir')} if radial_root else {}
+    old_bp=new.get('recurrent-energy_bp',radial.get('recurrent-energy_bp'))
+    if old_bp is None:raise ValueError('An explicit completed old-model BPTT control is required')
     runs={'new_ep':new['input-energy_ep'],'new_bp':new['input-energy_bp'],
-          'old_bp':new['recurrent-energy_bp'],'old_ep':old['energy_ep'],'digital':old['digital_bp']}
+          'old_bp':old_bp,'old_ep':old['energy_ep'],'digital':old['digital_bp']}
+    if radial_root:
+        runs.update(radial_ep=radial['input-energy_ep'],radial_bp=radial['input-energy_bp'])
     summaries={k:read(p/'artifacts/summary.json') for k,p in runs.items()}
     histories={k:[json.loads(line) for line in (p/'metrics.jsonl').read_text().splitlines()] for k,p in runs.items()}
     checks={}
     manifest={k:read(p/'manifest.json') for k,p in runs.items()}
     expected_source=read(root/'launch.json')['source_commit']
     checks['new_sources_clean']=all(manifest[k]['source']['commit']==expected_source and not manifest[k]['source']['dirty']
-                                   for k in ('new_ep','new_bp','old_bp'))
+                                   for k in (('new_ep','new_bp') if radial_root else ('new_ep','new_bp','old_bp')))
     dataset=lambda m:{v['path']:v['sha256'] for v in m['inputs'] if '/MNIST/raw/' in v['path']}
     checks['identical_mnist_inputs']=all(dataset(m)==dataset(manifest['old_ep']) for m in manifest.values())
     initial={k:load(p/'checkpoints/initial.pt') for k,p in runs.items() if k!='digital'}
@@ -79,6 +84,24 @@ def collect(root,old_root):
     for a,b in (('new_ep','new_bp'),('old_ep','old_bp'),('new_ep','old_ep')):
         checks[f'{a}_{b}_rng_equal']=all(torch.equal(final[a][key],final[b][key]) for key in ('order_rng','mask_rng'))
         checks[f'{a}_{b}_cohorts_equal']=equal(load(runs[a]/'artifacts/cohorts.pt'),load(runs[b]/'artifacts/cohorts.pt'))
+    if radial_root:
+        prior_source=read(radial_root/'launch.json')['source_commit']
+        checks['prior_comparison_verified']=read(radial_root/'analysis/review.json')['verdict']['numerical_and_coverage_pass']
+        checks['reused_sources_clean']=all(manifest[k]['source']['commit']==prior_source and not manifest[k]['source']['dirty']
+                                          for k in ('radial_ep','radial_bp','old_bp'))
+        checks['projection_variant_initial_model_equal']=equal(initial['new_ep']['model'],initial['radial_ep']['model'])
+        checks['projection_policies_match_declared_intervention']=(
+            all(final[k]['config']['recurrent_constraint']=='input_attention_singular_v1' for k in ('new_ep','new_bp'))
+            and all(final[k]['config']['recurrent_constraint']=='input_attention_v1' for k in ('radial_ep','radial_bp')))
+        # Cap selection is the same rule but may select a different cap.
+        invariant=lambda c:{k:v for k,v in c.items() if k not in ('recurrent_constraint','max_steps')}
+        checks['projection_only_config_intervention']=invariant(final['new_ep']['config'])==invariant(final['radial_ep']['config'])
+        checks['projection_variant_rng_equal']=all(torch.equal(final['new_ep'][k],final['radial_ep'][k]) for k in ('order_rng','mask_rng'))
+        checks['projection_variant_cohort_equal']=equal(load(runs['new_ep']/'artifacts/cohorts.pt'),load(runs['radial_ep']/'artifacts/cohorts.pt'))
+        equations=('networks/energy_transformer/input_attention.py','networks/energy_transformer/gpu.py','networks/energy_transformer/finite_time.py')
+        checks['projection_variant_energy_equations_unchanged']=all(
+            sha256_file(Path(manifest['new_ep']['working_directory'])/f)==
+            sha256_file(Path(manifest['radial_ep']['working_directory'])/f) for f in equations)
     checks['all_weights_fp32_finite']=all(v.dtype==torch.float32 and bool(torch.isfinite(v).all())
         for payload in final.values() for v in payload['model'].values())
     checks['all_full_coverage']=all(s.get('coverage_complete') and s['updates']==2000 and
@@ -140,6 +163,8 @@ def collect(root,old_root):
         ep_test_improvement_percent=improvement,new_ep_vs_bp_gap_percent=bp_gap,
         meaningful_quality_gain=improvement>=5,
         meaningful_routing=byname['new_ep']['uniform_penalty_percent']>=1)
+    if radial_root:
+        verdict['ep_improvement_over_radial_percent']=100*(1-byname['new_ep']['test_mse']/byname['radial_ep']['test_mse'])
     verdict['promote']=all(verdict[k] for k in ('numerical_and_coverage_pass','meaningful_quality_gain','meaningful_routing'))
     out=root/'analysis';out.mkdir(exist_ok=True)
     review=dict(checks=checks,training_checks=training_checks,diagnostics=diagnostic,
@@ -155,6 +180,10 @@ def collect(root,old_root):
             'old_ep':'Recurrent attention / EP','old_bp':'Recurrent attention / BPTT','digital':'Digital reference'}
     styles={'new_ep':('tab:orange','-'),'new_bp':('tab:blue','-'),
             'old_ep':('tab:orange','--'),'old_bp':('tab:blue','--'),'digital':('0.4',':')}
+    if radial_root:
+        labels.update(new_ep='Singular clip / EP',new_bp='Singular clip / BPTT',
+                      radial_ep='Radial limit / EP',radial_bp='Radial limit / BPTT')
+        styles.update(radial_ep=('tab:orange',':'),radial_bp=('tab:blue',':'))
     fig,axes=plt.subplots(1,2,figsize=(12,4.5),layout='constrained')
     for name in runs:
         points=validation_points(histories[name],summaries[name]);color,style=styles[name]
@@ -227,4 +256,5 @@ def collect(root,old_root):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('root',type=Path);parser.add_argument('--old-root',type=Path,required=True)
-    args=parser.parse_args();collect(args.root,args.old_root)
+    parser.add_argument('--radial-root',type=Path)
+    args=parser.parse_args();collect(args.root,args.old_root,args.radial_root)

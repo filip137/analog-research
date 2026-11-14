@@ -451,3 +451,36 @@ watcher reached terminal verification and was stopped after collection; no
 task workers remain. Runtime storage was approximately124MB before final
 additional figures, below2GB. The original21:43:14.786UTC deadline remains
 unchanged for any separately approved follow-up. No new task has launched.
+
+
+## Follow-up orchestration prepared —21:19UTC
+
+The existing serial runner now accepts `--variant singular_clip --prior-root`.
+It requires the original comparison's complete numerical review, reuses the
+old recurrent BPTT control, and inherits the original absolute deadline rather
+than resetting an hour. The2GB allowance covers both output roots together.
+The collector explicitly checks the different projection policies, identical
+initial tensors/data/RNGs, otherwise matching scientific settings and unchanged
+energy/dynamics source files. The cap-selection rule is unchanged; if the
+selected cap differs, that difference is reported rather than hidden.
+
+Prepared launch command, **not executed**:
+
+```bash
+python -u -m experiments.run_energy_transformer_input_attention \
+  --variant singular_clip \
+  --prior-root /home/filip/analog-research/drn/results/energy-transformer-input-attention/benchmark-001 \
+  --output-root /home/filip/analog-research/drn/results/energy-transformer-input-attention/singular-001
+```
+
+Run only from a clean pinned source after explicit approval, with a fresh
+watch identity and the existing21:43:14.786UTC deadline. The matching collector
+uses the new output root, `--radial-root` pointing to `benchmark-001` and
+`--old-root` pointing to `energy-transformer-repair/training-003`. Neither a
+new scientific run nor an extension is authorized by automatic continuation.
+
+Verification: all61 relevant mathematical/schema/gradient/runner tests pass.
+A read-only replay of the existing bundles through the updated collector
+reproduces all23 prior checks, the comparison values and the verdict exactly;
+its temporary outputs are outside the native evidence tree. This verifies
+backward-compatible collection, not the unexecuted follow-up's task quality.
