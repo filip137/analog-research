@@ -584,3 +584,42 @@ binding. Proposed new allowance:20minutes on the same local RTX3090, within the
 original aggregate6h/2GB ceilings; this time extension awaits user authorization.
 The next watcher handoff must permit understood operational repairs within that
 allowance rather than referring every fault back to an inactive root.
+
+
+## Approved recovery running —22:35UTC
+
+The user explicitly approved the20-minute extension. `singular-002` launched
+at22:35:15.365UTC and is limited to22:55:15.365UTC (Unix1794696915.3653052),
+including all smokes, diagnostics, training/evaluation and operational retries.
+The prior elapsed1241.37s comparison and588.64s partial attempt stay charged;
+aggregate6h and combined2GB limits remain. No new scientific setting changed.
+
+Clean source is `c0df4ab99ed19c954acb8d36104edec6055dec07`, pinned at
+`/home/filip/analog-research/drn/results/energy-transformer-input-attention/source-c0df4ab`.
+Output root is
+`/home/filip/analog-research/drn/results/energy-transformer-input-attention/singular-002`.
+Supervisor2654842; persistent watcher2655250; current native child is in
+`child.pid`. Local RTX3090 was idle and had sufficient memory at admission.
+
+Both FP32 two-update smokes passed on their first attempts with complete native
+artifact inspection. The250-update warm-up is producing metrics. Its native
+`artifacts/budget.json` confirms a13.17s measured evaluation reserve instead of
+the previous600s constant, leaving its full600s training allowance available.
+This is readiness/progress evidence, not final quality or gradient validation.
+
+The command uses the prepared serial composition with `--variant singular_clip`,
+`--prior-root .../benchmark-001`, `--charge-root .../singular-001`,
+`--seconds 1200`, `--approved-deadline-unix 1794696915.3653052` and
+`--output-root .../singular-002`. Exactly one pipeline owns the cases.
+
+Monitoring ownership is corrected: the verified persistent watch observes
+process/GPU/artifact/log evidence every60seconds. Its bounded incident agent
+is explicitly delegated understood operational repairs within the SAME deadline
+and terminal collection/scientific review, including the existing collector,
+figures and the current pilot note. It must preserve attempts, test and pin
+repairs, and may not retune science or extend time. It must not simply refer an
+already-authorized operational repair to an inactive root. Terminal review
+separates full coverage and numerical checks from promotion; partial data cannot
+be called complete. The current runtime handoff contains exact commands and
+artifact paths. Next milestone: warm-up/gradient qualification, then full EP
+and BPTT coverage and final gradient gate.
