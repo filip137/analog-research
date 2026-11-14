@@ -131,3 +131,15 @@ def test_comparison_uses_only_complete_fixed_validation_cohort():
     points=validation_points(history,summary)
     assert [p['step'] for p in points]==[0,382]
     assert [p['mse'] for p in points]==[.2,.05]
+
+
+def test_capped64_reuses_only_three_valid_bp_baselines(tmp_path):
+    import json
+    from experiments.run_energy_transformer_mnist import capped64_baselines
+    path=tmp_path/'coverage.json'
+    rows=[{'case':c,'arm':a,'outcome':'terminal','integrity_passed':True}
+          for c in ('small','reference','wider','more_tokens') for a in ('energy_ep','digital_bp')]
+    path.write_text(json.dumps(rows));chosen=capped64_baselines(path)
+    assert [(r['case'],r['arm']) for r in chosen]==[(c,'digital_bp') for c in ('small','reference','more_tokens')]
+    rows[1]['integrity_passed']=False;path.write_text(json.dumps(rows))
+    with pytest.raises(RuntimeError,match='small'):capped64_baselines(path)

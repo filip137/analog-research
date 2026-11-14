@@ -44,12 +44,28 @@ def previous_coverage(root):
     return {(r['case'],r['arm']):r for r in rows}, result['seconds']+result.get('charged_prior_seconds',0),launch['deadline']
 
 
+def capped64_baselines(path):
+    rows=json.loads(path.read_text())
+    chosen=[]
+    for case in ('small','reference','more_tokens'):
+        matches=[r for r in rows if r['case']==case and r['arm']=='digital_bp']
+        if len(matches)!=1 or matches[0]['outcome']!='terminal' or not matches[0].get('integrity_passed'):
+            raise RuntimeError(f'Missing valid completed BP baseline: {case}')
+        chosen.append({**matches[0],'reused_from':str(path)})
+    return chosen
+
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--output-root',type=Path,required=True)
     parser.add_argument('--readiness',type=Path,required=True)
     parser.add_argument('--charged-readiness-seconds',type=float,required=True)
     parser.add_argument('--retry-from',type=Path)
-    args=parser.parse_args();root=args.output_root.resolve();root.mkdir(parents=True,exist_ok=True)
+    parser.add_argument('--capped64-from',type=Path,help='Run three capped EP configs and reuse completed BP coverage')
+    args=parser.parse_args()
+    if args.capped64_from and args.retry_from:parser.error('Capped training cannot use old eight-case recovery')
+    baseline_rows=capped64_baselines(args.capped64_from) if args.capped64_from else []
+    expected_cases=6 if args.capped64_from else 8
+    root=args.output_root.resolve();root.mkdir(parents=True,exist_ok=True)
     gate=json.loads(args.readiness.read_text())
     if not gate['passed']:raise RuntimeError('FP32 numerical readiness failed')
     if not 0<=args.charged_readiness_seconds<=1800:raise ValueError('Readiness allowance exhausted')
@@ -69,7 +85,7 @@ def main():
                               'predecessor_stage':previous_status.get('stage')})
             time.sleep(10)
         previous,prior_seconds,prior_deadline=previous_coverage(predecessor)
-    begin=time.monotonic();deadline=begin+21600-args.charged_readiness_seconds-prior_seconds
+    begin=time.monotonic();deadline=begin+(7200 if args.capped64_from else 21600)-args.charged_readiness_seconds-prior_seconds
     if prior_deadline:
         deadline=min(deadline,begin+datetime.fromisoformat(prior_deadline).timestamp()-time.time())
     # Keep one CUDA context alive between workers. On this host, cold worker
@@ -81,7 +97,8 @@ def main():
     atomic_write_json(root/'supervisor-gpu.json',{'context_guard_bytes':cuda_context_guard.numel()*4,
                       'gpu':torch.cuda.get_device_name(),'pid':os.getpid(),
                       'note':'Persistent supervisor CUDA context; driver/context memory is additional to reported model tensor peaks.'})
-    rows=[];active=None
+    rows=list(baseline_rows);active=None
+    atomic_write_json(root/'coverage.json',rows)
     def status(stage,**extra):
         native=list((root/active).rglob('metrics.jsonl')) if active else []
         metric_bytes=sum(p.stat().st_size for p in native)
@@ -90,8 +107,8 @@ def main():
                           'elapsed_seconds':time.monotonic()-begin,
                           'charged_readiness_seconds':args.charged_readiness_seconds,**extra})
     try:
-        for case in ('small','reference','wider','more_tokens'):
-            for arm in ('energy_ep','digital_bp'):
+        for case in (('small','reference','more_tokens') if args.capped64_from else ('small','reference','wider','more_tokens')):
+            for arm in (('energy_ep',) if args.capped64_from else ('energy_ep','digital_bp')):
                 active=f'{case}-{arm}';status('running')
                 prior=previous.get((case,arm))
                 if prior and prior['outcome']=='terminal':
@@ -102,7 +119,8 @@ def main():
                 if remaining<60:
                     rows.append({'case':case,'arm':arm,'outcome':'global_budget_exhausted'});continue
                 folder=root/active;folder.mkdir()
-                config=ROOT/'examples/energy_transformer_mnist'/f'{active}.json'
+                config_root=ROOT/'examples/energy_transformer_mnist'
+                config=(config_root/'capped64' if args.capped64_from else config_root)/f'{active}.json'
                 case_begin=time.monotonic()
                 allowance=min(2100-(prior.get('wall_seconds',0) if prior else 0),remaining)
                 attempts=[]
@@ -149,8 +167,8 @@ def main():
         analysis=subprocess.run([sys.executable,'-m','experiments.plot_energy_transformer_mnist',str(root)],
                                  cwd=ROOT,timeout=max(1,min(600,deadline-time.monotonic())))
         result={'cases':rows,'terminal_cases':sum(r['outcome']=='terminal' for r in rows),
-                'expected_cases':8,'coverage_complete':len(rows)==8 and all(r.get('summary',{}).get('coverage_complete',False) for r in rows),
-                'integrity_passed':len(rows)==8 and all(r.get('integrity_passed',False) for r in rows),
+                'expected_cases':expected_cases,'coverage_complete':len(rows)==expected_cases and all(r.get('summary',{}).get('coverage_complete',False) for r in rows),
+                'integrity_passed':len(rows)==expected_cases and all(r.get('integrity_passed',False) for r in rows),
                 'analysis_returncode':analysis.returncode,'seconds':time.monotonic()-begin,
                 'charged_readiness_seconds':args.charged_readiness_seconds,'charged_prior_seconds':prior_seconds}
         atomic_write_json(root/'result.json',result)
