@@ -484,3 +484,37 @@ A read-only replay of the existing bundles through the updated collector
 reproduces all23 prior checks, the comparison values and the verdict exactly;
 its temporary outputs are outside the native evidence tree. This verifies
 backward-compatible collection, not the unexecuted follow-up's task quality.
+
+
+## Approved follow-up running —21:24UTC
+
+The user approved the singular-clipping comparison and explicitly requested
+standing authorization for follow-ups within approved goals and budgets. The
+shared research AGENTS.md now records that rule (commit e7daecf); this branch's
+AGENTS.md mirrors it so backend agents do not reinstate per-variant approval.
+Existing deadlines and budgets remain binding.
+
+The serial pipeline launched at21:24:11UTC from clean pinned source
+`a76aaa24d913745408034204091d2bc4a375db15`, at
+`/home/filip/analog-research/drn/results/energy-transformer-input-attention/source-a76aaa2`.
+Output root is
+`/home/filip/analog-research/drn/results/energy-transformer-input-attention/singular-001`.
+Supervisor2599030; watcher2599199; current native child is in `child.pid`.
+Both FP32 GPU smokes passed on their first attempts with complete native
+artifact inspection; the250-update warm-up is producing training metrics.
+Local RTX3090 was idle with ample memory at launch. No unrelated process changed.
+
+The command is the prepared `--variant singular_clip --prior-root benchmark-001`
+composition above. It retains the21:43:14.786UTC hard deadline (about19minutes
+at launch),2GB combined storage allowance, original initialization and scientific
+settings. Expected execution15–20minutes; actual throughput is monitored before
+claiming the complete pair fits. Failed/partial results remain evidence, and no
+budget extension or acceptance-threshold change is implied.
+
+The verified persistent watch owns routine process/GPU/artifact/log observations
+at60-second cadence and bounded incident diagnosis. Root owns repairs and
+scientific interpretation. Watch/config/current handoff are under the output
+root; `status.json`, `coverage.json`, `metrics.jsonl`, `supervisor.log` and native
+metrics/checkpoints are progress evidence. Final collection uses the prepared
+reviewer with the original radial and digital/control roots. Next check:
+warm-up completion and32/64/128 qualification, then full-arm progress.

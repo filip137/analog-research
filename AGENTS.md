@@ -201,6 +201,16 @@ duration and result paths visible before substantial execution. Escalate materia
 scientific choices, missing access, unrelated effects or scope/budget changes.
 This migration does not expand remote, shared-GPU or overnight permissions.
 
+The user's standing direction of 14 November 2026 supersedes per-run approval
+requirements within an approved research goal: proceed with necessary follow-up
+scientific variants, matched controls, diagnostics and repairs within the existing
+scope, authorized resources, budget and deadline. Record the question, intervention,
+comparison and remaining allowance before launch; do not seek approval for each
+variant or because a previous result was negative. Preserve prior evidence and
+acceptance criteria. Request a decision only for work outside those limits, a
+choice the user explicitly reserved, or a destructive/irreversible action needing
+separate authority. This authority persists across turns and handoffs.
+
 Use the existing public ebl CLI, exact configs/inputs and native run bundles. Keep one
 real monitoring owner per running case. Preserve failed/partial evidence and distinguish
 process completion, artifact validity, coverage and scientific review. Review can conclude
