@@ -15,6 +15,7 @@ from networks.energy_transformer.mnist import load_raw, hidden_masks, batch
 from networks.energy_transformer.finite_time import relax, finite_ep, bptt_gradient
 from networks.energy_transformer.contractive import initialize_shared, project
 from networks.energy_transformer.input_attention import InputAttentionNetwork, project as project_input_attention
+from networks.energy_transformer.singular_projection import project as project_singular
 
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -212,11 +213,14 @@ def train(config,store,images,ids,resume=None):
                 raise EquilibriumError('Nonfinite parameter gradient')
             optimizer.step()
             if config.recurrent_constraint != 'none':
-                projector=project_input_attention if config.recurrent_constraint=='input_attention_v1' else project
+                projector=(project_singular if config.recurrent_constraint=='input_attention_singular_v1' else
+                           project_input_attention if config.recurrent_constraint=='input_attention_v1' else project)
                 certificate=projector(model,beta=config.beta)
                 last_diag.update(recurrent_bounds={k:certificate['after'][k] for k in ('attention','memory','decoder')},
                                  recurrent_bound=certificate['after']['normalized_total'],
                                  contraction_radius=certificate['after']['contraction_radius'])
+                if 'projection_method' in certificate:
+                    last_diag.update(projection_method=certificate['projection_method'],clipped_singular_values=certificate['clipped_counts'])
                 if 'scale' in certificate:
                     last_diag.update(constraint_scale=certificate['scale'],constraint_scales=certificate['scales'])
         except TimeoutError:

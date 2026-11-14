@@ -67,7 +67,7 @@ def parse_config(raw):
         raise ConfigError('Unknown finite-time step selection rule')
     if (c.device_domain!='declared4' or c.solver_dt!=.5 or c.solver_rule!='energy_backtracking') and (c.arm not in ('energy_ep','energy_bp') or c.phase_mode!='fixed_steps'):
         raise ConfigError('Physical-domain/full-step repair requires finite-time energy EP')
-    if c.initialization not in ('standard','contractive_blocks_v1','input_attention_v1') or c.recurrent_constraint not in ('none','contractive_blocks_v1','input_attention_v1'):
+    if c.initialization not in ('standard','contractive_blocks_v1','input_attention_v1') or c.recurrent_constraint not in ('none','contractive_blocks_v1','input_attention_v1','input_attention_singular_v1'):
         raise ConfigError('Unknown initialization or recurrent constraint')
     if c.recurrent_constraint == 'contractive_blocks_v1':
         if (c.arm not in ('energy_ep','energy_bp') or c.energy_architecture!='recurrent' or c.initialization != 'contractive_blocks_v1'
@@ -77,10 +77,10 @@ def parse_config(raw):
         raise ConfigError('Paired energy initialization requires its declared recurrent constraint')
     if c.energy_architecture=='input_conditioned':
         if (c.arm not in ('energy_ep','energy_bp') or c.case!='more_tokens'
-                or c.initialization!='input_attention_v1' or c.recurrent_constraint!='input_attention_v1'
+                or c.initialization!='input_attention_v1' or c.recurrent_constraint not in ('input_attention_v1','input_attention_singular_v1')
                 or c.phase_mode!='fixed_steps' or c.device_domain!='physical' or c.solver_dt!=1.):
             raise ConfigError('Input attention requires its explicit projected 49-token finite-time protocol')
-    elif 'input_attention_v1' in (c.initialization,c.recurrent_constraint):
+    elif c.initialization=='input_attention_v1' or c.recurrent_constraint in ('input_attention_v1','input_attention_singular_v1'):
         raise ConfigError('Input-attention policies require that architecture')
     if c.phase_mode=='fixed_steps' and c.max_steps>128:
         raise ConfigError('Finite-time phase cap cannot exceed 128')

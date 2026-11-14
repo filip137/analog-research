@@ -332,3 +332,65 @@ cohorts and final sampling/masking RNGs, audits all training bounds/margins,
 verifies checkpoint identity and selected-group gradient gates, and produces
 the predeclared decision plus identical-cohort validation/reconstruction figures.
 The script is prepared; no final result or performance claim exists yet.
+
+## Candidate result and proposed projection follow-up
+
+The input-attention EP arm completed2,000updates and full held-out coverage:
+test MSE0.0544708864, versus old EP0.0544174788. Its uniform-attention penalty
+is0.191259%, below the1% target. Matched BPTT also completed and reached
+0.0544720605, effectively the same result. The current candidate does not
+meet the predeclared promotion rule. The remaining old-model BPTT and final
+gradient diagnostic must still finish; do not call the original comparison
+fully reviewed before those artifacts and the independent audit exist.
+
+Read-only final-weight analysis identifies another capacity limitation. Define
+stable rank as ||M||F^2/||M||2^2 (a continuous effective dimension, not exact
+algebraic rank). Old EP's query/key heads have stable rank1.0001–1.0002 and
+memory1.00004. New EP's query/key heads are1.0001–1.0028, values1.0001–1.0002,
+output heads1.011–1.021 and memory1.00035. The digital reference retains
+query/key ranks2.49–4.92 and FF ranks6.28/3.95. Thus parameter count substantially
+overstates the number of strong learned directions in either constrained EP model.
+
+The existing programming limiter rescales a whole matrix when its top singular
+value exceeds its bound. Each such update also shrinks all weaker directions,
+even those already well below the bound. This mechanism can erase useful modes
+over repeated updates. It is a hypothesis for the observed collapse, not a
+causal conclusion from weights alone; task-driven concentration or other
+architectural effects remain possible.
+
+Prepared intervention: clip only singular values exceeding the selected norm
+radius. Memory and decoder then use the Euclidean projection onto their
+spectral-norm balls. Q/K retain the same physical operand norm cap. For coupled
+V/O constraints, use the existing common reduction to choose target radii and
+clip each matrix to its radius; this is not an exact Euclidean projection onto
+the full joint nonconvex constraint set. The same scalar energy, feedback0.1,
+score gain4, independent Q/K/V/O, separate0.2/0.2/0.3 budgets, local EP rule and
+physical laws remain unchanged. Initialization deliberately keeps the original
+radial projection, so the new controls start from identical tensors.
+
+Code: `networks/energy_transformer/singular_projection.py`; explicit policy
+`input_attention_singular_v1`. The60-test suite verifies preservation of
+unsaturated singular values, prevention of erasure under repeated dominant-mode
+updates, identical initial maps, unchanged contraction/physical norm limits,
+and EP/BPTT agreement after projection. This is prepared mathematical evidence;
+no singular-clipping task run has launched.
+
+Proposed follow-up, pending explicit scientific authorization: reuse the current
+radial EP/BPTT results and run one fresh singular-clipping EP/BPTT pair,2,000
+updates each, with the same250-update warm-up,32/64/128 selection and final
+eight-batch gradient gate. Exact configs are under
+`examples/energy_transformer_mnist/input_attention/singular_clip/`, including
+both GPU smokes and all frozen cap alternatives. Invoke the same public
+`python -m ebl train/validate` commands. No seed, LR, data, task, architecture,
+norm budget, beta or physical-domain change is included. Report stable-rank
+trajectories at the already saved250-update checkpoints as well as quality,
+routing ablations and gradient agreement. Retain the original5% quality and1%
+routing promotion thresholds; do not lower them after seeing this result.
+
+Use only the remainder of the already authorized one-hour window, ending
+21:43:14.786UTC, and the existing2GB storage ceiling. Expected extra execution
+is15–20minutes; exact throughput must be checked in the smokes/warm-up. No
+extension, independent seed, extra hyperparameter setting or silent scientific
+retry is included. The current pipeline continues unchanged while the user
+reviews this proposal. Further task runs require the user's explicit answer;
+automatic goal continuation is not run authorization.
