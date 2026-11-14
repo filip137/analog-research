@@ -932,3 +932,48 @@ and final fidelity remain pending. A separate diagnostic figure,
 gradient spike, Adam update, device excursion and corrected100-update fork.
 Its reproducible script and source traces are retained beside it. This is a
 failure-mechanism figure, not a plot of the ongoing fresh training run.
+
+
+### Why the energy check allowed the numerical cycle
+
+The continuous circuit still has the same Lyapunov calculation. Let g(z) be
+centered normalization, J_g its symmetric positive-semidefinite Jacobian, and
+f_z/f_y the two force arrays returned by the model. Differentiating the existing
+energy gives grad_z(E) = -J_g f_z and grad_y(E) = -f_y. With dz/dt=f_z and
+dy/dt=f_y/1.3, the continuous derivative is
+
+$$
+\frac{dE}{dt}=-f_z^\top J_g f_z-\frac{1}{1.3}\lVert f_y\rVert^2\leq0.
+$$
+
+This continuous-time property does not impose a useful contraction rate on a
+finite Euler step. A locally stable scalar mode u'=-lambda*u becomes
+u_next=(1-h*lambda)*u. Near h*lambda=2, it alternates sign with almost unchanged
+amplitude; at exactly2 its quadratic energy is unchanged. Thus a non-increase
+check can accept a period-two numerical cycle. The explicit FP32 energy allowance
+also admits small roundoff-scale increases, and the model energy sums many terms.
+Neither acceptance nor finite energy alone establishes settling within128 steps.
+
+Cycle rejection halves h when a candidate nearly returns to the preceding state
+while its one-step movement is still meaningful. This changes the integrator's
+trajectory and computational cost, while preserving f_z, f_y, E, device laws,
+weights and the continuous-time circuit. It is not an added transistor block or
+a claim that this adaptive integration controller must be implemented in silicon.
+It addresses the observed numerical cycle; it does not prove every future state
+converges within128 updates.
+
+Incomplete positive and negative phases can have unequal transient errors. Their
+parameter-statistic difference is divided by2*beta in EP, so those errors can
+produce a large gradient even when the circuit energy itself is valid. This is
+why the final trained-checkpoint comparison against same-length BPTT and a
+qualified longer reference remains mandatory after an apparently stable run.
+BPTT treats discrete step-selection decisions as locally constant; the regression
+suite checks finite differences on a branch with an actual cycle rejection.
+
+A read-only production trajectory audit confirms the intended intervention:
+new and old model/Adam/order-RNG/mask-RNG states are identical at updates250,500
+and750. The first cycle reduction occurs at821; the first loss/operand difference
+appears at822. Evidence: `training-002/analysis/precycle-trajectory-parity.json`.
+The cost/storage audit is in `training-002/analysis/cost-storage-in-progress.json`:
+316.6 MB native evidence and2.21 GB including pinned sources at its timestamp,
+with all attempts retained and conservative charged time below the allowance.
