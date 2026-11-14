@@ -118,3 +118,14 @@ def test_all_explorer_recipes_are_strict_public_configs():
         if mode==RunMode.TRAIN:
             assert config.attention_gain*config.attention_feedback==.1
             assert config.precision=='fp32'
+
+
+@pytest.mark.parametrize('processes,device,process_code,device_code,allowed',[
+    ('','23000, 0',0,0,True),('1234\n','23000, 0',0,0,False),
+    ('','23000, 0',1,0,False),('','',0,1,False),('','1000, 0',0,0,False)])
+def test_admission_never_treats_busy_or_unknown_capacity_as_free(monkeypatch,processes,device,process_code,device_code,allowed):
+    from types import SimpleNamespace
+    import experiments.admit_energy_transformer_explorer as admission
+    replies=iter([SimpleNamespace(returncode=process_code,stdout=processes),SimpleNamespace(returncode=device_code,stdout=device)])
+    monkeypatch.setattr(admission.subprocess,'run',lambda *a,**k:next(replies))
+    assert admission.gpu_available()[0] is allowed

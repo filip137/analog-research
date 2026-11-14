@@ -811,3 +811,17 @@ are at2,000updates; screen force ratios are at750, clearly labelled as different
 checkpoints. Full-arm ratios provide the equal-update comparison. The launcher,
 source and watcher handles below establish execution; preparation alone is
 not evidence that any candidate helped.
+
+
+Admission handoff: another user-owned sparse-attention job occupied the local
+GPU after preparation. The shared queue service reports admission disabled;
+do not change that global setting or other jobs. Use the existing per-study
+watch with `experiments.admit_energy_transformer_explorer`: one detached process
+checks GPU capacity read-only, reports `queued`, and execs the prepared public
+composition only when no compute process remains, free memory>=2GB and
+utilization<=10%. Failed/unknown GPU observations never count as free. Waiting
+is capped at30minutes; the90-minute execution deadline starts at actual
+admission. The observer window spans at most these120minutes, while the native
+launcher enforces the shorter precise execution deadline in admission.json and
+launch.json. Exactly one owner/PID transfers from admission to execution;
+there is no simultaneous shared-queue or second-watch ownership.
