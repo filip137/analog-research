@@ -67,6 +67,22 @@ estimator and seeds are unchanged.
   final dev KL 0.1738, ~40 s). 24 matrices; per-matrix median 0.055–0.079, max 0.218; 2,116 fc1
   channels with B exactly zero (dead units) → 1e-12 at load.
 
+## Readiness: canary (launch commit `ca1d470`, readiness only, not evidence)
+
+Unit `canary`: all 33 screen arms × 4 steps, complete, `runs inspect --verify-artifacts
+--require-complete` valid; samples `df73ce66…` and the three apparent hashes as pinned; clean
+0.2041. Child-D mask 5,662,320 weights (10 % of 56.6M), 0 writes outside; Fisher 16 s. Noisy and
+Child-D arms issue no writes within 4 steps (threshold gate, as expected); noiseless writes
+~201.7M device writes per 4 steps; analog LoRA writes only at 3e-2 within 4 steps. Peak
+allocated GPU memory 6.5 GB (nvidia-smi 8.2 GB) — well within the 24 GB 3090. ~3 min total.
+
 ## Current execution and monitoring handoff
 
-Owner: the implementing agent. Next: `canary`, then `s1`–`s3`.
+Owner: the implementing agent (monitoring until the screen ends).
+
+- **Screen:** units `s1` → `s2` → `s3` in one detached chain on `nom-cool-1`, started
+  2026-11-14 11:57:53 from `src-ca1d470` (clean clone of `ca1d470`), `launch/run_local_l12.sh UNIT ROOT`.
+- **Logs:** `ROOT/logs/{s1,s2,s3}.log`, `screen.start`/`screen.end`, GPU sampler `gpu-mem.log`.
+- **Runs:** `ROOT/runs/<unit>/opt125m-cmo-l12-fault-paper-tune-<unit>/stages/standard_hwa_model__271001/local/fault_tuning__standard_hwa_model__271001/attempt-001/runs/*/`.
+- **Checks:** every unit inspected with `--verify-artifacts --require-complete`; `launch/summarize_l12.py ROOT`
+  checks samples and apparent hashes in every unit and applies the selection rule.
