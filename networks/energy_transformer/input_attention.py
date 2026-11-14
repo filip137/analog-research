@@ -21,7 +21,8 @@ class InputAttentionNetwork(EnergyNetwork):
     def __init__(self, tokens=49, width=64, patch_width=16, heads=4,
                  seed=20261114, epsilon=.5, device='cpu', dtype=torch.float32,
                  device_domain='physical', solver_dt=1.,
-                 solver_rule='energy_backtracking', feedback=.1, gain=1., score_gain=4.):
+                 solver_rule='energy_backtracking', feedback=.1, gain=1., score_gain=4.,
+                 key_mode='all', query_context='local'):
         if width % 4 or width % heads:
             raise ValueError('Width must be divisible by four and by heads')
         if device_domain != 'physical':
@@ -32,6 +33,9 @@ class InputAttentionNetwork(EnergyNetwork):
             raise ValueError('Attention gain must be positive')
         if not math.isfinite(score_gain) or score_gain <= 0:
             raise ValueError('Input score gain must be positive')
+        if key_mode not in ('all','observed') or query_context not in ('local','observed_mean'):
+            raise ValueError('Unknown clamped-input attention policy')
+        self.key_mode, self.query_context = key_mode, query_context
         self.score_gain = score_gain
         super().__init__(tokens, width, patch_width, heads, seed, epsilon,
                          device, dtype, device_domain, solver_dt, solver_rule)
@@ -56,17 +60,37 @@ class InputAttentionNetwork(EnergyNetwork):
         f = torch.cat((x, self.fixed_position.expand(len(x), -1, -1)), -1)
         return normalize(f, self.epsilon)[0]*math.sqrt(self.width/self.feature_width)
 
-    def attention_context(self, f):
+    def attention_context(self, f, *, query_f=None, key_mask=None):
         """Algebraic input ports. The public prepare path bounds ||f_i||<=sqrt(D)."""
-        q = torch.einsum('bnf,haf->bhna', f, self.query)
+        query_f = f if query_f is None else query_f
+        q = torch.einsum('bnf,haf->bhna', query_f, self.query)
         k = torch.einsum('bnf,haf->bhna', f, self.key)
         value = torch.einsum('bnf,haf->bhna', f, self.value)
         scores = self.score_gain*self.kappa*(q @ k.transpose(-1, -2))
-        return dict(f=f, q=q, k=k, value=value, scores=scores,
+        # -inf denotes a disconnected softmax branch, never a physical voltage.
+        if key_mask is not None:
+            scores = scores.masked_fill(~key_mask, -torch.inf)
+        return dict(f=f, query_f=query_f, key_mask=key_mask, q=q, k=k, value=value, scores=scores,
                     base_probability=scores.softmax(-1))
 
     def prepare(self, x):
-        return self.attention_context(self.fixed_features(x))
+        f = self.fixed_features(x)
+        if self.key_mode == 'all' and self.query_context == 'local':
+            return self.attention_context(f)
+        observed = (x[..., self.patch_width:] > 0).any(-1)
+        if not observed.any(-1).all():
+            raise ValueError('Observed-input attention requires at least one observed token')
+        query_f = f
+        if self.query_context == 'observed_mean':
+            weights = observed.to(f.dtype)
+            pooled = (f*weights[..., None]).sum(-2, keepdim=True)/weights.sum(-1)[:, None, None]
+            combined = f+pooled
+            # Add observed-image context while preserving each original query
+            # feature norm. This is a fixed bounded analog preprocessing macro;
+            # no learned weights or hidden targets are introduced outside EP.
+            query_f = combined*(f.norm(dim=-1,keepdim=True)/combined.norm(dim=-1,keepdim=True).clamp_min(1e-12))
+        key_mask = observed[:, None, None, :] if self.key_mode == 'observed' else None
+        return self.attention_context(f, query_f=query_f, key_mask=key_mask)
 
     def ports(self, z, y, attention='normal', *, context=None):
         if context is None:
@@ -81,7 +105,11 @@ class InputAttentionNetwork(EnergyNetwork):
             # centering reduces cancellation in query/key phase statistics.
             delta_p = p-context['base_probability']
         elif attention == 'uniform':
-            p = torch.full_like(logits, 1/self.tokens)
+            if context['key_mask'] is None:
+                p = torch.full_like(logits, 1/self.tokens)
+            else:
+                eligible = context['key_mask'].to(logits.dtype)
+                p = (eligible/eligible.sum(-1,keepdim=True)).expand_as(logits)
             delta_p = torch.zeros_like(p)
         elif attention == 'zero':
             p = torch.zeros_like(logits)
@@ -109,7 +137,8 @@ class InputAttentionNetwork(EnergyNetwork):
             difference = torch.logsumexp(v['logits'], -1)-torch.logsumexp(v['scores'], -1)
             total -= self.gain/self.feedback*difference.sum((1, 2))
         elif attention == 'uniform':
-            total -= self.gain*(v['returned_state']*v['value'].mean(-2, keepdim=True)).sum((1, 2, 3))
+            average = v['value'].mean(-2,keepdim=True) if v['key_mask'] is None else v['p'] @ v['value']
+            total -= self.gain*(v['returned_state']*average).sum((1, 2, 3))
         elif attention != 'zero':
             raise ValueError('Unknown attention intervention')
         total -= .5*v['r'].square().sum((1, 2))
@@ -119,7 +148,7 @@ class InputAttentionNetwork(EnergyNetwork):
     def statistics(self, v, x):
         factor = self.gain*self.score_gain*self.kappa/self.feedback
         return {
-            'query': -factor*torch.einsum('bhna,bnf->haf', v['delta_p'] @ v['k'], v['f']),
+            'query': -factor*torch.einsum('bhna,bnf->haf', v['delta_p'] @ v['k'], v['query_f']),
             'key': -factor*torch.einsum('bhna,bnf->haf', v['delta_p'].transpose(-1, -2) @ v['q'], v['f']),
             'value': -self.gain*torch.einsum('bhna,bnf->haf', v['p'].transpose(-1, -2) @ v['returned_state'], v['f']),
             'output': -self.gain*torch.einsum('bnd,bhna->hda', v['g'], v['p'] @ v['value']),
@@ -149,7 +178,7 @@ class InputAttentionNetwork(EnergyNetwork):
         dr = plus['r']-minus['r']
         dy = plus['y']-minus['y']
         return {
-            'query': -factor*torch.einsum('bhna,bnf->haf', dp @ minus['k'], minus['f']),
+            'query': -factor*torch.einsum('bhna,bnf->haf', dp @ minus['k'], minus['query_f']),
             'key': -factor*torch.einsum('bhna,bnf->haf', dp.transpose(-1, -2) @ minus['q'], minus['f']),
             'value': -self.gain*torch.einsum('bhna,bnf->haf',
                 minus['p'].transpose(-1, -2) @ dt + dp.transpose(-1, -2) @ plus['returned_state'], minus['f']),

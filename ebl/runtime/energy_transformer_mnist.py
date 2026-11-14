@@ -9,7 +9,7 @@ import torch
 
 from ebl.runtime.store import RunStore, atomic_write_json, sha256_file
 from ebl.schema.base import ConfigError
-from ebl.schema.energy_transformer_mnist import CASES
+from ebl.schema.energy_transformer_mnist import CASES, parse_config as parse_training_config
 from networks.energy_transformer.gpu import EnergyNetwork, DigitalNetwork, EquilibriumError, settle, ep_gradient
 from networks.energy_transformer.mnist import load_raw, hidden_masks, batch
 from networks.energy_transformer.finite_time import relax, finite_ep, bptt_gradient
@@ -34,6 +34,9 @@ def build_model(config, device='cuda'):
     kwargs=dict(tokens=n,width=d,patch_width=patch**2,heads=4,seed=config.seed,epsilon=config.epsilon,device=device)
     if config.arm!='digital_bp':
         kwargs.update(device_domain=config.device_domain,solver_dt=config.solver_dt,solver_rule=config.solver_rule)
+    if cls is InputAttentionNetwork:
+        kwargs.update(score_gain=config.attention_score_gain,gain=config.attention_gain,
+                      feedback=config.attention_feedback,key_mode=config.attention_keys,query_context=config.query_context)
     return cls(**kwargs)
 
 
@@ -58,7 +61,7 @@ def save_checkpoint(path,model,optimizer,config,step,train_seconds,order_gen,mas
 
 def restore_checkpoint(path,model,optimizer,config,order_gen,mask_gen):
     payload=torch.load(path,map_location='cpu',weights_only=False)
-    if payload['schema']!='energy-transformer-mnist.checkpoint.v1' or {'energy_architecture':'recurrent','phase_mode':'settled','device_domain':'declared4','solver_dt':.5,'solver_rule':'energy_backtracking','initialization':'standard','recurrent_constraint':'none',**payload['config']}!=asdict(config):
+    if payload['schema']!='energy-transformer-mnist.checkpoint.v1' or asdict(parse_training_config(payload['config']))!=asdict(config):
         raise ConfigError('Resume requires the identical scientific configuration')
     model.load_state_dict(payload['model']);optimizer.load_state_dict(payload['optimizer'])
     order_gen.set_state(payload['order_rng']);mask_gen.set_state(payload['mask_rng'])
@@ -81,6 +84,21 @@ def predict(model,x,target,mask,config,deadline,attention='normal'):
             'attention_mean_max':p.amax(-1).mean().item(),
             'attention_normalized_entropy':(-(p*p.clamp_min(torch.finfo(p.dtype).tiny).log()).sum(-1).mean()/math.log(model.tokens)).item(),
             'attention_l1_from_uniform':(p-1/model.tokens).abs().sum(-1).mean().item()}
+        if isinstance(model,InputAttentionNetwork):
+            v=phase.ports
+            if v['key_mask'] is not None and attention!='zero':
+                eligible=v['key_mask'].to(p.dtype);counts=eligible.sum(-1)
+                uniform=eligible/counts[...,None]
+                entropy=-(p*p.clamp_min(torch.finfo(p.dtype).tiny).log()).sum(-1)
+                attention_metrics.update(attention_normalized_entropy=(entropy/counts.log().clamp_min(1e-12)).mean().item(),
+                    attention_l1_from_uniform=(p-uniform).abs().sum(-1).mean().item(),
+                    eligible_key_fraction=(counts/model.tokens).mean().item())
+            returned=model.gain*torch.einsum('bhna,hda->bnd',p@v['value'],model.output)
+            input_drive=x@model.encoder.T+model.position
+            attention_metrics.update(attention_force_rms=returned.square().mean().sqrt().item(),
+                input_drive_rms=input_drive.square().mean().sqrt().item(),
+                memory_force_rms=(v['r']@model.memory).square().mean().sqrt().item(),
+                decoder_force_rms=(v['y']@model.decoder).square().mean().sqrt().item())
         return phase.y,{**attention_metrics,'residual':phase.residual,'iterations':phase.iterations.float().mean().item(),
                         'maximum_operand':phase.maximum_operand,'minimum_triode_margin':phase.minimum_triode_margin,
                         'minimum_drain_margin':phase.minimum_drain_margin,
@@ -122,7 +140,8 @@ def evaluate(model,images,masks,patch,config,deadline,*,initial=None,mean_image=
             if diag.get(key) is not None:
                 device_minima[key]=min(device_minima.get(key,float('inf')),diag[key])
         cycle_reductions+=diag.get('cycle_reductions',0)
-        for key in ('attention_mean_max','attention_normalized_entropy','attention_l1_from_uniform'):
+        for key in ('attention_mean_max','attention_normalized_entropy','attention_l1_from_uniform',
+                    'eligible_key_fraction','attention_force_rms','input_drive_rms','memory_force_rms','decoder_force_rms'):
             if key in diag: attention_sums[key]=attention_sums.get(key,0.)+len(im)*diag[key]
         if not examples:
             examples={k:v[:16].cpu() for k,v in predictions.items()}

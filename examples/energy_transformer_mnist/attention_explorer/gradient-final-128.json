@@ -1,0 +1,15 @@
+{
+  "batch_size": 8,
+  "batches": 8,
+  "case": "more_tokens",
+  "experiment_id": "energy_transformer_iterations.v1",
+  "iterations": [
+    128
+  ],
+  "required_groups": [
+    "query",
+    "key",
+    "value",
+    "output"
+  ]
+}

@@ -19,6 +19,11 @@ class Config:
     solver_rule: str="energy_backtracking"
     initialization: str="standard"
     recurrent_constraint: str="none"
+    attention_score_gain: float=4.
+    attention_gain: float=1.
+    attention_feedback: float=.1
+    attention_keys: str='all'
+    query_context: str='local'
     seed: int=20261114
     updates: int=2000
     batch_size: int=64
@@ -48,6 +53,16 @@ def parse_config(raw):
         raise ConfigError('Unknown arm/case or non-FP32 precision')
     if c.energy_architecture not in ('recurrent','input_conditioned'):
         raise ConfigError('Unknown energy architecture')
+    settings=(('attention_score_gain',(4.,8.,16.)),('attention_gain',(1.,2.,4.)),
+              ('attention_feedback',(.1,.05,.025)))
+    if any(type(getattr(c,name)) not in (int,float) or getattr(c,name) not in allowed for name,allowed in settings):
+        raise ConfigError('Unknown frozen attention explorer setting')
+    if c.attention_gain*c.attention_feedback != .1:
+        raise ConfigError('Explorer preserves gain times feedback at 0.1')
+    if c.attention_keys not in ('all','observed') or c.query_context not in ('local','observed_mean'):
+        raise ConfigError('Unknown clamped-input attention policy')
+    if c.energy_architecture!='input_conditioned' and (c.attention_score_gain,c.attention_gain,c.attention_feedback,c.attention_keys,c.query_context)!=(4.,1.,.1,'all','local'):
+        raise ConfigError('Explorer settings require input-conditioned attention')
     if c.arm=='digital_bp' and c.energy_architecture!='recurrent':
         raise ConfigError('Digital baseline does not use an energy architecture')
     if c.arm=='energy_bp' and c.phase_mode!='fixed_steps':

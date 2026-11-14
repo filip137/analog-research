@@ -2,11 +2,10 @@
 
 Issue: https://github.com/filip137/on-chip-learning/issues/36
 Branch: `energy-transformer`, continuing the user's explicitly named branch.
-Status: the first comparison is complete and independently verified. The
-input-conditioned attention candidate fails the predeclared quality/routing
-promotion rule. EP and matched BPTT agree. A singular-value clipping follow-up
-is implemented and awaiting explicit authorization. The improvement goal
-remains active; no successful capacity improvement is claimed yet.
+Status: the original and singular-clipping comparisons are complete. Singular
+clipping fixes rank collapse and improves test error2.1%, but falls short of
+promotion and digital quality. The user now explicitly requests an Explorer
+round listing alternatives and testing them; preparation is in progress.
 
 ## Question and existing evidence
 
@@ -691,3 +690,124 @@ hardware measurements. No retuning, new experiments or budget extensions are
 part of this review. The watcher may stop this run after this complete,
 scientifically negative result; the broader improvement objective remains
 unresolved.
+
+
+## Explorer round —15 November2026 local date, explicit user request
+
+Question: which part of attention limits useful routing: score contrast,
+returned-value influence, key eligibility, or information available to queries?
+The user said "act as an explorer list the different possibilities and then
+test them". This is a new execution assignment under the updated standing
+AGENTS authority, not an automatic continuation of the expired20-minute window.
+Allocate at most90minutes from actual GPU admission, including readiness,
+qualification, screens, confirmations and retries, on the local RTX3090 only.
+Keep the original6h aggregate ceiling: prior debit<3.14h plus2863.44s leaves
+>2.06h, so the proposed1.5h round remains within it. New outputs<=1GB and
+combined input-attention roots<=2GB. Do not overlap an occupied GPU; the observed
+sparse-attention job is unrelated and must be left alone. No remote host or
+unrelated workload changes. One evolving note and issue36 continue to own this
+work; no new standalone research issue is needed for this user-assigned follow-up.
+
+Frozen alternatives (all38,976parameters,49tokens,D64,perfect-diode memory):
+
+| Case | Change from singular-clipping baseline | What it tests |
+| --- | --- | --- |
+| sharp8 | score gain4→8 | Greater input-score contrast |
+| sharp16 | score gain4→16 | Stronger contrast, including saturation risk |
+| drive2 | return gain1→2, reciprocal feedback0.1→0.05 | Stronger values with the same curvature bound |
+| drive4 | return gain1→4, reciprocal feedback0.1→0.025 | Larger return influence with unchanged gain×feedback |
+| visible_keys | disconnect keys of completely unobserved patches | Whether position-only keys dilute useful routing |
+| context_query | add the mean feature of observed tokens to each query feature, then preserve its original norm | Whether hidden queries lack image information |
+| sharp8_drive2 | score gain8, return gain2, feedback0.05 | A predeclared contrast/influence interaction |
+
+All seven are tested; they are not a Cartesian hyperparameter sweep. The scalar
+attention energy and its local derivatives remain explicit. Fixed query features
+and key masks depend only on observed inputs/indicators and position, never hidden
+targets. Query context preserves each original feature norm, hence the same
+operand bounds. The masked softmax is over eligible branches: negative infinity
+is software notation for disconnecting a bank branch, not a transistor voltage.
+Its uniform ablation averages over the SAME eligible set, and entropy uses that
+set's size. Gain×feedback remains0.1, keeping the same attention Hessian bound;
+all separate0.2/0.2/0.3 budgets and initial weight tensors remain unchanged.
+The input amplifier, branch switch and query-summary/normalization are ideal
+analog macros. Device-complete circuits and power/time benefits remain untested.
+
+Common science: FP32GPU only, seed20261114, batch64, Adam0.003, beta0.005,
+epsilon0.5, identical MNIST data/cohorts/masks and no digital learned preprocessing.
+Every case first has two2-update GPU smokes, then a250-update128-step warm-up.
+The existing8×8 trained-checkpoint diagnostic selects32/64/128 using global and
+Q/K/V/output cosine>=0.9 versus BPTT and qualified512/1024 references. Reject a
+variant failing numerical/device/gradient gates; retain it as evidence without
+retuning. Passing variants receive a fresh750-update EP screen at the selected
+cap. This reset keeps equal-update screens matched to the baseline, without
+changing a live checkpoint's integration rule.
+
+Rank all valid screens by the fixed256-image validation probe, never test error.
+The reference is the explicit750-update probe/checkpoint of `singular-002`
+EP (native run20261114T223928.237031Z-1367c83b-54121c73). Reuse its exact
+initial/cohort/RNG and completed evidence; do not rerun a control solely for new
+metadata. Promote at most the best two screens improving reference probe MSE by
+>=0.5% to fresh matched2,000-update EP/BPTT comparisons and final8×8 gradient
+gates. Tie-break by case name. If none qualifies, finish with that negative
+result. If time is insufficient, label affected coverage partial rather than
+quietly excluding slow cases or extending the allowance.
+
+Full comparisons use10,000test,5,000validation and all three256-image ablations.
+Keep the existing promotion threshold:>=5% lower test error than old recurrent
+EP and>=1% uniform-attention penalty, with valid gradients and physical bounds.
+Also report improvement over the stronger singular-clipping baseline. These are
+one-seed validation-selected exploratory results; no statistical generalization
+or hardware advantage is established by a winner. Record attention entropy/max,
+uniform/zero ablations, effective ranks, and RMS attention/input/memory/decoder
+forces to distinguish sharpness from actual contribution. Runtime throughput
+and resource use are simulator measurements.
+
+Exact recipes are under `examples/energy_transformer_mnist/attention_explorer/`.
+The composition will use only public `python -m ebl train/validate` commands.
+The same absolute deadline propagates into every child; measured evaluation
+reservation and explicit retained-attempt accounting remain enabled. Recovery
+and terminal collection must have an active persistent owner with authority to
+repair understood operational faults within this scope. Scientific failures
+remain results, not an excuse to relax gates or change settings in flight.
+
+
+One additional reference measurement is declared before launch: replay the
+explicit completed singular-002 EP checkpoint through the public train command
+with `--resume`, identical config and an already-reached2,000-update target.
+It performs zero optimizer steps and supplies the new force measurements.
+Require exact equality of weights, optimizer, sampling/masking RNGs and step,
+and test-MSE agreement within1e-8 with the existing baseline. Charge its wall
+time. This is a read-only reference measurement, not a new training replicate.
+All model/schema/energy/local-statistic/gradient checks currently pass; freeze
+final readiness and actual handles below at launch.
+
+
+Explorer readiness:98 relevant tests pass. The suite covers energy/force and
+all eight weight-statistic derivatives for every variant and intervention,
+EP/BPTT agreement, masked-branch behavior, query-feature norm preservation,
+identical initial tensors/certificates, legacy-checkpoint defaults and all89
+strict public recipes. Both public compositions import and expose their CLI.
+A read-only collector test with existing control artifacts and deliberately
+missing screens/confirmation correctly reports incomplete coverage; it does
+not turn an empty or partial plan into a successful comparison.
+
+Prepared run composition:
+
+```bash
+python -u -m experiments.run_energy_transformer_explorer \
+  --output-root /home/filip/analog-research/drn/results/energy-transformer-input-attention/explorer-001 \
+  --baseline-root /home/filip/analog-research/drn/results/energy-transformer-input-attention/singular-002 \
+  --charge-root /home/filip/analog-research/drn/results/energy-transformer-input-attention/benchmark-001 \
+  --charge-root /home/filip/analog-research/drn/results/energy-transformer-input-attention/singular-001 \
+  --charge-root /home/filip/analog-research/drn/results/energy-transformer-input-attention/singular-002 \
+  --seconds 5400 --deadline-unix <actual-admission-plus-5400>
+```
+
+The independent collector is
+`python -m experiments.review_energy_transformer_explorer <explicit-output-root>`.
+It checks actual selected confirmations, not just runner exit status, and
+records exclusions alongside completed cases. Force-reference measurements
+are at2,000updates; screen force ratios are at750, clearly labelled as different
+checkpoints. Full-arm ratios provide the equal-update comparison. The launcher,
+source and watcher handles below establish execution; preparation alone is
+not evidence that any candidate helped.

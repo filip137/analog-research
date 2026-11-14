@@ -116,7 +116,7 @@ def bptt_gradient(model,x,target,mask,steps,*,deadline=None):
         if not all(torch.isfinite(g).all() for g in gradient.values()):
             raise EquilibriumError('Nonfinite BPTT gradient')
         phase.z=phase.z.detach();phase.y=phase.y.detach()
-        phase.ports={name:value.detach() for name,value in phase.ports.items()}
+        phase.ports={name:value.detach() if isinstance(value,torch.Tensor) else value for name,value in phase.ports.items()}
         return gradient,phase
     finally:
         for p,flag in zip(model.parameters(),flags):p.requires_grad_(flag)
