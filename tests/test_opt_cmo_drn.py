@@ -204,7 +204,7 @@ def test_all_opt_examples_resolve_through_public_cli(tmp_path):
     from ebl.registry import resolve_experiment_config
     from ebl.schema.base import RunMode
     examples=Path(__file__).resolve().parents[1]/'examples/opt_cmo_drn'
-    for path in sorted(examples.glob('*.json')):
+    for path in sorted([*examples.glob('*.json'),*examples.glob('l12/*.json')]):
         definition,config=resolve_experiment_config(path,RunMode.TRAIN)
         assert definition.experiment_id==config.experiment_id=='opt_cmo_drn_hwa.v1'
         captured=[]
@@ -231,20 +231,21 @@ def test_pinned_device_goldens():
     plant.write(torch.full_like(golden['q'],.01));assert torch.equal(plant.g,golden['written'])
 
 
-def source_payload(teacher):
+def source_payload(teacher,start=6):
     state={}
     qs=[];scales=[];channels=[]
     for k,v in teacher.state_dict().items():
-        if not any(k.startswith(f'layers.{i}.{m}.') for i in range(6,12) for m in ('fc1','fc2','final_layer_norm')):
+        if not any(k.startswith(f'layers.{i}.{m}.') for i in range(start,12) for m in ('fc1','fc2','final_layer_norm')):
             state['digital.'+k]=v.clone()+.001
-    for k,i in enumerate(range(6,12)):
+    for k,i in enumerate(range(start,12)):
         for j,name in enumerate(('fc1','fc2')):
             layer=getattr(teacher.layers[i],name)
             scale=layer.weight.abs().amax(1)
             qs.append((layer.weight/scale[:,None]).flatten());scales.append(layer.weight.abs().max());channels.append(scale)
             state[f'mlp_biases.{2*k+j}']=layer.bias.clone()
         for name in ('weight','bias'):state[f'mlp_norms.{k}.{name}']=getattr(teacher.layers[i].final_layer_norm,name).clone()
-    state.update(q=torch.cat(qs),scales=torch.stack(scales),channel_scales=torch.cat(channels),output_gains=torch.linspace(.8,1.2,12))
+    state.update(q=torch.cat(qs),scales=torch.stack(scales),channel_scales=torch.cat(channels),
+                 output_gains=torch.linspace(.8,1.2,2*(12-start)))
     return {'model':state,'arm':{'scope':'model'}}
 
 
@@ -337,3 +338,32 @@ def test_hwa_projection_has_identity_coordinate_gradient():
 def test_tuning_retention_is_explicit():
     assert parse_config({'training':{'retention':'final'}}).training.retention=='final'
     with pytest.raises(ValueError):parse_config({'training':{'retention':'delete_everything'}})
+
+
+def test_twelve_drn_mlps_are_accepted_and_other_depths_rejected():
+    assert parse_config({'analog_layers':12}).analog_layers==12
+    for depth in (0,5,7,11,13):
+        with pytest.raises(ValueError): parse_config({'analog_layers':depth})
+
+
+def test_twelve_mlp_source_reconstructs_and_rejects_a_six_mlp_source():
+    _,teacher=tiny_model()
+    payload=source_payload(teacher,start=0)
+    source=reconstruct_source(teacher,payload,12)
+    assert source.start==0 and source.gains.numel()==24
+    for i in range(12):
+        torch.testing.assert_close(source.layers[i].fc2.weight,teacher.layers[i].fc2.weight)
+        torch.testing.assert_close(source.layers[i].final_layer_norm.weight,teacher.layers[i].final_layer_norm.weight)
+    with pytest.raises(ValueError):reconstruct_source(teacher,source_payload(teacher),12)
+    with pytest.raises(ValueError):reconstruct_source(teacher,payload,6)
+
+
+def test_all_twelve_blocks_receive_gradients():
+    torch.manual_seed(7)
+    teacher=OptDecoder(OptConfig(17,4,12,2,6,16)).eval().requires_grad_(False)
+    source=reconstruct_source(teacher,source_payload(teacher,start=0),12)
+    model=OptDrn(source,DrnSettings(input_gain=5,token_chunk_size=3))
+    assert len(model.blocks)==12
+    model(torch.tensor([[1,2,3,4],[4,3,2,1]])).square().mean().backward()
+    for b in model.blocks:
+        assert b.u1.grad.abs().sum()>0 and b.u2.grad.abs().sum()>0

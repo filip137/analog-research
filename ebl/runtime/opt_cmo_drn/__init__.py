@@ -1,1 +1,1 @@
-"""CMO-initialized OPT with six coupled perfect-diode MLPs."""
+"""CMO-initialized OPT with six or twelve coupled perfect-diode MLPs."""

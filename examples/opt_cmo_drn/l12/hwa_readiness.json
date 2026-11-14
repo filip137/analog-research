@@ -1,0 +1,75 @@
+{
+  "analog_layers": 12,
+  "cpu_threads": 1,
+  "data": {
+    "corpus": "opt125m-synthetic-50m",
+    "development_sequences": 256,
+    "mapping_sequences": 1,
+    "seed": 20261008,
+    "sequence_length": 256,
+    "sequences": 195226,
+    "sha256": "ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984"
+  },
+  "deployment": {
+    "assignment_seed": 271002,
+    "fault_kind": "random",
+    "fault_rate": 0.03
+  },
+  "device": "cuda:0",
+  "experiment_id": "opt_cmo_drn_hwa.v1",
+  "initialization": "full_span_quad.v1",
+  "model": "facebook/opt-125m",
+  "recovery": {
+    "arm": "learning",
+    "calibration_lr": 0.0001,
+    "calibration_updates": 200,
+    "checkpoint_every": 128,
+    "learning_rate": 0.003,
+    "max_write_attempts": 4,
+    "threshold_sigma": 2.0,
+    "updates": 2048
+  },
+  "schema_version": 1,
+  "selection": {
+    "assignment_seeds": [
+      211001,
+      211002
+    ],
+    "every_updates": 512,
+    "fault_kinds": [
+      "none",
+      "random"
+    ],
+    "random_rate": 0.03
+  },
+  "solver": {
+    "activation_checkpointing": true,
+    "current_amp": 0.1,
+    "gradient_iterations": 4,
+    "input_gain": 100.0,
+    "settling_iterations": 4,
+    "token_chunk_size": 256,
+    "voltage_amp": 5.0
+  },
+  "source_sha256": "ed53b6cbe2a7315f364291c7142ee2826c6ca4a44c21a2d5d25190b8c90569b0",
+  "stage": "hwa",
+  "teacher_sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9",
+  "training": {
+    "arm": "std3",
+    "calibration_lr": 0.0001,
+    "checkpoint_every": 1,
+    "conductance_lr": 0.0001,
+    "digital_lr": 3e-06,
+    "effective_batch": 32,
+    "epochs": 1,
+    "max_updates": 2,
+    "max_wall_seconds": 1500,
+    "microbatch": 1,
+    "minimum_lr_factor": 0.2,
+    "recipe": "B",
+    "retention": "best_latest_final",
+    "schedule": "cosine",
+    "seed": 41,
+    "warmup_updates": 245
+  }
+}

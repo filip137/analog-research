@@ -1,4 +1,4 @@
-"""Reconstruct the pinned whole-model CMO source and map its six MLPs."""
+"""Reconstruct the pinned whole-model CMO source and map its analog MLPs."""
 
 import copy
 from dataclasses import asdict

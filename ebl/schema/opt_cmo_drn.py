@@ -9,6 +9,11 @@ from ebl.schema.base import ConfigError, RunMode
 EXPERIMENT_ID='opt_cmo_drn_hwa.v1'
 TEACHER_SHA256='2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9'
 SOURCE_SHA256='86522e230dfac9646beffbd84d244fa7cdf7ecdbac4b9f3db2de29dcbab2b028'
+# 12-MLP crossbar std3-recipe source (hwa exp/drift-all-mlps, selected at epoch 98).
+SOURCE_L12_SHA256='ed53b6cbe2a7315f364291c7142ee2826c6ca4a44c21a2d5d25190b8c90569b0'
+# The last 6 or all 12 decoder MLPs are DRNs. reconstruct_source rejects a
+# source whose analog weights do not match the declared depth.
+ANALOG_DEPTHS=(6,12)
 
 
 from networks.config.opt import Solver
@@ -133,8 +138,8 @@ def parse_config(raw):
             raise ConfigError('Scalar drift currently requires a nominal fault-free deployment.')
         if c.retention.power_law.development_sequences>c.data.development_sequences:
             raise ConfigError('Drift cohort exceeds the declared development cohort.')
-    if c.model!='facebook/opt-125m' or c.analog_layers!=6:
-        raise ConfigError('Expected OPT-125M with six DRN MLPs.')
+    if c.model!='facebook/opt-125m' or c.analog_layers not in ANALOG_DEPTHS:
+        raise ConfigError('Expected OPT-125M with six or twelve DRN MLPs.')
     if c.initialization!='full_span_quad.v1':
         raise ConfigError('Expected the assigned full-span four-device initialization.')
     for digest in (c.teacher_sha256,c.source_sha256,c.data.sha256):
