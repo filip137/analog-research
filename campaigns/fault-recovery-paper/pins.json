@@ -6,5 +6,11 @@
   "b_scale": {
     "name": "fault-paper-bscale-r16-3em3",
     "sha256": "494f5c052004bf49a2c15622429e9ba40357e13daba54235c3e515844dd6c333"
+  },
+  "l12": {
+    "deployment": {
+      "name": "fault-paper-l12-deploy-271001-random3pct",
+      "sha256": "03af2f12921c6ded1dd4f033c29b5ba61f116bfd494cb03f7075255e66e8044d"
+    }
   }
 }
