@@ -691,3 +691,36 @@ not change or complete the overarching goal. The coordinator owns further
 scientific corrections under the user's instruction to continue through failures.
 No chat notification callback is configured; evidence and local watch state are
 preserved. The active goal must not be closed merely because this run terminates.
+
+
+### Completion audit in progress
+
+The input/initialization audit passes for all three declared sizes. Native initial
+checkpoints have equal total parameter counts in each EP/BP pair (11,360; 35,008;
+30,784), bit-identical shared query/key/encoder/decoder/position maps, identical
+training-order and mask RNG state, equal validation/test masks and split IDs,
+and identical raw-input hashes. The declared seed, batch, learning rate, beta,
+epsilon, update count, precision, dataset path and evaluation counts match.
+The deliberate EP solver differences remain explicit. Receipt:
+`training-001/analysis/matched-inputs.json`.
+
+A figure separating the operating-range and late-gradient problems is saved as
+`diagnostic-001/repair-diagnosis.png` and `.svg`. It uses the measured failed
+checkpoint and unchanged full-cohort replay, not the still-running repaired
+training. Only the 128/dt1 comparison also passes the qualified-reference rule.
+
+Current requirements and authoritative evidence:
+
+| Requirement | Evidence | Status |
+| --- | --- | --- |
+| Preserve scalar energy and reciprocal circuit forces | Unchanged energy/force equations; energy identity and device tests; exact production/diagnostic GPU gradient parity | Verified |
+| Resolve failed evaluation without invalid device operation | Unchanged final1633 replay: full 10k test/5k validation, all physical margins positive | Verified for the failure checkpoint |
+| Production cap no greater than 128 | Strict schema; native repaired recipe and phase metrics [128,128,128] | Verified in active run |
+| Three complete training/evaluation cases | Small/reference native completed runs; new 49-token run must finish | Pending 49-token completion |
+| Useful learning against matched controls | Matched inputs audit; final native MSE and attention probes | Final repaired scores pending |
+| Late EP/BPTT agreement around or above 0.9 | Small/reference final replay passes; corrected old49-token probe passes; new final checkpoint must be tested | Pending repaired final diagnostic |
+| Honest final coverage and limits | Native inspections, comparison plots and review | Pending collection |
+
+No pending item is treated as completed merely because a process is running or
+an earlier checkpoint passed. The active goal continues until this audit is
+satisfied or further corrections are needed.
