@@ -295,7 +295,7 @@ Clean published launch source `f27b8c8225ab0f727d90bb6280e62e5eb73b96ab`:
 `/home/filip/analog-research/drn/results/energy-transformer-input-attention/source-f27b8c8`.
 Command: `python -u -m experiments.run_energy_transformer_input_attention
 --output-root /home/filip/analog-research/drn/results/energy-transformer-input-attention/benchmark-001
---seconds3600` (the actual argv uses separate `--seconds` and `3600` arguments).
+--seconds 3600`.
 Started20:43:14.786UTC; absolute deadline21:43:14.786UTC. Supervisor2573088;
 current child is recorded in `child.pid`. No other GPU compute process was
 present at admission.
@@ -315,3 +315,20 @@ expected native cases are named by the launcher; full arms are conditional
 on warm-up qualification. Read `status.json`, `coverage.json`, `selection.json`,
 native `metrics.jsonl` and final `result.json`. Never replace an existing
 attempt or reset the absolute deadline during recovery.
+
+At20:47UTC, the250-update checkpoint qualified32 steps (the smallest tested
+cap). All eight reference batches passed; minimum global EP/BPTT cosine was
+0.99999985093 and minimum Q/K/V/output cosine0.99999998146. Fixed-probe MSE
+was0.05684640; uniform attention gave0.05752294 (+1.19%), zero attention
+0.11502143. This warm-up is development evidence, not the final promotion
+decision. The full32-step EP run was at1346/2000 updates at20:52:16UTC,
+with maximum recorded phase residual9.54e-7; subsequent matched BPTT runs
+and final same-cohort gradient qualification remain pending.
+
+Independent collection uses `python -m experiments.review_energy_transformer_input_attention
+<benchmark-root> --old-root /home/filip/analog-research/drn/results/energy-transformer-repair/training-003`.
+It rereads native summaries/checkpoints/manifests, compares initial maps,
+cohorts and final sampling/masking RNGs, audits all training bounds/margins,
+verifies checkpoint identity and selected-group gradient gates, and produces
+the predeclared decision plus identical-cohort validation/reconstruction figures.
+The script is prepared; no final result or performance claim exists yet.
