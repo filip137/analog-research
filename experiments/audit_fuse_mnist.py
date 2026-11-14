@@ -4,6 +4,7 @@ import argparse,json,subprocess,sys
 import torch
 from ebl.runtime.store import atomic_write_json,sha256_file
 from networks.energy_transformer.fuse_gpu import NAMES
+from networks.energy_transformer.mnist import patchify
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('root',type=Path);a=p.parse_args();root=a.root
@@ -60,7 +61,12 @@ def main():
     check('aggregate_budget',result['total_charged_seconds']<=5400)
     sizes=sum(p.stat().st_size for p in root.rglob('*') if p.is_file())
     check('storage_budget',sizes<3_000_000_000)
-    report={'passed':all(c['passed'] for c in checks),'checks':checks,'evidence':evidence,'storage_bytes':sizes,
+    geometry={}
+    for patch in (7,4):
+        hidden=patchify(cohorts['test_masks'],patch).sum(-1);mixed=(hidden>0)&(hidden<patch*patch)
+        geometry[str(patch)]={'fraction_hidden_pixels_in_mixed_tokens':(hidden*mixed).sum().item()/hidden.sum().item(),
+                              'fraction_tokens_fully_hidden':(hidden==patch*patch).float().mean().item()}
+    report={'mask_geometry':geometry,'passed':all(c['passed'] for c in checks),'checks':checks,'evidence':evidence,'storage_bytes':sizes,
             'total_charged_seconds':result['total_charged_seconds']}
     atomic_write_json(root/'analysis/parent-verification.json',report)
     print(json.dumps({'passed':report['passed'],'failed':[c for c in checks if not c['passed']],'evidence':evidence}),flush=True)
