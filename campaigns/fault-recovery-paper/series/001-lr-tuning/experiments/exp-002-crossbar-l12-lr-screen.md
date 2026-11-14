@@ -52,6 +52,15 @@ estimator and seeds are unchanged.
   `036a564c…`), teacher `2d74da66…` and corpora at `nom-cool-1:~/analog-research/opt-cmo-exp1/inputs/`.
 - Expected ~100 s per training arm (2× exp-001), 31 training arms ≈ 1 h; storage < 20 GB.
 
+## Pinned inputs
+
+- **Deployment** `fault-paper-l12-deploy-271001-random3pct`, SHA-256
+  `03af2f12921c6ded1dd4f033c29b5ba61f116bfd494cb03f7075255e66e8044d` (1.38 GB), from unit `deploy`
+  at `dc9f3e9` (runs `deploy-a`, `deploy-b`). **Determinism:** the two independent builds wrote
+  byte-identical files (same SHA-256) with identical apparent hashes — naive `0c6140f9…`,
+  fault-aware `06bd5454…`, adapter `263bbf76…`; fault identity `4e01b48f…`, adapter fault identity
+  `3132d761…`. Dev KL: clean 0.2041, naive 0.4362, fault-aware 0.2191. ~30 s per build, peak 6.2 GB.
+
 ## Current execution and monitoring handoff
 
-Owner: the implementing agent. Not started.
+Owner: the implementing agent. Next: unit `bscale`.
