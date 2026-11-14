@@ -12,6 +12,7 @@ class Config:
     case:str='small'
     iterations:tuple=(8,16,32,64,96,128)
     reference_steps:tuple=(512,1024)
+    required_groups:tuple=()
     batches:int=3
     batch_size:int=8
     beta:float=.005
@@ -24,7 +25,7 @@ def parse_config(raw):
     if not isinstance(raw,dict) or set(raw)-{f.name for f in fields(Config)}:
         raise ConfigError('Expected declared gradient diagnostic fields')
     data=dict(raw)
-    for name in ('iterations','reference_steps'):
+    for name in ('iterations','reference_steps','required_groups'):
         if name in data:
             if not isinstance(data[name],(tuple,list)):raise ConfigError('Expected iteration sequence')
             data[name]=tuple(data[name])
@@ -34,6 +35,9 @@ def parse_config(raw):
     if c.case not in ('small','reference','more_tokens'):raise ConfigError('Expected a declared trained model size')
     if not c.iterations or any(type(t) is not int or not 1<=t<=128 for t in c.iterations) or tuple(sorted(set(c.iterations)))!=c.iterations:
         raise ConfigError('Candidate phase caps must increase and stay within 128')
+    allowed={'query','key','value','output','memory','encoder','decoder','position'}
+    if any(type(n) is not str or n not in allowed for n in c.required_groups) or len(set(c.required_groups))!=len(c.required_groups):
+        raise ConfigError('Expected unique declared gradient groups')
     if c.reference_steps!=(512,1024):raise ConfigError('Reference qualification is frozen at 512 versus 1024')
     for name,upper in (('batches',8),('batch_size',8),('wall_seconds',600)):
         v=getattr(c,name)

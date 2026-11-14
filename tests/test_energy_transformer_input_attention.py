@@ -177,3 +177,47 @@ def test_invalid_architecture_and_policy_combinations_are_rejected():
                    {'initialization':'input_attention_v1'},
                    {'arm':'digital_bp','energy_architecture':'input_conditioned'}):
         with pytest.raises(ConfigError): parse_config(config)
+
+
+def test_paired_statistics_are_the_same_finite_contrast_not_a_linearization():
+    m,x,_,_,z,y=case()
+    context=m.prepare(x)
+    plus=m.ports(z+.2,y+.1,context=context)
+    # Change directions as well as magnitudes so normalization is nontrivial.
+    minus=m.ports(.8*z.flip(-1),-.5*y,context=context)
+    high,low=m.statistics(plus,x),m.statistics(minus,x)
+    delta=m.statistic_difference(plus,minus,x)
+    for name in high:
+        torch.testing.assert_close(delta[name],high[name]-low[name],atol=2e-13,rtol=2e-11)
+
+
+def test_fp32_paired_ep_preserves_tiny_query_key_gradients():
+    m=InputAttentionNetwork(tokens=3,width=8,patch_width=2,heads=2)
+    project(m);gen=torch.Generator().manual_seed(814)
+    x=torch.randn(2,3,4,generator=gen)*.3
+    target=torch.randn(2,3,2,generator=gen)*.2;mask=torch.ones_like(target)
+    ep,phases=finite_ep(m,x,target,mask,64)
+    bp,_=bptt_gradient(m,x,target,mask,64)
+    metrics=agreement(ep,bp)
+    for group in metrics['groups'].values():
+        assert group['cosine']>.999
+        assert group['relative_l2']<.01
+    assert all(g.dtype==torch.float32 for g in ep.values())
+
+
+def test_iteration_selection_cannot_hide_bad_routing_in_a_good_global_cosine():
+    from networks.energy_transformer.finite_time import select_cap
+    from ebl.schema.energy_transformer_iterations import parse_config
+    from ebl.schema.base import ConfigError
+    required=('query','key','value','output')
+    row={'iterations':32,'batch':0,'reference_valid':True}
+    for key in ('ep_vs_bptt','ep_vs_reference','bptt_vs_reference'):
+        row[key]={'global':{'cosine':.99999},'groups':{name:{'cosine':.99} for name in required}}
+    row['ep_vs_bptt']['groups']['query']['cosine']=.78
+    assert select_cap([row],(32,),1)==32
+    assert select_cap([row],(32,),1,required_groups=required) is None
+    row['ep_vs_bptt']['groups']['query']['cosine']=.99
+    assert select_cap([row],(32,),1,required_groups=required)==32
+    assert parse_config({'required_groups':list(required)}).required_groups==required
+    for invalid in (['query','query'],['unknown'],[1]):
+        with pytest.raises(ConfigError):parse_config({'required_groups':invalid})

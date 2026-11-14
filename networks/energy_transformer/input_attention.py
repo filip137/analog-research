@@ -129,6 +129,42 @@ class InputAttentionNetwork(EnergyNetwork):
             'position': -v['g'].sum(0),
         }
 
+    def statistic_difference(self, plus, minus, x):
+        """Exact paired EP identity, evaluated without cancelling softmax outputs.
+
+        If p=softmax(l) and d is the positive-minus-negative logit change,
+        softmax(l+d)-p = p*(expm1(d)-sum(p*expm1(d)))/(1+sum(p*expm1(d))).
+        Compute d from state differences before adding the common input scores.
+        Every operation remains in the state's dtype. This is a numerical
+        evaluation of the same phase contrast, not a small-signal derivative.
+        """
+        dg = plus['g']-minus['g']
+        dt = torch.einsum('bnd,hda->bhna', dg, self.output)
+        dl = self.feedback*(dt @ minus['value'].transpose(-1, -2))
+        em1 = torch.expm1(dl)
+        mean = (minus['p']*em1).sum(-1, keepdim=True)
+        dp = minus['p']*(em1-mean)/(1+mean)
+        factor = self.gain*self.score_gain*self.kappa/self.feedback
+        # Product contrasts use (a+ - a-)*b+ + a-*(b+ - b-).
+        dr = plus['r']-minus['r']
+        dy = plus['y']-minus['y']
+        return {
+            'query': -factor*torch.einsum('bhna,bnf->haf', dp @ minus['k'], minus['f']),
+            'key': -factor*torch.einsum('bhna,bnf->haf', dp.transpose(-1, -2) @ minus['q'], minus['f']),
+            'value': -self.gain*torch.einsum('bhna,bnf->haf',
+                minus['p'].transpose(-1, -2) @ dt + dp.transpose(-1, -2) @ plus['returned_state'], minus['f']),
+            'output': -self.gain*(
+                torch.einsum('bnd,bhna->hda', dg, minus['p'] @ minus['value']) +
+                torch.einsum('bnd,bhna->hda', plus['g'], dp @ minus['value'])),
+            'memory': -(torch.einsum('bnm,bnd->md', dr, plus['g']) +
+                        torch.einsum('bnm,bnd->md', minus['r'], dg)),
+            'encoder': -torch.einsum('bnd,bnp->dp', dg, x),
+            'decoder': -(torch.einsum('bnp,bnd->pd', dy, plus['g']) +
+                         torch.einsum('bnp,bnd->pd', minus['y'], dg)),
+            'position': -dg.sum(0),
+        }
+
+
     @torch.no_grad()
     def device_margins(self, v):
         """Forward QK, output-feedback and probability-value MOS products.

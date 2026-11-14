@@ -95,8 +95,12 @@ def finite_ep(model,x,target,mask,steps,*,beta=.005,deadline=None):
     free=relax(model,x,target,mask,steps,deadline=deadline)
     plus=relax(model,x,target,mask,steps,beta,initial=free,deadline=deadline)
     minus=relax(model,x,target,mask,steps,-beta,initial=free,deadline=deadline)
-    high,low=model.statistics(plus.ports,x),model.statistics(minus.ports,x)
-    gradient={name:(high[name]-low[name])/(2*beta*mask.sum()) for name,_ in model.named_parameters()}
+    if hasattr(model,'statistic_difference'):
+        delta=model.statistic_difference(plus.ports,minus.ports,x)
+        gradient={name:delta[name]/(2*beta*mask.sum()) for name,_ in model.named_parameters()}
+    else:
+        high,low=model.statistics(plus.ports,x),model.statistics(minus.ports,x)
+        gradient={name:(high[name]-low[name])/(2*beta*mask.sum()) for name,_ in model.named_parameters()}
     return gradient,(free,plus,minus)
 
 
@@ -133,14 +137,17 @@ def agreement(estimate,reference):
             'groups':{name:compare(estimate[name],reference[name]) for name in names}}
 
 
-def select_cap(rows,caps,batches,threshold=.9):
+def select_cap(rows,caps,batches,threshold=.9,required_groups=()):
     """Smallest tested equal phase cap passing every held-out minibatch."""
     for cap in caps:
         selected=[row for row in rows if row.get('iterations')==cap]
         if len(selected)!=batches or {row['batch'] for row in selected}!=set(range(batches)):
             continue
         if any(not row.get('reference_valid') for row in selected):continue
-        if all(row[key]['global']['cosine'] is not None and row[key]['global']['cosine']>=threshold
-               for row in selected for key in ('ep_vs_bptt','ep_vs_reference','bptt_vs_reference')):
+        def passing(row,key):
+            metrics=[row[key]['global']]+[row[key].get('groups',{}).get(name,{}) for name in required_groups]
+            return all(m.get('cosine') is not None and m['cosine']>=threshold for m in metrics)
+        if all(passing(row,key) for row in selected
+               for key in ('ep_vs_bptt','ep_vs_reference','bptt_vs_reference')):
             return cap
     return None

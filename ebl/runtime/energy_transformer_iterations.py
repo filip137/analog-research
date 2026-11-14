@@ -32,6 +32,8 @@ def evaluate(config,store,payload,cohort,images,deadline):
     n,d,patch=CASES[config.case]
     model=build_model(parse_training_config(payload['config']))
     model.load_state_dict(payload['model'])
+    if not set(config.required_groups).issubset(dict(model.named_parameters())):
+        raise ConfigError('Requested gradient groups are absent from this checkpoint')
     original={name:p.detach().clone() for name,p in model.named_parameters()}
     count=config.batches*config.batch_size
     indices=cohort['ids']['validation'][:count]
@@ -51,8 +53,10 @@ def evaluate(config,store,payload,cohort,images,deadline):
                 saved[f'bptt_reference_{steps}']={name:value.cpu() for name,value in grad.items()}
             stability=agreement(reference_gradients[0],reference_gradients[1])
             ref_global=stability['global']
-            valid=(ref_global['cosine'] is not None and ref_global['cosine']>=.999
-                   and ref_global['relative_l2']<=.01 and reference_phases[-1].residual<=1e-5)
+            qualification=[ref_global]+[stability['groups'][name] for name in config.required_groups]
+            valid=(all(v['cosine'] is not None and v['cosine']>=.999
+                       and v['relative_l2'] is not None and v['relative_l2']<=.01 for v in qualification)
+                   and reference_phases[-1].residual<=1e-5)
             ref={'batch':batch_index,'valid':valid,'agreement_512_vs_1024':stability,
                  'phases':[phase_record(p) for p in reference_phases],'costs':reference_costs}
             references.append(ref)
@@ -79,12 +83,12 @@ def evaluate(config,store,payload,cohort,images,deadline):
             if isinstance(error,(TimeoutError,torch.cuda.OutOfMemoryError)):break
     if any(not torch.equal(p,original[name]) for name,p in model.named_parameters()):
         raise RuntimeError('Diagnostic mutated checkpoint weights')
-    passing=[cap for cap in config.iterations if select_cap(rows,(cap,),config.batches,config.threshold) is not None]
+    passing=[cap for cap in config.iterations if select_cap(rows,(cap,),config.batches,config.threshold,config.required_groups) is not None]
     result={'case':config.case,'checkpoint_step':payload['step'],'candidate_cap':128,
-            'selected_cap':min(passing) if passing else None,'passing_caps':passing,
+            'selected_cap':min(passing) if passing else None,'passing_caps':passing,'required_groups':list(config.required_groups),
             'coverage_complete':len(rows)==len(config.iterations)*config.batches and not failures,
             'reference_valid':len(references)==config.batches and all(r['valid'] for r in references),
-            'selection_rule':'Smallest tested cap whose global EP/BPTT, EP/reference and BPTT/reference cosines are each >=0.9 on every batch; reference must pass 512/1024 stability and residual checks.',
+            'selection_rule':'Smallest tested cap whose global and explicitly required-group EP/BPTT, EP/reference and BPTT/reference cosines are each >=0.9 on every batch; reference must pass 512/1024 stability and residual checks.',
             'references':references,'failures':failures,'rows':rows,
             'claim_boundary':'Read-only FP32 diagnostic. Each candidate is T free plus T positive and T negative iterations (3T serial). Reference uses longer unrolls only for validation. Truncated EP is not exact finite-time backpropagation or an asserted equilibrium gradient.'}
     atomic_write_json(store.run_dir/'artifacts/summary.json',result)

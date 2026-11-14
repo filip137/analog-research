@@ -143,13 +143,37 @@ adds `energy_bp`, which backpropagates through exactly the same energy model,
 solver and projection policy as its EP partner. Attention concentration,
 normalized entropy and distance from uniform are recorded during evaluation.
 
-The affected mathematical/runtime suite passes50 tests. The new tests cover
+The affected mathematical/runtime suite passes53 tests. The new tests cover
 the energy/force identity, every parameter derivative, actual loss finite
 differences for Q/K/V/O, EP/BPTT agreement, covariance-Hessian bound, weighted
 contraction, added MOS operand guards, exact paired initialization and strict
 config rejection. These are tiny CPU mathematical fixtures, mostly FP64,
 not GPU FP32 task evidence. Projection idempotence is checked within numerical
 roundoff, not bit equality after repeated SVDs.
+
+A subsequent FP32 toy check exposed cancellation that a global cosine hid:
+direct phase-statistic subtraction gave query/key cosines0.7867/0.8172,
+despite global0.99999999. The fix evaluates the exact finite softmax contrast
+using expm1 of the state-induced logit difference before adding common input
+scores. For p=softmax(l), e=expm1(delta_l), and a=sum(p*e):
+
+    softmax(l+delta_l)-p = p*(e-a)/(1+a).
+
+Product statistics are likewise expanded as differences of factors. This is
+an algebraic identity for a finite contrast, not a linear response
+approximation or an FP64 fallback. Its FP64 equivalence is tested against
+ordinary phase subtraction, including large state differences. The repaired
+FP32 toy has global cosine0.99999999976, query/key cosines0.999999990/
+0.999999978, and worst group relative error0.000324. These remain CPU
+mathematical fixtures; GPU/task qualification is still pending. Physical
+measurement of such small phase-current differences would need its own
+precision/noise validation and is not established by stable simulator math.
+
+Consequently the prepared trained-state diagnostic requires query, key, value
+and output group cosines>=0.9 in addition to the existing global gate; those
+groups also must pass512/1024 reference stability. Historical diagnostics
+retain their old default global-only rule. This stricter requirement was
+declared before any new task run.
 
 A synthetic bounded-feature witness can put over98% on one of49 tokens while
 satisfying the contraction and forward MOS guards. Its input amplitude is
@@ -174,8 +198,8 @@ while retaining the user's trained-state gradient criterion?
 
 1. Run250 EP warm-up updates of the new model at128 steps, then test caps
    32/64/128 on the same eight minibatches of eight held-out examples as before.
-   Require global EP/BPTT, EP/reference and BPTT/reference cosine>=0.9 on
-   every minibatch, with qualified512/1024 references. Report every group;
+   Require global and Q/K/V/output EP/BPTT, EP/reference and BPTT/reference
+   cosine>=0.9 on every minibatch, with qualified512/1024 references. Report every group;
    use the smallest passing cap. If none passes, stop this candidate as a
    failed numerical result; do not weaken acceptance or launch full training.
 2. From fresh paired initialization, run2,000 updates each for input-conditioned
