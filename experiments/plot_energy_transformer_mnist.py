@@ -27,6 +27,7 @@ def validation_points(history,summary):
 def summarize(root):
     rows=json.loads((root/'coverage.json').read_text());out=root/'analysis';out.mkdir(exist_ok=True)
     comparisons=[]
+    colors={'digital_bp':'tab:blue','energy_ep':'tab:orange'}
     cases=[case for case in ('small','reference','wider','more_tokens') if any(r['case']==case for r in rows)]
     fig,axes=plt.subplots(len(cases),2,figsize=(11,3.5*len(cases)),layout='constrained',squeeze=False)
     vf,va=plt.subplots(len(cases),2,figsize=(11,3.5*len(cases)),layout='constrained',squeeze=False)
@@ -40,13 +41,13 @@ def summarize(root):
             probes=validation_points(history,row.get('summary',{}))
             byarm[row['arm']]={'summary':row.get('summary',{}),'history':train,'probes':probes}
             if probes:
-                va[i,0].plot([p['step'] for p in probes],[p['mse'] for p in probes],'.-',label=row['arm'])
-                va[i,1].plot([p['seconds'] for p in probes],[p['mse'] for p in probes],'.-',label=row['arm'])
+                va[i,0].plot([p['step'] for p in probes],[p['mse'] for p in probes],'.-',label=row['arm'],color=colors[row['arm']])
+                va[i,1].plot([p['seconds'] for p in probes],[p['mse'] for p in probes],'.-',label=row['arm'],color=colors[row['arm']])
             if train:
                 losses=np.array([r['mse'] for r in train]);window=min(25,len(losses))
                 smooth=np.convolve(losses,np.ones(window)/window,mode='valid')
-                axes[i,0].plot([r['step'] for r in train][window-1:],smooth,label=row['arm'])
-                axes[i,1].plot([r['train_seconds'] for r in train][window-1:],smooth,label=row['arm'])
+                axes[i,0].plot([r['step'] for r in train][window-1:],smooth,label=row['arm'],color=colors[row['arm']])
+                axes[i,1].plot([r['train_seconds'] for r in train][window-1:],smooth,label=row['arm'],color=colors[row['arm']])
             examples=run/'artifacts/reconstructions.pt'
             if examples.exists():
                 ex=torch.load(examples,map_location='cpu',weights_only=False)

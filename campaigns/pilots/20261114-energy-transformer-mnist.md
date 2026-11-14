@@ -4,12 +4,13 @@ Issue: https://github.com/filip137/on-chip-learning/issues/36
 Branch: `energy-transformer`. Exploratory GPU simulation, one seed.
 User authorized implementation and the six-GPU-hour plan on 14 November 2026.
 
-Current repair status: fresh 49-token EP and matched digital training are running
-from `e5a4969`, with independent recurrent-weight constraints and32 iterations
-per EP phase. A250-update readiness run passes every trained-gradient batch at
-32/64/128 steps and learns beyond the mean-image baseline. Earlier runs completed
-all task coverage but failed final gradient fidelity; those results remain below.
-The goal stays active until the fresh full run and final qualification pass.
+Current repair status: the GPU training/evaluation repair is verified. All three
+selected sizes and their matched digital baselines complete2,000 updates and full
+held-out evaluation. The repaired49-token model uses32 steps per phase, test
+MSE0.0544175 and final minimum EP/BPTT cosine0.9999989. Energy/device equations
+are unchanged; separate recurrent-weight constraints are enforced by the digital
+programming controller. This completes the bounded repair, not the broader
+mid-scale transistor project. Earlier failures remain historical evidence below.
 
 ## Frozen question and comparison
 
@@ -1231,3 +1232,76 @@ contraction certificates, matched initialization/RNG/cohorts, unchanged circuit
 equations, prior small/reference final gradients, an independent stored-weight
 norm check, all eight final gradient/reference gates and native artifact hashes.
 The parent retains figure review, interpretation and overall goal completion.
+
+
+### Final repair result: full coverage and trained-gradient qualification pass
+
+All six native comparison arms pass independent artifact-hash/completeness
+inspection: three selected model sizes,2,000 updates each,10,000 test images,
+5,000 validation images and all three256-example attention probes. Small and
+reference reuse their previously qualified64-step runs; the49-token pair is
+fresh from clean source `e5a4969`, with the declared projected initialization.
+
+| Tokens × width | Parameters | EP phase cap | EP test MSE | Digital test MSE | EP training s | Digital training s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 16 × 32 | 11,360 | 64 | 0.0638694 | 0.0524059 | 427.37 | 6.86 |
+| 16 × 64 | 35,008 | 64 | 0.0640147 | 0.0461110 | 454.77 | 7.50 |
+| 49 × 64 | 30,784 | 32 | 0.0544175 | 0.0422274 | 321.39 | 7.02 |
+
+The repaired EP test MSE is19.20% below the mean-image baseline0.0673463 and
+improves substantially from initialization0.236493. It remains worse than the
+matched digital model. New EP peak tensor memory is114.39 MiB versus31.71 MiB
+for BP; the fresh composition, including evaluation and analysis, takes363.52 s.
+These are GPU simulator costs, not analog hardware speed, energy or area claims.
+The32-step cap was selected on the250-update readiness checkpoint, before this
+fresh full training; it was not chosen using final test results.
+
+The final checkpoint SHA is
+`afcb5c499450925c1bbb1058054ca1992beefda8b9ad3a114655eaeef2eaa0a8`.
+The native diagnostic is
+`training-003/gradient-final/20261114T194907.163552Z-35f706fe-df7ac36b`.
+All eight batches of eight saved validation examples pass at the production32
+steps: minimum global EP/BPTT0.999998925, EP/reference0.999998924 and
+BPTT/reference0.999999999632. Every parameter group passes, with minimum
+cosine0.999930. All512/1024 references qualify: maximum relative gradient
+difference9.15e-8 and residual4.77e-7. The diagnostic takes35.98 s and leaves
+the checkpoint unchanged. No cosine, reference or physical threshold was relaxed.
+
+Every recorded post-update block constraint passes; maximum total normalized
+bound0.699939 and Perron radius0.803531. Full-test worst residual is9.54e-7.
+Across all training phases the maximum is1.22e-6, so the fixed32-step run should
+not be described as satisfying the historical1e-6 stopping rule on every phase.
+Its acceptance is the declared finite-cap gradient qualification. Test minimum
+triode/drain/weak-inversion margins are0.682061/0.290943/0.235110 V.
+
+Final normal/uniform/zero probe MSEs are0.0546622/0.0546678/0.0558328. Disabling
+attention worsens error2.14%, supporting useful token aggregation; normal versus
+uniform differs only0.010%, so strong content-dependent routing remains unproven.
+The parent reviewed the learning/validation curves and paired reconstructions.
+EP reconstructs broad digit structure but remains blurrier than digital BP. A
+plot-only fix assigns consistent arm colors across rows; training evidence and
+numerical results are unchanged.
+
+The independent audit verifies matched initial maps, RNG, split/mask cohorts,
+parameter counts, FP32, exact32-step coverage, per-block constraints, positive
+physical margins, unchanged energy/reciprocal/statistic equations, all final
+gradient gates and artifact hashes for all six arms plus the diagnostic. It also
+rechecks the reused small/reference final-checkpoint hashes and gradient evidence.
+A separate float64 weight-only algebra check confirms the final norm certificate;
+all task training and gradient replay are GPU FP32. Its initial standalone-import
+path issue was corrected and the full audit rerun successfully.
+
+Terminal evidence is in `training-003/analysis/parent-verification.json`,
+`final-gradient-review.json`, `figure-review.json`, `final-budget-audit.json`
+and `review.json` (`goal_outcome=repair_verified`). The conservative whole-campaign
+GPU-calendar upper bound, including earlier failed attempts and idle/analysis
+time, is3.14 hours, below the six-hour allowance. The watcher was stopped after
+terminal diagnostic handoff; all training/diagnostic workers have exited.
+
+This verifies the requested bounded GPU FP32 EP learning repair at these three
+selected sizes. It remains an exploratory single-seed MNIST completion study
+with ideal MOS/perfect-diode equations, ideal auxiliary analog blocks, and
+digital Adam/norm-constrained programming. It does not establish foundry-device
+behavior, hardware efficiency, a fully local analog optimizer, an independent-V
+energy transformer, or the broader mid-scale transistor implementation. Issue36
+stays open for that broader project; shared-trunk integration remains separate.
