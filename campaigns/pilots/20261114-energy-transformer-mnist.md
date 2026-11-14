@@ -194,3 +194,68 @@ times are not advertised as identical wall budgets.59 distinct targeted tests
 passed,4 SPICE/environment checks skipped. At closeout rerender the derived
 comparison with the current feature-branch `experiments.plot_energy_transformer_mnist`
 module; the pinned runtime source and raw native bundles remain unchanged.
+
+
+## Terminal review — 14 November 2026
+
+Benchmark003 accounts for all eight terminal arms. Fresh public-CLI inspection
+with `--verify-artifacts --require-complete` passed all eight explicit native
+bundles with full artifact hashes and no errors. Worker2189095 and child2204303
+are absent. The historical startup failures remain preserved; the reused small
+BP and reference EP bundles are from002, and49-token EP remains from001.
+No further training or scientific retries are authorized by this review.
+Scientific coverage remains partial (`coverage_complete=false`), despite valid
+terminal artifacts. Derived comparison.json/md, learning.png and validation.png
+were regenerated from feature commit `af7b9a3`; raw evidence was unchanged.
+
+| Case | EP updates | EP test count | EP test MSE | BP updates | BP test count | BP test MSE |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| small | 1050 | 5568 | 0.0635810 | 2000 | 10000 | 0.0524059 |
+| reference | 1450 | 0 | unavailable | 2000 | 10000 | 0.0461110 |
+| wider | 6 | 0 | unavailable | 2000 | 10000 | 0.0466076 |
+| more_tokens | 382 | 10000 | 0.0545565 | 2000 | 10000 | 0.0419638 |
+
+Every EP arm reached the predeclared convergence stop. Small failed the positive
+nudged phase at residual0.000316203; reference and wider failed free phases at
+2.86102e-6 and1.90735e-6;49-token failed the positive nudged phase at1.54972e-6.
+Small test evaluation separately stopped at residual2.74926e-5. Reference and
+wider have no final validation/test scores. Their incomplete ablation phases
+remain recorded; wider zero-attention replay alone completed. Last accepted
+training residuals were below1e-6 and operand maxima remained below4; positive
+triode margins were0.474/0.301/0.565/0.583 in case order. Recorded small positive
+energy increases are numerical diagnostics, not proof of strict descent.
+
+The49-token EP result demonstrates learning: full-test MSE0.0545565 beats its
+initial0.2366731 and paired mean-image0.0673463. Small EP beats its own initial
+and mean image on its5568-example prefix (0.236536 and0.0647197), but that prefix
+cannot be compared directly to BP's full test. All BP arms beat their paired
+initialization and mean image. Uniform attention scarcely changes49-token EP
+MSE while zero attention worsens it, so content-dependent routing is not
+established. No hardware performance claim follows from these simulations.
+
+On the same256-image validation cohort at the largest shared trained checkpoint,
+EP/BP MSE is0.0676298/0.0655144 at1000updates (small),
+0.0662456/0.0519687 at1250 (reference), and0.0560462/0.0552632 at250
+(49tokens). Wider has only a shared initialization probe. Digital BP is lower
+on these matched checkpoints; this is one seed, without statistical replication.
+Training curves show early improvement then EP plateaus, with reference
+instability near its stop. Final scores have unequal update counts and are not
+matched-training comparisons. Probe timestamps show much greater simulator
+cost for EP, but sparse probes do not establish identical wall budgets.
+Model tensor peak memory EP/BP in MiB:21.875/19.849,29.876/21.750,
+46.730/26.783,99.775/31.714; supervisor CUDA-context overhead is additional.
+
+Launcher receipts charge609.0467seconds for003 plus1061.9854 prior seconds and
+300 readiness seconds:1971.0320seconds total, within21600seconds. Original
+absolute deadline17:37:58UTC and all failed attempts remain unchanged. No budget
+extension or remaining-case launch is needed. The sandbox GPU query could not
+access the driver; this does not invalidate the completed artifact checks and
+no GPU action was taken.
+
+Verdict: terminal execution and artifact review are complete, with explicitly
+partial scientific coverage. Energy EP learns in the49-token case but robustness
+across widths and digital parity are not established. Any further investigation
+requires a new assignment; no retuning or rerun follows from these stops.
+Issue36 stays open. Shared trunk integration remains prohibited by the earlier
+review rejection; only this feature-branch review is published. The experiment
+worktree and pinned source remain retained rather than claiming trunk closeout.
