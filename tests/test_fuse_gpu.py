@@ -94,3 +94,32 @@ def test_fp32_local_statistics_and_fail_closed_settling():
         assert (a-b).norm()/b.norm()<.05
         assert torch.nn.functional.cosine_similarity(a,b,dim=0)>.99
     assert all(not a.requires_grad for p in phases for a in p.tensors())
+
+
+def test_native_contract_and_matching_data_permutation():
+    from dataclasses import asdict
+    from ebl.schema.fuse_mnist import Config,parse_config
+    from ebl.schema.base import ConfigError
+    from ebl.runtime.fuse_mnist import task_batch
+    from networks.energy_transformer.mnist import hidden_masks,batch,unpatchify
+    gen=torch.Generator().manual_seed(5)
+    images=torch.randint(256,(3,28,28),generator=gen)
+    mask=hidden_masks(3,gen)
+    for patch in (4,7):
+        actual=task_batch(images,mask,patch,'cpu')
+        for a,b in zip(actual,batch(images,mask,patch,'cpu')):assert torch.equal(a,b)
+        permutation=torch.randperm(784,generator=gen)
+        x,t,m=task_batch(images,mask,patch,'cpu',permutation)
+        assert bool((x[...,:patch**2][m.bool()]==0).all())
+        inverse=permutation.argsort()
+        torch.testing.assert_close(unpatchify(t,patch).flatten(1)[:,inverse].reshape(-1,28,28),images.float()/255*.8-.4)
+        assert torch.equal(unpatchify(m,patch).flatten(1)[:,inverse].reshape(-1,28,28).bool(),mask)
+    for bad in ({'updates':2001},{'kernel':'cauchy'},{'beta':.01},{'heads':8},{'permutation_seed':True},{'oops':1}):
+        with pytest.raises(ConfigError):parse_config({**asdict(Config()),**bad})
+
+
+def test_same_initialization_for_independently_trained_linear_control():
+    for n,d,p in ((16,32,49),(16,64,49),(49,64,16)):
+        a=FuseNetwork(n,d,p);b=FuseNetwork(n,d,p,kernel='linear')
+        assert a.counts()==b.counts()
+        for name,value in a.state_dict().items():assert torch.equal(value,b.state_dict()[name])

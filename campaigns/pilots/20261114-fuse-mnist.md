@@ -56,7 +56,7 @@ No tolerance relaxation or silent scientific retry. Report terminal failures.
 
 Local RTX3090; py312 interpreter. 90-minute aggregate compute ceiling, including
 readiness and retries; each arm max600s training /850s including evaluation.
-Expected duration will be measured by readiness. Max3GB outputs,500MB/arm. Keep
+Measured readiness throughput is about .013–.047s/update; expect roughly 10–20 minutes for six arms plus evaluation/checks. Max3GB outputs,500MB/arm. Keep
 initial, every250-update and final checkpoints with Adam and sampler RNG.
 Results: `/home/filip/analog-research/drn/results/fuse-mnist/`.
 Backend branch `drn/20261114-fuse-attention`, existing worktree of the same name.
@@ -71,3 +71,29 @@ trunk closeout. No changes to the user's README or unrelated work.
 Current state: implementation/readiness in progress. Five CPU circuit/gradient
 checks pass. No full MNIST training launched. Root agent owns short readiness;
 one verified run-watch owner will cover the full serial composition.
+
+## Launch readiness
+
+The native two-update smoke completes with full declared small evaluation. All
+three Gaussian cases complete25 updates at batch64, followed by independent
+FP64 dense-KCL implicit gradient checks on two held validation examples. Minimum
+global cosine0.99999985; maximum global relative error0.000676. Worst parameter
+group error0.00296 and minimum group cosine0.9999956. These are readiness
+results, not final accuracy. Numerical references have positive-definite energy
+Hessians and symmetric KCL Jacobians.
+
+Readiness artifacts: `results/fuse-mnist/readiness/` (including all native
+bundles and gradient JSON). Conservatively charge120s against the90-minute
+ceiling. Expected six-arm wall time is10–20minutes at measured throughput.
+Full source will be published and pinned before launch; exact SHA/handles
+are recorded by the launcher in `benchmark-001/launch.json`. Native command:
+
+```sh
+python -m experiments.run_fuse_mnist --output-root /home/filip/analog-research/drn/results/fuse-mnist/benchmark-001 --charged-readiness-seconds 120
+```
+
+Each arm also runs8-example final validation-gradient verification, with global
+and every parameter-group cosine>.99 and relative L2<5%, stable isolated FP64
+reference equilibria, and unchanged checkpoint. The full held-out test still
+requires10000 images and5000 validation images. Do not conflate native bundle
+completion with these scientific acceptance conditions.
