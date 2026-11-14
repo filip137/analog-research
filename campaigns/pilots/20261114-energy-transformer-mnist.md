@@ -869,3 +869,30 @@ and the unchanged readiness receipt. Preserve all five completed arms. Keep the
 supports, and charge the first failed attempt plus diagnostics to the six-hour
 repair allowance. The new run needs complete evaluation and the same 64-example
 final gradient qualification before the goal can pass its completion audit.
+
+
+### Stabilized run launched and monitored
+
+The complete targeted suite passes: 46 tests, with three optional SPICE/environment
+skips. This includes finite differences through an actively rejected cycle.
+Published source `396d236acfe28cdb5c36cb4fb997700b8dede524` is pinned at
+`results/energy-transformer-repair/source-396d236`. Fresh training-002 started
+14 November at 18:27:54 UTC; supervisor PID 2455616, native worker PID 2455635.
+The exact native bundle is
+`training-002/more_tokens-energy_ep/attempt-01/20261114T182757.297409Z-6a185af8-43cdfe98`.
+Launch command, source, limits and deadline are recorded in its parent launch.json.
+
+Two independent launch checks observed step 1 to 29 and metrics growing from
+6,029 to 18,254 bytes. The measured update time is about 0.63 seconds, projecting
+roughly 21 minutes for 2,000 updates, before evaluation. The existing five complete
+arms are reused. Persistent run-watch PID 2456527 has dispatch enabled, verified
+host/GPU/artifact observations and no probe errors. It owns five-minute monitoring,
+bounded Sol incident work and the required final diagnostic; the interactive
+parent retains the active goal and scientific repair decisions.
+
+The cap counts 128 accepted Euler updates per phase. Energy backtracking and
+cycle rejection may perform extra candidate energy evaluations inside an update;
+these costs are included in measured runtime. This is a numerical integration
+repair to the GPU simulator; the underlying continuous circuit energy and forces
+remain unchanged. Final training, full held-out evaluation and all eight final
+gradient minibatches must pass before the repair is considered verified.
