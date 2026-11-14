@@ -930,6 +930,17 @@ EXPERIMENT_REGISTRY["mos_attention_learning.v1"] = ExperimentDefinition(
 )
 
 
+
+from ebl.schema.energy_transformer_mnist import (
+    parse_config as _et_mnist_parse, resolve_config as _et_mnist_resolve,
+)
+EXPERIMENT_REGISTRY["energy_transformer_mnist.v1"] = ExperimentDefinition(
+    experiment_id="energy_transformer_mnist.v1", schema_version=1,
+    description="FP32 GPU ideal-circuit EP versus digital attention on MNIST patch completion.",
+    supported_modes=(RunMode.TRAIN,), parser=_et_mnist_parse, resolver=_et_mnist_resolve,
+)
+
+
 def list_definitions() -> Tuple[ExperimentDefinition, ...]:
     """Return definitions in stable identifier order."""
 

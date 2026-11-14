@@ -1,0 +1,5 @@
+{
+  "experiment_id": "energy_transformer_mnist.v1",
+  "case": "small",
+  "arm": "digital_bp"
+}
