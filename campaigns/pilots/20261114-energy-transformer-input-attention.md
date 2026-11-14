@@ -288,3 +288,30 @@ has600s training/1200s total to preserve the runner's600s evaluation reserve;
 this does not extend the common3600s ceiling. All possible caps and full-pair
 configs are committed before launch. The root monitor owns scientific review;
 run-watch owns deterministic process/artifact observations and bounded incidents.
+
+## Active execution —14November2026
+
+Clean published launch source `f27b8c8225ab0f727d90bb6280e62e5eb73b96ab`:
+`/home/filip/analog-research/drn/results/energy-transformer-input-attention/source-f27b8c8`.
+Command: `python -u -m experiments.run_energy_transformer_input_attention
+--output-root /home/filip/analog-research/drn/results/energy-transformer-input-attention/benchmark-001
+--seconds3600` (the actual argv uses separate `--seconds` and `3600` arguments).
+Started20:43:14.786UTC; absolute deadline21:43:14.786UTC. Supervisor2573088;
+current child is recorded in `child.pid`. No other GPU compute process was
+present at admission.
+
+Both two-update GPU smokes passed full declared coverage and native artifact
+hash checks on their first attempts. At20:45:23UTC, warm-up child2573434 had
+reached156/250 updates in112.6training seconds, residual1.79e-7 and normalized
+bound0.699928. This is launch progress, not scientific acceptance.
+
+Persistent run-watch2573932 is armed with dispatch, verified process/GPU and
+semantic-artifact observations, no probe errors, and60-second cadence. Its
+config, state, incident budgets and explicit recovery scope are under the run
+root (`watch.json`, `watch-state/`, `handoff.md`). Last successful observation
+20:45UTC; next due20:46UTC. Parent root owns scientific review and repairs;
+watch owns routine monitoring and bounded incident diagnosis. All eight
+expected native cases are named by the launcher; full arms are conditional
+on warm-up qualification. Read `status.json`, `coverage.json`, `selection.json`,
+native `metrics.jsonl` and final `result.json`. Never replace an existing
+attempt or reset the absolute deadline during recovery.
