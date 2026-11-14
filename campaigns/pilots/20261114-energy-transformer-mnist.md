@@ -133,3 +133,19 @@ the original absolute deadline. At most two attempts in the recovery sweep;
 no new science or extra GPU allowance. The new watchdog retains the original
 watch-state dispatch history and budget; it owns the queued recovery and final
 review.58 distinct targeted tests passed,4 SPICE/environment checks skipped.
+
+The49-token EP case completed its10k test and5k validation after stopping at
+update382 (nudged residual1.54972e-6). TestMSE0.0545565 versus initialization
+0.2366731 and training-mean image0.0673463. Uniform-attention validation replay
+was almost unchanged (0.0548616 vs0.0548131); zero attention worsened it to
+0.1067171. Thus this case demonstrates learning and dependence on attention
+coupling, but does not establish useful content-dependent routing.
+
+Sweep002 reuses this case and retries seven startup failures. Small digital
+completed2000updates; small EP again failed before training, and reference EP
+started. CUDA startup probes passed6/6 when their supervisor retained a CUDA
+context. The launcher now retains one four-byte GPU tensor/context between
+workers as an operational guard; it changes no science. Driver/context memory
+is additional to reported model tensor peaks. A subsequent recovery may reuse
+all terminal cases and retry remaining initialization failures within the
+original17:37:58UTC deadline. All attempts/dispatch history remain preserved.

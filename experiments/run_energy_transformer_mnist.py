@@ -72,6 +72,15 @@ def main():
     begin=time.monotonic();deadline=begin+21600-args.charged_readiness_seconds-prior_seconds
     if prior_deadline:
         deadline=min(deadline,begin+datetime.fromisoformat(prior_deadline).timestamp()-time.time())
+    # Keep one CUDA context alive between workers. On this host, cold worker
+    # initialization failed intermittently; six child probes with a retained
+    # context passed. This is supervisor overhead, not model tensor memory.
+    import torch
+    cuda_context_guard=torch.empty(1,device='cuda',dtype=torch.float32)
+    torch.cuda.synchronize()
+    atomic_write_json(root/'supervisor-gpu.json',{'context_guard_bytes':cuda_context_guard.numel()*4,
+                      'gpu':torch.cuda.get_device_name(),'pid':os.getpid(),
+                      'note':'Persistent supervisor CUDA context; driver/context memory is additional to reported model tensor peaks.'})
     rows=[];active=None
     def status(stage,**extra):
         native=list((root/active).rglob('metrics.jsonl')) if active else []
