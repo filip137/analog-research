@@ -757,3 +757,29 @@ so reported training wall time includes this short diagnostic's contention.
 The existing training context guard is active. Diagnostic runtime is bounded at
 600 seconds and charged to the repair allowance. The coordinator owns this short
 check; run-watch retains ownership of training and its final diagnostic.
+
+
+### Training-001 scientific stop: needs repair
+
+The new physical-domain 128-step, dt=1 EP arm stopped at 1,189/2,000
+updates. Its next free phase violated the MOS drain condition at iteration 3:
+maximum operand 6.02003288, drain margin -0.00100162625; triode and weak-inversion
+margins remained positive. Test, validation and normal-attention evaluation each
+covered zero examples. Uniform and zero-attention probes each covered 256 examples
+(MSE 0.13198218 and 0.11551682); these do not establish held-out learning quality.
+
+Six terminal rows comprise five reused complete arms and this incomplete arm.
+Native inspection with artifact hashing reports ten valid artifacts and process
+completion, but explicitly reports `coverage_complete=false`. The preserved
+bundle is `training-001/more_tokens-energy_ep/attempt-01/20261114T175351.310637Z-3398fa6d-df6e4d2d`
+under the repair result root. Its exact `checkpoints/final.pt` identity, failure,
+coverage and costs are recorded in `training-001/analysis/review.json`, with
+`goal_outcome=needs_repair`. Launcher wall time was 680.109 seconds (training
+672.749 seconds). The final gradient diagnostic was not run because successful
+full training/evaluation, its handoff prerequisite, failed. The independent
+parent-owned midpoint diagnostic does not replace this requirement.
+
+The incident decision is blocked for parent scientific review. The parent retains
+the active objective and corrective decisions. No training settings, physical
+gates or budgets changed; no identical retry or fresh allowance was granted.
+This run does not verify the repair.
