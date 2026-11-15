@@ -41,7 +41,7 @@ def model_lines(model):
     ]
 
 
-def export(values, controls, model='bsim3', nudge=0., error=(.7,-.4), transient=False, initial=.3):
+def export(values, controls, model='bsim3', nudge=0., error=(.7,-.4), transient=False, initial=.3, transient_seconds=.02):
     values, controls = np.asarray(values), np.asarray(controls)
     if values.shape != (3,2) or controls.shape != (3,):
         raise ValueError('Expected three keys and two features')
@@ -96,7 +96,7 @@ def export(values, controls, model='bsim3', nudge=0., error=(.7,-.4), transient=
     lines += ['.control','set noaskquit','set numdgt=15','set wr_vecnames','set wr_singlescale']
     # Without UIC, ngspice biases the other compact-model nodes consistently
     # with .ic on state nodes, then releases those initialization constraints.
-    lines += ['tran 10u 20m' if transient else 'op']
+    lines += [f'tran {transient_seconds/2000:.17g} {transient_seconds:.17g}' if transient else 'op']
     lines += ['wrdata trace.txt '+' '.join(expr for _,expr in columns),'quit','.endc','.end']
     return '\n'.join(lines)+'\n',columns,count
 
@@ -118,7 +118,7 @@ def simulate(values, controls, directory, executable, **kwargs):
         raise RuntimeError(f'Invalid trace shape/data {data.shape} in {directory}')
     if 'aborted' in (proc.stdout+proc.stderr).lower():
         raise RuntimeError(f'SPICE aborted an analysis despite zero exit status: {directory}')
-    if kwargs.get('transient') and data[-1,0] < .02*(1-1e-8):
+    if kwargs.get('transient') and data[-1,0] < kwargs.get('transient_seconds',.02)*(1-1e-8):
         raise RuntimeError(f'Incomplete transient ending at {data[-1,0]} in {directory}')
     port={name:data[:,k+1] for k,(name,_) in enumerate(columns)}
     x=np.array([[port[f'read_{j}_{d}'][-1]/(IREF*(1 if j<3 else H0)) for d in range(2)] for j in range(4)])

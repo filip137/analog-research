@@ -84,6 +84,34 @@ Each model uses 108 SPICE cases (DC plus two transient starts), no training.
 Parent owns both cases; metrics advance every simulation and stdout every
 12 cases. Operational repairs share the declared 1800 s total allowance.
 
+## Initial evidence and declared follow-up
+
+Published launch e2a2101; pinned source /tmp/pseudoconductance-source-e2a2101.
+Both 108-case runs completed their full coverage:
+- ideal: /tmp/pseudoconductance-native-results/ideal/20261115T204938.973576Z-a6462845-d6577e8b
+- BSIM3: /tmp/pseudoconductance-native-results/bsim3/20261115T204940.237559Z-15a58626-9131a503
+
+Selection RMSE 0.00587 ideal / 0.00572 BSIM3 versus uniform 0.34702 / 0.34746.
+All ideal checks passed. BSIM3 passed selection, mixing, permutation, value
+gradient and compliance. Its nominal control statistic failed (10.47% error),
+and 20 ms transients missed the DC output by up to 0.04889. Original results
+remain unchanged. Total SPICE CPU-wall usage reported by these runs: 6.60 s.
+
+Inspection found that the 1 pA output-anchor bias reference was still displaced
+after 20 ms. Also, the nominal control statistic assumes effective coupling
+equals the reference current. Using the recorded actual branch current in
+the already-derived homogeneous-control formula reduced control-gradient error
+to 0.56% on the SAME saved free/nudged phases. This is a diagnostic based on
+ideal SPICE current probes, not an implemented branch-current sensor.
+
+Revision 3 (readout/time only; hardware unchanged): retain the same inputs,
+models, criteria and both gradient statistics, select the measured-branch
+statistic explicitly, and extend the two transient observations to 500 ms.
+Repeat matched coverage as a separate native bundle with
+examples/pseudoconductance_bsim3_branch_readout.json. The original 20 ms and
+nominal-readout failures remain reported. Expected additional SPICE runtime
+<30 s; <=1793 s remains before smoke/repair overhead. No additional bias tuning.
+
 Home filesystem has insufficient free space for raw bundles. Native temporary
 results will use /tmp/pseudoconductance-native-results; compact final evidence
 will be copied into the owning backend if space permits. No existing data deleted.

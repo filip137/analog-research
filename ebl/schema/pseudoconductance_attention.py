@@ -11,6 +11,8 @@ class Config:
     model: str='bsim3'
     seed: int=20261115
     wall_seconds: int=600
+    transient_seconds: float=.02
+    control_readout: str='nominal_drop'
     spice_executable: str='/tmp/pseudoconductance-spice-env/bin/ngspice'
 
 def parse_config(raw):
@@ -21,6 +23,10 @@ def parse_config(raw):
         raise ConfigError('Expected pseudoconductance_attention.v1 schema 1')
     if c.model not in ('ideal','bsim3'):
         raise ConfigError('Expected ideal or bsim3 model')
+    if c.control_readout not in ('nominal_drop','measured_branch_current'):
+        raise ConfigError('Unknown control readout')
+    if type(c.transient_seconds) not in (int,float) or not .02<=c.transient_seconds<=.5:
+        raise ConfigError('Transient duration must be in [0.02,0.5] seconds')
     if type(c.seed) is not int or not 0<=c.seed<2**32:
         raise ConfigError('Invalid seed')
     if type(c.wall_seconds) is not int or not 1<=c.wall_seconds<=600:

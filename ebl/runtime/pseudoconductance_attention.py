@@ -63,6 +63,8 @@ def characterize(c,store,exe):
     drop=free['x_read'][:3]-free['x_read'][3]
     dlam=lam[:3]-lam[3]
     control_estimate=-np.sum(drop*dlam,axis=1)
+    physical_flux=np.array([[free['port'][f'edge_{j}_{d}'][-1]/circuit.IREF for d in range(2)] for j in range(3)])
+    branch_estimate=np.sum(physical_flux*dlam,axis=1)/controls
     input_fd=np.zeros_like(base);control_fd=np.zeros(3)
     epsilon=1e-4
     for j,d in np.ndindex(base.shape):
@@ -77,12 +79,14 @@ def characterize(c,store,exe):
         control_fd[j]=e@(p['y']-m['y'])/(2*epsilon)
     transient=[]
     for i,start in enumerate([.2,.4]):
-        transient.append(run(f'transient-{i}',base,controls,transient=True,initial=start))
+        transient.append(run(f'transient-{i}',base,controls,transient=True,initial=start,transient_seconds=c.transient_seconds))
     selection_mse=float(np.mean((select_out-targets)**2))
     uniform_mse=float(np.mean((uniform_out-targets)**2))
     mixerr=np.array([m['output'] for m in mixture])-np.array([m['reference'] for m in mixture])
     vg=gradient_error(input_estimate,input_fd)
-    ag=gradient_error(control_estimate,control_fd)
+    nominal_ag=gradient_error(control_estimate,control_fd)
+    measured_ag=gradient_error(branch_estimate,control_fd)
+    ag=nominal_ag if c.control_readout=='nominal_drop' else measured_ag
     settling=max(float(np.max(abs(t['y']-free['y']))) for t in transient)
     metrics={'selective_rmse':float(np.sqrt(selection_mse)),
              'uniform_rmse':float(np.sqrt(uniform_mse)),
@@ -91,6 +95,7 @@ def characterize(c,store,exe):
              'mixture_rmse':float(np.sqrt(np.mean(mixerr**2))),
              'permutation_max_abs_error':float(np.max(abs(permuted['y']-free['y']))),
              'off_output':off['y'].tolist(),'value_gradient':vg,'control_gradient':ag,
+             'nominal_drop_control_gradient':nominal_ag,'measured_branch_control_gradient':measured_ag,
              'transient_vs_dc_max_abs_error':settling,
              'min_node_voltage':min(s['min_node_voltage'] for s in stats),
              'max_node_voltage':max(s['max_node_voltage'] for s in stats),
@@ -105,15 +110,17 @@ def characterize(c,store,exe):
             'settling':settling<1e-3,
             'voltage_range':metrics['min_node_voltage']>0 and metrics['max_node_voltage']<circuit.VDD,
             'anchor_compliance':metrics['min_anchor_vds']>4*circuit.UT}
-    summary={'model':c.model,'passed':all(checks.values()),'checks':checks,'metrics':metrics,
+    summary={'model':c.model,'control_readout':c.control_readout,'transient_seconds':c.transient_seconds,
+             'passed':all(checks.values()),'checks':checks,'metrics':metrics,
              'counts':free['counts'],'total_mos':sum(free['counts'].values()),
              'mixtures':mixture,
              'example':{'values':base.tolist(),'controls':controls.tolist(),'output':free['y'].tolist(),
                         'reference':circuit.reference(base,controls).tolist(),'voltages':free['voltage'].tolist(),
                         'gate_voltages':{k:float(v[-1]) for k,v in free['port'].items() if k.startswith('gate_')}},
              'gradients':{'value_fd':input_fd.tolist(),'value_nudge':input_estimate.tolist(),
-                          'control_fd':control_fd.tolist(),'control_nudge':control_estimate.tolist()},
-             'claim_boundary':'One-query 3-key 2-feature aggregation with supplied controls. Explicit MOS bias/input/read mirrors; ideal external reference currents, supply/reference/read-load voltages, and nudge source. Software phase storage/statistic evaluation. No analog QK scorer, gradient multiplier, PDK, mismatch/noise validation, silicon, latency/energy advantage or task-training claim.'}
+                          'control_fd':control_fd.tolist(),'control_nudge':control_estimate.tolist(),
+                          'control_branch_nudge':branch_estimate.tolist()},
+             'claim_boundary':'One-query 3-key 2-feature aggregation with supplied controls. Explicit MOS bias/input/read mirrors; ideal external reference currents, supply/reference/read-load voltages, and nudge source. Software phase storage/statistic evaluation. Measured-branch readout uses ideal SPICE current probes; its sensing circuit is not implemented. No analog QK scorer, gradient multiplier, PDK, mismatch/noise validation, silicon, latency/energy advantage or task-training claim.'}
     np.savez_compressed(artifacts/'routing.npz',values=values,selected=selected,targets=targets,
                         selective=select_out,uniform=uniform_out,operator=np.array(ideal_out))
     atomic_write_json(artifacts/'summary.json',summary)
