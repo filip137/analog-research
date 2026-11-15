@@ -1,0 +1,135 @@
+Biased three-key two-feature pseudoconductance attention
+.options reltol=1e-7 abstol=1e-20 vntol=1e-10 gmin=1e-18 method=gear maxord=2
+.temp 27
+VDD vdd 0 1.8
+VREF vref 0 0.3
+* Generic nominal BSIM3.3.0 cards; not a foundry PDK.
+.model nc nmos level=49 version=3.3.0 tox=10n nch=1e17 nsub=1e16 vth0=.7 u0=400 tnom=27
+.model pc pmos level=49 version=3.3.0 tox=10n nch=1e17 nsub=1e16 vth0=-.7 u0=150 tnom=27
+Iref_h vdd g_h 1e-10
+Mbias_h g_h g_h vref 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+.nodeset v(g_h)=.7
+Iref_h0 vdd g_h0 9.9999999999999998e-13
+Mbias_h0 g_h0 g_h0 vref 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+.nodeset v(g_h0)=.7
+Iref_a0 vdd g_a0 2.0000000000000002e-11
+Mbias_a0 g_a0 g_a0 vref 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+.nodeset v(g_a0)=.7
+Iref_a1 vdd g_a1 6e-11
+Mbias_a1 g_a1 g_a1 vref 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+.nodeset v(g_a1)=.7
+Iref_a2 vdd g_a2 1.5e-10
+Mbias_a2 g_a2 g_a2 vref 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+.nodeset v(g_a2)=.7
+Ivalue_0_0 vdd data_0_0 4.0000000000000004e-11
+Miref_0_0 data_0_0 data_0_0 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Vin_0_0 z0_0 sink_0_0 0
+Misink_0_0 sink_0_0 data_0_0 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpr_0_0 sense_0_0 sense_0_0 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vanc_0_0 sense_0_0 anc_0_0 0
+Manchor_0_0 anc_0_0 g_h z0_0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpcopy_0_0 read_0_0 sense_0_0 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vread_0_0 read_0_0 0 1.2
+Cstate_0_0 z0_0 0 9.9999999999999998e-13
+.nodeset v(z0_0)=0.3 v(data_0_0)=.3 v(sense_0_0)=1.5
+Ivalue_1_0 vdd data_1_0 1.2e-10
+Miref_1_0 data_1_0 data_1_0 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Vin_1_0 z1_0 sink_1_0 0
+Misink_1_0 sink_1_0 data_1_0 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpr_1_0 sense_1_0 sense_1_0 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vanc_1_0 sense_1_0 anc_1_0 0
+Manchor_1_0 anc_1_0 g_h z1_0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpcopy_1_0 read_1_0 sense_1_0 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vread_1_0 read_1_0 0 1.2
+Cstate_1_0 z1_0 0 9.9999999999999998e-13
+.nodeset v(z1_0)=0.3 v(data_1_0)=.3 v(sense_1_0)=1.5
+Ivalue_2_0 vdd data_2_0 1.7000000000000001e-10
+Miref_2_0 data_2_0 data_2_0 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Vin_2_0 z2_0 sink_2_0 0
+Misink_2_0 sink_2_0 data_2_0 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpr_2_0 sense_2_0 sense_2_0 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vanc_2_0 sense_2_0 anc_2_0 0
+Manchor_2_0 anc_2_0 g_h z2_0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpcopy_2_0 read_2_0 sense_2_0 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vread_2_0 read_2_0 0 1.2
+Cstate_2_0 z2_0 0 9.9999999999999998e-13
+.nodeset v(z2_0)=0.3 v(data_2_0)=.3 v(sense_2_0)=1.5
+Ivalue_3_0 vdd data_3_0 9.9999999999999998e-13
+Miref_3_0 data_3_0 data_3_0 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Vin_3_0 z3_0 sink_3_0 0
+Misink_3_0 sink_3_0 data_3_0 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpr_3_0 sense_3_0 sense_3_0 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vanc_3_0 sense_3_0 anc_3_0 0
+Manchor_3_0 anc_3_0 g_h0 z3_0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpcopy_3_0 read_3_0 sense_3_0 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vread_3_0 read_3_0 0 1.2
+Cstate_3_0 z3_0 0 9.9999999999999998e-13
+.nodeset v(z3_0)=0.3 v(data_3_0)=.3 v(sense_3_0)=1.5
+Vedge_0_0 z0_0 edge_0_0 0
+Medge_0_0 edge_0_0 g_a0 z3_0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Vedge_1_0 z1_0 edge_1_0 0
+Medge_1_0 edge_1_0 g_a1 z3_0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Vedge_2_0 z2_0 edge_2_0 0
+Medge_2_0 edge_2_0 g_a2 z3_0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Inudge_0 0 z3_0 0
+Ivalue_0_1 vdd data_0_1 1.4000000000000001e-10
+Miref_0_1 data_0_1 data_0_1 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Vin_0_1 z0_1 sink_0_1 0
+Misink_0_1 sink_0_1 data_0_1 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpr_0_1 sense_0_1 sense_0_1 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vanc_0_1 sense_0_1 anc_0_1 0
+Manchor_0_1 anc_0_1 g_h z0_1 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpcopy_0_1 read_0_1 sense_0_1 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vread_0_1 read_0_1 0 1.2
+Cstate_0_1 z0_1 0 9.9999999999999998e-13
+.nodeset v(z0_1)=0.3 v(data_0_1)=.3 v(sense_0_1)=1.5
+Ivalue_1_1 vdd data_1_1 5.0000000000000002e-11
+Miref_1_1 data_1_1 data_1_1 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Vin_1_1 z1_1 sink_1_1 0
+Misink_1_1 sink_1_1 data_1_1 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpr_1_1 sense_1_1 sense_1_1 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vanc_1_1 sense_1_1 anc_1_1 0
+Manchor_1_1 anc_1_1 g_h z1_1 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpcopy_1_1 read_1_1 sense_1_1 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vread_1_1 read_1_1 0 1.2
+Cstate_1_1 z1_1 0 9.9999999999999998e-13
+.nodeset v(z1_1)=0.3 v(data_1_1)=.3 v(sense_1_1)=1.5
+Ivalue_2_1 vdd data_2_1 1.1000000000000001e-10
+Miref_2_1 data_2_1 data_2_1 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Vin_2_1 z2_1 sink_2_1 0
+Misink_2_1 sink_2_1 data_2_1 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpr_2_1 sense_2_1 sense_2_1 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vanc_2_1 sense_2_1 anc_2_1 0
+Manchor_2_1 anc_2_1 g_h z2_1 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpcopy_2_1 read_2_1 sense_2_1 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vread_2_1 read_2_1 0 1.2
+Cstate_2_1 z2_1 0 9.9999999999999998e-13
+.nodeset v(z2_1)=0.3 v(data_2_1)=.3 v(sense_2_1)=1.5
+Ivalue_3_1 vdd data_3_1 9.9999999999999998e-13
+Miref_3_1 data_3_1 data_3_1 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Vin_3_1 z3_1 sink_3_1 0
+Misink_3_1 sink_3_1 data_3_1 0 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpr_3_1 sense_3_1 sense_3_1 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vanc_3_1 sense_3_1 anc_3_1 0
+Manchor_3_1 anc_3_1 g_h0 z3_1 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Mpcopy_3_1 read_3_1 sense_3_1 vdd vdd pc w=1.0000000000000002e-06 l=1.0000000000000001e-05
+Vread_3_1 read_3_1 0 1.2
+Cstate_3_1 z3_1 0 9.9999999999999998e-13
+.nodeset v(z3_1)=0.3 v(data_3_1)=.3 v(sense_3_1)=1.5
+Vedge_0_1 z0_1 edge_0_1 0
+Medge_0_1 edge_0_1 g_a0 z3_1 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Vedge_1_1 z1_1 edge_1_1 0
+Medge_1_1 edge_1_1 g_a1 z3_1 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Vedge_2_1 z2_1 edge_2_1 0
+Medge_2_1 edge_2_1 g_a2 z3_1 0 nc w=1.0000000000000001e-05 l=1.0000000000000001e-05
+Inudge_1 0 z3_1 -0
+.control
+set noaskquit
+set numdgt=15
+set wr_vecnames
+set wr_singlescale
+op
+wrdata trace.txt v(z0_0) i(Vanc_0_0) i(Vread_0_0) i(Vin_0_0) v(sense_0_0) v(z1_0) i(Vanc_1_0) i(Vread_1_0) i(Vin_1_0) v(sense_1_0) v(z2_0) i(Vanc_2_0) i(Vread_2_0) i(Vin_2_0) v(sense_2_0) v(z3_0) i(Vanc_3_0) i(Vread_3_0) i(Vin_3_0) v(sense_3_0) i(Vedge_0_0) i(Vedge_1_0) i(Vedge_2_0) v(z0_1) i(Vanc_0_1) i(Vread_0_1) i(Vin_0_1) v(sense_0_1) v(z1_1) i(Vanc_1_1) i(Vread_1_1) i(Vin_1_1) v(sense_1_1) v(z2_1) i(Vanc_2_1) i(Vread_2_1) i(Vin_2_1) v(sense_2_1) v(z3_1) i(Vanc_3_1) i(Vread_3_1) i(Vin_3_1) v(sense_3_1) i(Vedge_0_1) i(Vedge_1_1) i(Vedge_2_1) v(g_h) v(g_h0) v(g_a0) v(g_a1) v(g_a2) i(VDD)
+quit
+.endc
+.end

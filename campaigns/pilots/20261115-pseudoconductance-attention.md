@@ -47,7 +47,11 @@ Code, exact CLI, launch commit and outcomes will be recorded below.
 
 ## Handoff
 
-Design/readiness in progress. No evidence run launched yet.
+Execution and review complete; all three declared 108-case bundles are retained
+and artifact-verified. Forward aggregation is supported in the tested nominal
+model; a complete hardware control-gradient readout is still unresolved.
+No jobs remain active and no follow-up is launched. Final checkpoint below owns
+the runnable example, figure generator and review.
 
 Readiness revision 1 used 1 nA reference currents and threshold +/-0.5 V.
 One selective input produced ideal read-mirror ratio error 10.49%, because the
@@ -115,3 +119,103 @@ nominal-readout failures remain reported. Expected additional SPICE runtime
 Home filesystem has insufficient free space for raw bundles. Native temporary
 results will use /tmp/pseudoconductance-native-results; compact final evidence
 will be copied into the owning backend if space permits. No existing data deleted.
+
+## Final evidence and review
+
+Follow-up published launch: baf39f49621d277064c34b588d10986af30c099f,
+clean pinned source /tmp/pseudoconductance-source-baf39f4. Command:
+
+```bash
+/home/filip/miniconda3/envs/py312/bin/python -m ebl characterize --config examples/pseudoconductance_bsim3_branch_readout.json --output-dir /tmp/pseudoconductance-native-results/bsim3-branch-readout
+```
+
+Final bundle:
+/tmp/pseudoconductance-native-results/bsim3-branch-readout/20261115T205514.091549Z-11e73014-a31808e8.
+It completed all 108 cases. `ebl runs inspect --verify-artifacts --require-complete`
+passed for all three explicit bundles above. Scientific failures in the first
+native bundle are retained; process completion is distinct from acceptance.
+
+| Metric | Ideal, initial | BSIM3, initial | BSIM3, follow-up |
+| --- | ---: | ---: | ---: |
+| Selected-value RMSE | 0.005873 | 0.005723 | 0.005723 |
+| Matched uniform RMSE | 0.347019 | 0.347464 | 0.347464 |
+| Uniform / selective MSE | 3491.30 | 3685.86 | 3685.86 |
+| Mixture RMSE vs specified operator | 0.0000758 | 0.005725 | 0.005725 |
+| Value-gradient relative L2 error | 0.00283% | 2.9154% | 2.9154% |
+| Nominal-drop control-gradient error | 0.00251% | 10.4655%, fail | 10.4655%, fail |
+| Measured-branch control-gradient error | Not separately declared | Diagnostic 0.5588% | 0.5588% |
+| Terminal output error vs DC | 2.2e-13 at 20 ms | 0.04889 at 20 ms, fail | 5.4e-13 at 500 ms |
+
+The follow-up passes the original numerical thresholds with its explicitly
+selected measured-branch statistic and extended observation. Hardware, input
+cases, FD epsilon (1e-4), nudge beta (1e-3) and criteria are unchanged.
+Two initial state voltages 0.2/0.4 V reach and remain within 1e-3 of the DC
+output at 53.99/58.72 ms. Output-anchor bias reference settling is slow at
+1 pA; these data establish neither efficient latency nor energy.
+
+Actual example: v=[[-.6,.4],[.2,-.5],[.7,.1]], a=[.2,.6,1.5], output
+[.34285837,-.05294461] versus ideal [.34298119,-.05282200]. Joint permutation
+error is zero. The all-off diagnostic has residual output [.04850923,.04850923]
+and is NOT an exact suppression result. Off behavior was not a pass/fail gate.
+Settled state voltages span .28528–.33680 V; minimum anchor VDS .72985 V.
+Follow-up maximum read-copy ratio error at final endpoints is .00131975.
+
+The full netlist is [examples/pseudoconductance_nominal.cir](../../examples/pseudoconductance_nominal.cir),
+a byte-identical copy of the tested gradient-free case. Device count is
+6 couplings + 8 anchors + 5 controller references + 16 input mirrors +
+16 state-readout mirrors = 51 MOS, with 8 explicit 1 pF state capacitors.
+VDD=1.8 V, VREF=.3 V, external read-load compliance=1.2 V, Iref=100 pA;
+key anchors use 100 pA and output anchors 1 pA. Values [-.75,.75] enter as
+25–175 pA reference currents. NMOS W/L=10u/10u, PMOS 1u/10u. Five shared
+diode-connected NMOS references turn supplied currents into gate voltages.
+Generic BSIM3 cards are not foundry-fitted; no layout, noise or mismatch test.
+
+The backward test uses FREE/+beta/-beta phases and software current differences,
+not an implemented two-phase learning controller. All input derivatives and
+three control derivatives are finite-differenced at one mixed-control point
+with e=[.7,-.4]. Value gradients use the explicit state-current mirrors;
+the improved control statistic uses ideal zero-volt branch-current probes:
+sum_d (Iedge_jd/Iref)/a_j * (lambda_jd-lambda_out,d).
+No physical branch-current sensor, product/reduction, phase storage or score
+generator is implemented. The successful relative L2 result does not imply an
+exact BSIM3 adjoint identity or a per-component uniform error guarantee.
+
+Interpretation: a biased MOS star can perform attention-like value selection
+and mixing with one coupling transistor per edge-feature. The natural ideal
+operator has weights a/(1+a), a zero-valued anchor entry and no softmax. Its
+nominal forward behavior survives explicit input/read loading. The attractive
+control-gradient reading still depends on an unimplemented sensing path;
+nominal-drop readout alone fails the declared derivative criterion. This
+supports the aggregation primitive, not complete analog attention, training,
+recurrence benefit, PDK viability or an area/energy advantage.
+
+The next hardware question is a shared low-overhead branch sensor/product
+path, followed by bias settling and all-off offset checks. These are proposed
+next decisions only; no additional experiments are launched.
+
+Three affected implementation tests passed, including abort detection.
+The figure generator was executed and both circuit/validation figures visually
+inspected. Reproduce figures with explicit bundle selection:
+
+```bash
+/home/filip/miniconda3/envs/py312/bin/python -m experiments.energy_transformer.pseudoconductance_figures --bundle /tmp/pseudoconductance-native-results/bsim3-branch-readout/20261115T205514.091549Z-11e73014-a31808e8 --output /tmp/pseudoconductance-figures
+```
+
+Shared explanation, connection diagram, result plots and small provenance JSON:
+/home/filip/analog-research/on-chip-learning/explorations/pseudoconductance-attention-20261115/.
+Owning issue: https://github.com/filip137/on-chip-learning/issues/50.
+Three evidence bundles consumed 324 SPICE calls and 8.7357 s simulator wall
+time, plus small readiness/test calls; about 27 MB raw bundles. Original
+1800 s/500 MB limits were respected. Preparation, analysis and token usage
+were not instrumented. No GPU, remote compute or training was used.
+
+Durable raw evidence including failed readiness:
+results/pseudoconductance-attention/20261115/native-and-readiness.tar.gz
+(8,200,709 bytes, SHA256
+dd0c0d507759f22e8c551020dc146aa85c7eb9c78a4f10d8f0ff9dd9186ce0c3).
+Extract to /tmp to recreate exact original bundle directories and rerun the
+inspector. Archive includes native netlists/logs/traces/configs/manifests/results
+and readiness revisions 1/2. Source is retained in published launch commits.
+Small backend evidence.json also retains all three summaries and provenance.
+Only this pilot's worktrees/merged branch are removed at integration closeout;
+raw results and original failed evidence remain.
