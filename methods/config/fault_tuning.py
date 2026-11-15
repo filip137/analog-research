@@ -8,8 +8,8 @@ against the full FP32 teacher.
 from dataclasses import dataclass
 import math
 
-METHODS = ('naive_hold', 'hold', 'noisy', 'noiseless', 'child_d', 'lora')
-LEARNING = ('noisy', 'noiseless', 'child_d', 'lora')
+METHODS = ('naive_hold', 'hold', 'noisy', 'noiseless', 'child_d', 'lora', 'matched_noiseless', 'calibration')
+LEARNING = ('noisy', 'noiseless', 'child_d', 'lora', 'matched_noiseless', 'calibration')
 
 
 def _digest(value, name):

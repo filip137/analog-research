@@ -122,6 +122,14 @@ def fisher_scores(model, bank, tokens, samples, batch, microbatch, device, progr
     return [s / batches for s in scores]
 
 
+class MatchedNoiselessPort(RecoveryWritePort):
+    """Exact writes with the noisy arm's target-dependent gate calibration."""
+
+    def write_noise_std_q(self, command):
+        nominal = RecoveryWritePort(self.array, 1.0, target_bounds=self.target_bounds)
+        return nominal.write_noise_std_q(command)
+
+
 class PhysicalArm:
     """Per-device Adam write commands from held-state gradients; noisy, noiseless or masked."""
 
@@ -133,10 +141,12 @@ class PhysicalArm:
             u.requires_grad_(True)
         schedule = ('cosine_to_zero', 0, steps)
         noise = 0. if method == 'noiseless' else 1.
-        self.ports = [RecoveryWritePort(a, noise, target_bounds='gmin_gmax') for a in bank.arrays]
+        self.ports = ([MatchedNoiselessPort(a, 0.0, target_bounds='gmin_gmax') for a in bank.arrays]
+                      if method == 'matched_noiseless' else
+                      [RecoveryWritePort(a, noise, target_bounds='gmin_gmax') for a in bank.arrays])
         if method == 'noiseless':
             self.writers = [DirectWriteAdam(p, learning_rate=learning_rate, schedule=schedule) for p in self.ports]
-        elif method in ('noisy', 'child_d'):
+        elif method in ('noisy', 'child_d', 'matched_noiseless'):
             self.writers = [ThresholdedBoundedWriteAdam(p, learning_rate=learning_rate, threshold_sigma=threshold_sigma,
                                                         schedule=schedule) for p in self.ports]
         else:
@@ -212,3 +222,39 @@ class LoraArm:
 
     def state(self):
         return {k: v.detach().cpu().clone() for k, v in self.adapters.state_dict().items()}
+
+
+class OutputCalibration(nn.Module):
+    """Digital per-channel affine correction of complete MLP outputs; identity init."""
+
+    def __init__(self, model):
+        super().__init__()
+        self.gain = nn.ParameterList([nn.Parameter(torch.ones_like(b.bias2)) for b in model.blocks])
+        self.shift = nn.ParameterList([nn.Parameter(torch.zeros_like(b.bias2)) for b in model.blocks])
+        self.handles = []
+
+    def attach(self, model):
+        if self.handles:
+            raise RuntimeError('Calibration is already attached.')
+        for k, block in enumerate(model.blocks):
+            def hook(module, args, output, k=k):
+                return output * self.gain[k] + self.shift[k]
+            self.handles.append(block.register_forward_hook(hook))
+
+    def detach_hooks(self):
+        for handle in self.handles:
+            handle.remove()
+        self.handles = []
+
+
+class CalibrationArm(LoraArm):
+    """Fit only output gains/shifts with fixed sampled-token targets; never write devices."""
+
+    def __init__(self, model, bank, learning_rate, steps):
+        self.model, self.bank = model, bank
+        model.requires_grad_(False)
+        self.adapters = OutputCalibration(model)
+        self.adapters.attach(model)
+        self.optimizer = torch.optim.Adam(self.adapters.parameters(), lr=learning_rate,
+                                          betas=(0.9, 0.999), eps=1e-8, foreach=False)
+        self.schedule = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, steps)

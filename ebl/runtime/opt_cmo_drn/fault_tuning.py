@@ -202,7 +202,9 @@ def run(request):
                     artifacts.append(store.artifact_record(mask_path, kind='child_d_masks'))
                     store.append_metric({'event': 'child_d_fisher', **fisher_record})
                     del scores
-                if arm.method == 'lora':
+                if arm.method == 'calibration':
+                    learner = ft.CalibrationArm(model, bank, arm.learning_rate, s.steps)
+                elif arm.method == 'lora':
                     learner = ft.LoraArm(model, bank, arm.learning_rate, s.steps, arm.rank, s.lora_seed)
                 else:
                     learner = ft.PhysicalArm(model, bank, arm.method, arm.learning_rate, s.steps,
@@ -220,7 +222,7 @@ def run(request):
                                          'update_seconds': time.monotonic() - before,
                                          'elapsed_seconds': time.monotonic() - started,
                                          'peak_memory_bytes': torch.cuda.max_memory_allocated() if str(device).startswith('cuda') else 0,
-                                         **({} if arm.method == 'lora' else {'costs': bank.costs()})})
+                                         **({} if arm.method in ('lora', 'calibration') else {'costs': bank.costs()})})
                     if step < s.steps and s.development_every and step % s.development_every == 0:
                         scored = evaluate(bank)
                         curve.append({'step': step, 'teacher_kl': scored['teacher_kl']})
@@ -232,16 +234,24 @@ def run(request):
                        'updates': s.steps, 'development': final, 'curve': curve,
                        'first_loss': sum(losses[:10]) / min(10, len(losses)),
                        'last_loss': sum(losses[-10:]) / min(10, len(losses))}
-                if arm.method == 'lora':
-                    row.update(rank=arm.rank, alpha=arm.rank, costs=bank.costs(),
+                if arm.method in ('lora', 'calibration'):
+                    row.update(costs=bank.costs(),
                                adapter_parameters=sum(p.numel() for p in learner.adapters.parameters()))
-                    adapter_path = store.run_dir / f'artifacts/lora-{arm.label}.pt'
+                    if arm.method == 'lora':
+                        row.update(rank=arm.rank, alpha=arm.rank)
+                        saved = {'schema': 'opt_cmo_drn.digital_lora.v1', 'rank': arm.rank,
+                                 'alpha': arm.rank, 'seed': s.lora_seed, 'state': learner.state()}
+                        kind = 'digital_lora'
+                    else:
+                        saved = {'schema': 'opt_cmo_drn.sampled_output_calibration.v1',
+                                 'state': learner.state(), 'placement': 'complete_mlp_output_before_residual'}
+                        kind = 'sampled_output_calibration'
+                    adapter_path = store.run_dir / f'artifacts/{arm.method}-{arm.label}.pt'
                     adapter_path.parent.mkdir(parents=True, exist_ok=True)
-                    runtime.save(adapter_path, {'schema': 'opt_cmo_drn.digital_lora.v1', 'rank': arm.rank,
-                                                'alpha': arm.rank, 'seed': s.lora_seed, 'state': learner.state()})
-                    artifacts.append(store.artifact_record(adapter_path, kind='digital_lora'))
+                    runtime.save(adapter_path, saved)
+                    artifacts.append(store.artifact_record(adapter_path, kind=kind))
                     if bank.costs()['write_attempts'] != 0 or bank.held_hashes() != physical['start_held_hashes']:
-                        raise RuntimeError('Digital LoRA changed the held physical state.')
+                        raise RuntimeError('Digital correction changed the held physical state.')
                 else:
                     row.update(learner.write_report())
                     if arm.method == 'child_d':
