@@ -79,12 +79,13 @@ class Model(nn.Module):
         split=lambda t:t.reshape(t.shape[0],64,4,16).transpose(1,2)
         q,k=split(self.query(n)),split(self.key(n))
         s=q@k.transpose(-1,-2)/4 if self.score=='dot' else -torch.cdist(q,k,p=1)/4
-        a=torch.softmax(s,-1);v=.75*torch.tanh(split(self.value(n)))
+        a=torch.exp(s) if self.score=='l1_raw' else torch.softmax(s,-1)
+        v=.75*torch.tanh(split(self.value(n)))
         return z,a,v
 
     def forward(self,x,mode='ep',steps=32,ablation=None):
         z,a,v=self.ports(x)
-        if ablation=='uniform':a=torch.ones_like(a)/64
+        if ablation=='uniform':a=a.mean(-1,keepdim=True).expand_as(a)
         y=attention(a,v,steps,mode).transpose(1,2).flatten(-2)
         z=z+self.output(y);n=torch.nn.functional.layer_norm(z,(64,),eps=.5)
         z=z+(self.drn(n,mode,steps) if self.mlp=='drn' else self.ff2(torch.relu(self.ff1(n))))

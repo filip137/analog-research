@@ -68,3 +68,21 @@ Native CLI: `python -m ebl train --config examples/pseudo_drn_scale/<arm>.json
 Current agent owns supervisor/log/metric monitoring and final collection;
 check50-update heartbeats and terminal summary+artifact inspection. Budget
 guard requires900s remaining before a new arm starts. No tuning after launch.
+
+## Declared score follow-up (before execution)
+
+The scorer analysis derived a distinct normalization-free candidate: negative
+L1 scores imply s<=0, so feeding a=exp(s) directly gives0<a<=1 and the ideal
+aggregator computes normalized sigmoid(s) weights plus its null anchor. This
+eliminates the separate row softmax, but changes the operator and total control
+current. The block-GS contraction remains below.5 because a²/(1+a)<=a/2.
+
+Add one explicit DRN-l1_raw-EP arm after the four original arms finish. Question:
+does this simpler control interface still learn CIFAR? Change only score-to-gate
+normalization, matched against DRN-l1-EP; preserve initialization,data,2000
+updates,32sweeps,Adam,batch size and all diagnostic criteria. Uniform ablation
+preserves each actual row's total current. Original pinned four runs remain
+unchanged. Reuse same shared60-minute/500MB allowance: first two full cases
+consumed222.3s plus300s conservative readiness; >3000s remains before pending
+two arms and the single additional <=900s arm. No extra host or model-size
+sweep. New source/config committed and published before the follow-up launch.

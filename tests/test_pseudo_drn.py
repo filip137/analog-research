@@ -35,3 +35,13 @@ def test_softmax_current_backward_then_l1_sign_gates():
     sign=(q[:,:,None,:]-k[:,None,:,:]).sign()
     assert torch.allclose(qg,-(score_error[:,:,:,None]*sign).sum(2)/2)
     assert torch.allclose(kg,(score_error[:,:,:,None]*sign).sum(1)/2)
+
+def test_raw_distance_controls_are_bounded_and_contractive():
+    from networks.energy_transformer.pseudo_drn import Model
+    from networks.energy_transformer.pseudo_learning import exact,settle
+    model=Model(score='l1_raw').double()
+    x=torch.randn(1,64,48,dtype=torch.float64)
+    _,a,v=model.ports(x)
+    assert (a>0).all() and (a<=1).all()
+    assert (((a*a/(1+a)).sum(-1)/(.01+a.sum(-1)))<.5).all()
+    assert torch.allclose(settle(a,v,64)[1]-1,exact(a,v),atol=1e-12,rtol=0)
