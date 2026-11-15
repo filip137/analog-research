@@ -957,6 +957,13 @@ EXPERIMENT_REGISTRY['pseudo_drn_scale.v1'] = ExperimentDefinition(
 )
 
 
+from ebl.schema.pseudo_drn_large import parse_config as _pdl_parse, resolve_config as _pdl_resolve
+EXPERIMENT_REGISTRY['pseudo_drn_large.v1'] = ExperimentDefinition(
+    experiment_id='pseudo_drn_large.v1', schema_version=1, description='Deep CIFAR attention DRN with bounded resumable training.',
+    supported_modes=(RunMode.TRAIN,), parser=_pdl_parse, resolver=_pdl_resolve,
+)
+
+
 def list_definitions() -> Tuple[ExperimentDefinition, ...]:
     """Return definitions in stable identifier order."""
 

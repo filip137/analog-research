@@ -787,7 +787,9 @@ def _handler_result(handler: Handler, request: Any) -> int:
 
 
 def _default_train_handler(request: TrainRequest) -> Optional[int]:
-    if request.definition.experiment_id == "pseudo_drn_scale.v1":
+    if request.definition.experiment_id == "pseudo_drn_large.v1":
+        from ebl.runtime.pseudo_drn_large import run_train
+    elif request.definition.experiment_id == "pseudo_drn_scale.v1":
         from ebl.runtime.pseudo_drn_scale import run_train
     elif request.definition.experiment_id == "pseudo_mnist.v1":
         from ebl.runtime.pseudo_mnist import run_train

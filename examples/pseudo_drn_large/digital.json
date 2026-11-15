@@ -1,0 +1,7 @@
+{
+  "experiment_id": "pseudo_drn_large.v1",
+  "mlp": "digital",
+  "method": "bptt",
+  "epochs": 100,
+  "wall_seconds": 3600
+}

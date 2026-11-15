@@ -59,4 +59,34 @@ Monitoring: executing agent through readiness and first training progress,
 then one persistent run-watch owner with300s checks and bounded incident
 dispatch. Metrics every25updates and each epoch, checkpoint everyepoch plus
 mid-epoch periodic saves,45-minute semantic stall gate. Launcher enforces
-hard shared deadline without relying on agent availability. Exact handles,+configs, epochs, throughput, deadline and handoff added before transfer.
+hard shared deadline without relying on agent availability. Exact handles,
+configs, epochs, throughput, deadline and handoff added before transfer.
+
+## Readiness status
+
+Tracking [issue53](https://github.com/filip137/on-chip-learning/issues/53).
+Implementation contains7,902,474primary parameters (138.74times the previous
+56,960). Six blocks, width256, hidden1024, heads8. Eight numerical tests pass,
+including explicit/reduced capped attention and both nudged phases at1/3/8/32
+sweeps, EP/BPTT derivatives, shared initialization and optimizer/RNG replay.
+A full-size CPU gradient check on two examples passed: worst relative L2
+0.418%, minimum cosine0.99999127, zero32/64-step forward discrepancy.
+Raw result:/tmp/pseudo-drn-large-20261115/cpu-initial-gradients.json.
+
+GPU readiness is currently blocked before any model execution. PyTorch2.5.1
+and an independent ctypes driver call both fail with CUDA initialization
+error3. Device files open and driver ioctls return without OS permission
+errors; NVIDIA575.57.08 sees the idle3090. nvidia_uvm has zero users, but
+sudo requires a password. Xorg uses the GPU, so no device reset or display
+driver reload was attempted. Repeated same-process and NVML-retention
+diagnostics did not initialize CUDA. Failed logs:/tmp/pdl-benchmark.log,
+/tmp/pdl-benchmark-attempt1.log,/tmp/pdl-benchmark-nvml.log;
+syscall trace:/tmp/pdl-cuinit.trace. User asked to restore CUDA; no secrets
+requested and no GPU-wide settings changed.
+
+The original shared budget clock is preserved in
+/tmp/pseudo-drn-large-20261115/budget.json: start2026-11-15T22:43:44.335927Z,
+deadline2026-11-16T10:43:44.335927Z (11:43:44Paris). This conservative clock
+includes readiness and time spent diagnosing the failure. It is not renewed
+by retries. GPU throughput, public-CLI smoke and full-size resume replay remain
+pending. No full training run or durable monitoring handoff is claimed yet.
