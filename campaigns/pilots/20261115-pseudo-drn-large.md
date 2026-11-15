@@ -2,7 +2,8 @@
 
 User assignment: scale the previous shallow pilot substantially and train longer.
 Explicit allowance: up to12hours on the local RTX3090, including readiness,
-diagnostics, controls and retries; no other host. This is an exploratory scaling
+diagnostics, controls and retries. On16November the user additionally authorized
+nom-cool-1 as fallback ("launch otherwise nom cool1"). This is an exploratory scaling
 experiment, not a paper benchmark or a physical circuit/energy measurement.
 
 Question: can the direct-exp L1 attention + passive perfect-diode DRN hybrid
@@ -54,7 +55,8 @@ no per-epoch archive. Cap storage8GB in/tmp/pseudo-drn-large-20261115 (211GB
 free at intake; home has88MB free). Records and source versioned in backend.
 Native EBL CLI/bundles; launch source pinned after merge/push. Failures retained.
 Recovery may resume the same settings from a complete checkpoint within the
-remaining original deadline; no implicit allowance reset or remote failover.
+remaining original deadline; no implicit allowance reset. Nom-cool-1 is now
+explicitly authorized as fallback; other remote hosts remain outside scope.
 
 Monitoring: executing agent through readiness and first training progress,
 then one persistent run-watch owner with300s checks and bounded incident
@@ -97,3 +99,35 @@ immutable through smokes, runs and retries. This preserves, rather than
 renews, the user's allowance. GPU throughput, public-CLI smoke and full-size
 resume replay remain pending. No full training run or durable monitoring
 handoff is claimed yet.
+
+## GPU readiness and frozen launch recipe (16 November)
+
+Local cuInit briefly returned zero, but PyTorch still failed to allocate. The
+user-authorized fallback nom-cool-1 passes actual CUDA allocation. It has an
+idle RTX3090 UUID GPU-2262d56b-2c1d-1546-3e93-2e441399cd4f, PyTorch2.5.1+cu121,
+and667GB home/195GB tmp free at placement. No other compute users were present.
+Copied identical CIFAR batches to the same absolute data path; native manifests
+verify all six hashes. Source c4f0843 was shallow-cloned with its original Git
+identity and staged under/home/filip/analog-research/pseudo-drn-large-20261115/
+source-c4f0843. No other worktree or GPU setting was modified.
+
+Measured batch64 update time: DRN0.53045s, digital0.10335s. Peak allocated memory
+2,412/2,157MiB respectively. After12readiness updates, worst EP/BPTT/reference
+relative L2 is0.2723%/0.0223%; all groups pass, with zero32/64-step forward
+discrepancy. JSON/logs remain in the remote/tmp/pseudo-drn-large-20261115 root.
+
+Freeze80epochs for both cases before training, preserving all other recipe
+settings. There are704updates/epoch and56,320updates/case. Predicted training
+time is8.30h DRN and1.62h digital, plus validation/checkpoint overhead. Allocate
+at most9h DRN and2h digital, leaving the original shared allowance for readiness
+and diagnostics. This replaces the earlier provisional100epoch/10h/1h split
+before any evidence run, to retain equal epoch coverage within12hours.
+
+The remaining42,900-second clock started2026-11-15T23:03:13.801678Z and ends
+2026-11-16T10:58:13.801678Z (11:58Paris). It is fixed through readiness,
+staging, training and retries; no fresh budget from host migration. Remote
+context keeper PID2206375 prevents cold starts while native CLI smokes and
+resume replay are prepared, then exits before queue admission. Main and
+control will be one serial prepared job owned by the existing shared GPU queue;
+no duplicate per-study watcher. Launcher forwards native step/epoch progress
+and keeps children in the queue's process group for enforceable hard stops.

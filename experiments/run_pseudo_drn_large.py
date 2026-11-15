@@ -37,17 +37,29 @@ def main():
             logpath=root/f'{case}.log';output=root/case
             with logpath.open('x') as log:
                 command=[sys.executable,'-m','ebl','train','--config',f'examples/pseudo_drn_large/{case}.json','--output-dir',str(output)]
-                child=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+                # Stay in the queue worker's process group so its hard stop owns
+                # both this supervisor and the training process.
+                child=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT)
                 row={'case':case,'pid':child.pid,'log':str(logpath),'output':str(output),'state':'running'}
                 state['cases'].append(row);save();print(row,flush=True)
-                case_limit=36000 if case=='drn' else 3600
+                config=json.loads(Path(f'examples/pseudo_drn_large/{case}.json').read_text())
+                case_limit=config['wall_seconds']
                 stop_at=min(deadline,time.time()+case_limit)
                 while child.poll() is None:
                     if time.time()>=stop_at:
-                        os.killpg(child.pid,signal.SIGTERM)
+                        child.terminate()
                         try:child.wait(timeout=max(1,min(30,deadline-time.time())))
-                        except subprocess.TimeoutExpired:os.killpg(child.pid,signal.SIGKILL);child.wait()
+                        except subprocess.TimeoutExpired:child.kill();child.wait()
                         row['hard_limit_reached']=True;break
+                    active_path=output/'active-run.json'
+                    if active_path.exists():
+                        current=Path(json.loads(active_path.read_text())['run_dir'])
+                        progress_path=current/'progress.json'
+                        if progress_path.exists():
+                            progress=json.loads(progress_path.read_text())
+                            state.update(stage=case+':'+str(progress.get('stage','evaluation')),
+                                         step=progress.get('step'),epoch=progress.get('epoch'))
+                            save()
                     time.sleep(min(5,max(0,stop_at-time.time())))
                 row.update(returncode=child.returncode,state='complete' if child.returncode==0 else 'failed');save()
                 if child.returncode:raise RuntimeError(f'{case} failed; preserve artifacts and recover within the original allowance')

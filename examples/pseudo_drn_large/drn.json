@@ -2,6 +2,6 @@
   "experiment_id": "pseudo_drn_large.v1",
   "mlp": "drn",
   "method": "ep",
-  "epochs": 100,
-  "wall_seconds": 36000
+  "epochs": 80,
+  "wall_seconds": 32400
 }
