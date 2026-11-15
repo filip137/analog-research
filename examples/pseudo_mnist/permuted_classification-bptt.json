@@ -1,0 +1,5 @@
+{
+  "experiment_id": "pseudo_mnist.v1",
+  "task": "permuted_classification",
+  "method": "bptt"
+}

@@ -942,6 +942,14 @@ EXPERIMENT_REGISTRY['pseudoconductance_attention.v1'] = ExperimentDefinition(
 )
 
 
+from ebl.schema.pseudo_mnist import parse_config as _pseudo_mnist_parse, resolve_config as _pseudo_mnist_resolve
+EXPERIMENT_REGISTRY['pseudo_mnist.v1'] = ExperimentDefinition(
+    experiment_id='pseudo_mnist.v1', schema_version=1,
+    description='Ideal anchored attention MNIST with capped EP and BPTT.',
+    supported_modes=(RunMode.TRAIN,), parser=_pseudo_mnist_parse, resolver=_pseudo_mnist_resolve,
+)
+
+
 def list_definitions() -> Tuple[ExperimentDefinition, ...]:
     """Return definitions in stable identifier order."""
 

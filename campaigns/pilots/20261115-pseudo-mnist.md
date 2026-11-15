@@ -32,3 +32,50 @@ to backend results at collection. No new remote/GPU host, noise or tuning sweep.
 Current agent owns short-run monitoring, metrics every50 updates, five-minute
 stall gate, and retains all failed attempts. Durable watcher needed if handing
 off a long run. Final records in this pilot and shared exploration.
+
+## Task resolution and readiness
+
+No answer to the task clarification arrived during independent implementation.
+Cover both interpretations explicitly within the original 60-minute budget:
+completion-ep, completion-bptt, permuted_classification-ep and
+permuted_classification-bptt, each2000updates. Classification uses one fixed
+784-pixel permutation(seed3105) across all splits, then16 patches, token-mean
+readout and cross entropy. Completion exactly reuses yesterday's split/mask
+helpers (copied to a separately owned module from energy-transformer source),
+half-masked image MSE, original unpermuted pixel layout and mean-image baseline.
+Classification's baseline is always class0 (~10%). Four independently named
+native bundles; no conflation of classification accuracy and completion MSE.
+FP32, no TF32, 32 full key/output block sweeps in every free/nudged phase.
+
+Controls are digital softmax(QK), positive with row sum1; this has no per-edge
+sharpness cap. Couplings are a, effective weights a/(1+a). This fixes the
+total input conductance and gives the block-GS contraction at most1/(2*1.01),
+so small caps should suffice even for sharp attention. Neither that solver nor
+this normalization is evidence of physical circuit latency. All other digital
+maps use BP. EP is a centered local energy-statistic readout with frozen incoming
+error: current amplitude is scaled to max abs .005 and the scaling is undone
+in the gradient. This avoids sub-ulp FP32 nudges and is valid for this linear
+conditional circuit; it is not nonlinear full-network loss-nudged EP.
+
+Two FP64 tests passed: settling/exact/EP/BPTT/FD agreement and a deliberately
+short finite-time counterexample with proper summation over duplicated value
+inputs. CUDA startup first failed exactly as recorded yesterday; retry passed.
+Supervisor retains a tiny CUDA tensor/context across child runs, using the
+already established local workaround. Initial GPU32-sweep global EP/BPTT
+cosine0.9999999999994, relative L2 1.12e-6. Full public-CLI two-update smokes
+for each task are under /tmp/pseudo-mnist-readiness. Failed readiness is retained.
+
+Commands, one task-method config per bundle:
+
+```bash
+python -m ebl train --config examples/pseudo_mnist/completion-ep.json --output-dir /tmp/pseudo-mnist-results/completion-ep
+python -m ebl train --config examples/pseudo_mnist/completion-bptt.json --output-dir /tmp/pseudo-mnist-results/completion-bptt
+python -m ebl train --config examples/pseudo_mnist/permuted_classification-ep.json --output-dir /tmp/pseudo-mnist-results/permuted_classification-ep
+python -m ebl train --config examples/pseudo_mnist/permuted_classification-bptt.json --output-dir /tmp/pseudo-mnist-results/permuted_classification-bptt
+```
+
+Do not start a further900-second case with less than900seconds of the shared
+60-minute allowance remaining; readiness and retries consume it. An early
+CUDA-initialization failure may retry once with identical config and preserved
+log/bundle; no other silent retry. Source is pinned after merge/push. Agent
+monitors the serial supervisor, checks growing metrics, and reviews all results.
