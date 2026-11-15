@@ -131,3 +131,34 @@ resume replay are prepared, then exits before queue admission. Main and
 control will be one serial prepared job owned by the existing shared GPU queue;
 no duplicate per-study watcher. Launcher forwards native step/epoch progress
 and keeps children in the queue's process group for enforceable hard stops.
+
+## Prepared queue handoff
+
+Native GPU readiness passed on pinned source
+745ebc97c53728b029f053a21adcd8c5a6a3cf85: smoke, fixed-cohort gradients,
+artifact verification and full-state interruption/resume. Resumed update4 equals
+uninterrupted update4 exactly (model/optimizer/RNG maximum difference0), from
+interrupted update2. Shared initialization has55identical common tensors.
+Remote receipt:/tmp/pseudo-drn-large-20261115/readiness.json.
+
+Queue job:pseudo-drn-large-cifar-20261115-v1, permitted target nom-cool-1 only.
+Prepared transport and main study record are in on-chip-learning/
+explorations/pseudo-drn-large-20261115/. Both80epoch cases run serially from
+/home/filip/analog-research/pseudo-drn-large-20261115/source-745ebc9 using
+/home/filip/miniconda3/envs/py312/bin/python. Source remains pinned despite
+later collector/documentation commits. Budget stop remains10:58:13UTC16November.
+
+Shared queue ownership replaces the provisional separate300s watcher: service
+poll60s, semantic progress through root/supervisor.json, startup grace300s,
+stall threshold2700s. The serial wrapper stays in the queue process group.
+No blind replay: retry_safe=false. Native full-state resume is verified, but an
+incident must first prove old descendants stopped, retain bundles and prepare
+compatible resume commands under the original deadline. No scientific changes
+or allowance reset. Other remote hosts remain unauthorized.
+
+Remote validator:/tmp/pdl-collect.py; controller collector is published in
+731931e. Collection target:/tmp/pseudo-drn-large-collected-20261115. It checks
+native artifact hashes and evaluation counts, plots validation curves and queues
+this originating task for review (thread01a1e07c-65dd-7c91-98a8-0a489f574997).
+A successful execution is not a completed scientific closeout; review achieved
+coverage, truncation, gradient gates and both final accuracies before concluding.
