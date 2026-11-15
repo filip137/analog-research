@@ -25,6 +25,8 @@ def run_train(request):
             raise ValueError('Unsupported external initialization')
     started = time.monotonic()
     budget = json.loads(Path(c.budget_file).read_text())
+    if budget.get('deadline') is None:
+        raise RuntimeError('GPU readiness must establish the remaining execution deadline before training')
     deadline = datetime.fromisoformat(budget['deadline']).timestamp()
     if time.time() >= deadline:
         raise TimeoutError('Original shared allowance expired')

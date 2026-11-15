@@ -31,7 +31,8 @@ and cosine decay. Exact recipe and epoch count frozen after a bounded
 throughput/memory/gradient readiness measurement, before evidence launch.
 At most200epochs; primary allocation at most10hours, control at most1hour,
 readiness/final diagnostics reserve1hour, all subject to a shared12-hour
-deadline established at first GPU readiness execution. A time-limited result
+deadline established at first successful GPU readiness execution, less charged
+failed-startup time. A time-limited result
 is honestly labelled truncated. No scientific changes to an active case.
 
 Optimization: eliminate value-node updates algebraically from attention GS
@@ -84,9 +85,15 @@ diagnostics did not initialize CUDA. Failed logs:/tmp/pdl-benchmark.log,
 syscall trace:/tmp/pdl-cuinit.trace. User asked to restore CUDA; no secrets
 requested and no GPU-wide settings changed.
 
-The original shared budget clock is preserved in
-/tmp/pseudo-drn-large-20261115/budget.json: start2026-11-15T22:43:44.335927Z,
-deadline2026-11-16T10:43:44.335927Z (11:43:44Paris). This conservative clock
-includes readiness and time spent diagnosing the failure. It is not renewed
-by retries. GPU throughput, public-CLI smoke and full-size resume replay remain
-pending. No full training run or durable monitoring handoff is claimed yet.
+Budget accounting correction before evidence launch: the user authorized
+12GPU hours, with no absolute calendar deadline. No CUDA context succeeded,
+so idle time awaiting administrator action must not consume GPU training time.
+Conservatively charge300seconds for all failed startups/diagnostics so far;
+42,900seconds remain. The initial attempted clock is preserved in
+/tmp/pseudo-drn-large-20261115/budget.first-attempt.json. Active budget.json
+records awaiting_working_cuda with deadline unset; the benchmark arms the
+remaining clock once CUDA actually initializes. After that, the deadline is
+immutable through smokes, runs and retries. This preserves, rather than
+renews, the user's allowance. GPU throughput, public-CLI smoke and full-size
+resume replay remain pending. No full training run or durable monitoring
+handoff is claimed yet.
