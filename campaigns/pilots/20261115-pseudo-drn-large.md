@@ -162,3 +162,13 @@ native artifact hashes and evaluation counts, plots validation curves and queues
 this originating task for review (thread01a1e07c-65dd-7c91-98a8-0a489f574997).
 A successful execution is not a completed scientific closeout; review achieved
 coverage, truncation, gradient gates and both final accuracies before concluding.
+
+Admission confirmed2026-11-15T23:16:27Z. Queue attempt
+200f00b2d3914b909baf635634aea528; remote queue supervisor2209675,
+serial wrapper2209676, native DRN worker2209722. Native DRN bundle:
+/tmp/pseudo-drn-large-20261115/drn/20261115T231629.027932Z-d6d8d737-504334b3.
+At23:17:11Z, update75 is recorded with loss2.24055, gradnorm1.27332,
+0.54284s/update and2,412MiB allocated. Initial checkpoint and gradient
+probe artifact exist. Actual NVIDIA process memory including caches/contexts
+is3.8GiB on the exclusively reserved24GiB GPU. The completion validator also
+passes CPU verification of the completed readiness bundles.
