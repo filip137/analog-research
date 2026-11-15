@@ -849,3 +849,70 @@ The bounded incident owner is authorized for understood operational repairs and
 final independent collection/visual review, not merely failure notification.
 Parent retains scientific reporting; terminal evidence will be committed in this
 same note. No final task-performance claim is available at launch.
+
+## Explorer terminal review —15 November 2026
+
+`explorer-001` finished at00:56:34UTC, before its unchanged01:10:14UTC
+execution deadline. All42 native cases terminated, all seven750-update screens
+completed, and both validation-selected finalists completed paired2,000-update
+EP/BPTT training and final8x8 gradient checks. No variants were excluded,
+replaced or retuned. The pinned-source CPU collector passed all178 checks,
+including paired initial tensors/configs/cohorts/RNGs, clean source/data
+identities, finite FP32 weights, complete evaluation and physical/numerical
+bounds. All seven selected32-step caps passed512/1024 reference qualification.
+The baseline replay performed zero optimizer steps, retained identical model,
+optimizer and RNG states, and reproduced test MSE0.05333482905310027 exactly.
+
+Screen probe improvements over the matched750-update baseline were: sharp8
+0.955%, sharp16 1.561%, drive2 0.300%, drive4 0.551%, visible_keys 0.211%,
+context_query -0.114%, and sharp8_drive2 1.143%. The frozen rule selected
+sharp16 and sharp8_drive2; test results did not drive selection.
+
+| Finalist | EP test MSE | BP test MSE | Improvement over old EP | Over singular EP | Uniform / zero penalty |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| sharp16 | 0.05209355 | 0.05210092 | 4.271% | 2.327% | 5.188% / 12.363% |
+| sharp8_drive2 | 0.05241387 | 0.05242325 | 3.682% | 1.727% | 4.190% / 30.388% |
+
+Each full arm evaluated10,000 test and5,000 validation examples and all three
+256-image ablations. EP validation MSE was0.05233894/0.05266974 respectively.
+EP/BP test gaps were -0.0141%/-0.0179%. Worst final global EP/BPTT cosines
+were0.99999444/0.99999199; routing-group minima0.99999196/0.99998964.
+Worst final routing agreement against reference was0.99998924. Maximum audited
+training bound0.69994517 and residual9.54e-7; all audited MOS margins were
+positive and contraction radii below1. These certify ideal FP32 equation
+simulations, without establishing device-level precision or hardware advantage.
+
+Screen entropy/mean maximum attention was0.5862/0.3435 for sharp16 and
+0.8573/0.1346 for sharp8_drive2. At2,000updates, EP attention/input/memory/decoder
+force RMS was0.04806/0.62196/0.06079/0.09567 and
+0.06556/0.66299/0.05373/0.09337 respectively, versus baseline
+0.06198/0.67979/0.05945/0.09318. Thus sharper routing need not mean a larger
+attention force. Final EP per-head stable-rank ranges were Q6.87–13.02,
+K7.77–11.83, V5.04–9.26, O5.91–11.61 for sharp16; Q4.49–13.18,
+K5.11–12.45, V6.03–11.55, O7.35–12.03 for sharp8_drive2. Neither shows
+the earlier near-rank-one collapse.
+
+Verdict: complete negative promotion result. Both finalists improve the two
+prior EP controls and show meaningful routing dependence, but neither reaches
+the unchanged5% improvement over old EP required alongside the1% uniform
+penalty. Digital test MSE0.04222741 remains substantially better. EP closely
+matches BPTT here; this evidence does not identify EP gradients as the remaining
+quality bottleneck. One seed, one task and validation selection limit inference;
+no additional experiment is launched or implied by this review.
+
+Evidence: `explorer-001/analysis/review.json`, `weight-ranks.json`,
+`comparison.md`, `screens.png`, `confirmations.png` and `figure-review.json`
+under the declared result root. Both figures were visually inspected: legible
+labels, all declared cases, and values consistent with the collector; screen
+force reference is explicitly labelled a different-age context comparison.
+The latter receipt records inspected image hashes and independent native
+bundle inspections. Supervisor PID2709312 is absent. No GPU work was launched
+during review; a sandbox NVIDIA-driver probe was unavailable and was not
+treated as capacity evidence.
+
+Launcher elapsed was4579.40s of5400s; prior charged attempts remain2863.44s,
+for7442.83s plus the unchanged earlier<3.14h debit (<5.208h total, under6h).
+New outputs were613MB and combined input-attention root1.881GB at review,
+within1GB/2GB limits. Failed/partial evidence and all checkpoints are retained.
+This closes execution/review only. Existing shared-trunk publication remains
+separately pending as recorded above; this incident does not retry it.
