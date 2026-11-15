@@ -49,9 +49,9 @@ from core.tensor_identity import tensor_hash
 from hardware.mapping import MatrixSpec
 
 METHODS = ("hold_naive", "hold_fault_aware", "onchip_noisy", "onchip_noiseless", "child_tuning_d",
-           "digital_lora", "analog_lora")
+           "digital_lora", "analog_lora", "matched_noiseless", "calibration")
 TRAINS = METHODS[2:]
-WRITES = ("onchip_noisy", "onchip_noiseless", "child_tuning_d")
+WRITES = ("onchip_noisy", "onchip_noiseless", "child_tuning_d", "matched_noiseless")
 LORA = ("digital_lora", "analog_lora")
 _HEX = set("0123456789abcdef")
 
@@ -324,3 +324,16 @@ def child_mask(fisher, layout, reserve_p):
         k = max(1, int(round(reserve_p * spec.size)))
         mask[spec.offset + part.topk(k).indices] = True
     return mask
+
+
+class OutputCalibration(torch.nn.Module):
+    """Per-channel gain/shift of complete analog MLP outputs, fitted on sampled tokens."""
+
+    def __init__(self, network):
+        super().__init__()
+        widths = [network.layout[2 * k + 1].shape[0] for k in range(len(network.mlp_norms))]
+        self.gain = torch.nn.ParameterList([torch.nn.Parameter(network.q.new_ones(w)) for w in widths])
+        self.shift = torch.nn.ParameterList([torch.nn.Parameter(network.q.new_zeros(w)) for w in widths])
+
+    def pairs(self):
+        return list(zip(self.gain, self.shift))

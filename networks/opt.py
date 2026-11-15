@@ -249,6 +249,7 @@ class OptMlpSuffix(nn.Module):
             for spec in self.layout:
                 self.channel_offsets.append(self.channel_offsets[-1] + spec.shape[0])
         self.output_gains = nn.Parameter(torch.ones(self.base_matrices, device=self.q.device))
+        self.fault_output_calibration = None
         self.mlp_biases = nn.ParameterList(biases)
         self.mlp_norms = nn.ModuleList(
             copy.deepcopy(teacher.layers[i].final_layer_norm) for i in range(self.start, depth)
@@ -406,7 +407,9 @@ class OptMlpSuffix(nn.Module):
             hidden = digital.embed(hidden.tokens)
             for i in range(self.start):
                 hidden = digital.layers[i](hidden)
-        return self.forward_suffix(hidden, q, digital=digital)
+        return self.forward_suffix(hidden, q, digital=digital,
+                                   correction=None if self.fault_output_calibration is None
+                                   else self.fault_output_calibration.pairs())
 
     def forward_suffix(self, hidden, q, *, digital, correction=None, capture=False):
         """Shared suffix traversal for native weights and physical drift adapters.

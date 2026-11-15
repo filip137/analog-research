@@ -174,6 +174,7 @@ def run_arm(ctx, arm):
     schedule, law = cfg.schedule, cfg.write_law
     started = time.monotonic()
     network.enable_lora(None)
+    network.fault_output_calibration = None
     base = ctx.array("naive" if arm.method == "hold_naive" else "fault_aware")
     held = base.read()
     initial = ctx.evaluate(held)
@@ -185,15 +186,18 @@ def run_arm(ctx, arm):
         return row, None
     acceptance, noise = ctx.lc.program_verify.acceptance_percent, ctx.lc.devices.noise_scale
 
-    def thresholded(array, mask=None):
+    def thresholded(array, mask=None, write_noise_scale=None):
         return ThresholdedWriteAdam(array, learning_rate=arm.learning_rate, threshold_sigma=law["threshold_sigma"],
                                     accumulate_updates=law["accumulate_updates"], acceptance_percent=acceptance,
-                                    noise_scale=noise, max_write_attempts_per_device=None, write_mask=mask)
+                                    noise_scale=noise, max_write_attempts_per_device=None, write_mask=mask,
+                                    write_noise_scale=write_noise_scale)
 
     writer = optimizer = scheduler = adapter = mask = None
     tracked = base
     if arm.method == "onchip_noisy":
         writer = thresholded(base)
+    elif arm.method == "matched_noiseless":
+        writer = thresholded(base, write_noise_scale=0.0)
     elif arm.method == "onchip_noiseless":
         writer = IdealizedWriteAdam(base, learning_rate=arm.learning_rate, write_noise_scale=0.0)
     elif arm.method == "child_tuning_d":
@@ -203,6 +207,12 @@ def run_arm(ctx, arm):
             ctx.fisher_seconds = time.monotonic() - t0
         mask = ft.child_mask(ctx.fisher, ctx.layout, arm.reserve_p)
         writer = thresholded(base, mask)
+    elif arm.method == "calibration":
+        network.requires_grad_(False)
+        network.fault_output_calibration = ft.OutputCalibration(network)
+        optimizer = torch.optim.Adam(network.fault_output_calibration.parameters(),
+                                     lr=arm.learning_rate, betas=(0.9, 0.999), eps=1e-8)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, schedule["steps"])
     elif arm.method == "digital_lora":
         parameters = _lora(network, arm.rank, arm.learning_rate, cfg.lora_seed)
         optimizer = torch.optim.Adam(parameters, lr=arm.learning_rate, betas=(0.9, 0.999), eps=1e-8)
@@ -226,8 +236,11 @@ def run_arm(ctx, arm):
             q = held
             if adapter is not None:
                 _set_adapter(network, adapter.read(), ctx.adapter_layout, ctx.a_scales, ctx.b_scales)
-            for p in network.lora.parameters():
-                p.grad = None
+            if arm.method == "calibration":
+                optimizer.zero_grad(set_to_none=True)
+            else:
+                for p in network.lora.parameters():
+                    p.grad = None
         loss = ft.sample_loss(network.forward_features(network.features(tokens), q), drawn)
         if not bool(torch.isfinite(loss)):
             raise FloatingPointError(f"Nonfinite training loss in arm {arm.label}.")
@@ -268,6 +281,14 @@ def run_arm(ctx, arm):
     else:
         row["cost"] = {"healthy_device_writes": 0, "stuck_write_attempts": 0, "touched_devices": 0,
                        "max_writes_per_device": 0, "out_of_range_devices": base.out_of_range()}
+    if arm.method == "calibration":
+        if tensor_hash(base.read()) != base_hash or base.cost() != ctx.deployed_cost:
+            raise RuntimeError("Calibration changed the base deployment.")
+        correction = network.fault_output_calibration
+        row["calibration_parameters"] = sum(p.numel() for p in correction.parameters())
+        state = {"schema": "fault_tuning.sampled_output_calibration.v1",
+                 "placement": "complete_mlp_output_before_residual",
+                 "state": {k: v.detach().cpu().clone() for k, v in correction.state_dict().items()}}
     if arm.method in ft.LORA:
         if tensor_hash(base.read()) != base_hash or base.cost() != ctx.deployed_cost:
             raise RuntimeError("A LoRA arm changed the base deployment.")
@@ -281,6 +302,7 @@ def run_arm(ctx, arm):
             row["final_adapter_apparent_sha256"] = state["final_adapter_apparent_sha256"]
     row.update(final_apparent_sha256=tensor_hash(base.read()), seconds=time.monotonic() - started)
     network.enable_lora(None)
+    network.fault_output_calibration = None
     return row, state
 
 
