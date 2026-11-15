@@ -48,3 +48,42 @@ Code, exact CLI, launch commit and outcomes will be recorded below.
 ## Handoff
 
 Design/readiness in progress. No evidence run launched yet.
+
+Readiness revision 1 used 1 nA reference currents and threshold +/-0.5 V.
+One selective input produced ideal read-mirror ratio error 10.49%, because the
+10 pA PMOS reference diode did not satisfy the saturated-current approximation;
+generic BSIM output also exceeded the ideal prediction. Artifacts retained at
+/tmp/pseudoconductance-readiness-r1/. Revision 2 uses 100 pA reference current,
+generic thresholds +/-0.7 V and PMOS mirror W/L=1u/10u (NMOS 10u/10u) to retain
+read-mirror compliance while lowering core inversion level. Same topology and
+acceptance criteria. Two of three circuit design revisions now specified.
+These generic parameters are an illustrative design choice, not a process fit.
+
+Revision-2 DC smoke: ideal selected output [0.689639,0.098533], analytic
+reference [0.689592,0.098463], BSIM3 [0.712835,0.102156]. Ideal read-copy
+error fell to 4.84e-5; BSIM3 error 0.00131. This is readiness, not the declared
+held-out test. The full circuit now has 51 MOS devices including input mirrors.
+
+The first native UIC transient aborted at 100 ns despite simulator exit 0.
+Retained at /tmp/pseudoconductance-readiness-r2/transient/. Repair: use the
+simulator's consistent DC bias under .ic state constraints before release,
+instead of leaving other compact-model charges at zero; require both absence
+of an aborted analysis and the declared 20 ms terminal time. A regression test
+covers the zero-exit/aborted case. The repaired transient reached 20 ms.
+
+Executable: /tmp/pseudoconductance-spice-env/bin/ngspice (41).
+Python/test interpreter: /home/filip/miniconda3/envs/py312/bin/python.
+Commands after the launch checkpoint, from a pinned source checkout:
+
+```bash
+/home/filip/miniconda3/envs/py312/bin/python -m ebl characterize --config examples/pseudoconductance_ideal.json --output-dir /tmp/pseudoconductance-native-results/ideal
+/home/filip/miniconda3/envs/py312/bin/python -m ebl characterize --config examples/pseudoconductance_bsim3.json --output-dir /tmp/pseudoconductance-native-results/bsim3
+```
+
+Each model uses 108 SPICE cases (DC plus two transient starts), no training.
+Parent owns both cases; metrics advance every simulation and stdout every
+12 cases. Operational repairs share the declared 1800 s total allowance.
+
+Home filesystem has insufficient free space for raw bundles. Native temporary
+results will use /tmp/pseudoconductance-native-results; compact final evidence
+will be copied into the owning backend if space permits. No existing data deleted.

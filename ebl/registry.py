@@ -930,6 +930,18 @@ EXPERIMENT_REGISTRY["mos_attention_learning.v1"] = ExperimentDefinition(
 )
 
 
+from ebl.schema.pseudoconductance_attention import (
+    parse_config as _pseudoconductance_parse,
+    resolve_config as _pseudoconductance_resolve,
+)
+EXPERIMENT_REGISTRY['pseudoconductance_attention.v1'] = ExperimentDefinition(
+    experiment_id='pseudoconductance_attention.v1', schema_version=1,
+    description='Explicit biased MOS pseudoconductance aggregation and nudged derivatives.',
+    supported_modes=(RunMode.CHARACTERIZE,),
+    parser=_pseudoconductance_parse, resolver=_pseudoconductance_resolve,
+)
+
+
 def list_definitions() -> Tuple[ExperimentDefinition, ...]:
     """Return definitions in stable identifier order."""
 
