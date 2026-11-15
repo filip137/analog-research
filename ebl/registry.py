@@ -950,6 +950,13 @@ EXPERIMENT_REGISTRY['pseudo_mnist.v1'] = ExperimentDefinition(
 )
 
 
+from ebl.schema.pseudo_drn_scale import parse_config as _pds_parse, resolve_config as _pds_resolve
+EXPERIMENT_REGISTRY['pseudo_drn_scale.v1'] = ExperimentDefinition(
+    experiment_id='pseudo_drn_scale.v1', schema_version=1, description='CIFAR-10 passive DRN MLP and attention scores.',
+    supported_modes=(RunMode.TRAIN,),parser=_pds_parse,resolver=_pds_resolve,
+)
+
+
 def list_definitions() -> Tuple[ExperimentDefinition, ...]:
     """Return definitions in stable identifier order."""
 

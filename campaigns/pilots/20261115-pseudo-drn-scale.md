@@ -38,3 +38,33 @@ Current agent owns monitoring; native heartbeat every50updates and check
 five-minute stall gate. No remote host/GPU-sharing/settings changes. Preserve
 operational failures and numerical failures. At most one identical pre-update
 CUDA startup retry per case; bounded implementation fixes during readiness.
+
+## Readiness and launch
+
+Five numerical tests pass: DRN EP/BPTT/finite differences on an active/inactive
+diode mixture; the earlier attention checks; L1 sign backward and its composition
+with the softmax Jacobian. Public two-update CLI smokes for DRN-dot-EP,
+DRN-L1-EP and digital-dot-BPTT completed full evaluation and all gradient probes.
+Worst smoke group relative error is0.313%/0.297%/0.0085%; all 128/256-step
+references qualify. Raw readiness:/tmp/pseudo-drn-readiness; logs
+/tmp/pds-smoke-<arm>.log. Conservative readiness charge300s.
+
+DRN equations, with clamped u=[x,-x], positive G1/G2 and hidden diode h>=0:
+D_h=1+sum_rows(G1)+sum_cols(G2); D_o=1+sum_rows(G2).
+Each sweep h=max(0,(uG1+oG2^T)/D_h), o=(hG2-injected_error)/D_o.
+Readout32*(o_plus-o_minus). G1=softplus(raw1)/128 and G2=softplus(raw2)/128;
+these are actual ideal conductances for every forward, not surrogate weights.
+Unit shunts preserve strict convexity. EP input error is lambda_h G1^T;
+conductance errors are contrasts of squared physical voltage drops. DRN
+max nudge-current amplitude1e-4 (scaled and divided back out), attention.005.
+Diode active-set changes make finite-amplitude DRN EP approximate.
+
+Source/config/notes commit and merge/push before evidence. Launch:
+`python -m experiments.run_pseudo_drn_scale --output-root /tmp/pseudo-drn-results`
+from its pinned source checkout, with Python env py312. Supervisor retains a
+four-byte CUDA tensor/context across workers as established in previous pilots.
+Native CLI: `python -m ebl train --config examples/pseudo_drn_scale/<arm>.json
+--output-dir /tmp/pseudo-drn-results/<arm>`.
+Current agent owns supervisor/log/metric monitoring and final collection;
+check50-update heartbeats and terminal summary+artifact inspection. Budget
+guard requires900s remaining before a new arm starts. No tuning after launch.

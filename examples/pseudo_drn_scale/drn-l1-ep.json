@@ -1,0 +1,6 @@
+{
+  "experiment_id": "pseudo_drn_scale.v1",
+  "mlp": "drn",
+  "score": "l1",
+  "method": "ep"
+}
