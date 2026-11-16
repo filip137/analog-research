@@ -148,3 +148,15 @@ checkpoint bySHA to the four-step all-arm paper canary, and require its
 full held-out/native artifact validation before the300-step release. Keep
 immutable deployment artifacts; no manual state construction. All runs
 including probes count against the shared48GPUh/19Nov17:43UTC ceiling.
+
+## DRN6 selection frozen and paper configs
+
+The300-step calibration upper extension passed exact native validation:
+LR.1KL.18612535748 andLR.3KL4.20576108297, zero writes. The prior.03
+endpoint.08959215418 is bracketed and lower than.01=.09131397073 outside
+the1%tie band. Root freezes DRN6calibration.03; all other rates unchanged.
+Prepare12native deployments and12eight-arm/full-heldout paper cells at
+0/1/3/5% andmaps271002–271004. Original1024/8/300; no held-out selection.
+As forDRN12, validate first3%/271002 deployment and bind its checkpointSHA
+to thefour-step all-armcanary beforefull300steprelease. riri5090 remains
+the DRN6host; shared48GPUh/19Nov17:43UTC limit includes allpriorprobes.
