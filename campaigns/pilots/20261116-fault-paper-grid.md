@@ -3,8 +3,12 @@
 User authorized scheduling the paper sweep on16November2026; owning issue
 filip137/on-chip-learning#33. Shared case inventory and protocol live under
 campaigns/fault-recovery-paper/launch/20261116-paper-grid in the research home.
-Compute envelope selection is pending; CPU implementation/tests are authorized.
-Do not submit GPU jobs until root binds the selected budget and live gates.
+On16November2026 at17:43UTC the user chose DRN on riri/fifi RTX5090 and
+crossbar jobs on Jean Zay V100. Root binds a48GPU-hour campaign ceiling over
+72hours, ending19November2026 at17:43UTC, including every prerequisite, probe,
+held-out evaluation and retry. Concurrency is at most two DRN5090 plus two XB
+V100 GPUs. This replaces the earlier pending-envelope choice. Root owns release
+after source integration, resource/profile binding and the exact live gates.
 
 Question: across0/1/3/5% faults and independent maps271002–271004, how much
 recovery is specific to corruption, relative to the same arm's0% twin?
@@ -70,3 +74,58 @@ Tiny OPT/CMO tests cover all arm methods and two digital ranks, live adapter and
 calibration scoring before cleanup, pretraining pin failures, contiguous cohorts,
 rejection of physical/counter/RNG/correction mutation and nonfinite scores, and
 legacy behavior/digest preservation. No GPU work, launch, merge or push occurred.
+
+## XB V100 canary preparation — 16 November, after placement authorization
+
+Native readiness configs are in
+`campaigns/fault-recovery-paper/lifecycles/paper-grid-20261116/canary/`:
+
+| Lifecycle/file stem | Arms | Updates | Lifecycle digest prefix |
+| --- | ---: | ---: | --- |
+| `fault-paper-grid-20261116-xb6-all-arms-canary` | 9 | 4 | `8fa0e3ad937b` |
+| `fault-paper-grid-20261116-xb12-all-arms-canary` | 9 | 4 | `d9ff62511c4d` |
+| `fault-paper-grid-20261116-xb6-standard-bscale-fit-canary` | 1 | 2 | `23e0065d1ce1` |
+
+Both all-arm configs retain the full1024-sequence recovery pool and both full
+held-out cohorts:1024WikiText test and384generated test. They observe development
+at2/4updates, use the original3% tuning deployment/map271001, fixed LoRA seed271001,
+standard eight sampled targets `df73ce66…`, and all nine declared method arms.
+The XB6 legacy scale `494f5c05…` is **readiness only**, never paper evidence or an
+LR freeze. XB12 uses its standard frozen scale `e1aa6c11…`. Rebuilt XB6 scale
+and the standard-target analog LR recheck still gate XB6 paper release.
+
+The two-update fit canary preserves the prerequisite's exact rank16, LR3e-3,
+standard samples and adapter-state label `dlora-r16-3em3`; only its schedule,
+readiness question and lifecycle ID differ. It has no held-out scoring, matching
+the full prerequisite fit. Its state must not be used to derive the scientific
+B scale; that requires the validated300-update fit.
+
+CPU checks: all three native `ebl lifecycle check` and `describe --json` calls
+passed; descriptions retain prepare/devices/HWA-import/fault_tuning stages and
+28,311,552/56,623,104 logical weights for XB6/XB12. Native filename stems equal
+lifecycle IDs. Config assertions verify exact arm coverage, cohorts, sample pins,
+matched-control LR and unchanged fit science. The focused evaluation/fault/control/
+token-preparation suite passed62tests in2.44s with CUDA hidden. Worker/staging/
+manifest Python compilation and `bash -n` on existing wrappers passed. No jobs
+were submitted; source staging, scheduler checks and live semantic gates remain.
+
+Root manifest binding must supply the immutable Git-backed source, per-depth HWA
+weights, teacher, standard sample file, both evaluation corpora, synthetic HWA
+corpus, deployment and scale pins. File hashes and raw tensor hashes are distinct.
+`run.slurm` executes a worker copy beside its manifest: stage/hash-compare that
+copy against the tracked source worker and bind its identity in the launch gate.
+The worker and runtime verify `source_snapshot.json` tracked-file hashes, while
+native bundles retain its receipt hash; root must also bind actual source HEAD,
+receipt/config/manifest/wrapper hashes and unchanged resource/module/export
+profile. A Git-backed snapshot with only its receipt excluded retains clean-source
+identity. The existing manifest helper is tuning-specific; it does not generate
+these new unit/corpus bindings automatically.
+
+The existing worker validates native artifacts, arm labels and finite development
+KL, but root's new semantic gate must additionally require both named held-out
+records per all-arm endpoint, exact cohort identities/counts, finite scores,
+unchanged physical/correction state, calibration/LoRA invariants and native
+completion. `jz_prepare.sh` logs failed preparation units without propagating a
+nonzero aggregate exit: inspect each preparation result, or fix this wrapper
+before relying on it. These findings were reported to root; no worker or wrapper
+changes are included in this bounded canary-config preparation.
