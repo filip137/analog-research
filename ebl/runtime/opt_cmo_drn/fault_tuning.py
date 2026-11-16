@@ -53,6 +53,50 @@ def cohorts(settings):
     return recovery, development
 
 
+def evaluation_cohorts(settings):
+    """Verify every explicitly pinned contiguous cohort before creating a learner."""
+    loaded = {}
+    selected = []
+    for spec in getattr(settings, 'evaluation_cohorts', ()):
+        key = (spec.corpus, spec.corpus_sha256)
+        if key not in loaded:
+            loaded[key] = load_corpus(*key)
+        splits = loaded[key]
+        if spec.split not in splits:
+            raise ValueError(f'Unknown evaluation split for {spec.name}.')
+        stream = splits[spec.split]
+        first = spec.start * settings.sequence_length
+        last = first + spec.sequences * settings.sequence_length
+        if last > len(stream):
+            raise ValueError(f'Evaluation cohort {spec.name} exceeds its corpus.')
+        tokens = stream[first:last].reshape(spec.sequences, settings.sequence_length).contiguous()
+        if plain_hash(tokens) != spec.cohort_sha256:
+            raise ValueError(f'Evaluation cohort hash mismatch: {spec.name}.')
+        selected.append((spec, tokens))
+    return selected
+
+
+def score_held_out(model, teacher, bank, selected, settings, device, store, arm):
+    """Score the current apparent bank and still-attached digital corrections only."""
+    if not selected:
+        return {}
+    held = bank.held_hashes()
+    costs = bank.costs()
+    rng = [a.generator.get_state().clone() for a in bank.arrays]
+    results = {}
+    for spec, tokens in selected:
+        before = time.monotonic()
+        metrics = runtime.evaluate(model, teacher, tokens, device, bank.view(model), settings.evaluation_microbatch)
+        metrics['seconds'] = time.monotonic() - before
+        if (bank.held_hashes() != held or bank.costs() != costs or any(
+                not torch.equal(saved, a.generator.get_state()) for saved, a in zip(rng, bank.arrays))):
+            raise RuntimeError('Held-out evaluation mutated physical state, write costs or device RNG.')
+        results[spec.name] = {'cohort': asdict(spec), 'metrics': metrics}
+        store.append_metric({'event': 'fault_tuning_held_out', 'arm': arm,
+                             'cohort': asdict(spec), 'metrics': metrics})
+    return results
+
+
 def samples_path(settings):
     root = os.environ.get('EBL_CORPUS_ROOT')
     if not root:
@@ -108,6 +152,7 @@ def run(request):
     runtime.configure_runtime(c)
     torch.backends.cudnn.allow_tf32 = False
     recovery, development = cohorts(s)
+    held_out_cohorts = evaluation_cohorts(s)
     samples, path = load_samples(s, recovery)
     source_sha = sha256_file(request.weights)
     physical = torch.load(request.device_state, map_location='cpu', weights_only=True)
@@ -256,8 +301,12 @@ def run(request):
                     row.update(learner.write_report())
                     if arm.method == 'child_d':
                         row['mask_sha256'] = fisher_record['mask_sha256']
+                if held_out_cohorts:
+                    row['held_out'] = score_held_out(model, teacher, bank, held_out_cohorts, s, device, store, arm.label)
                 learner.close()
                 del learner
+            if held_out_cohorts and arm.method in ('naive_hold', 'hold'):
+                row['held_out'] = score_held_out(model, teacher, bank, held_out_cohorts, s, device, store, arm.label)
             row.update(final_held_hashes=bank.held_hashes(), seconds=time.monotonic() - arm_started,
                        primary_state='held_apparent')
             path = store.run_dir / f'artifacts/arm-{arm.label}.json'

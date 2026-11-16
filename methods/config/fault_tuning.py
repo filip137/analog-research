@@ -55,6 +55,30 @@ class Arm:
 
 
 @dataclass(frozen=True)
+class EvaluationCohort:
+    name: str
+    corpus: str
+    corpus_sha256: str
+    split: str
+    start: int
+    sequences: int
+    cohort_sha256: str
+
+    @classmethod
+    def parse(cls, raw):
+        if not isinstance(raw, dict) or set(raw) != set(cls.__dataclass_fields__):
+            raise ValueError('Expected exactly the evaluation cohort fields.')
+        for key in ('name', 'corpus', 'split'):
+            if not isinstance(raw[key], str) or not raw[key] or any(c.isspace() or c in '/\\' for c in raw[key]):
+                raise ValueError(f'Expected a plain evaluation cohort {key}.')
+        _digest(raw['corpus_sha256'], 'evaluation corpus_sha256')
+        _digest(raw['cohort_sha256'], 'evaluation cohort_sha256')
+        _positive_int(raw['start'], 'evaluation start', zero=True)
+        _positive_int(raw['sequences'], 'evaluation sequences')
+        return cls(**raw)
+
+
+@dataclass(frozen=True)
 class FaultTuning:
     corpus: str
     corpus_sha256: str
@@ -84,10 +108,15 @@ class FaultTuning:
     lora_seed: int
     arms: tuple
 
+    @property
+    def evaluation_cohorts(self):
+        return ()
+
     @classmethod
     def parse(cls, raw):
-        if not isinstance(raw, dict) or set(raw) != set(cls.__dataclass_fields__):
-            raise ValueError(f'Expected exactly the fault-tuning fields {sorted(cls.__dataclass_fields__)}.')
+        required = set(FaultTuning.__dataclass_fields__)
+        if not isinstance(raw, dict) or not required <= set(raw) <= required | {'evaluation_cohorts'}:
+            raise ValueError(f'Expected fault-tuning fields {sorted(required)} and optional evaluation_cohorts.')
         v = dict(raw)
         for name in ('corpus_sha256', 'recovery_sha256', 'samples_sha256', 'development_sha256'):
             _digest(v[name], name)
@@ -117,4 +146,18 @@ class FaultTuning:
         labels = [a.label for a in v['arms']]
         if len(set(labels)) != len(labels):
             raise ValueError('Expected unique arm labels.')
+        if 'evaluation_cohorts' in v:
+            entries = v['evaluation_cohorts']
+            if not isinstance(entries, list):
+                raise ValueError('Expected an evaluation_cohorts list.')
+            v['evaluation_cohorts'] = tuple(EvaluationCohort.parse(x) for x in entries)
+            if len({x.name for x in v['evaluation_cohorts']}) != len(entries):
+                raise ValueError('Expected unique evaluation cohort names.')
+            return EvaluatedFaultTuning(**v)
         return cls(**v)
+
+
+@dataclass(frozen=True)
+class EvaluatedFaultTuning(FaultTuning):
+    # Keep legacy asdict/config identities unchanged when the optional field is absent.
+    evaluation_cohorts: tuple = ()
