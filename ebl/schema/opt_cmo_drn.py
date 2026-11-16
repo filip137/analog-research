@@ -62,6 +62,12 @@ class FaultTuningConfig(Config):
     fault_tuning: object=None
 
 
+@dataclass(frozen=True)
+class DriftTuningConfig(FaultTuningConfig):
+    """Fault-tuning learner under AIHWKit CMO log-time drift; a subclass keeps older digests unchanged."""
+    drift_tuning: object=None
+
+
 def _parse(cls,raw,path):
     if not isinstance(raw,Mapping):
         raise ConfigError(f'Expected {path} object. Provided value: {raw!r}.')
@@ -72,7 +78,12 @@ def _parse(cls,raw,path):
     defaults=cls()
     for key,value in raw.items():
         default=getattr(defaults,key)
-        if cls is FaultTuningConfig and key=='fault_tuning':
+        if issubclass(cls,DriftTuningConfig) and key=='drift_tuning':
+            if value is not None:
+                from methods.drift_tuning import DriftTuning
+                try: value=DriftTuning.parse(value)
+                except ValueError as error: raise ConfigError(str(error)) from error
+        elif issubclass(cls,FaultTuningConfig) and key=='fault_tuning':
             if value is not None:
                 from methods.config.fault_tuning import FaultTuning
                 try: value=FaultTuning.parse(value)
@@ -109,7 +120,9 @@ def _parse(cls,raw,path):
 
 
 def parse_config(raw):
-    c=_parse(FaultTuningConfig if isinstance(raw,Mapping) and 'fault_tuning' in raw else Config,raw,'config')
+    mapping=isinstance(raw,Mapping)
+    c=_parse(DriftTuningConfig if mapping and 'drift_tuning' in raw else
+             FaultTuningConfig if mapping and 'fault_tuning' in raw else Config,raw,'config')
     if c.experiment_id!=EXPERIMENT_ID or c.schema_version!=1 or c.stage not in ('prepare','hwa','deploy','recover','recovery_benchmark','retention','drift_recovery','fault_tuning'):
         raise ConfigError('Expected opt_cmo_drn_hwa.v1 schema 1 and a supported stage.')
     if (c.stage=='retention') != (c.retention is not None):
@@ -128,6 +141,20 @@ def parse_config(raw):
             raise ConfigError('Fault tuning keeps the DRN 2-rho gate, bounded targets, no floor and no write cap.')
         if f.recovery_sequences%f.fisher_batch:
             raise ConfigError('Fisher batches must tile the recovery set.')
+    if getattr(c,'drift_tuning',None) is not None:
+        d,f=c.drift_tuning,c.fault_tuning
+        if f is None or c.deployment.fault_kind!='none' or c.deployment.fault_rate!=0:
+            raise ConfigError('Drift tuning runs the fault-tuning stage on a fault-free deployment.')
+        methods=[a.method for a in f.arms]
+        if methods.count('hold')!=1 or not set(methods)<={'hold','noisy'} or 'noisy' not in methods:
+            raise ConfigError('Drift tuning takes one hold (untreated) arm and noisy learner arms.')
+        horizon=d.age(f.steps)
+        if any(t>0 and t<=horizon and d.step_at(t) is None for t in d.evaluation_seconds):
+            raise ConfigError('Every evaluation age inside the learning window must be a learner update age.')
+        if d.projection_seconds not in d.evaluation_seconds or d.projection_seconds<=horizon:
+            raise ConfigError('The projection age must be a post-window evaluation age, paired with the hold arm.')
+        if d.projection_steps and d.projection_steps[-1]>f.steps:
+            raise ConfigError('Projection steps must lie within the learner updates.')
     if c.drift_recovery is not None:
         if c.deployment.fault_kind!='none' or c.deployment.fault_rate!=0:
             raise ConfigError('Custom recovery requires a fault-free deployment.')

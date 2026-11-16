@@ -26,8 +26,12 @@ class CmoDrnBank:
         self.receipt=copy.deepcopy(state['receipt'])
         self.arrays=[ConductanceArray(s,device) for s in state['cells']]
 
-    def view(self,model,*,raw=False):
-        values=[(a.evidence['raw'].to(a.held.device) if raw else a.held)/G_MAX_US for a in self.arrays]
+    def view(self,model,*,raw=False,transform=None):
+        # ``transform(index, held_us)`` returns a read of the held state (e.g. drift); it never mutates it.
+        if raw and transform is not None:
+            raise ValueError('A transformed view reads the held state, not the raw evidence.')
+        values=[(a.evidence['raw'].to(a.held.device) if raw else
+                 a.held if transform is None else transform(k,a.held))/G_MAX_US for k,a in enumerate(self.arrays)]
         if len(values)!=2*len(model.blocks):
             raise ValueError('Physical array count differs from the DRN model.')
         pairs=tuple(tuple(values[i:i+2]) for i in range(0,len(values),2))
