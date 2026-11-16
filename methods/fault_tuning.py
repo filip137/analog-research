@@ -136,9 +136,10 @@ class FaultTuning:
     analog_lora: dict | None
     deployment: dict | None
     arms: tuple
+    drift: object = None  # methods.drift_tuning.DriftTuning; omitted when absent (older digests unchanged)
 
     def to_dict(self):
-        return {"source_sha256": self.source_sha256, "assignment_seed": self.assignment_seed,
+        out = {"source_sha256": self.source_sha256, "assignment_seed": self.assignment_seed,
                 "fault_rewrite": dict(self.fault_rewrite), "recovery": dict(self.recovery),
                 "development": dict(self.development), "targets": dict(self.targets),
                 "schedule": dict(self.schedule), "write_law": dict(self.write_law), "fisher": dict(self.fisher),
@@ -148,6 +149,10 @@ class FaultTuning:
                     "b_scale": None if self.analog_lora["b_scale"] is None else dict(self.analog_lora["b_scale"])},
                 "deployment": None if self.deployment is None else dict(self.deployment),
                 "arms": [a.to_dict() for a in self.arms]}
+        if self.drift is not None:
+            from dataclasses import asdict
+            out["drift"] = {k: list(v) if isinstance(v, tuple) else v for k, v in asdict(self.drift).items()}
+        return out
 
     def rewrite(self):
         from methods.config import FaultRewrite
@@ -158,6 +163,11 @@ class FaultTuning:
     def parse(cls, raw):
         keys = ("source_sha256", "assignment_seed", "fault_rewrite", "recovery", "development", "targets",
                 "schedule", "write_law", "fisher", "lora_seed", "analog_lora", "deployment", "arms")
+        drift = None
+        if isinstance(raw, dict) and "drift" in raw:
+            from methods.drift_tuning import DriftTuning
+            drift = DriftTuning.parse(raw["drift"])
+            raw = {k: v for k, v in raw.items() if k != "drift"}
         _exact(raw, keys, "fault_tuning")
         rewrite = _exact(raw["fault_rewrite"], ("detection", "roles", "seed", "threshold_sigma"), "fault_rewrite")
         if rewrite["detection"] != "verify" or rewrite["roles"] != "pair":
@@ -226,7 +236,7 @@ class FaultTuning:
                    dict(rewrite), data["recovery"], data["development"], dict(t), dict(s), dict(w), dict(f),
                    _int(raw["lora_seed"], "lora_seed"), None if analog is None else
                    {"rank": analog["rank"], "b_scale": None if analog["b_scale"] is None else dict(analog["b_scale"])},
-                   None if deployment is None else dict(deployment), arms)
+                   None if deployment is None else dict(deployment), arms, drift)
 
 
 # --- data ---------------------------------------------------------------------------------------

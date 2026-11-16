@@ -306,6 +306,104 @@ def run_arm(ctx, arm):
     return row, state
 
 
+def run_drift_arm(ctx, arm, hold):
+    """One arm under ``fault_tuning.drift`` (AIHWKit CMO log-time law, clock continues through writes).
+
+    Every device-facing forward reads the held devices through the drift law at its age;
+    writes shift the held programmed conductances. ``hold_fault_aware`` is the untreated
+    deployment read on the grid; ``onchip_noisy`` starts at release and update k reads at
+    k * update_seconds. Equal ages give identical draws in every arm (paired).
+    """
+    import methods.drift_tuning as dt
+    network, cfg, device, d = ctx.network, ctx.cfg, ctx.device, ctx.cfg.drift
+    schedule, law = cfg.schedule, cfg.write_law
+    started = time.monotonic()
+    network.enable_lora(None)
+    network.fault_output_calibration = None
+    base = ctx.array("fault_aware")
+    start_hash = tensor_hash(base.read())
+
+    def evaluate(seconds, step, kind="grid"):
+        q = base.read() if seconds is None else dt.drifted_weights(base, d, seconds)
+        metrics = ctx.evaluate(q)
+        point = {"arm": arm.label, "kind": kind, "age_seconds": seconds, "step": step,
+                 "teacher_kl": metrics["teacher_kl"], "development": metrics,
+                 "bounds": None if seconds is None else dt.bound_counts(base, d, seconds)}
+        ctx.stage.store.append_metric({"stage": "drift_tuning_evaluation", **point})
+        print(json.dumps({"arm": arm.label, "kind": kind, "age_seconds": seconds, "step": step,
+                          "teacher_kl": metrics["teacher_kl"]}), flush=True)
+        return point
+
+    row = {"label": arm.label, "method": arm.method, "learning_rate": arm.learning_rate, "rank": None,
+           "reserve_p": None, "initial_apparent_sha256": start_hash}
+    if arm.method == "hold_fault_aware":
+        grid = [evaluate(t, None) for t in d.evaluation_seconds]
+        if tensor_hash(base.read()) != start_hash:
+            raise RuntimeError("Evaluation changed the held deployment.")
+        row.update(grid=grid, cost={"healthy_device_writes": 0, "stuck_write_attempts": 0, "touched_devices": 0,
+                                    "max_writes_per_device": 0, "out_of_range_devices": base.out_of_range()})
+    else:
+        acceptance, noise = ctx.lc.program_verify.acceptance_percent, ctx.lc.devices.noise_scale
+        writer = ThresholdedWriteAdam(base, learning_rate=arm.learning_rate, threshold_sigma=law["threshold_sigma"],
+                                      accumulate_updates=law["accumulate_updates"], acceptance_percent=acceptance,
+                                      noise_scale=noise, max_write_attempts_per_device=None)
+        baseline, baseline_writes = base.cost(), base.write_counts().clone()
+        generator = torch.Generator().manual_seed(schedule["order_seed"])
+        steps, every = schedule["steps"], schedule["development_every_steps"]
+        horizon = d.age(steps)
+        grid_steps = {d.step_at(t): t for t in d.evaluation_seconds if 0 < t <= horizon}
+        grid, curve, projections, losses = [evaluate(0.0, 0)], [], [], []
+        for step in range(steps):
+            index = torch.randint(0, len(ctx.recovery), (schedule["batch"],), generator=generator)
+            tokens, drawn = ctx.recovery[index].to(device), ctx.samples[index.to(device)]
+            network.train()
+            q = dt.drifted_weights(base, d, d.age(step + 1)).requires_grad_(True)
+            loss = ft.sample_loss(network.forward_features(network.features(tokens), q), drawn)
+            if not bool(torch.isfinite(loss)):
+                raise FloatingPointError(f"Nonfinite training loss in arm {arm.label}.")
+            loss.backward()
+            writer.learning_rate = ft.cosine(arm.learning_rate, step, steps)
+            writer.step(q.grad)
+            losses.append(float(loss.detach()))
+            done = step + 1
+            ctx.stage.store.append_metric({"stage": "drift_tuning_update", "arm": arm.label, "step": done,
+                                           "age_seconds": d.age(done), "train_loss": losses[-1],
+                                           "learning_rate": writer.learning_rate})
+            if done in grid_steps:
+                point = evaluate(grid_steps[done], done)
+                point["cost"] = _cost(base, baseline, baseline_writes)[0]
+                grid.append(point)
+                curve.append(point)
+            elif done % every == 0:
+                point = evaluate(d.age(done), done, "development")
+                point["cost"] = _cost(base, baseline, baseline_writes)[0]
+                curve.append(point)
+            if done in d.projection_steps:
+                projections.append(evaluate(d.projection_seconds, done, "projection"))
+        base.verify_permanence()
+        grid += [evaluate(t, steps) for t in d.evaluation_seconds if t > horizon]
+        cost = _cost(base, baseline, baseline_writes)[0]
+        cost["writer"] = writer.diagnostics()
+        row.update(grid=grid, curve=curve, projections=projections, final_no_drift=evaluate(None, steps, "no_drift"),
+                   train_loss_first10=sum(losses[:10]) / min(10, len(losses)),
+                   train_loss_last10=sum(losses[-10:]) / min(10, len(losses)), train_losses=losses, cost=cost)
+        if cost["device_writes"] == 0 and hold is not None:
+            mismatched = [p["age_seconds"] for p in grid if p["teacher_kl"] != hold[p["age_seconds"]]]
+            row["zero_write_replay"] = {"checked": True, "mismatched_ages": mismatched}
+            if mismatched:
+                raise RuntimeError(f"A learner with no writes did not replay the hold arm: {mismatched}.")
+        else:
+            row["zero_write_replay"] = {"checked": False}
+    ages = [p["age_seconds"] for p in row["grid"]]
+    if ages != list(d.evaluation_seconds):
+        raise RuntimeError(f"Arm {arm.label} grid coverage {ages} differs from the declared grid.")
+    kl = [p["teacher_kl"] for p in row["grid"]]
+    row.update(initial=row["grid"][0]["development"], final=row["grid"][-1]["development"],
+               mean_teacher_kl=dt.trapezoid_mean(ages, kl), final_apparent_sha256=tensor_hash(base.read()),
+               primary_state="held_apparent_drifted", seconds=time.monotonic() - started)
+    return row
+
+
 def run(stage):
     from ebl.schema.source_fit import validate_source_fit
     lc, cfg = stage.lifecycle, stage.lifecycle.fault_tuning
@@ -373,7 +471,17 @@ def run(stage):
     store.append_metric({"stage": "fault_tuning_deployed", "clean": clean,
                          "apparent_sha256": {k: v["apparent_sha256"] for k, v in ctx.deployed.items()}})
     rows = []
-    for arm in cfg.arms:
+    if cfg.drift is not None:
+        hold = None
+        for arm in sorted(cfg.arms, key=lambda a: a.method != "hold_fault_aware"):
+            row = run_drift_arm(ctx, arm, hold)
+            if arm.method == "hold_fault_aware":
+                hold = {p["age_seconds"]: p["teacher_kl"] for p in row["grid"]}
+            rows.append(row)
+            atomic_write_json(stage.run_dir / "measurements.json", rows)
+            store.append_metric({"stage": "drift_tuning_arm", "arm": arm.label,
+                                 "mean_teacher_kl": row["mean_teacher_kl"], "seconds": row["seconds"]})
+    for arm in (cfg.arms if cfg.drift is None else ()):
         row, state = run_arm(ctx, arm)
         if state is not None:
             path = stage.run_dir / "checkpoints" / "arms" / f"{arm.label}.pt"
@@ -404,6 +512,9 @@ def run(stage):
                                      "cost": {k: v for k, v in r["cost"].items() if k != "writer"},
                                      "seconds": r["seconds"]} for r in rows},
                "deployment_seconds": deployment_seconds,
+               **({"drift": {"settings": cfg.to_dict()["drift"],
+                             "mean_teacher_kl": {r["label"]: r["mean_teacher_kl"] for r in rows}}}
+                  if cfg.drift is not None else {}),
                "selection": "final endpoint; development teacher KL; no test cohort"}
     atomic_write_json(stage.run_dir / "summary.json", summary)
     return summary, [("fault_tuning_measurements", stage.run_dir / "measurements.json"),

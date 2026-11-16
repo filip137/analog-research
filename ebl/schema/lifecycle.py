@@ -195,6 +195,23 @@ def _cross_validate(lifecycle: Lifecycle) -> None:
             raise config_error('fault_tuning', 'to declare exactly one permanent defect case', lifecycle.defects.to_dict())
         if len(lifecycle.hwa.arms) != 1:
             raise config_error('fault_tuning', 'to declare exactly the frozen source arm', [a.arm_id for a in lifecycle.hwa.arms])
+        drift = tuning.drift
+        if drift is not None:
+            case = lifecycle.defects.cases[0]
+            if case.kind != 'none' or case.rate_ppm != 0:
+                raise config_error('fault_tuning.drift', 'to run on the fault-free (0 %) case', lifecycle.defects.to_dict())
+            methods = [a.method for a in tuning.arms]
+            if (methods.count('hold_fault_aware') != 1 or 'onchip_noisy' not in methods
+                    or not set(methods) <= {'hold_fault_aware', 'onchip_noisy'}):
+                raise config_error('fault_tuning.arms', 'under drift to be one hold_fault_aware arm and onchip_noisy learners', methods)
+            steps = tuning.schedule['steps']
+            horizon = drift.age(steps)
+            if any(0 < t <= horizon and drift.step_at(t) is None for t in drift.evaluation_seconds):
+                raise config_error('fault_tuning.drift.evaluation_seconds', 'inside the learning window to be learner update ages', list(drift.evaluation_seconds))
+            if drift.projection_seconds not in drift.evaluation_seconds or drift.projection_seconds <= horizon:
+                raise config_error('fault_tuning.drift.projection_seconds', 'to be a post-window grid age', drift.projection_seconds)
+            if drift.projection_steps and drift.projection_steps[-1] > steps:
+                raise config_error('fault_tuning.drift.projection_steps', 'to lie within the learner updates', list(drift.projection_steps))
     custom = lifecycle.drift_recovery
     if custom is not None:
         if (family != OPT_FAMILY or devices.technology != 'cmo' or lifecycle.onchip is not None
