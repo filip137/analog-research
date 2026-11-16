@@ -1,4 +1,4 @@
-"""Derive the drift token-budget configs from the verified fault token-budget DRN6 configs.
+"""Derive the drift token-budget configs from the verified fault token-budget DRN6/DRN12 configs.
 
 Only the declared factors change: a fault-free deployment, the untreated hold arm, the
 AIHWKit CMO x4 log-time drift with the clock continuing through writes, the ratio3
@@ -24,8 +24,11 @@ DRIFT = {
 ARMS = [{'label': 'A0', 'method': 'hold'}, {'label': 'L1', 'method': 'noisy', 'learning_rate': 3e-4}]
 
 
-def build(kind):
-    doc = json.loads((SOURCE / kind / ('drn6-n8192' + ('-canary' if kind == 'canary' else '') + '.json')).read_text())
+FULL_WALL_MINUTES = {'drn6': 110, 'drn12': 240}  # DRN6 on qos_gpu-dev; DRN12 (~2x per update) on qos_gpu-t3
+
+
+def build(model, kind):
+    doc = json.loads((SOURCE / kind / (model + '-n8192' + ('-canary' if kind == 'canary' else '') + '.json')).read_text())
     doc['deployment'] = {'assignment_seed': 271001, 'fault_kind': 'none', 'fault_rate': 0.0}
     doc['fault_tuning']['arms'] = ARMS
     drift = dict(DRIFT)
@@ -33,7 +36,7 @@ def build(kind):
         drift['projection_steps'] = [16]
         doc['training']['max_wall_seconds'] = 25 * 60 - 120
     else:
-        doc['training']['max_wall_seconds'] = 110 * 60 - 120
+        doc['training']['max_wall_seconds'] = FULL_WALL_MINUTES[model] * 60 - 120
     doc['drift_tuning'] = drift
     from ebl.schema.opt_cmo_drn import parse_config
     parse_config(doc)
@@ -41,11 +44,12 @@ def build(kind):
 
 
 def main():
-    for kind in ('full', 'canary'):
-        out = TARGET / kind / ('drn6-ratio3-m4' + ('-canary' if kind == 'canary' else '') + '.json')
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(build(kind), indent=2) + '\n')
-        print(out)
+    for model in FULL_WALL_MINUTES:
+        for kind in ('full', 'canary'):
+            out = TARGET / kind / (model + '-ratio3-m4' + ('-canary' if kind == 'canary' else '') + '.json')
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(build(model, kind), indent=2) + '\n')
+            print(out)
 
 
 if __name__ == '__main__':

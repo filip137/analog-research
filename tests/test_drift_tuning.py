@@ -17,7 +17,8 @@ from tests.test_opt_cmo_drn import cpu_threads, tiny_model  # noqa: F401  (fixtu
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIGS = ROOT / 'examples' / 'opt_cmo_drn' / 'drift_token_budget'
-FAULT = ROOT / 'examples' / 'opt_cmo_drn' / 'fault_token_budget' / 'full' / 'drn6-n8192.json'
+FAULT_DIR = ROOT / 'examples' / 'opt_cmo_drn' / 'fault_token_budget'
+FAULT = FAULT_DIR / 'full' / 'drn6-n8192.json'
 
 
 def law(**changes):
@@ -117,10 +118,15 @@ def test_transformed_view_reads_without_mutating_and_zero_rate_replays_hold(cpu_
 
 
 def test_generated_configs_parse_and_differ_from_the_fault_run_only_where_declared():
-    fault = json.loads(FAULT.read_text())
+    seen = set()
     for kind in ('full', 'canary'):
-        for path in sorted((CONFIGS / kind).glob('drn6-*.json')):
+        for path in sorted((CONFIGS / kind).glob('drn*-ratio3-m4*.json')):
+            model = path.name.split('-')[0]
+            seen.add((model, kind))
+            # Each drift config derives from the fault token-budget config of the same model (full: full).
+            fault = json.loads((FAULT_DIR / 'full' / f'{model}-n8192.json').read_text())
             raw = json.loads(path.read_text())
+            assert raw['analog_layers'] == fault['analog_layers'] and raw['source_sha256'] == fault['source_sha256']
             c = parse_config(raw)
             assert isinstance(c, DriftTuningConfig) and c.deployment.fault_kind == 'none'
             assert c.drift_tuning.mapping_scale == 3.0 and c.drift_tuning.multiplier == 4.0
@@ -131,6 +137,8 @@ def test_generated_configs_parse_and_differ_from_the_fault_run_only_where_declar
                 x.pop('arms'), x.pop('steps')
             assert f == g
             assert raw['recovery'] == fault['recovery'] and raw['solver'] == fault['solver']
+    assert seen == {(m, k) for m in ('drn6', 'drn12') for k in ('full', 'canary')}
+    fault = json.loads(FAULT.read_text())
     assert isinstance(parse_config(fault), FaultTuningConfig)
     assert not isinstance(parse_config(fault), DriftTuningConfig)
 
