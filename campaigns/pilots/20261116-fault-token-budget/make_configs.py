@@ -68,6 +68,8 @@ def main():
         raise ValueError("Expected complete target-preparation receipt")
     if receipt.get("baseline_prefix_sha256") != BASELINE_SAMPLES:
         raise ValueError("Original teacher samples were not preserved")
+    if receipt.get("teacher_sha256") != "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9" or receipt.get("samples_seed") != 20365833 or receipt.get("draw_batch") != 16 or receipt.get("count") != 8:
+        raise ValueError("Unexpected teacher target preparation contract")
     samples = {s["sequences"]: s for s in receipt["samples"]}
     cases = json.loads(Path(__file__).with_name("cases.json").read_text())
     documents = []

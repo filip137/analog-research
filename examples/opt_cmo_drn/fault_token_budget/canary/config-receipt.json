@@ -1,0 +1,12 @@
+[
+  {
+    "case_id": "drn6-n8192-canary",
+    "path": "/tmp/drn-20261116-fault-token-budget/examples/opt_cmo_drn/fault_token_budget/canary/drn6-n8192-canary.json",
+    "sha256": "d16375b8a9e18367ff501fee83c3d821974432aeeae78e83712b2bb4f70526a1"
+  },
+  {
+    "case_id": "drn12-n8192-canary",
+    "path": "/tmp/drn-20261116-fault-token-budget/examples/opt_cmo_drn/fault_token_budget/canary/drn12-n8192-canary.json",
+    "sha256": "c6e5737c42dc3bd678f608649f604a8b6320dee1618bbad7231f1c0a1cbb0c1c"
+  }
+]

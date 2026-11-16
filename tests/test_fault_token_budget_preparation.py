@@ -74,3 +74,14 @@ def test_target_preparation_refuses_existing_output(tmp_path,monkeypatch):
     prep=importlib.util.module_from_spec(spec);spec.loader.exec_module(prep)
     monkeypatch.setattr(sys,"argv",["prepare_targets.py","not-read-corpus","not-read-teacher",str(tmp_path)])
     with pytest.raises(FileExistsError):prep.main()
+
+
+def test_reject_wrong_teacher_before_reading_targets(tmp_path,monkeypatch):
+    import sys
+    receipt={"schema":"fault_token_targets.v1","status":"complete",
+             "baseline_prefix_sha256":builder.BASELINE_SAMPLES,"teacher_sha256":"b"*64,
+             "samples_seed":20365833,"draw_batch":16,"count":8,"samples":[]}
+    path=tmp_path/"receipt.json";path.write_text(json.dumps(receipt))
+    monkeypatch.setattr(sys,"argv",["make_configs.py",str(path),str(tmp_path),str(tmp_path/"out")])
+    with pytest.raises(ValueError,match="preparation contract"):builder.main()
+    assert not (tmp_path/"out").exists()

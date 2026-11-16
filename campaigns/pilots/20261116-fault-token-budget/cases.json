@@ -13,7 +13,7 @@
     "processed_input_tokens": 4915200,
     "scored_positions": 4896000,
     "wall_minutes": 120,
-    "status": "planned_only",
+    "status": "authorized_V100_canary_pending",
     "development_every_steps": 100,
     "report_steps": [
       0,
@@ -38,8 +38,8 @@
     "input_pool_tokens": 2097152,
     "processed_input_tokens": 4915200,
     "scored_positions": 4896000,
-    "wall_minutes": 120,
-    "status": "planned_only",
+    "wall_minutes": 240,
+    "status": "authorized_V100_canary_pending",
     "development_every_steps": 100,
     "report_steps": [
       0,

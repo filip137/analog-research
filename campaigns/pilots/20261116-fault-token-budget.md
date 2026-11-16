@@ -1,15 +1,20 @@
-# Fixed-pool recovery learning curves — plan only
+# Fixed-pool recovery learning curves — authorized V100 campaign
 
 User decision,16November: retain the selected noisy-physical learning rates;
 use only the larger2.1M-token recovery pool and observe KL versus training
-length. **Do not launch.** This supersedes the preliminary2×/4×/8× pool grid.
+length. The later explicit V100 launch instruction supersedes the earlier
+plan-only restriction and preliminary2×/4×/8× pool grid.
 Owning issue:filip137/on-chip-learning#33.
 
 Shared protocol:
 `campaigns/fault-recovery-paper/series/001-lr-tuning/experiments/exp-005-recovery-token-budget-20261116.md`.
 The adjacent `20261116-fault-token-budget/cases.json` contains the two cases
 for this backend; `cohorts.json` pins the larger pool and historical reference.
-These are planning records, not executable native training configs.
+Strict native full/canary configs are bound to the verified targets receipt.
+Target job278249 completed on V100; all8192 sequences preserve the original
+1024-sequence sampled-target prefix. Four32-step canaries gate four2400-step runs.
+DRN12 uses qos_gpu-t3 with a240-minute candidate cap; DRN6 uses dev120minutes,
+XB6/XB12 dev45minutes. Release depends on measured V100 runtime and the8GPU-hour cap.
 
 Each run uses8,192×256 input tokens (2,097,152), WikiText-2 train, seed20261104,
 from the existing shuffled block order. The original1,024 sequences remain

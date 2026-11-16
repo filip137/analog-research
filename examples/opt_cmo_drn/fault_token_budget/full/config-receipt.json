@@ -1,0 +1,12 @@
+[
+  {
+    "case_id": "drn6-n8192",
+    "path": "/tmp/drn-20261116-fault-token-budget/examples/opt_cmo_drn/fault_token_budget/full/drn6-n8192.json",
+    "sha256": "5121e2a27a0588457aa31fcc3fcff43c644d19d33301f38ad2801abf58aa5133"
+  },
+  {
+    "case_id": "drn12-n8192",
+    "path": "/tmp/drn-20261116-fault-token-budget/examples/opt_cmo_drn/fault_token_budget/full/drn12-n8192.json",
+    "sha256": "60c40a7a22540b8fba2093defda3f24becf2183f29d647c1adc37905361313c7"
+  }
+]
