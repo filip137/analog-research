@@ -34,22 +34,27 @@ def law_gradients(query, keys, tail_current, iref, kappa):
 
 def add_scorer(lines, mos, scorer):
     """Append scorer devices/sources to a pseudoconductance netlist; return columns."""
-    query = np.asarray(scorer['query'], dtype=float)
-    keys = np.asarray(scorer['keys'], dtype=float)
     tail = float(scorer['tail_current'])
-    if query.shape != (DIMS,) or keys.shape != (KEYS, DIMS):
-        raise ValueError('Expected a 2-D query and three 2-D keys')
     if not 0 < tail <= 2e-9:
         raise ValueError('Tail current must keep the scorer in weak inversion (<=2 nA)')
-    for d in range(DIMS):
-        lines.append(f'Vq{d} q{d} 0 {query[d]:.17g}')
-    for j in range(KEYS):
+    columns = []
+    if 'crossbar' in scorer:
+        # query/key gate nodes q<d>, k<j><d> are driven by a resistive crossbar
+        from networks.energy_transformer import crossbar_qk
+        columns += crossbar_qk.add_crossbar(lines, scorer['crossbar'])
+    else:
+        query = np.asarray(scorer['query'], dtype=float)
+        keys = np.asarray(scorer['keys'], dtype=float)
+        if query.shape != (DIMS,) or keys.shape != (KEYS, DIMS):
+            raise ValueError('Expected a 2-D query and three 2-D keys')
         for d in range(DIMS):
-            lines.append(f'Vk{j}{d} k{j}{d} 0 {keys[j, d]:.17g}')
+            lines.append(f'Vq{d} q{d} 0 {query[d]:.17g}')
+        for j in range(KEYS):
+            for d in range(DIMS):
+                lines.append(f'Vk{j}{d} k{j}{d} 0 {keys[j, d]:.17g}')
     lines.append(f'Iref_tail vdd tref {tail:.17g}')
     mos('tref', 'tref', 'tref', '0', '0', 'nc', 'scorer')
     lines.append('.nodeset v(tref)=.6')
-    columns = []
     for j in range(KEYS):
         mos(f'tail_{j}', f't{j}0', 'tref', '0', '0', 'nc', 'scorer')
         for d in range(DIMS):

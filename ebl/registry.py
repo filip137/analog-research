@@ -953,6 +953,17 @@ EXPERIMENT_REGISTRY['bump_scorer_attention.v1'] = ExperimentDefinition(
     parser=_bump_scorer_parse, resolver=_bump_scorer_resolve,
 )
 
+from ebl.schema.crossbar_qk_attention import (
+    parse_config as _crossbar_qk_parse,
+    resolve_config as _crossbar_qk_resolve,
+)
+EXPERIMENT_REGISTRY['crossbar_qk_attention.v1'] = ExperimentDefinition(
+    experiment_id='crossbar_qk_attention.v1', schema_version=1,
+    description='Trained resistive-crossbar query/key projection driving the bump scorer and bank.',
+    supported_modes=(RunMode.CHARACTERIZE,),
+    parser=_crossbar_qk_parse, resolver=_crossbar_qk_resolve,
+)
+
 from ebl.schema.pseudo_mnist import parse_config as _pseudo_mnist_parse, resolve_config as _pseudo_mnist_resolve
 EXPERIMENT_REGISTRY['pseudo_mnist.v1'] = ExperimentDefinition(
     experiment_id='pseudo_mnist.v1', schema_version=1,

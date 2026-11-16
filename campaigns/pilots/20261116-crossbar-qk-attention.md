@@ -76,6 +76,32 @@ executing agent owns monitoring. Branch `drn/20261116-crossbar-qk-attention`;
 worktree `/home/filip/analog-research/worktrees/drn-20261116-crossbar-qk-attention`.
 Native results: `/home/filip/analog-research/drn/results/crossbar-qk-attention/`.
 
+## Implementation
+
+**Code:**
+- `networks/energy_transformer/crossbar_qk.py`: netlist, formula and dissipation.
+- A crossbar drive option in `bump_scorer.add_scorer`. The ideal query/key sources
+  of #55 stay the default.
+- `ebl/schema/crossbar_qk_attention.py` and `ebl/runtime/crossbar_qk_attention.py`.
+- Configs `examples/crossbar_qk_{ideal,bsim3}.json`, which carry the trained
+  conductances and value weights plus the source sha256.
+- `tests/test_crossbar_qk_attention.py`.
+
+Transients use the #55 solver setting, abstol = 1e-18 A, as transient-only;
+DC analyses keep 1e-20 A.
+
+**Readiness:** dirty-tree smokes of both models, at the scratchpad path
+`xqk-readiness`, passed all gates in 74 SPICE calls each.
+
 ## Handoff
 
-Specification recorded; implementation in progress. Nothing launched.
+The launch checkpoint is this commit, merged and pushed. Run from a pinned checkout:
+
+```bash
+PY=/home/filip/miniconda3/envs/py312/bin/python
+R=/home/filip/analog-research/drn/results/crossbar-qk-attention
+cd $R/source-<launch sha>
+$PY -m ebl characterize --config examples/crossbar_qk_ideal.json --output-dir $R/ideal
+$PY -m ebl characterize --config examples/crossbar_qk_bsim3.json --output-dir $R/bsim3
+$PY -m ebl runs inspect $R/ideal/<run> $R/bsim3/<run> --verify-artifacts --require-complete
+```
