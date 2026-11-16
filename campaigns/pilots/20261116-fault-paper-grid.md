@@ -128,3 +128,23 @@ Configuration byte SHA-256 values:
 - DRN6 calibration upper: `7a83e38be85a123772fd3007c92a76e4dc07220d00de8c84473bf4a46c264902`.
 - DRN12 calibration upper: `b35198824da4a2539e8a2f754d3f7bb0abf7730801758f388dc3771b4d37a43d`.
 - DRN12 LoRA64 lower: `0450614bf084687cc04c17153592446d64b7d38669629f49095b381ea1107289`.
+
+## DRN12 frozen paper column and remaining DRN6 boundary
+
+Root reviewed the completed prerequisite bundles: DRN12calibration.03 gives
+KL.3271677431 versus.244888736 at.01; LoRA64.00003 gives.2485549812
+versus.2372683943 at.0001. Both old selections are bracketed and frozen.
+Matched noiseless at.0003 completes300updates, KL.2564745592 and42,992,768
+write attempts, retaining24nominal2rho gates. No DRN12 boundary candidate
+is released. DRN6calibration.03 improves.01 by1.8856%; release its declared
+[.1,.3] extension only after a minimal two-step calibration-family canary.
+
+The DRN12 paper column now has12deployment configs and12eight-arm recovery
+configs under examples/opt_cmo_drn/fault_paper_grid/paper/:96 endpoints
+at0/1/3/5% andmaps271002–271004, original1024/8/300 andbothfulltests.
+First run the exact3%/271002 native deployment as a minimal deployment
+readiness task, validate its source/config/map/checkpoint identity, bind that
+checkpoint bySHA to the four-step all-arm paper canary, and require its
+full held-out/native artifact validation before the300-step release. Keep
+immutable deployment artifacts; no manual state construction. All runs
+including probes count against the shared48GPUh/19Nov17:43UTC ceiling.
