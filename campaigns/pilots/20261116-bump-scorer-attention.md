@@ -138,19 +138,82 @@ netlists, DC and transient, are byte-identical to `ea426d5`. No circuit, case,
 value or gate changed. Both models are relaunched from the revision commit. The
 attempt-1 bundles stay as evidence. This counts as revision 1 of the 3 allowed.
 
+**Attempt 2** (revision `e569ecb`, pinned at `results/bump-scorer-attention/source-e569ecb`):
+
+| Model | Bundle | Integrity |
+| --- | --- | --- |
+| ideal | `results/bump-scorer-attention/ideal/20261116T170443.915555Z-2c15b415-8c39dab9` | complete, valid |
+| bsim3 | `results/bump-scorer-attention/bsim3/20261116T170454.219899Z-4cf6ea47-8ab955ac` | complete, valid |
+
+Both pass `ebl runs inspect --verify-artifacts --require-complete`, with 105 SPICE
+calls each.
+
+## Results
+
+| Check | Ideal (κ = 2/3) | Generic BSIM3 | Gate |
+| --- | ---: | ---: | --- |
+| Selection RMSE, 36 fresh key/value sets | 0.0142 | **0.0083** | < 0.05 |
+| Uniform / selective MSE | 653× | **1909×** | ≥ 5× |
+| Output vs ideal operator at measured currents | 1.1e-4 | 0.0113 | reported |
+| Selected scorer current (law peak 0.5) | 0.500 | 0.594 (0.590–0.599) | reported |
+| Largest unselected current | 0.0026 | 0.0010 | reported |
+| κ fit from sweep (amplitude ratio, rms ln residual) | 0.6664 (0.999, 0.001) | 0.7911 (1.150, 0.055) | reported |
+| Scorer derivative, law vs FD, relative L2 | 0.02% | **1.65%** | < 5% |
+| End-to-end dL/dq, branch readout × law | 1.0% | 13.5% | reported |
+| End-to-end dL/dk | 0.8% | 11.0% | reported |
+| Far-query output | (0.0023, 0.0018) | (0.0485, 0.0485) | reported |
+| Transient vs DC, two starts | 5e-14 | 9.4e-5 | < 1e-3 |
+| Node voltages / min anchor V_DS / min scorer tail | 0.286–0.336 / 1.06 / 0.27 V | 0.285–0.337 / 0.73 / 0.19 V | rails, > 4U_T |
+| Supply power (largest case) | 11.6 nW | 11.7 nW | reported |
+
+## Review
+
+**Forward: passed.** The explicit scorer and the unchanged bank select the value
+whose key matches the query. They do so for fresh keys and values in every case,
+with BSIM3 RMSE 0.0083. That is comparable to #50 with ideal supplied controls
+(0.0057). The BSIM3 scorer delivers 19% more current at the peak than the law, and
+a 1.15× amplitude remains after the κ fit. Selection is insensitive to this gain.
+The fitted κ = 0.79 agrees with the controller-slope estimate of about 0.78 from #50.
+
+**Far query.** The BSIM3 output is 0.0485, the same value as the #50 all-off
+offset. That offset belongs to the bank at near-zero coupling, not to the scorer.
+
+**Scorer derivative: passed.** With κ fitted on the separate sweep, the law
+predicts ∂a/∂q and ∂a/∂k within 1.65%.
+
+**End-to-end gradient: not gated, and the error is larger than the derivative
+error.** The branch readout times the law derivative gives 11–13% error against
+full-circuit finite differences. The cause:
+- The two off-target keys carry a current floor of about 1e-4 (about 10 fA). The
+  law derivative scaled by that measured current overstates their sensitivity:
+  0.009 against a finite difference of 0.0018 or less.
+- Their dL/da is large (about 2.2), because adding weight to another token moves
+  the output a lot.
+- Retrospectively, and not part of the declared test: keeping only the matching
+  key's term gives 4.2% (q) and 3.0% (k).
+
+An explicit scorer backward pass therefore has to model the floor, or treat
+sub-floor keys as having zero gradient.
+
+**Not shown:**
+- mismatch or noise;
+- a projection circuit producing q and k;
+- an analog backward pass through the scorer;
+- training;
+- PDK or silicon behaviour;
+- energy or latency advantage.
+
+**Cost:**
+- Instrumented SPICE time 27 s: readiness 7.2 s, attempt 1 9.2 s, attempt 2 10.4 s.
+- 18 diagnostic probe runs, not instrumented, of a few seconds each.
+- Raw results 34 MB.
+- 1 of 3 revisions used.
+- All within the 1800 s and 500 MB allowance.
+
 ## Handoff
 
-The launch checkpoint is this commit, once merged into `refactor/training-core`
-and pushed. Run from a pinned checkout of that commit:
-
-```bash
-PY=/home/filip/miniconda3/envs/py312/bin/python
-R=/home/filip/analog-research/drn/results/bump-scorer-attention
-cd $R/source-<launch sha>
-$PY -m ebl characterize --config examples/bump_scorer_ideal.json --output-dir $R/ideal
-$PY -m ebl characterize --config examples/bump_scorer_bsim3.json --output-dir $R/bsim3
-$PY -m ebl runs inspect $R/ideal/<run> $R/bsim3/<run> --verify-artifacts --require-complete
-```
-
-The executing agent owns both short runs, which are expected to take under a
-minute each.
+Closed. Execution, collection and review are complete, and no jobs remain. The
+attempt-1 bundles (ideal passed; BSIM3 failed at its transient) are retained beside
+the attempt-2 evidence. Next decisions belong to on-chip-learning #55 and its
+follow-ups: mismatch, the floor-aware scorer backward pass, and a projection that
+produces q and k.
