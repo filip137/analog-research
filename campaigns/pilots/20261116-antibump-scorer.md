@@ -82,9 +82,46 @@ Branch `drn/20261116-antibump-scorer`; worktree
 `/home/filip/analog-research/worktrees/drn-20261116-antibump-scorer`. Native
 results: `/home/filip/analog-research/drn/results/antibump-scorer/`.
 
+## Pre-launch readiness corrections (dirty-tree smokes, scratchpad)
+
+1. **Trained designs replaced.** The first readiness smoke failed retrieval in both
+   models (MSE 3–9e-3 against about 1e-4 predicted). The stage-2 models used an
+   unbounded linear projection, which put query/key voltages at −0.43 to 2.5 V,
+   outside the rails.
+   - **Fix:** retrained with the physical passive crossbar projection of #56
+     (conductances 9–88.2 µS; on-chip-learning `scorer_scaling.py` arms `C1D*/xbar`).
+     Its effective projection keeps q and k within 0.71–1.39 V.
+   - **Equations:** softmax N = 3 MSE 2.2e-5, weight 0.961 (N = 8: 2.0e-5, 0.948).
+     Star N = 3 MSE 1.9e-5, weight 0.878: it misses the stage-2 weight criterion, but
+     keeps its stage-2 selection.
+   - **New sources:** `checks/results/antibump_xbar_star_n3_seed0.json`
+     (sha256 93fb1d4f1a28c26f98e1df5237e5b765152862af5fccf95654cc9f50a514f4ff, g = 4.4270) and `antibump_xbar_softmax_n3_seed0.json`
+     (sha256 24d4ebcaf7a6643d8156863d1ade5c6a0e4a59f950c46e754fb1e2ab12b0f410, g = 4.7783). The configs use their effective
+     projections.
+   - **Specification correction:** the projection is the crossbar's effective
+     (G⁺ − G⁻)/ΣG matrix, not an unconstrained K.
+2. **Convergence hints.** One ideal single-cell netlist in the D = 8 summation test
+   converged to a wrong operating point (case 4: additivity error 0.26, the only
+   outlier). I added `.nodeset` hints for the summation-test nodes.
+3. **Transient tolerance.** The BSIM3 star transient from 0.2 V aborted at
+   abstol = 1e-18 A, on the probe of a nearly-off coupler at femtoamps. With 1e-16
+   and 1e-14 A it completes, and the endpoint equals the DC solution to 1e-13. This
+   pilot therefore uses a transient-only abstol of 1e-16 A; DC stays at 1e-20 A.
+
+**Second readiness** (before the tolerance change): ideal star and softmax and BSIM3
+softmax passed all gates. BSIM3 softmax gave MSE 5.4e-5, context/retrieval 527×, a
+cell fit of S_eff ≈ 75 against 16 drawn, and κ ≈ 0.79.
+
 ## Handoff
 
-Specification recorded; implementation in progress. Nothing launched. The
-pre-specification wiring smoke (untrained keys, both variants and models) ran in the
-scratchpad. In it the BSIM3 summed current at a match was 0.10 nA against the law's
-0.40 nA, which suggests an effective S larger than drawn.
+The launch checkpoint is this commit, merged and pushed. From a pinned checkout:
+
+```bash
+PY=/home/filip/miniconda3/envs/py312/bin/python
+R=/home/filip/analog-research/drn/results/antibump-scorer
+cd $R/source-<launch sha>
+for v in star softmax; do for m in ideal bsim3; do
+  $PY -m ebl characterize --config examples/antibump_${v}_$m.json --output-dir $R/${v}_$m
+done; done
+$PY -m ebl runs inspect $R/*/2026* --verify-artifacts --require-complete
+```
