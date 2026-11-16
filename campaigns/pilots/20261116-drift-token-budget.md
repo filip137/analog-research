@@ -48,3 +48,11 @@ Jean Zay V100 `umg@v100`, `qos_gpu-dev`, wrapper `run.slurm` (in-job deploy, nat
 Canary 25 min wall, full 110 min wall. Storage < 1 GB (no device-state checkpoint;
 the deployment is reproducible from seeds and its held hashes are recorded).
 Handles and observations: see the shared experiment note.
+
+## Result (16 November 2026)
+
+Full runs complete and valid on the Jean Zay V100: XB6 job 289103 (9m31s), DRN6 job 289106
+(66m40s). 24-h mean teacher KL, A0 → L1: XB6 0.1264 → 0.1028, DRN6 ratio3 0.1210 → 0.0755.
+Both pass the primary rule, and the L1−A0 gap at 24 h is larger than at 1 h (1.32× and 1.75×).
+The DRN LR fallback was not triggered. Shared result record: on-chip-learning
+`campaigns/drift-regimes/series/003-cmo-recovery/results/exp-005-phase1a.md`.
