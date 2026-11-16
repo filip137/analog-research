@@ -112,16 +112,74 @@ results: `/home/filip/analog-research/drn/results/antibump-scorer/`.
 softmax passed all gates. BSIM3 softmax gave MSE 5.4e-5, context/retrieval 527×, a
 cell fit of S_eff ≈ 75 against 16 drawn, and κ ≈ 0.79.
 
+## Attempts
+
+**Attempt 1** (launch `2854192`, pinned at `results/antibump-scorer/source-2854192`).
+All four bundles are complete, valid and artifact-verified, with 141 SPICE calls each:
+- `star_ideal/20261116T180132.001481Z-e52b61ea-9036e083`
+- `star_bsim3/20261116T180141.121883Z-3abde53c-0cfbd497`
+- `softmax_ideal/20261116T180145.800784Z-18a37c16-6bddb04d`
+- `softmax_bsim3/20261116T180156.999060Z-c23cd303-511e347a`
+
+## Results
+
+| Check | Star, ideal | Star, BSIM3 | Softmax, ideal | Softmax, BSIM3 | Gate |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Retrieval MSE, 36 fresh examples | 2.3e-5 | **5.2e-4** | 2.6e-5 | **5.4e-5** | ≤ 1e-3 |
+| Context average / retrieval | 1216× | **54×** | 1073× | **527×** | ≥ 5× |
+| Equation MSE (same weights) | 2.3e-5 | 1.6e-5 | 2.6e-5 | 1.9e-5 | reported |
+| SPICE vs equation RMSE | 2e-4 | 0.022 | 1e-4 | 0.006 | reported |
+| Worst absolute error | 0.013 | 0.045 | 0.014 | 0.017 | reported |
+| Uniform-control MSE | 0.028 | 0.028 | 0.028 | 0.028 | reported |
+| Summed score vs law, RMS / I_b | 0.000 | 0.264 | 0.000 | 0.263 | reported |
+| Cell fit: S_eff, κ (drawn S = 16) | 15.9, 0.665 | **75**, 0.790 | 15.9, 0.665 | **75**, 0.790 | reported |
+| D = 8 summation, additivity error | 0.0000 | 0.0008 | 0.0000 | 0.0008 | reported |
+| Settling, two starts | 1.2e-6 | 1.5e-13 | 1.1e-6 | 2.0e-5 | < 1e-3 |
+| Score resistor R (ideal element) | 172 MΩ | 145 MΩ | 185 MΩ | 156 MΩ | reported |
+| Supply power (largest case) | 24 nW | 24 nW | 24 nW | 24 nW | reported |
+| MOS count (with the 51-MOS bank) | 92 | 92 | 93 | 93 | reported |
+
+## Review
+
+**All declared gates pass for both variants in both models.** A scorer that sums
+anti-bump currents and exponentiates once, in the coupler or in an Elfadel–Wyatt
+softmax, retrieves fresh bindings at transistor level. Its cost grows linearly with
+key dimension: eight cells sum into one diode with 0.08% additivity error in BSIM3,
+and there is no 4^−D attenuation.
+
+**The BSIM3 cell is far more selective than drawn.** The fit gives S_eff ≈ 75 against
+16 drawn, matching Delbrück's observation that measured S exceeds the drawn ratio.
+Its summed currents miss the drawn law by 26% of I_b.
+
+**The softmax variant absorbs this deviation; the star does not.**
+- **Softmax:** retrieval 5.4e-5, SPICE vs equations 0.006, close to the bank's own
+  BSIM3 deviation.
+- **Star:** 5.2e-4 and 0.022.
+- **Why** (inference): a common shift in the summed currents, such as a smaller
+  pedestal, cancels in a softmax but changes the star's absolute attention level. In
+  the star it moves the null-entry balance and the a/(1+a) saturation.
+
+The softmax variant is also the one that met the stage-2 criterion at N = 8.
+
+**Not shown:**
+- a transistor realization of the 150–185 MΩ score resistor, the V_A buffer
+  (star) and V_low;
+- mismatch and noise;
+- the crossbar in the loop (shown separately in #56);
+- training at transistor level, and asymmetric or relational tasks (stage 2 was
+  inconclusive there);
+- D = 8 retrieval (only D = 8 summation was tested);
+- PDK or silicon behaviour;
+- energy.
+
+**Cost:**
+- Instrumented SPICE 20.6 s for the evidence runs, plus readiness smokes (about
+  40 s) and 4 short transient probes.
+- Raw results 41 MB.
+- No post-launch revision.
+
 ## Handoff
 
-The launch checkpoint is this commit, merged and pushed. From a pinned checkout:
-
-```bash
-PY=/home/filip/miniconda3/envs/py312/bin/python
-R=/home/filip/analog-research/drn/results/antibump-scorer
-cd $R/source-<launch sha>
-for v in star softmax; do for m in ideal bsim3; do
-  $PY -m ebl characterize --config examples/antibump_${v}_$m.json --output-dir $R/${v}_$m
-done; done
-$PY -m ebl runs inspect $R/*/2026* --verify-artifacts --require-complete
-```
+Closed. Execution, collection and review are complete, and no jobs remain. Next
+decisions belong to on-chip-learning #57 follow-ups: a transistor-level score
+resistor, mismatch, D = 8 retrieval and a training protocol for relational tasks.
