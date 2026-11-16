@@ -81,3 +81,50 @@ DRN to riri/fifi and XB to JeanZayV100. Coordinator operational ceiling48GPUh
 and72hours ending19Nov17:43UTC, including prerequisites, tests, canaries and
 retries; max2DRN5090+2XBV100 allocations. This supersedes the pending compute
 question above. New host-native canaries and measured timing precede full release.
+
+## Conditional boundary candidates — CPU preparation
+
+Root requested one immutable source containing the next candidate rates. Prepared
+native configurations under `examples/opt_cmo_drn/fault_paper_grid/boundaries/`:
+
+- `drn6-calibration-upper.json`: independent calibration arms at LR .1 and .3.
+- `drn12-calibration-upper.json`: independent calibration arms at LR .1 and .3.
+- `drn12-lora64-lower.json`: one digital rank-64 LoRA arm at LR 1e-5.
+
+These are **conditional candidates, not released runs or selected rates**. Root
+releases a model's calibration pack only if its .03 prerequisite wins under the
+predeclared rule. Release the DRN12 lower LoRA point only if 3e-5 wins. Both arms
+in a calibration pack restart from the original saved tuning deployment, rather
+than continuing one another. Root owns integration, push, remote staging, native
+input/source preparation, gates and GPU release; this preparation launches none.
+
+All fields other than the declared arm list are identical to each depth's current
+prerequisite template: 3% faults, tuning map 271001, original 1,024-sequence cohort,
+eight stored samples, 300 steps, batch 8, cosine to zero, no held-out cohorts,
+fixed source/teacher/solver and DRN LoRA initialization seed 20261113. No budget,
+source or numerical default was expanded. Native runtime wall guards are inherited;
+root's independently bounded launcher sets the actual authorized attempt limit.
+
+DRN6's completed .03 prerequisite was collected to
+`/tmp/fault-paper-grid-collected/drn6-prerequisites/run`; native artifact inspection
+and exact source/config/input/cohort/sample/deployment/300-step checks passed.
+Final dev KL is 0.0895921541779649 with zero physical writes, versus the old .01
+endpoint 0.09131397073175393 (1.88560035% improvement, outside the 1% tie band).
+The winning upper boundary remains unresolved; no rate is frozen prematurely.
+The new run uses the authorized 5090/PyTorch 2.11 environment, while old evidence
+used A100/PyTorch 2.5; input identities match, and baseline dev differs only at
+small floating-point scale. Preserve this environment distinction in review.
+
+All three candidates pass strict native parsing and native CLI request routing
+with a CPU capture handler, which never enters training or opens GPU contexts.
+Live `run_local.py --prepare` source/input hashing remains root's staging step;
+these CPU checks do not claim that future remote artifacts are already prepared.
+
+Candidate validation: **26 focused CPU tests passed in 2.43 seconds** across
+paper launcher acceptance, held-out evaluation and matched controls. Exact
+template comparisons confirmed that only the candidate arm lists changed.
+Configuration byte SHA-256 values:
+
+- DRN6 calibration upper: `7a83e38be85a123772fd3007c92a76e4dc07220d00de8c84473bf4a46c264902`.
+- DRN12 calibration upper: `b35198824da4a2539e8a2f754d3f7bb0abf7730801758f388dc3771b4d37a43d`.
+- DRN12 LoRA64 lower: `0450614bf084687cc04c17153592446d64b7d38669629f49095b381ea1107289`.
