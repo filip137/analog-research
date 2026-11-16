@@ -158,3 +158,20 @@ is published, never completion. The combined launch/evaluation/fault/control/tok
 suite passed99CPUtests in2.53s with CUDA hidden; compilation and diff checks passed.
 Only the worker, its tests and this note changed in this bounded repair. No GPU
 work, integration, merge or push; root's concurrent prerequisite rename is preserved.
+
+## Independently frozen XB12 column
+
+All XB12 learning rates are frozen from the original 3%/271001 screens and
+completion controls. Prepare 12 cells (0/1/3/5%, maps271002–271004), each nine
+arms and both full held-out cohorts:108 endpoints. Original1024 sequences,
+eight stored teacher targets,300 updates; no test-based selection. Existing
+XB12 standard-target B-scale is unchanged. Native configs live in
+`campaigns/fault-recovery-paper/lifecycles/paper-grid-20261116/paper/`.
+
+The four-step XB12 paper canary uses3%/271002 and the same native internal
+deployment path as the paper cells; it retains all arms and full test scoring.
+Run it from this newly integrated source on the identical V100 profile before
+releasing any full cell. Full jobs are bounded waves with at most two crossbar
+allocations including XB6 prerequisites, within the shared48GPUh ceiling and
+19November17:43UTC deadline. Root owns launch and recovery decisions; durable
+Sol6.1medium observers report completion/failure and resume the root.
