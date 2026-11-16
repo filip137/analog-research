@@ -964,6 +964,17 @@ EXPERIMENT_REGISTRY['crossbar_qk_attention.v1'] = ExperimentDefinition(
     parser=_crossbar_qk_parse, resolver=_crossbar_qk_resolve,
 )
 
+from ebl.schema.antibump_scorer_attention import (
+    parse_config as _antibump_parse,
+    resolve_config as _antibump_resolve,
+)
+EXPERIMENT_REGISTRY['antibump_scorer_attention.v1'] = ExperimentDefinition(
+    experiment_id='antibump_scorer_attention.v1', schema_version=1,
+    description='Summed anti-bump attention scorer (star or softmax) driving the pseudoconductance bank.',
+    supported_modes=(RunMode.CHARACTERIZE,),
+    parser=_antibump_parse, resolver=_antibump_resolve,
+)
+
 from ebl.schema.pseudo_mnist import parse_config as _pseudo_mnist_parse, resolve_config as _pseudo_mnist_resolve
 EXPERIMENT_REGISTRY['pseudo_mnist.v1'] = ExperimentDefinition(
     experiment_id='pseudo_mnist.v1', schema_version=1,

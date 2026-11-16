@@ -44,7 +44,8 @@ def model_lines(model):
 def export(values, controls, model='bsim3', nudge=0., error=(.7,-.4), transient=False, initial=.3, transient_seconds=.02, scorer=None, transient_abstol=None):
     """scorer=None uses ideal attention reference currents (controls). Otherwise
     scorer=dict(query, keys, tail_current) replaces them with the explicit MOS
-    bump-chain scorer of networks.energy_transformer.bump_scorer.
+    bump-chain scorer of networks.energy_transformer.bump_scorer;
+    scorer=dict(kind='antibump', ...) uses networks.energy_transformer.antibump_scorer.
     transient_abstol overrides the 1e-20 A absolute current tolerance in transient
     analyses only (DC analyses always use 1e-20)."""
     values = np.asarray(values)
@@ -61,21 +62,28 @@ def export(values, controls, model='bsim3', nudge=0., error=(.7,-.4), transient=
              '.temp 27', 'VDD vdd 0 1.8', f'VREF vref 0 {VREF}',
              *model_lines(model)]
     count = {'couplings':0,'anchors':0,'control_bias':0,'input_mirror':0,'read_mirror':0}
-    def mos(name,d,g,s,b,kind,group):
+    def mos(name,d,g,s,b,kind,group,width=None):
         prefix='M' if model=='bsim3' else 'X'
-        width=WIDTH/10 if kind=='pc' else WIDTH
+        if width is None:
+            width=WIDTH/10 if kind=='pc' else WIDTH
         lines.append(f'{prefix}{name} {d} {g} {s} {b} {kind} w={width:.17g} l={LENGTH:.17g}')
         count[group]+=1
     for label,current in [('h',IREF),('h0',IREF*H0)]+[(f'a{j}',None if scorer is not None else IREF*controls[j]) for j in range(3)]:
+        if label.startswith('a') and scorer is not None and scorer.get('drives_gate'):
+            continue                      # the scorer drives coupler gate g_a<j> directly
         if current is not None:
             lines.append(f'Iref_{label} vdd g_{label} {current:.17g}')
         mos('bias_'+label,'g_'+label,'g_'+label,'vref','0','nc','control_bias')
         lines.append(f'.nodeset v(g_{label})=.7')
     columns=[]
     if scorer is not None:
-        from networks.energy_transformer import bump_scorer
         count['scorer']=0
-        columns += bump_scorer.add_scorer(lines, mos, scorer)
+        if scorer.get('kind') == 'antibump':
+            from networks.energy_transformer import antibump_scorer
+            columns += antibump_scorer.add_scorer(lines, mos, scorer)
+        else:
+            from networks.energy_transformer import bump_scorer
+            columns += bump_scorer.add_scorer(lines, mos, scorer)
     for d in range(2):
         for j in range(4):
             tag=f'{j}_{d}'
