@@ -1,0 +1,12 @@
+[
+  {
+    "case_id": "xb6-n8192",
+    "path": "/tmp/hwa-20261116-fault-token-budget/campaigns/fault-recovery-paper/lifecycles/fault-token-budget-20261116/full/fault-token-budget-20261116-xb6-n8192.json",
+    "sha256": "187935b3a6255c25d61852144cc6018327048e32ad2b80308704c65ead129358"
+  },
+  {
+    "case_id": "xb12-n8192",
+    "path": "/tmp/hwa-20261116-fault-token-budget/campaigns/fault-recovery-paper/lifecycles/fault-token-budget-20261116/full/fault-token-budget-20261116-xb12-n8192.json",
+    "sha256": "d70d0fd1cb22aa8c772664c4c0234b229c82876976d3dba31f0fbbf98f2cd783"
+  }
+]

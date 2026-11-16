@@ -1,0 +1,26 @@
+{
+  "schema": "fault_token_targets.v1",
+  "status": "complete",
+  "baseline_prefix_sha256": "df73ce6615be3cdd3005d2ca0b97c03131f9236ba481bc7250edde5ff66fb01a",
+  "teacher_sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9",
+  "corpus_sha256": "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01",
+  "samples_seed": 20365833,
+  "draw_batch": 16,
+  "count": 8,
+  "gpu": "Tesla V100-SXM2-32GB",
+  "torch": "2.5.0",
+  "samples": [
+    {
+      "sequences": 8192,
+      "cohort_sha256": "69f79f1efd43067d4e8cb1045a6817b7805df63dbaca053be270d121ef9ca126",
+      "shape": [
+        8192,
+        255,
+        8
+      ],
+      "file": "teacher-samples8-n8192-51467dd7edb2.pt",
+      "file_sha256": "9cba6cf3053413ec475de796ceff171f10b4f14447e685e98930eca3311739c5",
+      "tensor_sha256": "51467dd7edb2fbce5c5c5ae4c3dd8332bc2e14c6b74dea7741fd75f0732c01a1"
+    }
+  ]
+}

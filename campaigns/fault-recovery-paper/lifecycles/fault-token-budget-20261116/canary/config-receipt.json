@@ -1,0 +1,12 @@
+[
+  {
+    "case_id": "xb6-n8192-canary",
+    "path": "/tmp/hwa-20261116-fault-token-budget/campaigns/fault-recovery-paper/lifecycles/fault-token-budget-20261116/canary/fault-token-budget-20261116-xb6-n8192-canary.json",
+    "sha256": "a4cecee421dbc53f082375fc5352ffe59106f8ab114e543855c98748071443ce"
+  },
+  {
+    "case_id": "xb12-n8192-canary",
+    "path": "/tmp/hwa-20261116-fault-token-budget/campaigns/fault-recovery-paper/lifecycles/fault-token-budget-20261116/canary/fault-token-budget-20261116-xb12-n8192-canary.json",
+    "sha256": "687c564b4b042dd6f4a05228f481e3d41039ad18e1729570d3ca05b6decd5d11"
+  }
+]

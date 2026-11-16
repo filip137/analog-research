@@ -48,3 +48,14 @@ def test_fixed_science_and_exact_case_binding(case,canary):
 def test_reject_mismatched_or_unsafe_target_binding(change):
     case=CASES[0];target=sample(case);target.update(change)
     with pytest.raises(ValueError):builder.build(case,target)
+
+
+def test_reject_wrong_teacher_before_reading_targets(tmp_path,monkeypatch):
+    import sys
+    receipt={"schema":"fault_token_targets.v1","status":"complete",
+             "baseline_prefix_sha256":builder.BASELINE_SAMPLES,"teacher_sha256":"b"*64,
+             "samples_seed":20365833,"draw_batch":16,"count":8,"samples":[]}
+    path=tmp_path/"receipt.json";path.write_text(json.dumps(receipt))
+    monkeypatch.setattr(sys,"argv",["make_configs.py",str(path),str(tmp_path),str(tmp_path/"out")])
+    with pytest.raises(ValueError,match="preparation contract"):builder.main()
+    assert not (tmp_path/"out").exists()
