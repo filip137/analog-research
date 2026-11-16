@@ -942,6 +942,17 @@ EXPERIMENT_REGISTRY['pseudoconductance_attention.v1'] = ExperimentDefinition(
 )
 
 
+from ebl.schema.bump_scorer_attention import (
+    parse_config as _bump_scorer_parse,
+    resolve_config as _bump_scorer_resolve,
+)
+EXPERIMENT_REGISTRY['bump_scorer_attention.v1'] = ExperimentDefinition(
+    experiment_id='bump_scorer_attention.v1', schema_version=1,
+    description='Explicit MOS bump-chain attention scorer driving the pseudoconductance bank.',
+    supported_modes=(RunMode.CHARACTERIZE,),
+    parser=_bump_scorer_parse, resolver=_bump_scorer_resolve,
+)
+
 from ebl.schema.pseudo_mnist import parse_config as _pseudo_mnist_parse, resolve_config as _pseudo_mnist_resolve
 EXPERIMENT_REGISTRY['pseudo_mnist.v1'] = ExperimentDefinition(
     experiment_id='pseudo_mnist.v1', schema_version=1,

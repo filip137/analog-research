@@ -41,14 +41,23 @@ def model_lines(model):
     ]
 
 
-def export(values, controls, model='bsim3', nudge=0., error=(.7,-.4), transient=False, initial=.3, transient_seconds=.02):
-    values, controls = np.asarray(values), np.asarray(controls)
-    if values.shape != (3,2) or controls.shape != (3,):
+def export(values, controls, model='bsim3', nudge=0., error=(.7,-.4), transient=False, initial=.3, transient_seconds=.02, scorer=None, transient_abstol=None):
+    """scorer=None uses ideal attention reference currents (controls). Otherwise
+    scorer=dict(query, keys, tail_current) replaces them with the explicit MOS
+    bump-chain scorer of networks.energy_transformer.bump_scorer.
+    transient_abstol overrides the 1e-20 A absolute current tolerance in transient
+    analyses only (DC analyses always use 1e-20)."""
+    values = np.asarray(values)
+    if scorer is None:
+        controls = np.asarray(controls)
+        if controls.shape != (3,) or np.min(controls) < 0:
+            raise ValueError('Expected three nonnegative controls')
+    if values.shape != (3,2):
         raise ValueError('Expected three keys and two features')
-    if np.min(OFFSET+values) <= 0 or np.min(controls) < 0:
-        raise ValueError('Positive input currents and nonnegative controls required')
+    if np.min(OFFSET+values) <= 0:
+        raise ValueError('Positive input currents required')
     lines = ['Biased three-key two-feature pseudoconductance attention',
-             '.options reltol=1e-7 abstol=1e-20 vntol=1e-10 gmin=1e-18 method=gear maxord=2',
+             '.options reltol=1e-7 abstol='+(f'{transient_abstol:.3g}' if transient and transient_abstol is not None else '1e-20')+' vntol=1e-10 gmin=1e-18 method=gear maxord=2',
              '.temp 27', 'VDD vdd 0 1.8', f'VREF vref 0 {VREF}',
              *model_lines(model)]
     count = {'couplings':0,'anchors':0,'control_bias':0,'input_mirror':0,'read_mirror':0}
@@ -57,11 +66,16 @@ def export(values, controls, model='bsim3', nudge=0., error=(.7,-.4), transient=
         width=WIDTH/10 if kind=='pc' else WIDTH
         lines.append(f'{prefix}{name} {d} {g} {s} {b} {kind} w={width:.17g} l={LENGTH:.17g}')
         count[group]+=1
-    for label,current in [('h',IREF),('h0',IREF*H0)]+[(f'a{j}',IREF*controls[j]) for j in range(3)]:
-        lines.append(f'Iref_{label} vdd g_{label} {current:.17g}')
+    for label,current in [('h',IREF),('h0',IREF*H0)]+[(f'a{j}',None if scorer is not None else IREF*controls[j]) for j in range(3)]:
+        if current is not None:
+            lines.append(f'Iref_{label} vdd g_{label} {current:.17g}')
         mos('bias_'+label,'g_'+label,'g_'+label,'vref','0','nc','control_bias')
         lines.append(f'.nodeset v(g_{label})=.7')
     columns=[]
+    if scorer is not None:
+        from networks.energy_transformer import bump_scorer
+        count['scorer']=0
+        columns += bump_scorer.add_scorer(lines, mos, scorer)
     for d in range(2):
         for j in range(4):
             tag=f'{j}_{d}'
