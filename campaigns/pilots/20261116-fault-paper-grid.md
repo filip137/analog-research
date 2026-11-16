@@ -186,6 +186,39 @@ native lifecycle, launch-worker and fault-tuning suite passed 396 CPU tests in
 2.41 seconds. No GPU retry or source-state mutation was
 performed by the implementing monitor.
 
+## Standard-target XB6 scale and analog screen preparation
+
+Full fit 299719 completed 300 updates in 165 allocation seconds. Fresh native
+inspection and identity checks verified rank 16, LR 0.003, the original
+1,024-sequence recovery cohort, standard `df73ce66…` targets, deployment
+`611a0aab…` and source `568e752`. The frozen `make_b_scale.py` derived a new
+artifact with CUDA hidden; all twelve vectors exactly equal the per-output-row
+absolute maxima of the saved digital B matrices and have finite, nonnegative
+values with the expected shapes. The old scale remains unchanged.
+
+New scale name: `fault-paper-bscale-r16-3em3-standard-df73ce66`; SHA-256:
+`a9870ab948fd976735c1d389bfd51282229a8a499c716b3b6f9895b45289b740`.
+The validated receipt, source run and state identity are retained in the shared
+launch record `xb6-standard-bscale-receipt.json`; root reviewed and accepted it.
+There are 46 zero scale channels; the existing runtime minimum of `1e-12` is
+unchanged. The measured fit endpoint KL is 0.0613366; it is the predeclared scale
+fallback, not a new digital-LoRA LR selection.
+
+The full analog screen and its explicit canary pin that same new scale and
+original tuning deployment. Both contain the six predeclared rates
+`[1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2]`, rank 16, map 271001 and 3% faults.
+The full grid uses 300 updates per rate; the readiness canary uses two updates
+per rate with development evaluation every update. Neither uses held-out cohorts.
+Only the full development endpoints may select the paper LR. Root will bind the
+same new source, scale, worker and 30-minute V100 profile for the readiness gate
+and full grid release. This implementing monitor submitted no GPU job.
+
+Both native lifecycle checks passed. The combined analog preparation, source
+provenance, launch worker, fault-tuning and evaluation suite passed 106 CPU tests
+in 2.47 seconds. Tests ensure canary/full science and scales match, only the
+declared schedule differs, HWA provenance is preserved and only the tuning map
+is selected. Runtime code and numerical laws were not changed.
+
 ## Independently frozen XB12 column
 
 All XB12 learning rates are frozen from the original 3%/271001 screens and
