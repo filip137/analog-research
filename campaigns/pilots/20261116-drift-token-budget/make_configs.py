@@ -1,4 +1,4 @@
-"""Derive the crossbar drift token-budget lifecycles from the verified fault token-budget XB6 ones.
+"""Derive the crossbar drift token-budget lifecycles from the verified fault token-budget XB6/XB12 ones.
 
 Changed: no analog-LoRA tiles, the fault-free (0 %) case with in-job deployment (naive P&V + verify rewrite, as
 the fault study), the untreated hold arm, and the AIHWKit CMO x4 log-time drift with the
@@ -23,10 +23,10 @@ DRIFT = {
 }
 
 
-def build(kind):
-    name = 'fault-token-budget-20261116-xb6-n8192' + ('-canary' if kind == 'canary' else '')
+def build(model, kind):
+    name = f'fault-token-budget-20261116-{model}-n8192' + ('-canary' if kind == 'canary' else '')
     doc = json.loads((SOURCE / kind / (name + '.json')).read_text())
-    doc['lifecycle_id'] = 'drift-token-budget-20261116-xb6-m4' + ('-canary' if kind == 'canary' else '')
+    doc['lifecycle_id'] = f'drift-token-budget-20261116-{model}-m4' + ('-canary' if kind == 'canary' else '')
     doc['defects']['cases'] = [{'array_concentration': None, 'die_concentration': None, 'kind': 'none', 'rate_ppm': 0}]
     f = doc['fault_tuning']
     f['deployment'] = None
@@ -46,12 +46,13 @@ def build(kind):
 
 
 def main():
-    for kind in ('full', 'canary'):
-        doc = build(kind)
-        out = TARGET / kind / (doc['lifecycle_id'] + '.json')
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(doc, indent=2) + '\n')
-        print(out)
+    for model in ('xb6', 'xb12'):
+        for kind in ('full', 'canary'):
+            doc = build(model, kind)
+            out = TARGET / kind / (doc['lifecycle_id'] + '.json')
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(doc, indent=2) + '\n')
+            print(out)
 
 
 if __name__ == '__main__':
