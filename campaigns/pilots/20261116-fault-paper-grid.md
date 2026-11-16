@@ -159,6 +159,33 @@ suite passed99CPUtests in2.53s with CUDA hidden; compilation and diff checks pas
 Only the worker, its tests and this note changed in this bounded repair. No GPU
 work, integration, merge or push; root's concurrent prerequisite rename is preserved.
 
+## Paper-canary provenance incident and config repair
+
+XB12 paper canary 299780 used source `72226be` and exited 1:0 after 107 seconds,
+before deployment or recovery. `ebl/runtime/fault_tuning.py` called the frozen
+HWA source check, which rejected the changed `devices` section at
+`ebl/schema/lifecycle.py:697`. The paper generator had narrowed
+`devices.assignment_seeds` from the source's `[271001, 271002, 271003, 271004,
+271005]` to the individual deployment seed. Source provenance fingerprints the
+whole devices section; static plan/dry-run checks had not exercised this source
+artifact check. Root stopped the old CPU preparation and retained its receipts.
+
+The twelve committed XB12 paper configs and its paper canary now preserve the
+frozen template's entire devices section verbatim. Each requested seed remains
+in `fault_tuning.assignment_seed`, which selects exactly one native tuning stage;
+the declared per-cell fault rate and all other scientific settings remain intact.
+Existing source provenance validation stays active. Root owns the corresponding
+shared-generator correction, source integration and a new live canary before
+paper release. Failed source/output evidence remains immutable.
+
+The new CPU regression constructs the frozen template's native HWA provenance,
+verifies all twelve paper configs plus canary against it, checks the selected
+stage uses only its requested map, and covers zero and nonzero faults. The old
+singleton devices setting is an explicit negative test. The combined provenance,
+native lifecycle, launch-worker and fault-tuning suite passed 396 CPU tests in
+2.41 seconds. No GPU retry or source-state mutation was
+performed by the implementing monitor.
+
 ## Independently frozen XB12 column
 
 All XB12 learning rates are frozen from the original 3%/271001 screens and

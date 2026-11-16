@@ -35,7 +35,11 @@
   },
   "devices": {
     "assignment_seeds": [
-      271004
+      271001,
+      271002,
+      271003,
+      271004,
+      271005
     ],
     "endpoint_seed_offset": 10000,
     "model": "aihwkit_1.1.0_reram_cmo",
