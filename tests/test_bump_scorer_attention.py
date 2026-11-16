@@ -21,6 +21,10 @@ def test_scorer_replaces_attention_sources_only():
     assert 'Vsc_2 so2 g_a2 0' in text
     default, _, base = export(V, np.array([.001, .001, 5.]))
     assert sum(base.values()) == 51 and 'scorer' not in base and 'Vsc_' not in default
+    assert 'abstol=1e-20' in default
+    tr, _, _ = export(V, np.array([.2, .6, 1.5]), transient=True, transient_abstol=1e-18)
+    dc, _, _ = export(V, np.array([.2, .6, 1.5]), transient_abstol=1e-18)
+    assert 'abstol=1e-18' in tr and 'abstol=1e-20' in dc
 
 
 def test_law_gradient_matches_finite_difference():

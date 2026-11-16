@@ -113,6 +113,31 @@ the total is 97 MOS.
 recovered κ = 0.6664, against the true 2/3. The ideal-SPICE unit test tolerates a
 numerical floor of about 5 fA at starved branches.
 
+## Attempts
+
+**Attempt 1** (launch `ea426d5`, pinned at `results/bump-scorer-attention/source-ea426d5`):
+- **Ideal:** completed and passed every gate. Bundle `/home/filip/analog-research/drn/results/bump-scorer-attention/ideal/20261116T170120.648113Z-2c15b415-bf5181a8`.
+- **BSIM3:** all 103 DC cases completed. Then ngspice aborted `transient-0`, the
+  0.2 V start, at t = 2.5 µs with "timestep too small" on the probe of coupler 2,
+  feature 1. The runtime caught the zero-exit abort, as designed. Failed bundle
+  retained: `/home/filip/analog-research/drn/results/bump-scorer-attention/bsim3/20261116T170130.466080Z-4cf6ea47-c86d2aa0`.
+
+**Diagnosis** (scratchpad probes, recorded here):
+- At the derivative point a₂ ≈ 3.6e-5, so coupler 2 carries femtoamp currents.
+- The scorer-free #50 circuit starts from 0.2 V without trouble, even with
+  controls of 1e-4.
+- Neither more transient iterations (`itl4` = 100 or 1000) nor 1–10 fF of
+  scorer-node capacitance helps.
+- Replacing the absolute current tolerance abstol = 1e-20 A by any value from
+  1e-18 to 1e-15 A lets the transient complete. The settled output is identical
+  across that range, and within 9.4e-5 of the DC solution.
+
+**Revision 1, a solver setting:** transient analyses use abstol = 1e-18 A, through
+a new `transient_abstol` argument. DC analyses keep 1e-20. The default #50
+netlists, DC and transient, are byte-identical to `ea426d5`. No circuit, case,
+value or gate changed. Both models are relaunched from the revision commit. The
+attempt-1 bundles stay as evidence. This counts as revision 1 of the 3 allowed.
+
 ## Handoff
 
 The launch checkpoint is this commit, once merged into `refactor/training-core`

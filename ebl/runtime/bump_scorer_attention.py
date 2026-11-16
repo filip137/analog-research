@@ -23,6 +23,7 @@ EPSILON = 1e-3              # volts, central differences of query/key voltages
 BETA = .001
 ERROR = np.array([.7, -.4])
 IDEAL_KAPPA = 2 / 3
+TRANSIENT_ABSTOL = 1e-18     # revision 1: 1e-20 A aborted the 0.2 V BSIM3 start (fA branch currents)
 
 
 def relative_error(actual, expected):
@@ -131,7 +132,8 @@ def characterize(c, store, exe):
     est_lk = g[:, None] * law_ak
 
     transient = [run(f'transient-{i}', BASE_VALUES, q0, BASE_KEYS, transient=True, initial=s,
-                     transient_seconds=c.transient_seconds) for i, s in enumerate([.2, .4])]
+                     transient_seconds=c.transient_seconds, transient_abstol=TRANSIENT_ABSTOL)
+                 for i, s in enumerate([.2, .4])]
 
     sel_mse = float(np.mean((sel_out - targets) ** 2))
     uni_mse = float(np.mean((uni_out - targets) ** 2))

@@ -41,10 +41,12 @@ def model_lines(model):
     ]
 
 
-def export(values, controls, model='bsim3', nudge=0., error=(.7,-.4), transient=False, initial=.3, transient_seconds=.02, scorer=None):
+def export(values, controls, model='bsim3', nudge=0., error=(.7,-.4), transient=False, initial=.3, transient_seconds=.02, scorer=None, transient_abstol=None):
     """scorer=None uses ideal attention reference currents (controls). Otherwise
     scorer=dict(query, keys, tail_current) replaces them with the explicit MOS
-    bump-chain scorer of networks.energy_transformer.bump_scorer."""
+    bump-chain scorer of networks.energy_transformer.bump_scorer.
+    transient_abstol overrides the 1e-20 A absolute current tolerance in transient
+    analyses only (DC analyses always use 1e-20)."""
     values = np.asarray(values)
     if scorer is None:
         controls = np.asarray(controls)
@@ -55,7 +57,7 @@ def export(values, controls, model='bsim3', nudge=0., error=(.7,-.4), transient=
     if np.min(OFFSET+values) <= 0:
         raise ValueError('Positive input currents required')
     lines = ['Biased three-key two-feature pseudoconductance attention',
-             '.options reltol=1e-7 abstol=1e-20 vntol=1e-10 gmin=1e-18 method=gear maxord=2',
+             '.options reltol=1e-7 abstol='+(f'{transient_abstol:.3g}' if transient and transient_abstol is not None else '1e-20')+' vntol=1e-10 gmin=1e-18 method=gear maxord=2',
              '.temp 27', 'VDD vdd 0 1.8', f'VREF vref 0 {VREF}',
              *model_lines(model)]
     count = {'couplings':0,'anchors':0,'control_bias':0,'input_mirror':0,'read_mirror':0}
