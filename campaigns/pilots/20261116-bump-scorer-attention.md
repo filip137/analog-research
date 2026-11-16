@@ -85,6 +85,47 @@ Branch and worktree: `drn/20261116-bump-scorer-attention`,
 `/home/filip/analog-research/worktrees/drn-20261116-bump-scorer-attention`.
 Native results: `/home/filip/analog-research/drn/results/bump-scorer-attention/`.
 
+## Implementation
+
+**Code:**
+- `networks/energy_transformer/bump_scorer.py`: the scorer netlist, its law and
+  the law's derivatives.
+- An optional `scorer=` hook in `pseudoconductance.export`. The default 51-MOS
+  netlist is unchanged; a test asserts this.
+- `ebl/schema/bump_scorer_attention.py` and `ebl/runtime/bump_scorer_attention.py`.
+- Configs `examples/bump_scorer_ideal.json` and `examples/bump_scorer_bsim3.json`.
+- `tests/test_bump_scorer_attention.py`.
+
+The scorer has 46 MOS: 15 per key plus one shared tail reference. With the bank,
+the total is 97 MOS.
+
+**Fixed details** (set before launch, from the specification):
+- The law sweep and derivative point use keys (0.85, 0.90), (1.20, 0.95) and
+  (1.00, 1.25) V, with the #50 base values.
+- The κ fit grid-searches κ in [0.4, 1.2] with a free log-amplitude, over sweep
+  currents of at least 1e-3.
+- The far query is (1.6, 1.6) V.
+- The law derivative is the measured a_j times the law's d ln a/dq, at the fitted κ
+  (2/3 for the ideal model).
+
+**Readiness:** a dirty-tree smoke of the ideal model, at the scratchpad path
+`bump-readiness/ideal`. It passed all gates in 105 SPICE calls and 7.2 s. The fit
+recovered κ = 0.6664, against the true 2/3. The ideal-SPICE unit test tolerates a
+numerical floor of about 5 fA at starved branches.
+
 ## Handoff
 
-Specification recorded; implementation in progress. Nothing launched.
+The launch checkpoint is this commit, once merged into `refactor/training-core`
+and pushed. Run from a pinned checkout of that commit:
+
+```bash
+PY=/home/filip/miniconda3/envs/py312/bin/python
+R=/home/filip/analog-research/drn/results/bump-scorer-attention
+cd $R/source-<launch sha>
+$PY -m ebl characterize --config examples/bump_scorer_ideal.json --output-dir $R/ideal
+$PY -m ebl characterize --config examples/bump_scorer_bsim3.json --output-dir $R/bsim3
+$PY -m ebl runs inspect $R/ideal/<run> $R/bsim3/<run> --verify-artifacts --require-complete
+```
+
+The executing agent owns both short runs, which are expected to take under a
+minute each.

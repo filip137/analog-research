@@ -867,6 +867,9 @@ def _default_characterize_handler(
     if request.definition.experiment_id == 'pseudoconductance_attention.v1':
         from ebl.runtime.pseudoconductance_attention import run_characterize
         return run_characterize(request)
+    if request.definition.experiment_id == 'bump_scorer_attention.v1':
+        from ebl.runtime.bump_scorer_attention import run_characterize
+        return run_characterize(request)
     if request.definition.experiment_id == "convergent_energy_transformer.v1":
         from ebl.runtime.convergent_energy_transformer import run_characterize
         return run_characterize(request)
