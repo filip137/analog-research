@@ -39,3 +39,21 @@ No execution window is authorized or assigned; the previous deadline expired.
 Native target receipts, strict configs, plans, live canaries and monitored
 release remain future execution work. No GPU job or data-generation job
 was launched for this plan. Prior exp-004 missing controls stay separate.
+
+## Execution authorized — 16 November
+
+User superseded plan-only: launch all four models on Jean Zay V100, with
+GPT-6.1 Sol medium monitors and verified root wake-up. Root thread
+01a1e42f-9884-72d3-bb0c-dfa0fe071c5b was successfully resumed by one
+`codex queue --resume` callback after observed idle, with new-turn and nonce
+acknowledgement evidence in the shared launch/wake and monitor-drn records.
+
+Retain8GPUh total and20GB storage;max2V100 concurrent;coordinator latest
+finish17Nov09CET. This is a new execution authorization. V100 DRN throughput
+must be measured before final full-job wall caps; do not rely on A100 timing.
+Native source math is unchanged. New preparation streams one common8k teacher
+target draw, guarded by exact historical1024 prefix, then binds strict native
+configs to its real hashes. Canary configs retain full8192 data with32 updates;
+full runs have2400 updates and development every100. DRN CPUthreads10 and
+V100-compatible wrapper replace the A100-only environment. No data/target hash
+placeholder may be used in a live run. Root owns retries/cancellations/decisions.
