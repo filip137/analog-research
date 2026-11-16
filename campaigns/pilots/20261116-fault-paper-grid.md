@@ -73,3 +73,11 @@ paper-evaluation tests plus existing fault-tuning, control and recovery tests).
 `8e73b6b43aafb92b8b52e11cdd060d573331fae410350cf2427f3eeba640e224`,
 not the synthetic HWA training corpus. Root separately binds the actual cohort
 hashes and generates configurations.
+
+## Placement authorized16November17:43UTC
+
+User selected riri/fifi RTX5090s in parallel, with the rest on V100s. Root assigns
+DRN to riri/fifi and XB to JeanZayV100. Coordinator operational ceiling48GPUh
+and72hours ending19Nov17:43UTC, including prerequisites, tests, canaries and
+retries; max2DRN5090+2XBV100 allocations. This supersedes the pending compute
+question above. New host-native canaries and measured timing precede full release.
