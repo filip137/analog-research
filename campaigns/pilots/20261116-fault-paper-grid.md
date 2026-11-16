@@ -121,11 +121,40 @@ profile. A Git-backed snapshot with only its receipt excluded retains clean-sour
 identity. The existing manifest helper is tuning-specific; it does not generate
 these new unit/corpus bindings automatically.
 
-The existing worker validates native artifacts, arm labels and finite development
-KL, but root's new semantic gate must additionally require both named held-out
-records per all-arm endpoint, exact cohort identities/counts, finite scores,
-unchanged physical/correction state, calibration/LoRA invariants and native
-completion. `jz_prepare.sh` logs failed preparation units without propagating a
+The repaired worker validates native artifacts, arm/method coverage, finite
+development curves and complete updates, plus both named held-out records per
+all-arm endpoint with exact cohort identities/counts, finite KL and explicit
+unchanged-state evidence. Root's live semantic gate still reconciles physical/
+correction state, calibration/LoRA invariants, timing and native completion.
+`jz_prepare.sh` logs failed preparation units without propagating a
 nonzero aggregate exit: inspect each preparation result, or fix this wrapper
 before relying on it. These findings were reported to root; no worker or wrapper
-changes are included in this bounded canary-config preparation.
+changes were included in the canary-config preparation commit. The separately
+assigned worker repair below closes its completion-validation gap.
+
+## Launch-worker completion and source guards
+
+`launch/worker.py` now validates every native endpoint before publishing
+`complete.json`: exact arm labels/order and methods with no duplicates, finite
+final development KL/losses, configured training-loss count and final curve step,
+and zero updates/empty curves for holds. Every configured held-out cohort must
+appear exactly once with its exact name/corpus/file-and-tensor pins/split/slice,
+finite full-teacher KL, correct sequence and next-token-position counts, and
+`state_unchanged` explicitly true. Legacy configs without evaluation cohorts
+retain their no-held-out path. Test scores are validation evidence, not selection.
+
+The manifest optionally pins `source_receipt_sha256`; new root manifests set it.
+Before preparation or execution, the launch-directory worker's own file hash must
+equal the tracked worker in the declared source. Receipt file hashes are checked
+with resolved paths constrained to that source. Thus a stale external worker,
+changed receipt or changed tracked source cannot silently pass the source gate.
+
+Worker regressions include malformed/missing/duplicate/unexpected held-out rows,
+every cohort-identity field, nonfinite KL, wrong prediction counts, false state
+guards, incomplete/duplicate/wrong arm coverage, legacy behavior and stale source/
+receipt/worker rejection. A main-path regression emulates successful native
+execution/inspection followed by missing held-out evidence: only a failed receipt
+is published, never completion. The combined launch/evaluation/fault/control/token
+suite passed99CPUtests in2.53s with CUDA hidden; compilation and diff checks passed.
+Only the worker, its tests and this note changed in this bounded repair. No GPU
+work, integration, merge or push; root's concurrent prerequisite rename is preserved.

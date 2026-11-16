@@ -40,6 +40,81 @@ def call(*command):
     subprocess.run(list(map(str, command)), check=True)
 
 
+def verify_source(manifest, *, executed_worker=None):
+    """Bind the launch-directory worker copy and optional pinned receipt to source."""
+    source = Path(manifest['source']).resolve()
+    receipt = source / 'source_snapshot.json'
+    expected = manifest.get('source_receipt_sha256')
+    if expected is not None and digest(receipt) != expected:
+        raise ValueError('Pinned source receipt changed.')
+    tracked_worker = source / 'campaigns/fault-recovery-paper/launch/worker.py'
+    executing = Path(__file__) if executed_worker is None else Path(executed_worker)
+    if digest(executing) != digest(tracked_worker):
+        raise ValueError('Executed worker copy differs from the tracked source worker.')
+    for name, sha in read(receipt)['files'].items():
+        path = (source / name).resolve()
+        if not path.is_relative_to(source) or digest(path) != sha:
+            raise ValueError(f'Staged code changed: {name}')
+    return source, receipt
+
+
+def finite(value):
+    return type(value) in (float, int) and math.isfinite(value)
+
+
+def validate_measurements(spec, rows, *, sequence_length=256):
+    """Fail closed before publishing completion, including endpoint-only test scores."""
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        raise ValueError('Expected native measurement rows.')
+    labels = [row.get('label') for row in rows]
+    if (labels != [arm['label'] for arm in spec['arms']]
+            or len(set(labels)) != len(labels)):
+        raise ValueError('Missing, duplicate or unexpected arms.')
+    cohorts = spec.get('evaluation_cohorts', [])
+    names = [cohort['name'] for cohort in cohorts]
+    if len(set(names)) != len(names):
+        raise ValueError('Duplicate configured evaluation cohort names.')
+    for arm, row in zip(spec['arms'], rows):
+        if row.get('method') != arm['method']:
+            raise ValueError(f"Wrong method for arm {arm['label']}.")
+        if not isinstance(row.get('final'), dict) or not finite(row['final'].get('teacher_kl')):
+            raise ValueError('Nonfinite or missing development KL.')
+        losses, curve = row.get('train_losses', []), row.get('curve')
+        if (not isinstance(losses, list) or not isinstance(curve, list)
+                or any(not isinstance(point, dict) for point in curve)):
+            raise ValueError('Missing training/curve records.')
+        if arm['method'] in ('hold_naive', 'hold_fault_aware'):
+            if losses or curve:
+                raise ValueError('A hold must have zero training updates.')
+        else:
+            steps = spec['schedule']['steps']
+            if (len(losses) != steps or not all(finite(loss) for loss in losses)
+                    or not curve or curve[-1].get('step') != steps):
+                raise ValueError('Incomplete training updates or final curve endpoint.')
+            if (row['final'] != curve[-1].get('development')
+                    or not all(finite(point.get('development', {}).get('teacher_kl')) for point in curve)):
+                raise ValueError('Invalid development curve or mismatched final endpoint.')
+        held = row.get('held_out', [])
+        if not isinstance(held, list) or any(not isinstance(point, dict) for point in held):
+            raise ValueError('Expected named held_out measurement records.')
+        observed = [point.get('name') for point in held]
+        if (len(observed) != len(names) or any(not isinstance(name, str) for name in observed)
+                or set(observed) != set(names) or len(set(observed)) != len(observed)):
+            raise ValueError('Missing, duplicate or unexpected held-out cohorts.')
+        by_name = {point['name']: point for point in held}
+        for cohort in cohorts:
+            point = by_name[cohort['name']]
+            if any(point.get(key) != value for key, value in cohort.items()):
+                raise ValueError(f"Held-out identity mismatch: {cohort['name']}.")
+            scores = point.get('scores', {})
+            if (not isinstance(scores, dict) or not finite(scores.get('teacher_kl'))
+                    or scores.get('sequences') != cohort['sequences']
+                    or scores.get('scored_tokens') != cohort['sequences'] * (sequence_length - 1)):
+                raise ValueError(f"Invalid held-out scores/counts: {cohort['name']}.")
+            if point.get('state_unchanged') is not True:
+                raise ValueError(f"Held-out scoring changed state: {cohort['name']}.")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('manifest', type=Path)
@@ -50,14 +125,10 @@ def main():
     m = read(args.manifest)
     if args.unit not in m['units']:
         raise ValueError(f'Unknown unit {args.unit!r}.')
-    source = Path(m['source'])
+    source, receipt = verify_source(m)
     os.chdir(source)
     os.environ['EBL_CORPUS_ROOT'] = m['corpus_root']
     os.environ['EBL_CAMPAIGN_STREAM'] = '1'
-    receipt = source / 'source_snapshot.json'
-    for name, sha in read(receipt)['files'].items():
-        if digest(source / name) != sha:
-            raise ValueError(f'Staged code changed: {name}')
     for key in ('teacher', 'weights'):
         if digest(m[key]) != m[key + '_sha256']:
             raise ValueError(f'Pinned {key} changed.')
@@ -68,7 +139,8 @@ def main():
     root = Path(m['output']) / args.unit
     root.mkdir(parents=True, exist_ok=True)
     config = source / m['units'][args.unit]
-    spec = read(config)['fault_tuning']
+    config_doc = read(config)
+    spec = config_doc['fault_tuning']
     plan = root / 'plan'
     if args.prepare:
         call(sys.executable, '-m', 'ebl', 'lifecycle', 'plan', config, '--teacher-weights', m['teacher'],
@@ -94,11 +166,7 @@ def main():
         run = complete[-1].parent
         call(sys.executable, '-m', 'ebl', 'runs', 'inspect', run, '--verify-artifacts', '--require-complete')
         rows = read(run / 'measurements.json')
-        labels = [r['label'] for r in rows]
-        if labels != [a['label'] for a in spec['arms']]:
-            raise ValueError('Missing, duplicate or unexpected arms.')
-        if not all(math.isfinite(r['final']['teacher_kl']) for r in rows):
-            raise ValueError('Nonfinite development KL.')
+        validate_measurements(spec, rows, sequence_length=config_doc['data']['sequence_length'])
         summary = read(run / 'summary.json')
         write(root / 'complete.json', {'schema': 'fault_tuning.unit.complete.v1', 'unit': args.unit, 'run': str(run),
               'arms': {r['label']: r['final']['teacher_kl'] for r in rows},
