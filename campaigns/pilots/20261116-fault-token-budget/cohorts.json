@@ -1,0 +1,31 @@
+{
+  "corpus": "wikitext-2-raw-v1",
+  "corpus_sha256": "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01",
+  "inventory": {
+    "train_tokens": 2391885,
+    "validation_tokens": 247290,
+    "test_tokens": 283288,
+    "train_blocks256": 9343
+  },
+  "sequence_length": 256,
+  "selection_seed": 20261104,
+  "cohorts": [
+    {
+      "sequences": 1024,
+      "sha256": "c919329dbe0d545d7614daf3d8f790881e944cd80ff53fff88fc19d9697f7762",
+      "input_tokens": 262144,
+      "prediction_positions": 261120,
+      "steps": 300,
+      "processed_input_tokens": 614400
+    },
+    {
+      "sequences": 8192,
+      "sha256": "69f79f1efd43067d4e8cb1045a6817b7805df63dbaca053be270d121ef9ca126",
+      "input_tokens": 2097152,
+      "prediction_positions": 2088960,
+      "steps": 2400,
+      "processed_input_tokens": 4915200
+    }
+  ],
+  "baseline_role": "1024-sequence cohort is historical reference only; all four new runs use8192 sequences"
+}

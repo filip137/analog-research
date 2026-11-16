@@ -1,0 +1,54 @@
+[
+  {
+    "case_id": "drn6-n8192",
+    "backend": "drn",
+    "model": "drn6",
+    "method": "noisy",
+    "learning_rate": 0.0003,
+    "sequences": 8192,
+    "cohort_sha256": "69f79f1efd43067d4e8cb1045a6817b7805df63dbaca053be270d121ef9ca126",
+    "steps": 2400,
+    "batch": 8,
+    "input_pool_tokens": 2097152,
+    "processed_input_tokens": 4915200,
+    "scored_positions": 4896000,
+    "wall_minutes": 120,
+    "status": "planned_only",
+    "development_every_steps": 100,
+    "report_steps": [
+      0,
+      100,
+      200,
+      300,
+      600,
+      1200,
+      2400
+    ]
+  },
+  {
+    "case_id": "drn12-n8192",
+    "backend": "drn",
+    "model": "drn12",
+    "method": "noisy",
+    "learning_rate": 0.0003,
+    "sequences": 8192,
+    "cohort_sha256": "69f79f1efd43067d4e8cb1045a6817b7805df63dbaca053be270d121ef9ca126",
+    "steps": 2400,
+    "batch": 8,
+    "input_pool_tokens": 2097152,
+    "processed_input_tokens": 4915200,
+    "scored_positions": 4896000,
+    "wall_minutes": 120,
+    "status": "planned_only",
+    "development_every_steps": 100,
+    "report_steps": [
+      0,
+      100,
+      200,
+      300,
+      600,
+      1200,
+      2400
+    ]
+  }
+]
