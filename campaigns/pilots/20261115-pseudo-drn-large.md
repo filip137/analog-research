@@ -1,5 +1,98 @@
 # Larger pseudoconductance attention–DRN on CIFAR-10
 
+## Final review — 16 November 2026
+
+**Reviewed: useful learning at larger scale, with time-limited primary coverage.**
+The ideal attention–DRN hybrid reaches **83.27% CIFAR-10 test accuracy**;
+the digital-MLP architecture control reaches **87.17%**, a **3.90 percentage-point**
+gap. Both native runs and collection finished successfully. This closes the
+bounded experiment; it does not claim that the primary completed all 80 epochs
+or that an analog hardware advantage has been demonstrated.
+
+| Case | Parameters | Completed training | Selected epoch | Selected validation | Test (10k) | Native elapsed |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| Attention–DRN, local EP | 7,902,474 | 76 epochs + 325 updates (53,829 total) | 76 | 83.08% | **83.27%** | 8 h 55 m 55 s |
+| Attention + digital MLP, BPTT | 4,756,746 | 80 epochs (56,320 updates) | 79 | 87.22% | **87.17%** | 1 h 48 m 24 s |
+
+The primary stopped at its frozen 9-hour case allowance with a 5-minute final
+save/evaluation reserve (`budget_limit`), at 95.58% of planned updates. The
+control completed its planned epochs. These are different architectures and
+parameter counts, with unequal achieved training coverage; they do not isolate
+the EP estimator. As a retrospective check using existing epoch metrics, at
+completed epoch 76 the same validation split gives DRN 83.08% versus digital
+86.88% (3.80 points), so the observed gap already exists before the control's
+extra four epochs. This is one seed, not a population estimate.
+
+**Checkpoint selection detail:** the runtime selects among completed-epoch
+validation checkpoints. The DRN's terminal partial-epoch checkpoint has 83.34%
+validation accuracy, but was not promoted into the selected checkpoint by the
+implemented terminal path. Its test accuracy was not measured. The headline
+83.27% test result belongs to epoch 76 / update 53,504, selected before test
+inspection; no retrospective reselection or additional test evaluation was run.
+Digital selection is epoch 79 / update 55,616. This selection limitation is
+preserved in the evidence rather than rewriting the result.
+
+All six primary probes (initial, epochs 20/40/60, final, selected best) pass
+on the same two validation examples across parameter groups and globally.
+Worst EP versus 32-step BPTT relative L2 is **0.6931%**, minimum cosine
+**0.99997598**, at `blocks.0.drn.raw1` in the selected-best probe. The 32/64-step
+BPTT gradient discrepancy and forward discrepancy are zero in these recorded
+checks. The seven digital-control probes pass too; their attention-EP diagnostic
+worst relative error is 0.05230% (digital training itself used BPTT).
+These fixed-cohort checks establish numerical agreement at the sampled states,
+not a uniform guarantee over every example, step or physical transistor.
+
+[Validation learning curves](https://github.com/filip137/on-chip-learning/blob/main/explorations/pseudo-drn-large-20261115/learning.png)
+
+**Interpretation.** The larger hybrid learns substantially beyond the earlier
+shallow 45.31% test pilot, but the architecture, training duration and recipe
+changed together, so this is not an isolated scaling effect. Neither case
+reaches the aspirational 90% reference. The measured gradients do not point to
+a large local EP approximation error on the checked cohort; the accuracy gap
+cannot be assigned to EP without a same-architecture DRN/BPTT training control.
+Attention scoring, projections, normalization, classifier and optimizer remain
+digital, and the analog stages are idealized. GPU simulation times are not
+hardware latency or energy measurements.
+
+**Integrity and retention.** Both exact native bundles passed full artifact-hash
+inspection: 11 declared artifacts for DRN, 12 for digital, no errors. Source is
+clean pinned commit `745ebc97c53728b029f053a21adcd8c5a6a3cf85`; all six CIFAR input
+hashes match between cases. Resolved configs differ only in MLP implementation,
+training method and per-case wall allowance. Shared initialization and exact
+short interruption/resume were verified before launch. Initial, latest, best
+and final full-state checkpoints, metrics, probes and readiness/failure receipts
+remain retained. No evidence was pruned.
+
+Raw collection: `/tmp/pseudo-drn-large-collected-20261115` (about 1.62 GB), with
+an independent retained remote copy at `nom-cool-1:/tmp/pseudo-drn-large-20261115`.
+Native IDs: DRN `20261115T231629.027932Z-d6d8d737-504334b3`; digital
+`20261116T081229.216252Z-031e1d1c-e9465aba`. Small versioned evidence:
+[results and gradient/coverage summary](https://github.com/filip137/on-chip-learning/blob/main/explorations/pseudo-drn-large-20261115/results.json),
+[artifact inspection](https://github.com/filip137/on-chip-learning/blob/main/explorations/pseudo-drn-large-20261115/terminal-inspection.json).
+
+The queue reports execution, validation and controller collection complete,
+with no recovery incidents and no retained GPU reservation. GPU work ended
+at 10:00:56 UTC / 11:00:56 Paris, before the 11:58:13 Paris hard stop.
+Queue execution used 38,669.65 seconds; conservatively charging all time from
+successful readiness through terminal validation plus 300 seconds of earlier
+failed startups gives 39,763.01 seconds (11 h 02 m 43 s) against 43,200 allowed.
+Controller collection took 141.54 seconds with GPUs hidden. The remaining
+allowance is not reused; no further experiments were launched.
+
+The next scientific decision, if separately requested, is whether to prioritize
+an equal-update DRN/BPTT architecture control or transistor-level scoring and
+adjoint-interface validation. This review schedules neither. The current
+assignment ends with records published, issue closure and source-worktree cleanup;
+source commits and all native evidence remain retained.
+
+Remote source worktrees `source-745ebc9` and `source-c4f0843` were audited
+clean and removed after confirming all experiment workers exited. Native
+results remain at both declared raw roots. The editable experiment branch is
+integrated and removed at this closing checkpoint; source remains in published
+backend history. No global queue service or unrelated job is stopped.
+
+## Original assignment and execution history
+
 User assignment: scale the previous shallow pilot substantially and train longer.
 Explicit allowance: up to12hours on the local RTX3090, including readiness,
 diagnostics, controls and retries. On16November the user additionally authorized
