@@ -37,3 +37,36 @@ Future native configs/wrappers must pass parser/tests, pinned source staging,
 scheduler test-only and new live canaries before substantive release. Root owns
 release/retries/cancellation; monitor agents report evidence only. No source
 retraining, changes to numerical learning law, or repeated completed experiments.
+
+## Held-out scoring implementation — CPU validation
+
+The HWA-specific `methods/fault_tuning.py` parser now accepts the optional strict
+`evaluation_cohorts` list above. Empty/absent lists retain legacy serialization
+and lifecycle digests. Names are distinct, shuffle seeds are rejected, and
+evaluation cannot overlap recovery or the development slice (including renamed
+aliases of the same corpus hash). The drift branch explicitly rejects nonempty
+evaluation cohorts; this extension implements the declared corruption grid.
+
+`ebl/runtime/fault_tuning.py` records evaluation corpora as native pinned inputs
+and verifies corpus/cohort hashes before target drawing, deployment or training.
+Every hold and trained arm scores its final live apparent state through the
+existing streaming full-teacher evaluator. Digital/analog adapters and sampled
+output calibration remain attached until scoring finishes. Each measurement's
+`held_out` list and `fault_tuning_held_out` metric events retain cohort identities,
+scores, elapsed time and unchanged-state evidence. The summary continues to name
+development KL as the selection metric; held-out values do not select anything.
+
+Scoring fingerprints conductances, write counts, device RNG/counters, held state
+and active correction parameters before/after evaluation; mutation or nonfinite
+scores fail the run. Physical snapshots hash one CMO matrix at a time rather than
+cloning the complete twelve-MLP physical state simultaneously. Live-canary timing
+must include this integrity overhead. No shared-manifest module was edited.
+
+CPU validation used `/home/filip/miniconda3/envs/py312/bin/python`, with CUDA hidden:
+`pytest tests/test_fault_tuning_evaluation.py tests/test_fault_tuning.py
+tests/test_fault_completion_controls.py tests/test_drift_tuning.py
+tests/test_workflow_*.py -q` passed **741 tests**, with **5 skipped**, in52.02s.
+Tiny OPT/CMO tests cover all arm methods and two digital ranks, live adapter and
+calibration scoring before cleanup, pretraining pin failures, contiguous cohorts,
+rejection of physical/counter/RNG/correction mutation and nonfinite scores, and
+legacy behavior/digest preservation. No GPU work, launch, merge or push occurred.

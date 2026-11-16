@@ -137,6 +137,7 @@ class FaultTuning:
     deployment: dict | None
     arms: tuple
     drift: object = None  # methods.drift_tuning.DriftTuning; omitted when absent (older digests unchanged)
+    evaluation_cohorts: tuple = ()
 
     def to_dict(self):
         out = {"source_sha256": self.source_sha256, "assignment_seed": self.assignment_seed,
@@ -152,6 +153,8 @@ class FaultTuning:
         if self.drift is not None:
             from dataclasses import asdict
             out["drift"] = {k: list(v) if isinstance(v, tuple) else v for k, v in asdict(self.drift).items()}
+        if self.evaluation_cohorts:
+            out["evaluation_cohorts"] = [dict(c) for c in self.evaluation_cohorts]
         return out
 
     def rewrite(self):
@@ -164,11 +167,17 @@ class FaultTuning:
         keys = ("source_sha256", "assignment_seed", "fault_rewrite", "recovery", "development", "targets",
                 "schedule", "write_law", "fisher", "lora_seed", "analog_lora", "deployment", "arms")
         drift = None
+        evaluation_cohorts = ()
+        if isinstance(raw, dict) and "evaluation_cohorts" in raw:
+            evaluation_cohorts = parse_evaluation_cohorts(raw["evaluation_cohorts"])
+            raw = {k: v for k, v in raw.items() if k != "evaluation_cohorts"}
         if isinstance(raw, dict) and "drift" in raw:
             from methods.drift_tuning import DriftTuning
             drift = DriftTuning.parse(raw["drift"])
             raw = {k: v for k, v in raw.items() if k != "drift"}
         _exact(raw, keys, "fault_tuning")
+        if drift is not None and evaluation_cohorts:
+            raise ValueError("Held-out evaluation_cohorts currently require fault tuning without drift.")
         rewrite = _exact(raw["fault_rewrite"], ("detection", "roles", "seed", "threshold_sigma"), "fault_rewrite")
         if rewrite["detection"] != "verify" or rewrite["roles"] != "pair":
             raise ValueError("Expected the verify-based pair rewrite.")
@@ -188,6 +197,16 @@ class FaultTuning:
             data[name] = d
         if data["recovery"]["seed"] is None or data["recovery"]["start"] != 0 or data["development"]["seed"] is not None:
             raise ValueError("Expected a seeded recovery selection and a contiguous development slice.")
+        for c in evaluation_cohorts:
+            recovery = data["recovery"]
+            same_recovery = c["corpus"] == recovery["corpus"] or c["corpus_sha256"] == recovery["corpus_sha256"]
+            if same_recovery and c["split"] == recovery["split"]:
+                raise ValueError("Held-out evaluation must use a separate recovery split or corpus.")
+            dev = data["development"]
+            same_development = c["corpus"] == dev["corpus"] or c["corpus_sha256"] == dev["corpus_sha256"]
+            if (same_development and c["split"] == dev["split"]
+                    and max(c["start"], dev["start"]) < min(c["start"] + c["sequences"], dev["start"] + dev["sequences"])):
+                raise ValueError("Held-out evaluation must not overlap the development slice.")
         t = raw["targets"]
         t = _exact(t, ("kind", "count", "seed", "draw_batch", "sha256") + (("file",) if isinstance(t, dict) and "file" in t else ()),
                    "targets")
@@ -236,7 +255,32 @@ class FaultTuning:
                    dict(rewrite), data["recovery"], data["development"], dict(t), dict(s), dict(w), dict(f),
                    _int(raw["lora_seed"], "lora_seed"), None if analog is None else
                    {"rank": analog["rank"], "b_scale": None if analog["b_scale"] is None else dict(analog["b_scale"])},
-                   None if deployment is None else dict(deployment), arms, drift)
+                   None if deployment is None else dict(deployment), arms, drift, evaluation_cohorts)
+
+
+def parse_evaluation_cohorts(raw):
+    """Strict, named, contiguous endpoint-only cohorts; no sampling seed is accepted."""
+    if not isinstance(raw, list):
+        raise ValueError("Expected evaluation_cohorts to be a list.")
+    cohorts = []
+    for entry in raw:
+        c = _exact(entry, ("name", "corpus", "corpus_sha256", "split", "start", "sequences", "cohort_sha256"),
+                   "evaluation_cohorts")
+        for key in ("name", "corpus"):
+            value = c[key]
+            if (not isinstance(value, str) or value in ("", ".", "..")
+                    or not all(char.isalnum() or char in "-_." for char in value)):
+                raise ValueError(f"Expected a plain evaluation cohort {key}.")
+        _digest(c["corpus_sha256"], "evaluation_cohorts.corpus_sha256")
+        _digest(c["cohort_sha256"], "evaluation_cohorts.cohort_sha256")
+        _int(c["start"], "evaluation_cohorts.start")
+        _int(c["sequences"], "evaluation_cohorts.sequences", 1)
+        if c["split"] not in ("train", "validation", "test"):
+            raise ValueError("Expected a corpus split for evaluation_cohorts.")
+        cohorts.append(dict(c))
+    if len({c["name"] for c in cohorts}) != len(cohorts):
+        raise ValueError("Expected distinct evaluation cohort names.")
+    return tuple(cohorts)
 
 
 # --- data ---------------------------------------------------------------------------------------

@@ -9,6 +9,9 @@ apparent-state hash, so arms on any GPU start from the identical deployment.
 from __future__ import annotations
 
 import json
+import hashlib
+import math
+from dataclasses import replace
 import os
 from pathlib import Path
 import time
@@ -40,7 +43,15 @@ def pinned_inputs(lifecycle) -> list[dict]:
     entries = [("fault_deployment", cfg.deployment)]
     if cfg.analog_lora is not None:
         entries.append(("analog_lora_b_scale", cfg.analog_lora["b_scale"]))
-    return [{"role": role, "path": str(pinned_path(e)), "sha256": e["sha256"]} for role, e in entries if e is not None]
+    inputs = [{"role": role, "path": str(pinned_path(e)), "sha256": e["sha256"]}
+              for role, e in entries if e is not None]
+    if cfg.evaluation_cohorts:
+        import networks.opt as opt
+        for cohort in cfg.evaluation_cohorts:
+            data = replace(lifecycle.data, corpus=cohort["corpus"], corpus_sha256=cohort["corpus_sha256"])
+            inputs.append({"role": f"evaluation_corpus.{cohort['name']}", "path": str(opt.corpus_path(data)),
+                           "sha256": cohort["corpus_sha256"]})
+    return inputs
 
 
 class Context:
@@ -75,6 +86,80 @@ class Context:
 
     def evaluate(self, q):
         return self.stage.family.evaluate(self.network, {"tokens": self.development}, self.device, q=q)
+
+
+def prepare_evaluation_cohorts(ctx):
+    """Verify every held-out corpus/cohort before targets, deployment or training."""
+    ctx.evaluation_cohorts = []
+    for spec in getattr(ctx.cfg, "evaluation_cohorts", ()):
+        settings = {k: v for k, v in spec.items() if k != "name"}
+        tokens = ft.cohort(ctx.lc, {**settings, "seed": None})
+        ctx.evaluation_cohorts.append((dict(spec), tokens))
+        ctx.stage.store.append_metric({"stage": "fault_tuning_evaluation_cohort_verified", **spec})
+
+
+def _state_digest(value):
+    """Fingerprint nested physical state, including counters and device RNG."""
+    digest = hashlib.sha256()
+    def update(item):
+        if isinstance(item, torch.Tensor):
+            digest.update(b"tensor" + tensor_hash(item).encode())
+        elif isinstance(item, dict):
+            digest.update(b"dict[")
+            for key in sorted(item):
+                update(key)
+                update(item[key])
+            digest.update(b"]")
+        elif isinstance(item, (list, tuple)):
+            digest.update(b"list[")
+            for part in item:
+                update(part)
+            digest.update(b"]")
+        else:
+            digest.update(json.dumps(item, allow_nan=False, sort_keys=True).encode() + b"\0")
+    update(value)
+    return digest.hexdigest()
+
+
+def _physical_snapshot(array):
+    # Hash one matrix at a time: a full twelve-MLP state_dict would clone every
+    # conductance/write-count tensor onto CPU simultaneously.
+    children = getattr(array, "children", None)
+    state = ([_state_digest(child.state_dict()) for child in children]
+             if children is not None else _state_digest(array.state_dict()))
+    return {"state_sha256": _state_digest(state), "apparent_sha256": tensor_hash(array.read()),
+            "cost": dict(array.cost())}
+
+
+@torch.no_grad()
+def evaluate_held_out(ctx, arm, row, base, adapter=None):
+    """Score the final live learner, retaining all corrections until after scoring."""
+    cohorts = getattr(ctx, "evaluation_cohorts", ())
+    if not cohorts:
+        return
+    arrays = {"base": base, **({"adapter": adapter} if adapter is not None else {})}
+    before = {name: _physical_snapshot(array) for name, array in arrays.items()}
+    correction = ctx.network.fault_output_calibration
+    modules = {"lora": None if ctx.network.lora is None else ctx.network.lora.state_dict(),
+               "calibration": None if correction is None else correction.state_dict()}
+    correction_hash = _state_digest(modules)
+    scores = []
+    for spec, tokens in cohorts:
+        started = time.monotonic()
+        score = ctx.stage.family.evaluate(ctx.network, {"tokens": tokens}, ctx.device, q=base.read())
+        if any(isinstance(value, (float, int)) and not math.isfinite(value) for value in score.values()):
+            raise FloatingPointError("Nonfinite held-out evaluation score.")
+        after = {name: _physical_snapshot(array) for name, array in arrays.items()}
+        current_correction = ctx.network.fault_output_calibration
+        current = {"lora": None if ctx.network.lora is None else ctx.network.lora.state_dict(),
+                   "calibration": None if current_correction is None else current_correction.state_dict()}
+        if before != after or correction_hash != _state_digest(current):
+            raise RuntimeError("Held-out evaluation changed physical state, cost counters or corrections.")
+        point = {**spec, "scores": score, "seconds": time.monotonic() - started,
+                 "physical_state": after, "correction_sha256": correction_hash, "state_unchanged": True}
+        scores.append(point)
+        ctx.stage.store.append_metric({"stage": "fault_tuning_held_out", "arm": arm.label, **point})
+    row["held_out"] = scores
 
 
 def deploy(ctx, target):
@@ -183,6 +268,9 @@ def run_arm(ctx, arm):
     if arm.method not in ft.TRAINS:
         row.update(final=initial, curve=[], cost={}, final_apparent_sha256=row["initial_apparent_sha256"],
                    seconds=time.monotonic() - started)
+        evaluate_held_out(ctx, arm, row, base)
+        if "held_out" in row:
+            row["seconds"] = time.monotonic() - started
         return row, None
     acceptance, noise = ctx.lc.program_verify.acceptance_percent, ctx.lc.devices.noise_scale
 
@@ -300,6 +388,7 @@ def run_arm(ctx, arm):
             state["adapter_array"] = adapter.state_dict()
             state["final_adapter_apparent_sha256"] = tensor_hash(adapter.read())
             row["final_adapter_apparent_sha256"] = state["final_adapter_apparent_sha256"]
+    evaluate_held_out(ctx, arm, row, base, adapter)
     row.update(final_apparent_sha256=tensor_hash(base.read()), seconds=time.monotonic() - started)
     network.enable_lora(None)
     network.fault_output_calibration = None
@@ -424,6 +513,7 @@ def run(stage):
     started = time.monotonic()
     ctx.recovery = ft.cohort(lc, cfg.recovery)
     ctx.development = ft.cohort(lc, cfg.development)
+    prepare_evaluation_cohorts(ctx)
     t = cfg.targets
     if "file" in t:
         # A stored draw of the same procedure (the draw is GPU-specific); accepted by tensor hash only.
@@ -516,6 +606,9 @@ def run(stage):
                              "mean_teacher_kl": {r["label"]: r["mean_teacher_kl"] for r in rows}}}
                   if cfg.drift is not None else {}),
                "selection": "final endpoint; development teacher KL; no test cohort"}
+    if cfg.evaluation_cohorts:
+        summary["evaluation_cohorts"] = [dict(c) for c in cfg.evaluation_cohorts]
+        summary["selection"] = "final endpoint; development teacher KL; held-out cohorts are endpoint-only"
     atomic_write_json(stage.run_dir / "summary.json", summary)
     return summary, [("fault_tuning_measurements", stage.run_dir / "measurements.json"),
                      ("fault_tuning_summary", stage.run_dir / "summary.json")] + artifacts
