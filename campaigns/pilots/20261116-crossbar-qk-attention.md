@@ -93,15 +93,69 @@ DC analyses keep 1e-20 A.
 **Readiness:** dirty-tree smokes of both models, at the scratchpad path
 `xqk-readiness`, passed all gates in 74 SPICE calls each.
 
+## Attempts
+
+**Attempt 1** (launch `00c16d3`, pinned at `results/crossbar-qk-attention/source-00c16d3`):
+
+| Model | Bundle | Integrity |
+| --- | --- | --- |
+| ideal | `results/crossbar-qk-attention/ideal/20261116T172322.257534Z-3575ed40-8dcf979f` | complete, valid |
+| bsim3 | `results/crossbar-qk-attention/bsim3/20261116T172332.117870Z-7a661d54-c17d2e7e` | complete, valid |
+
+Both pass `ebl runs inspect --verify-artifacts --require-complete`, with 74 SPICE
+calls each. No revision was needed.
+
+## Results
+
+| Check | Ideal (κ = 2/3) | Generic BSIM3 | Gate |
+| --- | ---: | ---: | --- |
+| Retrieval MSE, 36 fresh examples, both features | 3.1e-5 | **4.2e-5** | ≤ 1e-3 |
+| Context-average MSE / retrieval MSE | 903× | **677×** | ≥ 5× |
+| Equation prediction MSE (same weights and examples) | 3.1e-5 | 3.8e-6 | reported |
+| SPICE vs equation RMSE | 1.1e-4 | 0.0059 | reported |
+| Uniform-control MSE | 0.0281 | 0.0280 | reported |
+| Weight on target from measured scorer currents | 0.957 | 0.969 | reported |
+| Selected scorer current (equation) | 0.499 (0.499) | 0.593 (0.574) | reported |
+| Crossbar row voltage vs formula, max error | 9e-16 V | 9e-16 V | < 1 mV |
+| Row voltage range (fraction outside 0.8–1.3 V) | 0.795–1.305 V (4.2%) | same | reported |
+| Settling, two starts | 1.1e-6 | 2.0e-5 | < 1e-3 |
+| Node voltages / min anchor V_DS / min scorer tail | 0.291–0.314 / 1.06 / 0.28 V | 0.291–0.315 / 0.73 / 0.20 V | rails, > 4U_T |
+| Crossbar dissipation (mean) | 331 µW | 331 µW | reported |
+| Bank and scorer supply power (largest case) | 10.8 nW | 10.9 nW | reported |
+
+## Review
+
+**All declared gates pass.** The trained shared projection, programmed as
+resistors, drives the transistor-level scorer and bank. They retrieve the
+query-matched value for fresh bindings, with BSIM3 MSE 4.2e-5, 677× below the
+context average.
+
+**SPICE vs equations.** SPICE output departs from the equations by RMSE 0.0059.
+That is the same size as the bank's own BSIM3 deviation in #50 (0.0057). The
+crossbar is exact, the scorer gain is about 3% above the fitted law, and uniform
+attention gives 0.028. The worst single error is 0.0125.
+
+**The crossbar dominates power.** At CMO conductances the crossbar dissipates
+about 30,000× the power of the bank and scorer. Because the rows are unloaded,
+only conductance ratios matter. Devices about 1000× more resistive, with the same
+9.8:1 range, would bring it to about 0.3 µW without changing the computation.
+That is a device-selection question this pilot does not test.
+
+**Not shown:**
+- device programming error, drift, read noise, mismatch, wire resistance;
+- on-chip training of the crossbar;
+- an analog value projection;
+- larger N;
+- PDK or silicon behaviour;
+- energy or latency advantage.
+
+**Cost:**
+- Instrumented SPICE 18.4 s: readiness 9.2 s, attempt 1 9.2 s.
+- Raw results 20 MB.
+- No revision used.
+
 ## Handoff
 
-The launch checkpoint is this commit, merged and pushed. Run from a pinned checkout:
-
-```bash
-PY=/home/filip/miniconda3/envs/py312/bin/python
-R=/home/filip/analog-research/drn/results/crossbar-qk-attention
-cd $R/source-<launch sha>
-$PY -m ebl characterize --config examples/crossbar_qk_ideal.json --output-dir $R/ideal
-$PY -m ebl characterize --config examples/crossbar_qk_bsim3.json --output-dir $R/bsim3
-$PY -m ebl runs inspect $R/ideal/<run> $R/bsim3/<run> --verify-artifacts --require-complete
-```
+Closed. Execution, collection and review are complete, and no jobs remain. Next
+decisions belong to on-chip-learning #56 follow-ups: device nonidealities and
+crossbar conductance scale, larger N and on-chip training of W.
