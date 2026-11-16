@@ -15,7 +15,8 @@ from networks.mapping import fault_domains
 
 ROOT = Path(__file__).resolve().parents[1]
 DRIFT = ROOT / "campaigns/pilots/20261116-drift-token-budget/lifecycles"
-FAULT = ROOT / "campaigns/fault-recovery-paper/lifecycles/fault-token-budget-20261116/full/fault-token-budget-20261116-xb6-n8192.json"
+FAULT_DIR = ROOT / "campaigns/fault-recovery-paper/lifecycles/fault-token-budget-20261116/full"
+FAULT = FAULT_DIR / "fault-token-budget-20261116-xb6-n8192.json"
 FULL = DRIFT / "full/drift-token-budget-20261116-xb6-m4.json"
 
 
@@ -86,9 +87,14 @@ def test_a_write_shifts_held_devices_and_keeps_every_draw():
 
 
 def test_drift_lifecycles_plan_one_stage_and_keep_the_fault_contract():
-    fault = json.loads(FAULT.read_text())
+    seen = set()
     for path in sorted(DRIFT.glob("*/*.json")):
+        model = path.stem.split("-")[4]
+        seen.add((model, path.parent.name))
+        # Each drift lifecycle derives from the fault token-budget lifecycle of the same model.
+        fault = json.loads((FAULT_DIR / f"fault-token-budget-20261116-{model}-n8192.json").read_text())
         raw = json.loads(path.read_text())
+        assert raw["hwa"] == fault["hwa"] and raw["network"] == fault["network"]
         lc = parse_lifecycle(raw)
         assert [s.kind for s in stage_selections(lc)] == ["prepare", "devices", "hwa", "fault_tuning"]
         assert parse_lifecycle(lc.to_dict()).digest() == lc.digest()
@@ -101,7 +107,8 @@ def test_drift_lifecycles_plan_one_stage_and_keep_the_fault_contract():
         assert raw["fault_tuning"]["schedule"]["steps"] in (32, 2400)
         assert {k: v for k, v in raw["fault_tuning"]["schedule"].items() if k != "steps"} == \
             {k: v for k, v in fault["fault_tuning"]["schedule"].items() if k != "steps"}
-    old = parse_lifecycle(fault)
+    assert seen == {(m, k) for m in ("xb6", "xb12") for k in ("full", "canary")}
+    old = parse_lifecycle(json.loads(FAULT.read_text()))
     assert old.fault_tuning.drift is None and "drift" not in old.fault_tuning.to_dict()
 
 
