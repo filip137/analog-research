@@ -235,3 +235,9 @@ releasing any full cell. Full jobs are bounded waves with at most two crossbar
 allocations including XB6 prerequisites, within the shared48GPUh ceiling and
 19November17:43UTC deadline. Root owns launch and recovery decisions; durable
 Sol6.1medium observers report completion/failure and resume the root.
+
+## XB6 standard analog selection and paper release
+
+Full tuning job301600 passed fresh native artifact/input/state/writer validation in432 allocated seconds. All six rates used300 updates, the original1024 sequences and eight df73 samples, tuning map271001, deployment611a and the newly pinned a987 B-scale. Final development KL at LR0.0001/0.0003/0.001/0.003/0.01/0.03 is0.05478611/0.05439810/0.04993249/0.04598883/0.04518408/0.05042800. LR0.01 is the interior minimum;0.003 is1.78106% worse, outside the predeclared1% cost tie. Freeze0.01 without a boundary extension. Other XB6 rates remain noisy/matched0.001,ChildD0.001,dLoRA16 0.0003,dLoRA64 0.0001,calibration0.001.
+
+Prepare12 paper cells covering0/1/3/5% and maps271002–271004, nine arms each, full1024 WikiText test and384 generated test evaluations. Keep the original devices declaration and fixed new B-scale for all chips; the fault_tuning assignment selector chooses one chip. A four-step nine-arm/full-heldout canary at3%/271002 gates this new immutable source before any full release. Native configs and worker, V10032G/gpu_p13/qos_gpu-dev/tenCPU profile, 90-minute allocation caps, at most two crossbar allocations and the shared48GPUh/19November17:43UTC ceiling remain fixed. Initial planned wave after the canary:3%,0%,1% on271002, serial; remaining cells await root-reviewed rolling release. Root owns every submission.
