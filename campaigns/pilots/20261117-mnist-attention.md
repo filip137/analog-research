@@ -89,4 +89,52 @@ planned).
 
 ## Attempts
 
+**Stage 1** (launches 13d8b9a sweep, d0c4156 final, 180ddab fitted-law retrain). All bundles
+are under `results/mnist-attention/`:
+- `sweep_h*_k*_v*` (12 bundles, 2 GPU-min);
+- `final_h4_k4_v16/20261117T134636.608850Z-2b3c5654-0e9c766e`: test 93.19%;
+- `final_h4_k4_v16_fitlaw/20261117T142408.280289Z-3e0962be-3562d587`: test 93.22%.
+
+**Stage 2** (launch a9d0d77). Both bundles are complete, valid and artifact-verified, 27 MB
+each (netlists, logs, final values; full waveforms not kept):
+- `spice_c2/20261117T142451.321499Z-9e6ff3fd-d44d422e`
+- `spice_c1/20261117T143034.725503Z-29e89fac-b9dd5995`
+
+Recorded SPICE: 110 CPU-min; with readiness, about 205 of 240.
+
 ## Results
+
+| 20 fresh test images (10–29) | C2: fitted-law network | C1: original network, window / 0.66 |
+| --- | ---: | ---: |
+| **Class agreement with the equations** (gate ≥ 90%) | **90%** (18/20) | **100%** (20/20) |
+| Accuracy, SPICE / equations | 90% / 100% | **100% / 100%** |
+| Attention weights, max abs error (median over images) | 0.25 | 0.11 |
+| Bank outputs, RMS error (median) | 0.092 | 0.073 |
+| Late drift of bank outputs (last 10% of 40 ms) | 0.019 | 0.018 |
+| SPICE time per image | about 170 s | about 165 s |
+
+With the 10 readiness images included, C1 agrees on 28/30 (93%) and C2 on 27/30 (90%).
+
+**Interpretation.**
+1. **The trained network classifies MNIST correctly in transistor-level simulation.** It
+   has 4 attention heads over 16 patch tokens, an analog KV cache, 11,339 MOS and 2,600
+   crossbar resistors, with a digital linear readout. Both variants pass the agreement
+   gate.
+2. **Scale exposed two operating-point limits** that the N = 3 circuits never reached,
+   score headroom and the four-dimension cell compression:
+   - the headroom needed a programmed offset sink per head (digitally calibrated);
+   - the compression is captured well enough by stretching the integration window
+     (C1).
+3. **The fitted-law retrain (C2) did not beat the simple window scaling.** Its block errors
+   are larger; it fits the measured key sums better, but the network trained on it relies
+   on the sharper law (κ 0.95) more than the circuit delivers. C1 is the better design point
+   in this run.
+4. **The banks are not fully settled at 40 ms with N = 16** (drift 0.018). A longer hold or
+   the precharge discussed in #59 would tighten them.
+5. **Limits:**
+   - 20 images per variant, so agreement is known to about ±7 points;
+   - ideal sources for the tokens, queries, clocks, biases and offsets;
+   - generic BSIM3, no mismatch;
+   - digital readout;
+   - offline training. On-chip training as in #62 at this scale would need about 3 min
+     per training transient.
