@@ -18,6 +18,8 @@ class Config:
     cosine: bool = False
     seed: int = 0
     scale: float = .5
+    cell_s: float = 75.
+    cell_kappa: float = .79
     data_root: str = '/home/filip/datasets/mnist'
     device: str = 'cuda'
     wall_seconds: int = 1800
@@ -33,7 +35,8 @@ def parse_config(raw):
                       ('seed', 0, 2**31), ('wall_seconds', 1, 3600)):
         if type(getattr(c, k)) is not int or not lo <= getattr(c, k) <= hi:
             raise ConfigError(f'{k} out of range')
-    if not (0 < c.lr < 1 and 0 < c.scale <= .75 and type(c.cosine) is bool and c.device in ('cuda', 'cpu')):
+    if not (0 < c.lr < 1 and 0 < c.scale <= .75 and type(c.cosine) is bool and c.device in ('cuda', 'cpu')
+            and 1 <= c.cell_s <= 1e4 and .1 <= c.cell_kappa <= 1.5):
         raise ConfigError('lr, scale, cosine or device invalid')
     return c
 

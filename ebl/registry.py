@@ -1040,6 +1040,16 @@ EXPERIMENT_REGISTRY['analog_attention_mnist.v1'] = ExperimentDefinition(
     supported_modes=(RunMode.TRAIN,), parser=_aam_parse, resolver=_aam_resolve,
 )
 
+from ebl.schema.analog_attention_mnist_spice import (
+    parse_config as _aams_parse,
+    resolve_config as _aams_resolve,
+)
+EXPERIMENT_REGISTRY['analog_attention_mnist_spice.v1'] = ExperimentDefinition(
+    experiment_id='analog_attention_mnist_spice.v1', schema_version=1,
+    description='SPICE inference samples of the trained MNIST chain A network.',
+    supported_modes=(RunMode.CHARACTERIZE,), parser=_aams_parse, resolver=_aams_resolve,
+)
+
 from ebl.schema.pseudo_mnist import parse_config as _pseudo_mnist_parse, resolve_config as _pseudo_mnist_resolve
 EXPERIMENT_REGISTRY['pseudo_mnist.v1'] = ExperimentDefinition(
     experiment_id='pseudo_mnist.v1', schema_version=1,

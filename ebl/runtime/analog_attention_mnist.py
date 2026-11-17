@@ -35,7 +35,7 @@ def run_train(request):
         lab = labels(c.data_root)
         X = {k: inputs(imgs[s][split[k]].to(dev)).double() for k, s in (('train', 'train'), ('validation', 'train'), ('test', 'test'))}
         Y = {k: lab[s][split[k]].to(dev) for k, s in (('train', 'train'), ('validation', 'train'), ('test', 'test'))}
-        m = ChainA(c.heads, c.d_k, c.d_v, scale=c.scale, seed=c.seed).to(dev).double()
+        m = ChainA(c.heads, c.d_k, c.d_v, scale=c.scale, s_eff=c.cell_s, kappa_cell=c.cell_kappa, seed=c.seed).to(dev).double()
         opt = torch.optim.Adam(m.parameters(), lr=c.lr)
         steps = c.epochs * ((len(X['train']) + c.batch_size - 1) // c.batch_size)
         sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, steps) if c.cosine else None

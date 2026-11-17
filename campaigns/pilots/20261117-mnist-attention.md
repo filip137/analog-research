@@ -31,7 +31,61 @@ inference samples through the transistor-level circuit.
 Scratch probes before the declaration: H4/dk4/dv16 reached 91.9% validation at 20 epochs,
 H8/dk4/dv16 93.9%.
 
-## Stage 2: SPICE inference (to be specified after selection)
+## Stage 1 result (recorded, see Attempts)
+
+Selected: H = 4, d_k = 4, d_v = 16 (12,118 MOS), 91.9% validation at 20 epochs. After the
+60-epoch cosine retrain: **test 93.19%**, validation 92.56%.
+
+## Stage 2: SPICE inference
+
+**Netlist** (`networks/energy_transformer/mnist_spice.py`, 11,339 MOS, 2,600 crossbar
+resistors, 321 hold capacitors):
+- 16 tokens are written in sequence (2 µs windows) through the 65-input crossbar into
+  1 pF transmission-gate holds, plus a V_cm reference hold.
+- **Per head:** programmed query sources; 64 anti-bump cells (10 µm, S = 16) with tail
+  gating and the #62 summing-mirror bias (1 nA, on a 10 pA standing floor); 1 pF
+  integration; a PMOS softmax into the attention controllers; and a 16-feature
+  pseudoconductance bank with PMOS diff-pair value inputs.
+- Readout digital.
+
+**Readiness findings (scratch, about 95 CPU-min):**
+1. **Convergence.** The #58–#62 tolerance (reltol 1e-6) aborts at the first sampling edge
+   once there are 16 keys. reltol 1e-4 and 1e-5 both converge and give identical outputs
+   to all printed digits on two images. reltol 1e-4 is used, with abstol 3e-15 A.
+   Without the standing 10 pA floor on the mirror bias, an unbiased summing diode leaves
+   its node floating while the cells are gated off.
+2. **Score headroom at this scale.** The trained temperatures (13–31) with 1 nA mirror
+   bias made the score integrators rise by up to 1 V of common offset. In two heads every
+   score sat at the rail and the softmax currents collapsed (attention error up to 0.70).
+   - **Fix:** a programmed sink per integrator during integration, equal to the bias plus
+     a per-head offset, so that only key differences integrate; the softmax is invariant
+     to a common offset.
+   - The offset is calibrated digitally from 1,000 training images: amp·I_b × the 10%
+     quantile of the per-image minimum key score.
+3. **Cell law at four summed dimensions.** Measured key-sum currents are 0.6–0.75 of the
+   S = 75 law. A fit to 384 key sums from 6 training images (SPICE) gives S_eff = 303,
+   κ = 0.95, amplitude 0.695 and a common offset of 0.215 I_b. Its RMS residual is
+   0.028 I_b, against 0.061 for the S = 75 law at its best scale.
+4. **Ten test images (0–9), two variants:**
+   - **C1:** the original network with the integration window scaled by 1/0.66 →
+     agreement 8/10, accuracy 9/10 (equations 9/10), attention error 0.07–0.18, output
+     RMS 0.04–0.10.
+   - **C2:** the network retrained on the fitted law (93.22% test), window / 0.695 →
+     agreement 9/10, accuracy 10/10 (equations 9/10), attention error 0.18–0.33, output
+     RMS 0.06–0.15.
+
+**Recorded cases** (declared before launch):
+- **C2, primary:** fitted-law network, from the native retraining run.
+- **C1, reference:** original final network.
+- **Both:** 20 fresh test images (10–29) that were not used in readiness, 10 parallel
+  workers.
+
+**Gate:** class agreement with the equations ≥ 90% on the simulated images, all of them
+simulated. **Reported:** accuracy (SPICE, equations), per-head attention and output
+errors, late drift, runtime.
+
+**Allowance:** SPICE ≤ 240 CPU-min in total (about 95 used in readiness, about 120
+planned).
 
 ## Attempts
 
