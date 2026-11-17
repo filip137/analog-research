@@ -100,4 +100,58 @@ results: `/home/filip/analog-research/drn/results/end-to-end-attention/`.
 
 ## Attempts
 
+**Attempt 1** (launch `4b4e82a`, pinned at `results/end-to-end-attention/source-4b4e82a`).
+All four bundles are complete, valid and artifact-verified (`ebl runs inspect
+--verify-artifacts --require-complete`). Cumulative SPICE was 63 s; storage 343 MB.
+- `A_ideal/20261117T090930.090189Z-ff4d4c39-cb3c18fc`
+- `A_bsim3/20261117T090930.094071Z-e3af9313-9792cd9c`
+- `B_ideal/20261117T090930.090221Z-03c16244-96f77df4`
+- `B_bsim3/20261117T090930.093335Z-ea81a3c7-f0c0b113`
+
 ## Results
+
+| Check | A, ideal | A, BSIM3 | B, ideal | B, BSIM3 | Gate |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Retrieval MSE, 36 fresh steps | 1.4e-3 | **3.8e-4** | 1.3e-3 | **1.9e-4** | BSIM3 ≤ 1e-3 |
+| Context average / retrieval | 20× | **74×** | 22× | **151×** | BSIM3 ≥ 5× |
+| SPICE vs own law, RMS (decoded) | **1e-4** | 0.014 | **<1e-4** | 0.010 | ideal ≤ 2e-3 |
+| Law MSE (same weights and κ) | 1.4e-3 | 5.8e-5 | 1.3e-3 | 2.9e-5 | reported |
+| Worst absolute error | 0.095 | 0.079 | 0.080 | 0.055 | reported |
+| Differential readout MSE | 1.4e-3 | 3.8e-4 | 1.3e-3 | 1.9e-4 | reported |
+| Softmax on target, SPICE / law | 0.989 / 0.989 | 0.978 / 0.992 | 0.985 / 0.985 | 0.973 / 0.990 | reported |
+| Summed score vs law, RMS / I_b | 0.000 | 0.260 | 0.000 | 0.287 | reported |
+| Integration window T (C = 1 pF) | 196 µs | 166 µs | 184 µs | 155 µs | reported |
+| Late drift (last 10% of hold) | 9e-7 | 7e-5 | — | — | A < 1e-3 |
+| Min anchor V_DS | 1.06 V | 0.73 V | — | — | A > 4U_T |
+| KV pedestal, keys (mean / max) | 0 | 0.36 / 1.22 mV | 0 | 0.34 / 1.11 mV | reported |
+| KV pedestal, values (mean / max) | 0 | 0.29 / 0.37 mV | 0 | 0.30 / 0.39 mV | reported |
+| Drift after switch-off, 1 s and 3 s holds | — | keys ≤ 0.93 mV, values ≤ 8 µV; output change 1.5e-5 | — | keys ≤ 0.74 mV, values ≤ 0.11 mV; output change 5.9e-4 | reported |
+| Column vs crossbar formula | < 1e-10 V | ≤ 14 µV | < 1e-10 V | ≤ 12 µV | reported |
+| Supply power (end of step) | 26 nW | 25 nW | 21 nW | 20 nW | reported |
+| MOS count (with switches) | 112 | 148 | 63 | 99 | reported |
+
+**Interpretation.**
+1. **All gates pass.** One transistor-level circuit takes a token sequence through a
+   resistor crossbar into a sampled analog KV cache, scores a fresh query, normalizes,
+   weights the values and produces the attention output. Both chains retrieve, and
+   chain B, without a bank, is the more accurate and the smaller (99 against 148 MOS).
+2. **The ideal model is exact in wiring:** SPICE equals its own law to 1e-4. Its
+   retrieval MSE of 1.3–1.4e-3 is the expected cost of running κ = 0.7911 weights
+   under κ = 2/3 and is not a gate.
+3. **The BSIM3 gap to the law** (3.8e-4 vs 5.8e-5 for A; 1.9e-4 vs 2.9e-5 for B)
+   comes mainly from the anti-bump cell. As in #57, its summed current departs from the
+   drawn law by about 0.26 I_b RMS, which lowers the softmax weight on the target from
+   0.99 to 0.97–0.98.
+4. **Capacitor integration replaces the 150 MΩ resistor** without any loss:
+   1 pF, about 160 µs, three switches per key.
+5. **KV cache in generic BSIM3:**
+   - Charge injection leaves a 0.3–1.2 mV pedestal on the 5 pF hold nodes.
+   - A further drift of at most 0.93 mV follows switch-off and has stopped by 1 s:
+     the 1 s and 3 s holds are identical.
+   - Value pedestals of about 0.3 mV are within the 1 mV tolerance found for the diff
+     pair in stage 2.
+   - The generic cards have no junction-leakage area, so real retention is **not**
+     modelled.
+6. **Not included:** the readout affine is the trained next-stage stand-in, applied
+   in software. Mismatch, noise, the output projection to the next layer, and on-chip
+   training are not included.
