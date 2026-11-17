@@ -1,0 +1,1 @@
+{"experiment_id": "analog_attention_mnist.v1", "schema_version": 1, "heads": 4, "d_k": 2, "d_v": 8, "epochs": 20, "batch_size": 256, "lr": 0.01, "cosine": false, "seed": 0, "scale": 0.5, "data_root": "/home/filip/datasets/mnist", "device": "cuda", "wall_seconds": 1800}

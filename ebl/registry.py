@@ -1030,6 +1030,16 @@ EXPERIMENT_REGISTRY['onchip_attention.v1'] = ExperimentDefinition(
     parser=_onchip_attention_parse, resolver=_onchip_attention_resolve,
 )
 
+from ebl.schema.analog_attention_mnist import (
+    parse_config as _aam_parse,
+    resolve_config as _aam_resolve,
+)
+EXPERIMENT_REGISTRY['analog_attention_mnist.v1'] = ExperimentDefinition(
+    experiment_id='analog_attention_mnist.v1', schema_version=1,
+    description='Chain A (bank attention) equations on MNIST, offline GPU training.',
+    supported_modes=(RunMode.TRAIN,), parser=_aam_parse, resolver=_aam_resolve,
+)
+
 from ebl.schema.pseudo_mnist import parse_config as _pseudo_mnist_parse, resolve_config as _pseudo_mnist_resolve
 EXPERIMENT_REGISTRY['pseudo_mnist.v1'] = ExperimentDefinition(
     experiment_id='pseudo_mnist.v1', schema_version=1,
