@@ -92,4 +92,56 @@ a completed run to contain metrics.jsonl". The runtime never appended a metric. 
 bundles are kept as evidence under `results/attention-layer/{ideal,bsim3}/20261117T1100*`.
 The fix appends one metric per example; there are no circuit or configuration changes.
 
+**Attempt 2** (launch `eabbfd6`, pinned at `results/attention-layer/source-eabbfd6`). Both
+bundles are complete, valid and artifact-verified:
+- `ideal/20261117T110045.081403Z-d36eaf2d-c9eb6a17`
+- `bsim3/20261117T110049.023934Z-238719c9-73a5e690`
+
+Cumulative SPICE over both attempts is about 2.3 CPU-min.
+
 ## Results
+
+| | Ideal law (wiring) | BSIM3 |
+| --- | ---: | ---: |
+| Examples | 36 | 96 |
+| **Accuracy, SPICE** (chance 17%) | 77.8% (its own law: 77.8%) | **97.9%** |
+| Accuracy, equations on the same examples | 77.8% | 99.0% |
+| Class agreement, SPICE vs equations | 100% | 99.0% (1 of 96 differs) |
+| Attention o, RMS vs law | 8e-6 | 0.012 |
+| Normalizer n vs law at the measured o, RMS / max | 0.029 / 0.11 | 0.016 / 0.039 |
+| Interface u vs n | 1e-14 V | 2e-14 V |
+| DRN outputs vs law at the measured u, max | 2.0 mV | 2.0 mV |
+| Softmax weight on the selected key | 0.74 (temperature 3) | 0.989 |
+| Late drift of DRN outputs | 6e-8 V | 1e-4 V |
+| Energy per step: crossbar drivers / core / clocks | 2.14 nJ / 55 pJ / — | 2.11 nJ / 57 pJ / 3 pJ |
+| Core breakdown | scorer 41, normalizer 10, softmax 4 pJ | scorer 42, normalizer 11, softmax 4 pJ |
+| DRN power while driven / energy per 2 µs read | 78 µW / 0.16 nJ | 83 µW / 0.17 nJ |
+| Step time | 20 ms | 20 ms |
+| MOS (scorer / softmax / weighting / norm / switches) | 37 / 5 / 21 / 36 / — | 37 / 5 / 21 / 36 / 54 = 153 |
+| Resistors (crossbar / DRN) | 32 / 110 | 32 / 110 |
+
+All gates pass. The ideal-law accuracy is low because the wiring check runs at a temperature
+and cell law that the weights were not trained for; it is not a gate.
+
+**Interpretation.**
+1. **The layer works end-to-end in one transient.** Token voltages pass through the analog
+   KV cache, the scorer, the softmax, the diff-pair weighting, the subthreshold L1 layer
+   norm, the interface and the DRN to a class decision. Accuracy is 97.9% against 99.0% for
+   the equations.
+2. **Each block tracks its own law in BSIM3:** attention within 0.012, the normalizer within
+   0.016 RMS, the DRN within 2 mV.
+3. **The normalizer** costs 36 MOS and 11 pJ per step. Its accuracy depends on the
+   rectifier's rail and bulk choice (readiness note 2). Small features (|D| ≈ 1 pA) lose
+   about 0.02.
+4. **The energy is dominated by resistive networks driven at µS:**
+   - the token crossbar: 2.1 nJ, now 4 inputs × 4 columns;
+   - the DRN: 83 µW while driven, 0.17 nJ if it is enabled only for a 2 µs read.
+
+   The transistor core is 57 pJ.
+5. **Not modelled:**
+   - ideal sources and buffers: the token DAC, clocks, bias references, and the unity
+     buffers driving the µS DRN;
+   - the software argmax;
+   - training (offline, in equations);
+   - mismatch, which the #60 Monte Carlo found binding for the value stages;
+   - the residual connection and a second layer.
