@@ -90,9 +90,16 @@ class DriftRegimes:
     evaluation_start: int = 0
     evaluation_seconds: tuple = (0., 60., 900., 1800., 3600., 7200., 14400., 28800., 57600., 86400.)
     canary: bool = False
+    # Optional deployment-time weight-to-conductance mapping (training.xbar_mapping, crossbar
+    # mapping search); absent (None) is the series-002 pair mapping and is left out of to_dict.
+    mapping: dict | None = None
 
     def to_dict(self):
         value = {k: list(v) if isinstance(v, tuple) else v for k, v in asdict(self).items()}
+        if self.mapping is None:
+            del value['mapping']
+        else:
+            value['mapping'] = {**self.mapping, 'gain': dict(self.mapping['gain'])}
         value['law'] = dict(self.law)
         value['arms'] = [{k: list(v) if isinstance(v, tuple) else v for k, v in arm.items()} for arm in self.arms]
         value['adaptation'] = None if self.adaptation is None else dict(self.adaptation)
@@ -111,10 +118,13 @@ class DriftRegimes:
         names = {f.name for f in fields(cls)}
         legacy = (names - {'arms', 'adaptation'}) | {'arm'}
         # evaluation_start (the cohort's first sequence) is optional and defaults to 0.
-        keys = set(raw) | {'evaluation_start'} if isinstance(raw, dict) else None
+        keys = set(raw) | {'evaluation_start', 'mapping'} if isinstance(raw, dict) else None
         if keys not in (names, legacy):
             raise ValueError('Expected exactly the drift-regimes fields.')
-        value = {'evaluation_start': 0, **raw}
+        value = {'evaluation_start': 0, 'mapping': None, **raw}
+        if value['mapping'] is not None:
+            from training.xbar_mapping import parse as parse_mapping
+            value['mapping'] = parse_mapping(value['mapping'])
         if type(value['evaluation_start']) is not int or not 0 <= value['evaluation_start'] < 2**31:
             raise ValueError('Invalid evaluation_start.')
         if 'arm' in value:
@@ -164,6 +174,9 @@ class DriftRegimes:
                 a['method'] in WRITES + ('lora_rescaled',) for a in value['arms']):
             # Write controllers and A6's rescaling use the power-law nominal deviation.
             raise ValueError('Log or time-independent drift laws support only non-writing arms without rescaling.')
+        if value['mapping'] is not None and any(a['method'] not in ('none', 'calibration') for a in value['arms']):
+            # Write, LoRA and LayerNorm controllers assume the series-002 pair mapping.
+            raise ValueError('A deployment mapping supports only untreated and calibration arms.')
         value['adaptation'] = cls._adaptation(value['adaptation'], value['arms'])
         return cls(**value)
 

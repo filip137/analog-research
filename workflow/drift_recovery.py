@@ -11,9 +11,14 @@ from workflow.networks import opt_mlp
 class CrossbarAdapter:
     architecture = 'crossbar'
 
-    def __init__(self, network, device):
+    def __init__(self, network, device, mapping=None):
         self.network = network.eval().requires_grad_(False)
         self.device = device
+        # Optional deployment-time mapping (training.xbar_mapping); None is the series-002 pair mapping.
+        if mapping is not None:
+            from training.xbar_mapping import Mapping
+            mapping = Mapping(mapping, network)
+        self.mapping = mapping
 
     def source_hash(self): return state_hash(self.network.state_dict())
 
@@ -21,9 +26,10 @@ class CrossbarAdapter:
 
     def physical_layout(self):
         targets, groups, roles, names = [], [], [], []
+        mapped = None if self.mapping is None else self.mapping.targets(self.network.q)
         for k, matrix in enumerate(self.network.layout):
             q = self.network.q[matrix.offset:matrix.offset+matrix.size].detach()
-            target = torch.stack((48.6+39.6*q, torch.full_like(q, 48.6)))
+            target = torch.stack((48.6+39.6*q, torch.full_like(q, 48.6))) if mapped is None else mapped[k]
             role = torch.zeros_like(target, dtype=torch.int8)
             role[0] = 2*(k % 2)
             role[1] = 2*(k % 2)+1
@@ -34,6 +40,8 @@ class CrossbarAdapter:
         return targets, groups, roles, names
 
     def bind(self, physical):
+        if self.mapping is not None:
+            return self.mapping.bind(physical)
         return torch.cat([(g[0]-g[1])/39.6 for g in physical])
 
     def block(self, k, x, bound):

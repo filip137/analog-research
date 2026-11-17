@@ -79,7 +79,7 @@ def run(stage):
     stage.cache()
     stage.device_bundle()
     tokens = evaluation_cohort(lc, cfg)
-    adapter = CrossbarAdapter(stage.network, stage.device)
+    adapter = CrossbarAdapter(stage.network, stage.device, mapping=cfg.mapping)
     original_hash = adapter.source_hash()
     law = cfg.family
     realization = stage.selection.array_seed
@@ -87,10 +87,13 @@ def run(stage):
                 'hwa_arm': stage.selection.hwa_arm, 'source_sha256': cfg.source_sha256,
                 'cohort_sha256': cfg.cohort_sha256, 'evaluation_corpus': cfg.evaluation_corpus,
                 'law': dict(cfg.law), 'kappa': law.kappa, 'canary': cfg.canary}
+    if cfg.mapping is not None:
+        identity['mapping'] = adapter.mapping.report(stage.network.q, stage.network)
     stage.store.append_metric({'phase': 'drift_regimes_start', **identity, 'arms': [a['label'] for a in cfg.arms]})
 
     targets, _, _, names = adapter.physical_layout()
-    if not torch.allclose(adapter.bind(targets), stage.network.q, atol=3e-7, rtol=1e-6):
+    clean_q = stage.network.q if adapter.mapping is None else adapter.mapping.clean(stage.network.q)
+    if not torch.allclose(adapter.bind(targets), clean_q, atol=3e-7, rtol=1e-6):
         raise ValueError('Physical mapping failed to preserve the clean normalized weights.')
     if any(bool(((t < law.program_min) | (t > law.program_max)).any()) for t in targets):
         raise ValueError('Mapped targets leave the programming window.')
@@ -122,6 +125,11 @@ def run(stage):
 
     references = {'clean_hwa': opt_mlp.evaluate(stage.network, {'tokens': tokens}, stage.device),
                   'teacher': teacher_ppl(stage.network, tokens, stage.device)}
+    if adapter.mapping is not None:
+        # The mapping's clean cost: exactly programmed targets, no programming error and no drift.
+        references['clean_mapped'] = opt_mlp.evaluate(stage.network, {'tokens': tokens}, stage.device,
+                                                      q=clean_q.detach())
+    del clean_q
     atomic_write_json(stage.run_dir / 'drift_regimes_references.json', references)
     hidden = probe = None
     if cfg.adaptation is not None:
@@ -202,8 +210,20 @@ def run(stage):
                     ('drift_regimes_events', stage.run_dir / 'drift_regimes_events.json')]
 
 
+def _mapping_columns(row):
+    if 'mapping' not in row:
+        return {}
+    m = row['mapping']
+    gain = m['mapping']['gain']
+    return {'mapping_kind': m['mapping']['kind'], 'mapping_gain': gain['rule'],
+            'mapping_gain_parameter': gain.get('fraction', gain.get('value')),
+            'mapping_margin_us': m['mapping']['margin_us'], 'mapping_saturated_fraction': m['saturated_fraction'],
+            'mapping_clean_relative_weight_error': m['clean_relative_weight_error']}
+
+
 def flat_rows(rows, run_dir):
-    return [{**{k: v for k, v in row.items() if k not in ('metrics', 'bounds', 'law')},
+    return [{**{k: v for k, v in row.items() if k not in ('metrics', 'bounds', 'law', 'mapping')},
+             **_mapping_columns(row),
              **row['metrics'],
              **{f'{role}_{k}': v for role, b in row['bounds'].items() for k, v in b.items()},
              'run_dir': str(run_dir)} for row in rows]

@@ -1,7 +1,10 @@
 """Write the Jean Zay manifest of the crossbar drift-mapping units: one group per drift law
 (its three realizations), run in turn by one dev-queue job (campaigns/drift-regimes/launch/worker.py).
 
-Usage: python campaigns/drift-mapping/make_manifest.py <source dir on JZ> <output root on JZ> <out.json>
+Usage: python campaigns/drift-mapping/make_manifest.py <source dir on JZ> <output root on JZ> <out.json> [prefix]
+
+``prefix`` selects another lifecycle family in lifecycles/ (default the series-002 units,
+'opt125m-drift-mapping-xbar-'; the mapping search uses 'opt125m-xbar-mapping-').
 """
 import json
 from pathlib import Path
@@ -14,15 +17,16 @@ JZ = '/lustre/fsn1/projects/rech/umg/ucy17uy'
 
 def main():
     source, output, out = sys.argv[1:4]
+    prefix = sys.argv[4] if len(sys.argv) > 4 else 'opt125m-drift-mapping-xbar-'
     groups = {}
-    for path in sorted((HERE / 'lifecycles').glob('opt125m-drift-mapping-xbar-*.json')):
-        law = path.stem.removeprefix('opt125m-drift-mapping-xbar-').rsplit('-', 1)[0]
+    for path in sorted((HERE / 'lifecycles').glob(f'{prefix}*.json')):
+        law = path.stem.removeprefix(prefix).rsplit('-', 1)[0]
         groups.setdefault(law, []).append(str(path.relative_to(ROOT)))
     if not groups or any(len(v) != 3 for v in groups.values()):
         raise ValueError('Expected three realizations per law; generate the lifecycles first.')
     manifest = {
-        'schema': 'drift_regimes.screen.launch.v1', 'run': 'drift-mapping-xbar',
-        'campaign_prefix': 'opt125m-drift-mapping-xbar-',
+        'schema': 'drift_regimes.screen.launch.v1', 'run': prefix.removeprefix('opt125m-').rstrip('-'),
+        'campaign_prefix': prefix,
         'source': source, 'output': output,
         'teacher': f'{JZ}/opt-cmo-exp1/inputs/opt-125m-27dcfa74/pytorch_model.bin',
         'teacher_sha256': '2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9',
