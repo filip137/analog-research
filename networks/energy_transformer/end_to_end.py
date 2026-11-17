@@ -62,8 +62,14 @@ def timing(spec):
     t_q = KEYS * tw
     t_int0 = t_q + (tw if spec.get('query_hold') else 0.) + float(spec['t_reset'])
     t_int1 = t_int0 + float(spec['t_integrate'])
-    return {'t_write': tw, 't_query': t_q, 't_int0': t_int0, 't_int1': t_int1,
-            't_end': t_int1 + float(spec['t_settle']), 'sample': [(j * tw + .1 * tw, (j + .9) * tw) for j in range(KEYS)]}
+    out = {'t_write': tw, 't_query': t_q, 't_int0': t_int0, 't_int1': t_int1,
+           't_end': t_int1 + float(spec['t_settle']), 'sample': [(j * tw + .1 * tw, (j + .9) * tw) for j in range(KEYS)]}
+    if spec.get('nudge'):                   # #62: free phase, then +beta and -beta phases at the output node
+        tp = float(spec['nudge']['t_phase'])
+        out['t_free'] = out['t_end']
+        out['t_plus'] = out['t_free'] + tp
+        out['t_end'] = out['t_free'] + 2 * tp
+    return out
 
 
 def pwl(points):
@@ -253,6 +259,10 @@ def netlist(spec, model):
             mos(f'mb_{j}{d}', 'vdd', f'k{j}{d}', x, '0', 'nc', 'scorer', width=S * W_N)
             lines.append(f'.nodeset v({t})=.45 v({x})=.5')
         lines.append(f'Vsc_{j} psum{j} sum{j} 0')
+        if spec.get('mirror_bias'):         # #62: bias keeps the summing mirror fast at small cell currents;
+            ib = float(spec['mirror_bias'])  # common to every key, so it cancels in the softmax
+            tb0 = max(T['t_int0'] - float(spec.get('t_warm', 0.)), EDGE) if gate else EDGE
+            lines.append(f'Ibias_{j} psum{j} 0 ' + (pwl([(0, 0), (tb0, 0), (tb0 + EDGE, ib), (T['t_int1'] + EDGE, ib), (T['t_int1'] + 2 * EDGE, 0)]) if gate else f'{ib:.17g}'))
         mos(f'pd_{j}', f'psum{j}', f'psum{j}', 'vdd', 'vdd', 'pc', 'scorer', width=W_N)
         mos(f'pc_{j}', f'pint{j}', f'psum{j}', 'vdd', 'vdd', 'pc', 'scorer', width=W_N)
         switch(f'int_{j}', f'pint{j}', f'gsc{j}', 'int', 'intb')
@@ -276,6 +286,11 @@ def netlist(spec, model):
 
     if chain == 'A':
         _bank(lines, mos, columns, ch, sup, spec.get('c_state', pc.CAP), vref_node)
+        if spec.get('nudge'):               # loss nudge: sink IREF*beta(t)*(x_t - x_o) at output node z3_0
+            nb, xt = float(spec['nudge']['beta']), float(spec['nudge']['x_target'])
+            lines.append(f'Vnb nb 0 {pwl([(0, 0), (T["t_free"], 0), (T["t_free"] + EDGE, nb), (T["t_plus"], nb), (T["t_plus"] + EDGE, -nb), (T["t_end"], -nb)])}')
+            lines.append(f'Bnud z3_0 0 I = {IREF:.17g}*V(nb)*({xt:.17g} - i(Vread_3_0)/{IREF * H0:.17g})')
+            columns.append(('nudge_beta', 'v(nb)'))
     else:
         _translinear(lines, mos, columns, vref_node)
     columns.append(('supply', 'i(VDD)'))
@@ -418,6 +433,14 @@ def decode(port, spec):
             pre = float(np.interp(t1 - EDGE, t, port[f'hold_{name}']))     # node just before the switch opens
             held[name] = {'column': before, 'held': after, 'end': end, 'pre': pre}
     out['kv'] = held
+    if spec.get('nudge') and spec['chain'] == 'A':      # bank coordinates at the end of each phase (feature 0)
+        ph = {}
+        for name, tt in (('free', T['t_free']), ('plus', T['t_plus']), ('minus', T['t_end'])):
+            tt = tt - EDGE if name != 'minus' else tt
+            ph[name] = {'x': [float(np.interp(tt, t, port[f'read_{j}_0'])) / IREF for j in range(KEYS)],
+                        'xo': float(np.interp(tt, t, port['read_3_0'])) / (IREF * H0)}
+        out['phases'] = ph
+        out['z'] = [float(port[f'value_in_{j}_0'][-1]) / IREF for j in range(KEYS)]
     if 'hold_qh0' in port:
         out['query_held'] = [float(port[f'hold_qh{d}'][-1]) for d in range(DIMS)]
     if 'hold_vcmh' in port:

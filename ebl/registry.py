@@ -1019,6 +1019,17 @@ EXPERIMENT_REGISTRY['attention_layer.v1'] = ExperimentDefinition(
     parser=_attention_layer_parse, resolver=_attention_layer_resolve,
 )
 
+from ebl.schema.onchip_attention import (
+    parse_config as _onchip_attention_parse,
+    resolve_config as _onchip_attention_resolve,
+)
+EXPERIMENT_REGISTRY['onchip_attention.v1'] = ExperimentDefinition(
+    experiment_id='onchip_attention.v1', schema_version=1,
+    description='SPICE-in-the-loop on-chip learning of the bank attention chain (EP in the bank, local backward rule).',
+    supported_modes=(RunMode.CHARACTERIZE,),
+    parser=_onchip_attention_parse, resolver=_onchip_attention_resolve,
+)
+
 from ebl.schema.pseudo_mnist import parse_config as _pseudo_mnist_parse, resolve_config as _pseudo_mnist_resolve
 EXPERIMENT_REGISTRY['pseudo_mnist.v1'] = ExperimentDefinition(
     experiment_id='pseudo_mnist.v1', schema_version=1,
