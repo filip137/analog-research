@@ -84,4 +84,54 @@ native results `/home/filip/analog-research/drn/results/onchip-attention/`.
 
 ## Attempts
 
+**Attempt 1** (launch `e73e326`, pinned at `results/onchip-attention/source-e73e326`). Both
+bundles are complete, valid and artifact-verified:
+- `finetune/20261117T132522.208152Z-82247a05-98620a71`
+- `scratch/20261117T132522.208837Z-7ed1b5d1-3e942f66`
+
+Recorded SPICE was 85 CPU-min: 720 + 3,600 training transients plus evaluations. With
+readiness, about 100 of the 240 CPU-min allowed.
+
 ## Results
+
+Test MSE in SPICE on the fixed 96-example test set, in normal operation; context-average
+MSE is 0.0341.
+
+| Step | Fine-tune (from offline drawn-law weights) | From scratch (random conductances) |
+| ---: | ---: | ---: |
+| 0 | 2.63e-4 | 9.08e-2 |
+| 20 | 1.13e-4 | |
+| 40 | 8.01e-5 | |
+| 50 | | 4.55e-2 |
+| 60 | **4.44e-5** (768× better than the context average) | |
+| 100 | | 3.87e-3 |
+| 150 | | 8.64e-5 |
+| 200 | | 6.28e-5 |
+| 250 | | 5.54e-5 |
+| 300 | | **4.94e-5** (690×) |
+| Training transients / failed | 720 / 0 | 3,600 / 1 (skipped) |
+| Temperature g, start → end | 5.6 → 6.9 | 3.5 → 13.9 |
+
+**Both runs pass the gate** (≤ 1e-3 and ≥ 5× the context average).
+
+**Interpretation.**
+1. **Chain A trains through its own circuit.** The gradient signals are measured in BSIM3:
+   bank coordinates under ±β nudges, softmax and value currents, held q/k voltages, summed
+   score currents. Only the products and the update are digital. From random conductances
+   it reaches 4.9e-5, at the level of the best offline designs in SPICE (2.5e-5 at #59 L5).
+2. **Fine-tuning in the loop improves an offline design 6× in 60 steps.** It corrects what
+   the drawn-law equations get wrong about the real circuit (the cell law, the bank, the
+   mirrors) without a separate law fit.
+3. **The from-scratch trajectory matches the equations** (stage 1: 3.6e-2 at step 50,
+   1.8e-3 at 100, 3.4e-5 at 300). The circuit-measured gradient carries the same
+   information.
+4. **Training raised the integration temperature** to g ≈ 13.9. Score voltages for
+   mismatched keys then enter the compressed region above about 1 V, and the circuit-in-the-
+   loop gradient accommodates that.
+5. **What stays digital or ideal:**
+   - the cell derivative law;
+   - the crossbar voltage formula (equal to the measured columns to µV);
+   - the backward products, the Adam update and the readout;
+   - the behavioural nudge source.
+
+   No mismatch, noise or update-device model; conductances are written exactly.
