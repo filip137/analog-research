@@ -1008,6 +1008,17 @@ EXPERIMENT_REGISTRY['attention_size.v1'] = ExperimentDefinition(
     parser=_attention_size_parse, resolver=_attention_size_resolve,
 )
 
+from ebl.schema.attention_layer import (
+    parse_config as _attention_layer_parse,
+    resolve_config as _attention_layer_resolve,
+)
+EXPERIMENT_REGISTRY['attention_layer.v1'] = ExperimentDefinition(
+    experiment_id='attention_layer.v1', schema_version=1,
+    description='End-to-end analog attention layer: chain B attention, L1 layer norm, DRN MLP.',
+    supported_modes=(RunMode.CHARACTERIZE,),
+    parser=_attention_layer_parse, resolver=_attention_layer_resolve,
+)
+
 from ebl.schema.pseudo_mnist import parse_config as _pseudo_mnist_parse, resolve_config as _pseudo_mnist_resolve
 EXPERIMENT_REGISTRY['pseudo_mnist.v1'] = ExperimentDefinition(
     experiment_id='pseudo_mnist.v1', schema_version=1,
