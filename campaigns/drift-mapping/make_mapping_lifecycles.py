@@ -40,7 +40,8 @@ MAPPINGS = {
     'two-sided-sat1pc': spec('two_sided', 'saturation', fraction=.01),
 }
 # (mapping, CMO multiplier) units; x1 and x10 are added for the winner only if budget allows.
-UNITS = [(m, 4) for m in MAPPINGS]
+# The x4 screen's winner by the frozen rule (lowest mean A1e) was two-sided-sat1pc (17 Nov 2026).
+UNITS = [(m, 4) for m in MAPPINGS] + [('two-sided-sat1pc', 1), ('two-sided-sat1pc', 10)]
 
 
 def mapped(label, multiplier, realization):
