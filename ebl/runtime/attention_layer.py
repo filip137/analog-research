@@ -61,6 +61,9 @@ def characterize(c, store, exe):
         out = list(pool.map(_sim, [(sp, c.model, art / f'ex-{i:03}', exe) for i, sp in enumerate(specs)]))
     if time.monotonic() - t0 > c.wall_seconds:
         raise TimeoutError('Declared characterization allowance exceeded')
+    for i, o in enumerate(out):
+        store.append_metric({'case': f'ex-{i:03}', 'ok': o['ok'],
+                             'spice_class': int(np.argmax(o['r']['out'])) if o['ok'] else None, 'target': exs[i]['target']})
     bad = [o['error'] for o in out if not o['ok']]
     if bad:
         raise RuntimeError(f'{len(bad)} simulations failed; first: {bad[0]}')

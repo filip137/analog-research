@@ -86,4 +86,10 @@ native results `/home/filip/analog-research/drn/results/attention-layer/`.
 
 ## Attempts
 
+**Attempt 1** (launch `7a9bdaa`). Both cases completed and passed their gates (ideal
+wiring: all blocks; BSIM3: 97.9% vs 99.0%), but the artifact validation failed: "Expected
+a completed run to contain metrics.jsonl". The runtime never appended a metric. The
+bundles are kept as evidence under `results/attention-layer/{ideal,bsim3}/20261117T1100*`.
+The fix appends one metric per example; there are no circuit or configuration changes.
+
 ## Results
