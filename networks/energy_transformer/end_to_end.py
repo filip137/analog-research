@@ -44,7 +44,7 @@ KEYS, DIMS, INPUTS = 3, 2, 3
 def timing(spec):
     tw = float(spec['t_write'])
     t_q = KEYS * tw
-    t_int0 = t_q + float(spec['t_reset'])
+    t_int0 = t_q + (tw if spec.get('query_hold') else 0.) + float(spec['t_reset'])
     t_int1 = t_int0 + float(spec['t_integrate'])
     return {'t_write': tw, 't_query': t_q, 't_int0': t_int0, 't_int1': t_int1,
             't_end': t_int1 + float(spec['t_settle']), 'sample': [(j * tw + .1 * tw, (j + .9) * tw) for j in range(KEYS)]}
@@ -104,22 +104,36 @@ def netlist(spec, model):
     count = {}
     columns = []
 
+    split = bool(spec.get('power_split'))
+    size_scale = float(spec.get('size_scale', 1.))
+
+    def sup(group):
+        return f'vdd_{group}' if split else 'vdd'
+
     def mos(name, d, g, s_, b, kind, group, width=None, length=L):
         if width is None:
             width = W_P if kind == 'pc' else W_N
+        if split:
+            d, s_, b = (sup(group) if n == 'vdd' else n for n in (d, s_, b))
+        if group != 'switches':                 # same W/L (same law), capacitance ~ size_scale^2
+            width, length = width * size_scale, length * size_scale
         lines.append(f'{prefix}{name} {d} {g} {s_} {b} {kind} w={width:.17g} l={length:.17g}')
         count[group] = count.get(group, 0) + 1
 
     if model == 'ideal':
         lines.append('.model swm sw vt=0.9 vh=0.05 ron=1e3 roff=1e16')
+        lines.append('.model swen sw vt=0.9 vh=0.05 ron=1e3 roff=1e12')
+
+    w_hold = float(spec.get('hold_switch_width', W_SW))
 
     def switch(name, a, b, clk, clkb):
         """Transmission gate (BSIM3) or ideal switch, closed while clk is high."""
         if model == 'ideal':
             lines.append(f'S{name} {a} {b} {clk} 0 swm')
         else:
-            mos(f'{name}n', a, clk, b, '0', 'nc', 'switches', W_SW, L_SW)
-            mos(f'{name}p', a, clkb, b, 'vdd', 'pc', 'switches', W_SW, L_SW)
+            w = w_hold if name.startswith('sh_') else W_SW
+            mos(f'{name}n', a, clk, b, '0', 'nc', 'switches', w, L_SW)
+            mos(f'{name}p', a, clkb, b, 'vdd', 'pc', 'switches', w, L_SW)
 
     # 1. token DAC and crossbar
     seq = [ctx[j] for j in range(KEYS)] + [xq]
@@ -129,7 +143,10 @@ def netlist(spec, model):
             for j, x in enumerate(seq):
                 v = v_cm + sign * s * x[i]
                 t0 = j * T['t_write']
-                pts += [(t0 + (EDGE if j else 0), v), ((j + 1) * T['t_write'] if j < KEYS else T['t_end'], v)]
+                t1 = (j + 1) * T['t_write'] if (j < KEYS or spec.get('duty_cycle')) else T['t_end']
+                pts += [(t0 + (EDGE if j else 0), v), (t1, v)]
+            if spec.get('duty_cycle'):          # inputs return to V_cm after the query window
+                pts += [(T['t_query'] + T['t_write'] + EDGE, v_cm), (T['t_end'], v_cm)]
             lines.append(f'Vx{tag}{i} x{tag}{i} 0 {pwl(pts)}')
     cols = [('kc0', kgp[0], kgm[0]), ('kc1', kgp[1], kgm[1]), ('vc', vgp[0], vgm[0])]
     for node, gp, gm in cols:
@@ -149,9 +166,37 @@ def netlist(spec, model):
             lines.append(f'.ic v({dst})={v_cm:.17g}')
             columns.append((f'hold_{dst}', f'v({dst})'))
     count['hold_capacitors'] = 3 * KEYS
+    qnode = 'kc{d}'
+    vref_node = 'vcmv'
+    if spec.get('duty_cycle') and not spec.get('query_hold'):
+        raise ValueError('duty_cycle needs query_hold (the live query would follow V_cm)')
+    if spec.get('ref_hold') and not spec.get('query_hold'):
+        raise ValueError('ref_hold needs query_hold (it samples in the query window)')
+    if spec.get('query_hold'):                  # sample the query too, so the crossbar can go idle
+        tq0, tq1 = T['t_query'] + .1 * T['t_write'], T['t_query'] + .9 * T['t_write']
+        lines.append(f'Vphiq phiq 0 {pulse_high(tq0, tq1)}')
+        lines.append(f'Vphibq phibq 0 {pulse_high(tq0, tq1, hi=0., lo=VDD)}')
+        for d in range(DIMS):
+            switch(f'sh_qh{d}', f'kc{d}', f'qh{d}', 'phiq', 'phibq')
+            lines.append(f'Chold_qh{d} qh{d} 0 {ch:.17g}')
+            lines.append(f'.ic v(qh{d})={v_cm:.17g}')
+            columns.append((f'hold_qh{d}', f'v(qh{d})'))
+        count['hold_capacitors'] += DIMS
+        qnode = 'qh{d}'
+        if spec.get('ref_hold'):                # value reference sampled like the values (matched pedestal)
+            switch('sh_vcmh', 'vcmv', 'vcmh', 'phiq', 'phibq')
+            lines.append(f'Chold_vcmh vcmh 0 {ch:.17g}')
+            lines.append(f'.ic v(vcmh)={v_cm:.17g}')
+            count['hold_capacitors'] += 1
+            vref_node = 'vcmh'
+            columns.append(('hold_vcmh', 'v(vcmh)'))
 
     # 4. anti-bump scorer with capacitor integration
-    lines.append(f'Iref_tail vdd tref {tail:.17g}')
+    lines.append(f'Iref_tail {sup("scorer")} tref {tail:.17g}')
+    gate = bool(spec.get('gate_scorer'))
+    if gate:                                    # cell tails switched on only for warm-up + integration
+        ta = max(T['t_int0'] - float(spec['t_warm']), EDGE)
+        lines.append(f'Ven en 0 {pulse_high(ta, T["t_int1"] + EDGE)}')
     mos('tref', 'tref', 'tref', '0', '0', 'nc', 'scorer')
     lines.append('.nodeset v(tref)=.6')
     lines.append(f'Vrst rst 0 {pulse_high(0, T["t_int0"])}')
@@ -160,10 +205,18 @@ def netlist(spec, model):
     for j in range(KEYS):
         for d in range(DIMS):
             t, x = f't{j}{d}', f'x{j}{d}'
-            mos(f'tail_{j}{d}', t, 'tref', '0', '0', 'nc', 'scorer')
-            mos(f'oa_{j}{d}', f'sum{j}', f'kc{d}', t, '0', 'nc', 'scorer')
+            if gate:
+                if model == 'ideal':            # open-switch leak keeps the floating tail node defined
+                    lines.append(f'Sen_{j}{d} ts{j}{d} 0 en 0 swen')
+                else:
+                    mos(f'en_{j}{d}', f'ts{j}{d}', 'en', '0', '0', 'nc', 'switches', W_SW, L_SW)
+                mos(f'tail_{j}{d}', t, 'tref', f'ts{j}{d}', '0', 'nc', 'scorer')
+                lines.append(f'.nodeset v(ts{j}{d})=.3')
+            else:
+                mos(f'tail_{j}{d}', t, 'tref', '0', '0', 'nc', 'scorer')
+            mos(f'oa_{j}{d}', f'sum{j}', qnode.format(d=d), t, '0', 'nc', 'scorer')
             mos(f'ob_{j}{d}', f'sum{j}', f'k{j}{d}', t, '0', 'nc', 'scorer')
-            mos(f'ma_{j}{d}', x, f'kc{d}', t, '0', 'nc', 'scorer', width=S * W_N)
+            mos(f'ma_{j}{d}', x, qnode.format(d=d), t, '0', 'nc', 'scorer', width=S * W_N)
             mos(f'mb_{j}{d}', 'vdd', f'k{j}{d}', x, '0', 'nc', 'scorer', width=S * W_N)
             lines.append(f'.nodeset v({t})=.45 v({x})=.5')
         lines.append(f'Vsc_{j} psum{j} sum{j} 0')
@@ -179,7 +232,7 @@ def netlist(spec, model):
     lines.append(f'Vrstb rstb 0 {pulse_high(0, T["t_int0"], hi=0., lo=VDD)}')
 
     # 5. Elfadel-Wyatt softmax
-    lines.append(f'Iref_ew ewr 0 {amp * IREF:.17g}')
+    lines.append(f'Iref_ew ewr 0 {amp * IREF:.17g}')    # sink: drawn through the softmax PMOS from its supply
     mos('ewr', 'ewr', 'ewr', 'vdd', 'vdd', 'pc', 'softmax')
     mos('ewt', 'ews', 'ewr', 'vdd', 'vdd', 'pc', 'softmax')
     lines.append('.nodeset v(ewr)=1.1 v(ews)=1.4')
@@ -189,10 +242,22 @@ def netlist(spec, model):
         columns.append((f'softmax_{j}', f'i(Vew_{j})'))
 
     if chain == 'A':
-        _bank(lines, mos, columns, ch)
+        _bank(lines, mos, columns, ch, sup, spec.get('c_state', pc.CAP), vref_node)
     else:
-        _translinear(lines, mos, columns)
+        _translinear(lines, mos, columns, vref_node)
     columns.append(('supply', 'i(VDD)'))
+    if split:
+        blocks = sorted(g for g in count if g not in ('crossbar_resistors', 'hold_capacitors'))
+        for g in blocks:
+            lines.insert(5, f'VDD_{g} vdd_{g} 0 {VDD}')
+            columns.append((f'pwr_supply_{g}', f'i(VDD_{g})'))
+        for i in range(INPUTS):
+            for tag in 'pm':
+                columns += [(f'pwr_tok_i_{tag}{i}', f'i(Vx{tag}{i})'), (f'pwr_tok_v_{tag}{i}', f'v(x{tag}{i})')]
+        clocks = [ln.split()[0] for ln in lines if ln.startswith(('Vphi', 'Vrst', 'Vint', 'Ven '))]
+        for name in clocks:
+            node = next(ln.split()[1] for ln in lines if ln.startswith(name + ' '))
+            columns += [(f'pwr_clk_i_{name}', f'i({name})'), (f'pwr_clk_v_{name}', f'v({node})')]
     tmax = min(T['t_end'] / 400, 2e-4)
     lines += ['.control', 'set noaskquit', 'set numdgt=15', 'set wr_vecnames', 'set wr_singlescale',
               f'tran {T["t_write"] / 200:.12g} {T["t_end"]:.12g} 0 {tmax:.12g}',
@@ -200,15 +265,15 @@ def netlist(spec, model):
     return '\n'.join(lines) + '\n', columns, count
 
 
-def _bank(lines, mos, columns, ch):
+def _bank(lines, mos, columns, ch, sup=lambda g: 'vdd', c_state=pc.CAP, vref_node='vcmv'):
     """51-MOS bank of pseudoconductance.export with diff-pair value inputs."""
     for label, current in (('h', IREF), ('h0', IREF * H0)):
-        lines.append(f'Iref_{label} vdd g_{label} {current:.17g}')
+        lines.append(f'Iref_{label} {sup("bank")} g_{label} {current:.17g}')
         mos('bias_' + label, 'g_' + label, 'g_' + label, 'vref', '0', 'nc', 'bank')
     for j in range(KEYS):
         mos(f'bias_a{j}', f'g_a{j}', f'g_a{j}', 'vref', '0', 'nc', 'bank')
         lines.append(f'.nodeset v(g_a{j})=.7')
-    lines.append(f'Iref_dp dref 0 {2 * IREF:.17g}')
+    lines.append(f'Iref_dp dref 0 {2 * IREF:.17g}')     # sink: drawn through the PMOS diode from its supply
     mos('dref', 'dref', 'dref', 'vdd', 'vdd', 'pc', 'value_conversion', W_DP)
     for d in range(DIMS):
         for j in range(KEYS + 1):
@@ -216,13 +281,13 @@ def _bank(lines, mos, columns, ch):
             gate = 'g_h' if j < KEYS else 'g_h0'
             if j < KEYS:      # PMOS diff pair: branch with gate V_cm feeds the input mirror
                 mos(f'dtail_{tag}', f'ds_{tag}', 'dref', 'vdd', 'vdd', 'pc', 'value_conversion', W_DP)
-                feed, dump = ('vcmv', f'v{j}') if d == 0 else (f'v{j}', 'vcmv')
+                feed, dump = (vref_node, f'v{j}') if d == 0 else (f'v{j}', vref_node)
                 lines.append(f'Vdin_{tag} dfeed_{tag} data_{tag} 0')
                 mos(f'dfeed_{tag}', f'dfeed_{tag}', feed, f'ds_{tag}', 'vdd', 'pc', 'value_conversion', W_DP)
                 mos(f'ddump_{tag}', '0', dump, f'ds_{tag}', 'vdd', 'pc', 'value_conversion', W_DP)
                 columns.append((f'value_in_{tag}', f'i(Vdin_{tag})'))
             else:
-                lines.append(f'Ivalue_{tag} vdd data_{tag} {IREF * H0:.17g}')
+                lines.append(f'Ivalue_{tag} {sup("bank")} data_{tag} {IREF * H0:.17g}')
             mos('iref_' + tag, 'data_' + tag, 'data_' + tag, '0', '0', 'nc', 'bank')
             mos('isink_' + tag, node, 'data_' + tag, '0', '0', 'nc', 'bank')
             mos('pr_' + tag, 'sense_' + tag, 'sense_' + tag, 'vdd', 'vdd', 'pc', 'bank')
@@ -230,7 +295,8 @@ def _bank(lines, mos, columns, ch):
             mos('anchor_' + tag, 'anc_' + tag, gate, node, '0', 'nc', 'bank')
             mos('pcopy_' + tag, 'read_' + tag, 'sense_' + tag, 'vdd', 'vdd', 'pc', 'bank')
             lines.append(f'Vread_{tag} read_{tag} 0 {VREAD}')
-            lines.append(f'Cstate_{tag} {node} 0 {pc.CAP:.17g}')
+            if c_state > 0:
+                lines.append(f'Cstate_{tag} {node} 0 {c_state:.17g}')
             lines.append(f'.ic v({node})=.3')
             lines.append(f'.nodeset v(data_{tag})=.3 v(sense_{tag})=1.5')
             columns += [(f'read_{tag}', f'i(Vread_{tag})'), (f'v_{tag}', f'v({node})'),
@@ -239,7 +305,7 @@ def _bank(lines, mos, columns, ch):
             mos(f'edge_{j}_{d}', f'z{j}_{d}', f'g_a{j}', f'z3_{d}', '0', 'nc', 'bank')
 
 
-def _translinear(lines, mos, columns):
+def _translinear(lines, mos, columns, vref_node='vcmv'):
     """Softmax currents as diff-pair tails; outputs into ideal compliance probes."""
     for d in range(DIMS):
         lines.append(f'Vop_{d} op{d} 0 {VREAD}')
@@ -250,7 +316,7 @@ def _translinear(lines, mos, columns):
         for d in range(DIMS):
             tag = f'{j}_{d}'
             mos(f'bt_{tag}', f'bs_{tag}', f'g_a{j}', '0', '0', 'nc', 'translinear')
-            vp, vm = (f'v{j}', 'vcmv') if d == 0 else ('vcmv', f'v{j}')
+            vp, vm = (f'v{j}', vref_node) if d == 0 else (vref_node, f'v{j}')
             mos(f'bp_{tag}', f'op{d}', vp, f'bs_{tag}', '0', 'nc', 'translinear')
             mos(f'bm_{tag}', f'om{d}', vm, f'bs_{tag}', '0', 'nc', 'translinear')
 
@@ -286,7 +352,33 @@ def decode(port, spec):
             end = float(port[f'hold_{name}'][-1])
             held[name] = {'column': before, 'held': after, 'end': end}
     out['kv'] = held
+    if 'hold_qh0' in port:
+        out['query_held'] = [float(port[f'hold_qh{d}'][-1]) for d in range(DIMS)]
+    if 'hold_vcmh' in port:
+        out['ref_offset'] = float(port['hold_vcmh'][-1]) - float(spec['v_cm'])
     out['hold_seconds'] = float(t[-1] - T['sample'][-1][1])
+    return out
+
+
+def energy(port):
+    """Energy delivered over the whole step (J): block supplies, token sources, clock sources."""
+    t = port['time']
+    out = {}
+    for k in port:
+        if k.startswith('pwr_supply_'):
+            out['supply_' + k[len('pwr_supply_'):]] = float(np.trapezoid(-VDD * port[k], t))
+    # token drivers: energy delivered into the crossbar (lower bound) and drawn from a VDD rail
+    # by a driver that sources from VDD and sinks to ground (class-B bound, used in the total)
+    out['crossbar_delivered'] = float(sum(np.trapezoid(-port[k] * port[k.replace('_i_', '_v_')], t)
+                                          for k in port if k.startswith('pwr_tok_i_')))
+    out['crossbar_tokens'] = float(sum(np.trapezoid(VDD * np.maximum(-port[k], 0), t)
+                                       for k in port if k.startswith('pwr_tok_i_')))
+    # clock drivers: charge drawn from VDD while driving gates high (C V^2 per rising edge)
+    out['clocks'] = float(sum(np.trapezoid(VDD * np.maximum(-port[k], 0), t)
+                              for k in port if k.startswith('pwr_clk_i_')))
+    out['core'] = sum(v for k, v in out.items() if k.startswith('supply_'))
+    out['total'] = out['core'] + out['crossbar_tokens'] + out['clocks']
+    out['step_seconds'] = float(t[-1])
     return out
 
 
@@ -309,6 +401,8 @@ def simulate(spec, model, directory, executable, timeout=600):
     port = {'time': data[:, 0], **{name: data[:, k + 1] for k, (name, _) in enumerate(columns)}}
     np.savez_compressed(directory / 'trace.npz', **port)
     res = decode(port, spec)
+    if spec.get('power_split'):
+        res['energy'] = energy(port)
     supply = port['supply']
     res['supply_power_W_end'] = float(-VDD * supply[-1])
     res['counts'] = count

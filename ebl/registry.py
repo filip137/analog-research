@@ -986,6 +986,17 @@ EXPERIMENT_REGISTRY['end_to_end_attention.v1'] = ExperimentDefinition(
     parser=_e2e_attention_parse, resolver=_e2e_attention_resolve,
 )
 
+from ebl.schema.attention_energy import (
+    parse_config as _attention_energy_parse,
+    resolve_config as _attention_energy_resolve,
+)
+EXPERIMENT_REGISTRY['attention_energy.v1'] = ExperimentDefinition(
+    experiment_id='attention_energy.v1', schema_version=1,
+    description='Energy ladder of the end-to-end analog attention step with per-block power accounting.',
+    supported_modes=(RunMode.CHARACTERIZE,),
+    parser=_attention_energy_parse, resolver=_attention_energy_resolve,
+)
+
 from ebl.schema.pseudo_mnist import parse_config as _pseudo_mnist_parse, resolve_config as _pseudo_mnist_resolve
 EXPERIMENT_REGISTRY['pseudo_mnist.v1'] = ExperimentDefinition(
     experiment_id='pseudo_mnist.v1', schema_version=1,

@@ -876,6 +876,9 @@ def _default_characterize_handler(
     if request.definition.experiment_id == 'antibump_scorer_attention.v1':
         from ebl.runtime.antibump_scorer_attention import run_characterize
         return run_characterize(request)
+    if request.definition.experiment_id == 'attention_energy.v1':
+        from ebl.runtime.attention_energy import run_characterize
+        return run_characterize(request)
     if request.definition.experiment_id == 'end_to_end_attention.v1':
         from ebl.runtime.end_to_end_attention import run_characterize
         return run_characterize(request)

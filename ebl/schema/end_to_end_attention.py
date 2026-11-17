@@ -73,7 +73,7 @@ def parse_config(raw):
         raise ConfigError('Token inputs must stay within the rails')
     if not (1e-14 <= c.c_score <= 1e-10 and 1e-14 <= c.c_hold <= 1e-10):
         raise ConfigError('Capacitors out of range')
-    if not (1e-6 <= c.t_write <= 1e-3 and 1e-6 <= c.t_reset <= 1e-3 and .005 <= c.t_settle <= 1):
+    if not (2e-7 <= c.t_write <= 1e-3 and 1e-6 <= c.t_reset <= 1e-3 and .005 <= c.t_settle <= 1):
         raise ConfigError('Timing out of range')
     if not all(math.isfinite(x) for x in (c.readout_alpha, c.readout_gamma)):
         raise ConfigError('Readout must be finite')
