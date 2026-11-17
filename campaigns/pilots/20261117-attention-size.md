@@ -98,4 +98,47 @@ traces are deleted after summarizing; per-instance results stay in `summary.json
 
 ## Attempts
 
+**Attempt 1** (launch `922c959`, pinned at `results/attention-size/source-922c959`).
+All 8 bundles are complete, valid and artifact-verified. Recorded SPICE was 182 CPU-min;
+with about 60 CPU-min of scratch work, the total is about 240 of the 300 allowed.
+
 ## Results
+
+| | Gate area | Capacitance | Area (2 fF/µm²) | Nominal MSE | Yield, calibrated (gate ≥ 0.9) | Yield, raw | Calibrated MSE median / worst | Yield at 2× A_VT | Energy |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **B Z0** | 24,330 µm² | 15.0 pF | 31,830 | 1.8e-4 | **1.00** | 0.60 | 3.2e-4 / 8.3e-4 | 0.50 | 0.94 nJ |
+| **B Z1** | 24,330 | 4.5 pF | 26,580 | 1.9e-4 | **1.00** | 0.60 | 3.4e-4 / 8.0e-4 | 0.50 | 0.94 nJ |
+| **B Z2** | 3,297 | 4.5 pF | 5,547 | 2.0e-4 | **0.95** | 0.55 | 3.7e-4 / 1.0e-3 | 0.30 | 0.95 nJ |
+| **B Z3** | **2,847** | 4.5 pF | **5,097** | 1.9e-4 | **0.90** | 0.50 | 4.5e-4 / 1.3e-3 | 0.30 | 0.95 nJ |
+| A Z0 | 29,690 | 15.0 pF | 37,190 | 2.5e-5 | 0.45 ✗ | 0.05 | 1.1e-3 / 4.7e-3 | 0.00 | 1.19 nJ |
+| A Z1 | 29,690 | 4.5 pF | 31,940 | 2.4e-4 | 0.40 ✗ (value sampling 1.6 mV ✗) | 0.05 | 1.1e-3 / 4.7e-3 | 0.00 | 1.18 nJ |
+| A Z2 | 8,657 | 4.5 pF | 10,907 | 2.4e-4 | 0.30 ✗ (value sampling ✗) | 0.05 | 1.4e-3 / 4.7e-3 | 0.00 | 1.19 nJ |
+| A Z3 | 13,457 | 4.5 pF | 15,707 | 3.2e-4 | 0.75 ✗ (value sampling ✗) | 0.05 | 7.2e-4 / 1.8e-3 | 0.00 | 1.20 nJ |
+
+Chain B passes every gate at every rung. Chain A fails the mismatch-yield gate at every
+rung, including the unmodified #59 design, and fails value sampling at 300 fF.
+
+**Area breakdown, B Z3 (µm²):** value-weighting diff pairs 2,100, switches 480,
+scorer mirrors 150, softmax 50, anti-bump cells 67 (19 + 48), plus 4.5 pF of
+capacitance (≈2,250 µm²).
+
+**Interpretation.**
+1. **Chain B shrinks 6.2× in total area** (8.5× in gate area, 3.3× in capacitance),
+   holding 90% calibrated yield and the nominal accuracy. The scorer goes from 21,100 to
+   67 µm². The SPICE-fitted law of the 1 µm, S = 4 cell plus retrained weights makes
+   this free.
+2. **What is left is precision-limited, not law-limited:**
+   - The value diff pairs (74% of B's gate area) compare values of about ±20 mV
+     against offsets of about 1 mV. Shrinking them fails yield.
+   - The capacitors (now about 45% of total area) are bounded by value sampling
+     accuracy.
+   - The switches are bounded by injection mismatch.
+3. **Chain A is not mismatch-robust at any size**, including the #58/#59 design: 45%
+   yield. Its value input mirrors add a per-slot gain error to the bank's 1 + v
+   encoding, which the two-parameter calibration cannot remove. 2× W and L on those
+   mirrors reaches 75%, not 90%.
+4. **The per-chip readout calibration is essential.** Raw yields are 50–60% (B) and 5%
+   (A). The 2× A_VT case passes only 30–50% (B), so the margin depends strongly on the
+   assumed Pelgrom coefficient.
+5. **Not modelled:** PDK mismatch data, layout parasitics (they add capacitance to the
+   small nodes), flicker and thermal noise beyond kT/C, and temperature.
