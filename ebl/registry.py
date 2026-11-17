@@ -975,6 +975,17 @@ EXPERIMENT_REGISTRY['antibump_scorer_attention.v1'] = ExperimentDefinition(
     parser=_antibump_parse, resolver=_antibump_resolve,
 )
 
+from ebl.schema.end_to_end_attention import (
+    parse_config as _e2e_attention_parse,
+    resolve_config as _e2e_attention_resolve,
+)
+EXPERIMENT_REGISTRY['end_to_end_attention.v1'] = ExperimentDefinition(
+    experiment_id='end_to_end_attention.v1', schema_version=1,
+    description='End-to-end analog attention step: token crossbar, KV hold, anti-bump scorer, softmax, bank or translinear values.',
+    supported_modes=(RunMode.CHARACTERIZE,),
+    parser=_e2e_attention_parse, resolver=_e2e_attention_resolve,
+)
+
 from ebl.schema.pseudo_mnist import parse_config as _pseudo_mnist_parse, resolve_config as _pseudo_mnist_resolve
 EXPERIMENT_REGISTRY['pseudo_mnist.v1'] = ExperimentDefinition(
     experiment_id='pseudo_mnist.v1', schema_version=1,
