@@ -39,6 +39,22 @@ W_SW, L_SW = 10e-6, 1e-6
 W_DP = 20e-6                  # value diff-pair PMOS width (headroom at V_cm = 1.05 V)
 EDGE = 100e-9
 KEYS, DIMS, INPUTS = 3, 2, 3
+KT = 1.380649e-23 * 300.15
+# device families for per-block geometry (name prefixes; switches are identified by their group)
+FAMILIES = (('cell_mid', ('ma_', 'mb_')), ('cell', ('tail_', 'oa_', 'ob_', 'tref')), ('mirror', ('pd_', 'pc_')),
+            ('softmax', ('ewr', 'ewt', 'ew_')), ('value', ('dref', 'dtail_', 'dfeed_', 'ddump_')),
+            ('bank_read', ('pr_', 'pcopy_')), ('bank_input', ('iref_', 'isink_')),
+            ('bank', ('bias_', 'anchor_', 'edge_')),
+            ('translinear', ('bd_', 'bt_', 'bp_', 'bm_')))
+
+
+def family(name, group):
+    if group == 'switches':
+        return 'switch'
+    for fam, prefixes in FAMILIES:
+        if name.startswith(prefixes):
+            return fam
+    raise ValueError(f'No device family for {name}')
 
 
 def timing(spec):
@@ -106,6 +122,12 @@ def netlist(spec, model):
 
     split = bool(spec.get('power_split'))
     size_scale = float(spec.get('size_scale', 1.))
+    geometry = spec.get('geometry') or {}
+    mism = spec.get('mismatch')
+    mrng = np.random.default_rng(int(mism['seed'])) if mism else None
+    ktc_seed = spec.get('ktc_seed')
+    held = ({f'k{j}{d}' for j in range(KEYS) for d in range(DIMS)} | {f'v{j}' for j in range(KEYS)}
+            | {f'qh{d}' for d in range(DIMS)} | {'vcmh'} | {f'gsc{j}' for j in range(KEYS)}) if ktc_seed is not None else set()
 
     def sup(group):
         return f'vdd_{group}' if split else 'vdd'
@@ -117,7 +139,18 @@ def netlist(spec, model):
             d, s_, b = (sup(group) if n == 'vdd' else n for n in (d, s_, b))
         if group != 'switches':                 # same W/L (same law), capacitance ~ size_scale^2
             width, length = width * size_scale, length * size_scale
-        lines.append(f'{prefix}{name} {d} {g} {s_} {b} {kind} w={width:.17g} l={length:.17g}')
+        fam = family(name, group)
+        wf, lf = geometry.get(fam, (1., 1.))
+        width, length = width * wf, length * lf
+        if g in held:                           # gate sees the held voltage plus its kT/C sampling offset
+            g = g + '_g'
+        extra = ''
+        if mrng is not None and model == 'bsim3':   # Pelgrom mismatch, A in V*um and fraction*um
+            root = np.sqrt(width * length) * 1e6
+            z1, z2 = mrng.standard_normal(2)          # drawn for every device, applied to selected families
+            if fam in mism.get('families', [f for f, _ in FAMILIES] + ['switch']):
+                extra = f' delvto={mism["avt"] / root * z1:.6g} mulu0={1 + mism["abeta"] / root * z2:.6g}'
+        lines.append(f'{prefix}{name} {d} {g} {s_} {b} {kind} w={width:.17g} l={length:.17g}{extra}')
         count[group] = count.get(group, 0) + 1
 
     if model == 'ideal':
@@ -246,6 +279,21 @@ def netlist(spec, model):
     else:
         _translinear(lines, mos, columns, vref_node)
     columns.append(('supply', 'i(VDD)'))
+    if ktc_seed is not None:                    # kT/C offsets, applied after each node is released
+        krng = np.random.default_rng(int(ktc_seed))
+        t_off = {f'k{j}{d}': T['sample'][j][1] for j in range(KEYS) for d in range(DIMS)}
+        t_off |= {f'v{j}': T['sample'][j][1] for j in range(KEYS)}
+        tq1 = T['t_query'] + .9 * T['t_write']
+        t_off |= {f'qh{d}': tq1 for d in range(DIMS)} | {'vcmh': tq1}
+        t_off |= {f'gsc{j}': T['t_int1'] for j in range(KEYS)}
+        made = {ln.split()[1] for ln in lines if ln.startswith(('Chold_', 'Cscore_'))}
+        for n in sorted(held):
+            if n not in made:
+                continue
+            c = cs if n.startswith('gsc') else ch
+            delta = np.sqrt(KT / c) * krng.standard_normal()
+            t0 = t_off[n] + 2 * EDGE
+            lines.append(f'Vktc_{n} {n}_g {n} {pwl([(0, 0), (t0, 0), (t0 + EDGE, delta)])}')
     if split:
         blocks = sorted(g for g in count if g not in ('crossbar_resistors', 'hold_capacitors'))
         for g in blocks:
@@ -321,6 +369,23 @@ def _translinear(lines, mos, columns, vref_node='vcmv'):
             mos(f'bm_{tag}', f'om{d}', vm, f'bs_{tag}', '0', 'nc', 'translinear')
 
 
+def inventory(net):
+    """Gate area per device family (um^2) and explicit capacitance (F) of a netlist."""
+    import re
+    areas, cap = {}, 0.
+    for ln in net.splitlines():
+        if ln[:1] in 'MX' and ' w=' in ln:
+            name = ln.split()[0][1:]
+            sw = name.startswith(('sh_', 'int_', 'dump_', 'rst_', 'en_'))
+            fam = family(name, 'switches' if sw else '')
+            w = float(re.search(r' w=([^ ]+)', ln).group(1))
+            l = float(re.search(r' l=([^ ]+)', ln).group(1))
+            areas[fam] = areas.get(fam, 0.) + w * l * 1e12
+        elif ln.startswith(('Chold_', 'Cscore_', 'Cstate_')):
+            cap += float(ln.split()[3])
+    return {'gate_area_um2': areas, 'gate_area_total_um2': sum(areas.values()), 'capacitance_F': cap}
+
+
 def decode(port, spec):
     T = timing(spec)
     t = port['time']
@@ -350,7 +415,8 @@ def decode(port, spec):
             before = float(np.interp(t1 - EDGE, t, port[f'col_{col}']))
             after = float(np.interp(t1 + 5 * EDGE + .02 * T['t_write'], t, port[f'hold_{name}']))
             end = float(port[f'hold_{name}'][-1])
-            held[name] = {'column': before, 'held': after, 'end': end}
+            pre = float(np.interp(t1 - EDGE, t, port[f'hold_{name}']))     # node just before the switch opens
+            held[name] = {'column': before, 'held': after, 'end': end, 'pre': pre}
     out['kv'] = held
     if 'hold_qh0' in port:
         out['query_held'] = [float(port[f'hold_qh{d}'][-1]) for d in range(DIMS)]

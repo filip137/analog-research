@@ -997,6 +997,17 @@ EXPERIMENT_REGISTRY['attention_energy.v1'] = ExperimentDefinition(
     parser=_attention_energy_parse, resolver=_attention_energy_resolve,
 )
 
+from ebl.schema.attention_size import (
+    parse_config as _attention_size_parse,
+    resolve_config as _attention_size_resolve,
+)
+EXPERIMENT_REGISTRY['attention_size.v1'] = ExperimentDefinition(
+    experiment_id='attention_size.v1', schema_version=1,
+    description='Size ladder of the end-to-end analog attention step with mismatch/kT/C Monte Carlo yield.',
+    supported_modes=(RunMode.CHARACTERIZE,),
+    parser=_attention_size_parse, resolver=_attention_size_resolve,
+)
+
 from ebl.schema.pseudo_mnist import parse_config as _pseudo_mnist_parse, resolve_config as _pseudo_mnist_resolve
 EXPERIMENT_REGISTRY['pseudo_mnist.v1'] = ExperimentDefinition(
     experiment_id='pseudo_mnist.v1', schema_version=1,
