@@ -87,4 +87,65 @@ The rung settings above were chosen from scratch ladders.
 
 ## Attempts
 
+**Attempt 1** (launch `fd865dd`, pinned at `results/attention-energy/source-fd865dd`).
+All 16 bundles are complete, valid and artifact-verified (`ebl runs inspect
+--verify-artifacts --require-complete`). Cumulative SPICE was 288 s. Bundles are under
+`results/attention-energy/<chain>_<rung>_<model>/`.
+
 ## Results
+
+Energy per step, mean of 36 steps. Every BSIM3 rung passes every gate; the ideal L0/L5
+wiring checks pass with SPICE matching its law to ≤ 1e-4.
+
+| Chain A | L0 | L1 | L2 | L3 | L4 | L5 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **Energy per step** | **56.5 µJ** | 11.8 nJ | 6.79 nJ | 4.94 nJ | 2.58 nJ | **1.19 nJ** |
+| Crossbar drivers (rail) / delivered | 56.5 µJ / 35.4 µJ | 4.72 / 2.89 nJ | 4.72 / 2.89 nJ | 4.72 / 2.89 nJ | 2.36 / 1.44 nJ | 0.90 / 0.37 nJ |
+| Core | 7.06 nJ | 7.05 nJ | 2.06 nJ | 0.21 nJ | 0.21 nJ | 0.28 nJ |
+| Clocks | 2.0 pJ | 2.3 pJ | 2.9 pJ | 2.9 pJ | 3.0 pJ | 2.9 pJ |
+| Step time / average power | 0.30 s / 188 µW | 0.30 s / 39 nW | 0.30 s / 23 nW | 30 ms / 163 nW | 30 ms / 85 nW | 40 ms / 29 nW |
+| Retrieval MSE (×context) | 3.8e-4 (74×) | 4.6e-4 (61×) | 8.7e-5 (321×) | 1.0e-4 (269×) | 1.1e-4 (260×) | **2.5e-5 (1128×)** |
+| Key / value sampling error | 1.2 / 0.37 mV | 1.8 / 0.37 | 1.9 / 0.37 | 1.9 / 0.37 | 3.3 / 0.75 | 4.2 / 0.70 |
+| Late drift (gate < 1e-3) | 7e-5 | 7e-5 | 7e-5 | 7.3e-4 | 7.4e-4 | 7.1e-4 |
+| vs 0.3 s hold (reported) | — | — | — | 3.0e-3 | 3.0e-3 | 2.1e-3 |
+| MOS | 148 | 152 | 158 | 158 | 160 | 160 |
+
+| Chain B | L0 | L1 | L2 | L3 | L4 | L5 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **Energy per step** | **3.86 µJ** | 5.20 nJ | 4.88 nJ | 4.86 nJ | 2.44 nJ | **0.94 nJ** |
+| Crossbar drivers (rail) / delivered | 3.85 µJ / 2.44 µJ | 4.83 / 2.96 nJ | 4.83 / 2.96 nJ | 4.83 / 2.96 nJ | 2.41 / 1.48 nJ | 0.91 / 0.37 nJ |
+| Core | 0.37 nJ | 0.37 nJ | 46 pJ | 26 pJ | 26 pJ | 26 pJ |
+| Step time / average power | 20 ms / 191 µW | 20 ms / 258 nW | 20 ms / 239 nW | 10 ms / 468 nW | 10 ms / 236 nW | 10 ms / 90 nW |
+| Retrieval MSE (×context) | 1.8e-4 (151×) | 2.0e-4 (142×) | 8.6e-5 (327×) | 1.3e-4 (210×) | 1.8e-4 (151×) | 1.8e-4 (155×) |
+| Key / value sampling error | 1.1 / 0.39 mV | 1.8 / 0.39 | 1.9 / 0.39 | 1.9 / 0.39 | 3.0 / 0.62 | 4.1 / 0.57 |
+| vs 0.1 s hold (reported) | 1.2e-3 | 1.2e-3 | 2.0e-3 | 5.4e-3 | 8.8e-3 | 9.6e-3 |
+| MOS | 99 | 103 | 109 | 109 | 111 | 111 |
+
+**Final core breakdown.**
+- **A (L5):** bank 94 pJ, value conversion 101 pJ, scorer 79 pJ (mostly the 1 nA bias
+  reference held for 40 ms), softmax 8 pJ.
+- **B (L5):** scorer 24 pJ, softmax 2 pJ.
+- **Not counted:** chain B's diff-pair drain current is supplied by the output
+  compliance sources, which stand for the next stage's input; about 1.4 pJ.
+
+**Interpretation.**
+1. **Energy falls 47,700× (A) and 4,100× (B), and accuracy is no worse.** Chain A's MSE
+   improves 15×, because holding the query too makes its switch pedestal common to the
+   matching key.
+2. **The baseline was dominated by driving the crossbar for the whole hold.** Duty
+   cycling (L1) alone removes about 99.98% of the energy.
+3. **After L5 the crossbar drivers are 76% (A) and 97% (B) of the step.**
+   - What sets them: 4 windows × 2 µs at s = 0.5 V/unit, with µS conductances.
+   - Only 41% of the rail energy reaches the crossbar; the rest is driver headroom.
+4. **The windows are now set by the transmission gates, which are weak near mid-rail
+   at 1.8 V,** not by the crossbar's RC. Bootstrapped switches are the next lever, along
+   with drivers fed from rails near V_cm ± s, or higher-resistance devices (outside the
+   CMO range).
+5. **Chain B, the smaller circuit, wins on energy per step;** chain A wins on average
+   power at its longer, slower step.
+6. **Per generated token with a KV cache (derived, not simulated),** only the new token's
+   window is written each step. The query comes from the same token. So crossbar energy
+   per token is about one window, roughly a quarter of the 4-window step measured here.
+7. **Not modelled:** history dependence of read-before-settle (reported long-hold
+   differences up to 1e-2 for B), mismatch, leakage, noise, and bias-generator and DAC
+   overheads.
