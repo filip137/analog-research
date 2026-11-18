@@ -131,3 +131,20 @@ drift-free CT was 0.038504. CAL recovered 64.3% of the mean gap with zero
 analog writes. CT supplied 90.9% of L1's gain but used 9,876,580 modeled
 writes versus 5,780,982 for L1. Their absolute KL gains over A0 persisted
 through 24 h (24-h gain divided by 1-h gain: CT 1.58, L1 1.57).
+
+DRN12 ×4 also completed. The locally and remotely hash-verified bundle is at
+`results/cmo-drift-recovery-20261118/fifi/drn12-ratio3-m4/run` (7 arms,
+10 ages and 2,400 updates per learner). Mean KL was 0.418314 untreated,
+0.289825 release twin, 0.217137 CAL, 0.255677 LN, 0.205702 CT, 0.205173
+dense L1 and 0.134097 CT-nodrift. The mean-gain ratio of CT to dense L1
+was 99.8%, while CT used 23,757,309 modeled writes to L1's 14,172,865.
+Both physical learners kept a larger gap to A0 at 24 h than at 1 h.
+No DRN12 ×4 LR fallback triggered. Verified elapsed time was 9,845.859 s
+including startup and artifact validation.
+
+Full ×1 cells now use `drn6-ratio3-m1` on riri and `drn12-ratio3-m1` on
+fifi. Launchers are tmux `cmo67-drn6-m1` and `cmo67-drn12-m1`, PIDs
+2450560 and 2105335. The native run tree, pins and verifier are as above.
+The coordinator reserved 2 h for DRN6 and 3.5 h for DRN12 per multiplier;
+×10 follows a fresh idle check on each required host. Cross-backend accounting
+and the callback handoff are in issue 67.
