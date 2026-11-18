@@ -112,9 +112,22 @@ GPU lock, refusal of an occupied GPU, source/teacher/receipt hash checks, `ebl t
 
 ## Current execution and monitoring handoff
 
-Not launched. Next: stage the merged commit and run the two canaries (commands in the
-shared note's handoff and the Codifier report).
+All DRN canaries passed. DRN6 ×4 completed on riri (launcher PID 2406112,
+worker 2406154). DRN12 ×4 on fifi remains with its full-run watcher.
+The [shared study record](https://github.com/filip137/on-chip-learning/issues/67)
+owns subsequent phase admissions and shared accounting.
 
 ## Evidence and coverage
 
-None yet.
+`results/cmo-drift-recovery-20261118/riri/drn6-ratio3-m4/run` contains
+the locally verified native bundle for chip 271001. The source run and local
+copy passed native hash inspection. The unit verifier accepted seven arms,
+ten ages each and all five 2,400-update learners. Time to terminal validation
+was 5,362.679 s (1.489633 GPU-h). All drifting learners beat untreated at 1 h.
+
+Mean 24-h KL was 0.120391 untreated, 0.077072 CAL, 0.079059 LN,
+0.081238 CT and 0.077338 L1. The release twin was 0.053020 and
+drift-free CT was 0.038504. CAL recovered 64.3% of the mean gap with zero
+analog writes. CT supplied 90.9% of L1's gain but used 9,876,580 modeled
+writes versus 5,780,982 for L1. Their absolute KL gains over A0 persisted
+through 24 h (24-h gain divided by 1-h gain: CT 1.58, L1 1.57).
