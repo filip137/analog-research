@@ -188,3 +188,14 @@ state, deployment/control grids and cohort. Select among the three rates
 by full 24-h mean KL, with the costs and all candidate results retained.
 Job IDs, live watch and the 30 GPU-h shared balance are maintained in
 [issue 67](https://github.com/filip137/on-chip-learning/issues/67).
+
+**XB12 full and XB6 fallback gate.** Job 387963 completed all eight arms,
+ten ages and 2,400 updates per trained arm on the V100 (3,140 s).
+The native JSON and validation are in
+`results/cmo-drift-recovery-20261118/jean-zay/xb12-m4/`. Mean KL was
+0.221404 untreated, 0.170106 CAL, 0.172479 LN, 0.234053 CT, 0.172210 L1
+and 0.147420 LoRA. CT used 109,068,405 writes and L1 used 176,092,341.
+No XB12 arm triggered the 1-h fallback. Separately, the XB6 L1 bracket
+gate 390133 passed all four arms and matched the original full XB6
+deployment, cohort and A0/twin age grids. Full bracket job 390386 is under
+the shared study watchdog and will be ranked against the original L1.
