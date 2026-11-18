@@ -35,7 +35,8 @@ DEVELOPMENT_SPLIT = 5000
 
 # Pinned OPT checkpoints: decoder layers, maximum sequence length and MLP shape.
 OPT_MODELS = {
-    "facebook/opt-125m": {"decoder_layers": 12, "max_positions": 2048, "hidden_size": 768, "ffn_dim": 3072}
+    "facebook/opt-125m": {"decoder_layers": 12, "max_positions": 2048, "hidden_size": 768, "ffn_dim": 3072},
+    "facebook/opt-1.3b": {"decoder_layers": 24, "max_positions": 2048, "hidden_size": 2048, "ffn_dim": 8192},
 }
 
 

@@ -65,7 +65,12 @@ PINNED = {
         "revision": "27dcfa74d334bc871f3234de431e71c6eeba5dd6",
         "sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9",
         "config": OptConfig(50272, 768, 12, 12, 3072, 2048),
-    }
+    },
+    "facebook/opt-1.3b": {
+        "revision": "3f5c25d0bc631cb57ac65913f76e22c2dfb61d62",
+        "sha256": "cf7d5c970d6ddbd3b03009b397c0422e147edd5c8020d47a8d2fac0b11a3b08d",
+        "config": OptConfig(50272, 2048, 24, 32, 8192, 2048),
+    },
 }
 
 
