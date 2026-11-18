@@ -127,24 +127,27 @@ def program(array, target, lifecycle) -> dict:
     return report
 
 
-def detect_stuck_devices(reads, target, *, acceptance, noise_scale, threshold_sigma):
+def detect_stuck_devices(reads, target, *, acceptance, noise_scale, threshold_sigma, expected=None):
     """Controller-side detection: devices read more than ``threshold_sigma`` programming sigmas from their target.
 
     A pure function of verify reads (uS, shape (2, size)) and the deployment
     targets; it never sees a fault map. The active target is the mapped weight,
-    the reference target mid-range.
+    the reference target mid-range (or the declared ``expected`` (2, size)
+    targets of another mapping).
     """
 
-    expected = torch.stack((cmo.to_conductance(target), torch.full_like(target, cmo.MID_US)))
+    if expected is None:
+        expected = torch.stack((cmo.to_conductance(target), torch.full_like(target, cmo.MID_US)))
     return (reads - expected).abs() > threshold_sigma * noise_scale * cmo.programming_sigma(expected, acceptance)
 
 
-def pair_rewrite_plan(flags, observed, target, roles):
+def pair_rewrite_plan(flags, observed, target, roles, span=cmo.HALF_RANGE_US):
     """Conductance targets that cancel flagged devices through their healthy partners.
 
     A flagged reference is absorbed by its active device, ``a = r_s + 39.6 q``.
     With ``roles == "pair"``, a flagged active device is also absorbed by its
-    reference, ``r = a_s - 39.6 q``: the stuck device takes the fixed role.
+    reference, ``r = a_s - 39.6 q``: the stuck device takes the fixed role. ``span`` is the
+    mapping's conductance per unit weight (79.2 uS for the two-sided mapping).
     Targets are clipped to the conductance range; weights with both devices
     flagged stay as read. Returns (selected, targets in uS, clipped count).
     """
@@ -153,8 +156,7 @@ def pair_rewrite_plan(flags, observed, target, roles):
     fix_reference = flags[cmo.ACTIVE] & ~flags[cmo.REFERENCE]
     if roles == "active":
         fix_reference = torch.zeros_like(fix_reference)
-    wanted = torch.stack((observed[cmo.REFERENCE] + target * cmo.HALF_RANGE_US,
-                          observed[cmo.ACTIVE] - target * cmo.HALF_RANGE_US))
+    wanted = torch.stack((observed[cmo.REFERENCE] + target * span, observed[cmo.ACTIVE] - target * span))
     bounded = wanted.clamp(cmo.G_MIN_US, cmo.G_MAX_US)
     selected = torch.stack((fix_active, fix_reference))
     return selected, torch.where(selected, bounded, observed), int(((wanted != bounded) & selected).sum())
@@ -169,13 +171,15 @@ def verified_write_roles(flags):
 
 
 @torch.no_grad()
-def fault_rewrite(array, target, lifecycle, rewrite, assignment_seed, *, controller_state=None) -> dict:
+def fault_rewrite(array, target, lifecycle, rewrite, assignment_seed, *, controller_state=None,
+                  expected_us=None, span_us=cmo.HALF_RANGE_US, readout=None) -> dict:
     """One-shot fault-aware rewrite of a held CMO deployment (docs/reram_cmo_device.md).
 
     The controller decides from verify reads (``verify``) or from the hidden
     fault map (``oracle``, non-physical), programs the selected partner devices
     from the declared rewrite stream, and only then is the hidden map read for
-    analysis-side accounting.
+    analysis-side accounting. ``expected_us``, ``span_us`` and ``readout`` describe a mapping
+    other than the standard pair (defaults: the standard pair).
     """
 
     pv, devices = lifecycle.program_verify, lifecycle.devices
@@ -183,7 +187,8 @@ def fault_rewrite(array, target, lifecycle, rewrite, assignment_seed, *, control
     if rewrite.detection == "verify":
         observed = array.read_devices()
         flags = detect_stuck_devices(observed, target, acceptance=pv.acceptance_percent,
-                                     noise_scale=devices.noise_scale, threshold_sigma=rewrite.threshold_sigma)
+                                     noise_scale=devices.noise_scale, threshold_sigma=rewrite.threshold_sigma,
+                                     expected=expected_us)
     else:
         flags, observed = device_stage.hidden_faults(array)
     if controller_state is not None:
@@ -191,7 +196,7 @@ def fault_rewrite(array, target, lifecycle, rewrite, assignment_seed, *, control
             raise ValueError("Training roles require a verify-based pair rewrite.")
         # Preserve the controller's original scan, before any rewrite or hidden-map analysis.
         controller_state["write_roles"] = verified_write_roles(flags)
-    selected, targets, clipped = pair_rewrite_plan(flags, observed, target, rewrite.roles)
+    selected, targets, clipped = pair_rewrite_plan(flags, observed, target, rewrite.roles, span_us)
     plan = torch.cat((selected.flatten().to(target.dtype), torch.where(selected, targets, 0.0).flatten()))
     namespace = lifecycle.network.binding_namespace
     seeds = {m.name: binding_seed(rewrite.seed, namespace, f"rewrite/{assignment_seed}/{m.name}") for m in array.layout}
@@ -214,7 +219,7 @@ def fault_rewrite(array, target, lifecycle, rewrite, assignment_seed, *, control
         "stream_seeds": seeds,
         "cost": {key: after[key] - before[key] for key in after},
         "out_of_range_devices": array.out_of_range(),
-        "rewritten_apparent_sha256": tensor_hash(array.read()),
+        "rewritten_apparent_sha256": tensor_hash(array.read() if readout is None else readout(array)),
         "analysis": {
             "stuck_active": int(mask[cmo.ACTIVE].sum()),
             "stuck_reference": int(mask[cmo.REFERENCE].sum()),

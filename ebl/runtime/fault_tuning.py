@@ -62,6 +62,13 @@ class Context:
         self.case = self.lc.defects.cases[0]
         self.layout = list(self.network.layout)
         self.fisher = None
+        spec = None if self.cfg.drift is None else self.cfg.drift.mapping
+        if spec is None:
+            self.mapping, self.readout = None, lambda array: array.read()
+        else:
+            import methods.drift_tuning as dt
+            self.mapping = dt.Mapping(spec)
+            self.readout = self.mapping.read_array
 
     def fresh(self, layout=None):
         layout = self.layout if layout is None else layout
@@ -80,7 +87,7 @@ class Context:
         entry = self.deployed[key]
         array = self.fresh(self.adapter_layout if key == "adapter" else None)
         devices.load_array_state(array, entry["state"], "cmo")
-        if tensor_hash(array.read()) != entry["apparent_sha256"]:
+        if tensor_hash(self.readout(array)) != entry["apparent_sha256"]:
             raise RuntimeError(f"Expected the exact deployed {key} state.")
         return array
 
@@ -162,9 +169,48 @@ def evaluate_held_out(ctx, arm, row, base, adapter=None):
     row["held_out"] = scores
 
 
+def deploy_mapped(ctx, target):
+    """``deploy`` for a ``drift.mapping`` other than the standard pair (two-sided).
+
+    Naive Gaussian-endpoint P&V of the mapped (2, size) conductance targets from each
+    matrix's own stream, then the same verify-based pair rewrite with the mapping's expected
+    targets and span. Apparent hashes are of the mapping's readout.
+    """
+    lc, cfg, mapping = ctx.lc, ctx.cfg, ctx.mapping
+    rewrite = cfg.rewrite()
+    array = ctx.fresh()
+    targets_us = mapping.targets(target)
+    before = array.cost()
+    array.program_conductances(targets_us)
+    after = array.cost()
+    apparent = mapping.read_array(array)
+    naive_report = {"cycles": 0, "verify_reads": 0, **{k: after[k] - before[k] for k in after},
+                    "acceptance_percent": lc.program_verify.acceptance_percent,
+                    "out_of_range_devices": array.out_of_range(), "method": lc.program_verify.method,
+                    "relaxation": lc.program_verify.relaxation.model, "mapping": dict(mapping.spec),
+                    "apparent_sha256": tensor_hash(apparent),
+                    "apparent_residual_rms": float((target - apparent).square().mean().sqrt())}
+    states = {"naive": {"state": devices.array_state(array, "cmo", portable=True), "report": naive_report,
+                        "apparent_sha256": naive_report["apparent_sha256"]}}
+    identity = devices.array_identity(array, "cmo")
+    report = program_verify.fault_rewrite(array, target, lc, rewrite, ctx.seed, expected_us=targets_us,
+                                          span_us=mapping.span, readout=mapping.read_array)
+    states["fault_aware"] = {"state": array.state_dict(), "report": report,
+                             "apparent_sha256": report["rewritten_apparent_sha256"]}
+    return {"schema": "fault_tuning.deployment.v1", "assignment_seed": ctx.seed, "case": ctx.case.to_dict(),
+            "target_sha256": tensor_hash(target), "identity": identity, "states": states, "adapter": None,
+            "mapping": dict(mapping.spec),
+            "gpu": torch.cuda.get_device_name(ctx.device) if ctx.device.type == "cuda" else "cpu",
+            "torch": str(torch.__version__)}
+
+
 def deploy(ctx, target):
     """Naive P&V, fault-aware pair rewrite and (if declared) the analog-LoRA tiles; portable states."""
     lc, cfg = ctx.lc, ctx.cfg
+    if ctx.mapping is not None and ctx.mapping.kind != "reference":
+        if cfg.analog_lora is not None:
+            raise ValueError("Analog-LoRA tiles use the standard pair mapping.")
+        return deploy_mapped(ctx, target)
     rewrite = cfg.rewrite()
     array = ctx.fresh()
     naive_report = program_verify.program(array, target, lc)
@@ -197,6 +243,9 @@ def check_deployment(ctx, bundle, target):
     if (bundle.get("schema") != "fault_tuning.deployment.v1" or bundle["assignment_seed"] != ctx.seed
             or bundle["case"] != ctx.case.to_dict() or bundle["target_sha256"] != tensor_hash(target)):
         raise ValueError("Expected the pinned deployment of this source, assignment and defect case.")
+    mapped = ctx.mapping is not None and ctx.mapping.kind != "reference"
+    if bundle.get("mapping") != (dict(ctx.mapping.spec) if mapped else None):
+        raise ValueError("Expected a deployment of the declared drift mapping.")
     if (ctx.cfg.analog_lora is not None) != (bundle["adapter"] is not None):
         raise ValueError("Expected adapter tiles exactly when analog LoRA is declared.")
     if bundle["adapter"] is not None and (bundle["adapter"]["rank"] != ctx.cfg.analog_lora["rank"]
@@ -207,7 +256,8 @@ def check_deployment(ctx, bundle, target):
 def compute_fisher(ctx):
     """Mean squared batch gradient of the training loss over the whole recovery set, fault-aware state."""
     network, cfg = ctx.network, ctx.cfg
-    q0 = ctx.array("fault_aware").read()
+    base = ctx.array("fault_aware")
+    q0 = base.read() if getattr(ctx, "mapping", None) is None else ctx.readout(base)
     total, batches = torch.zeros_like(q0), 0
     batch = cfg.fisher["batch"]
     network.train()
@@ -395,13 +445,18 @@ def run_arm(ctx, arm):
     return row, state
 
 
-def run_drift_arm(ctx, arm, hold):
-    """One arm under ``fault_tuning.drift`` (AIHWKit CMO log-time law, clock continues through writes).
+def run_drift_arm(ctx, arm, refs):
+    """One arm under ``fault_tuning.drift`` (AIHWKit CMO log-time law).
 
-    Every device-facing forward reads the held devices through the drift law at its age;
-    writes shift the held programmed conductances. ``hold_fault_aware`` is the untreated
-    deployment read on the grid; ``onchip_noisy`` starts at release and update k reads at
-    k * update_seconds. Equal ages give identical draws in every arm (paired).
+    Every device-facing forward -- gradients, development, grid and projections -- reads the
+    held devices through the drift law at its age (``methods.drift_tuning.DriftPlant``);
+    ``no_drift`` arms read the held state. ``hold_fault_aware`` is the untreated deployment
+    read on the grid (A0; with ``no_drift`` the release-state twin). Learners start at release
+    and update k reads at k * update_seconds; equal ages give identical draws in every arm
+    (paired). Writing learners (``onchip_noisy``, ``child_tuning_d``) write through the plant
+    (``reset_absorb``) or the array (``continues``, the drift token-budget learner, unchanged);
+    ``calibration``, ``layernorm`` and ``digital_lora`` learn digital parameters on the drifted
+    read, write nothing and are frozen after the window.
     """
     import methods.drift_tuning as dt
     network, cfg, device, d = ctx.network, ctx.cfg, ctx.device, ctx.cfg.drift
@@ -409,76 +464,149 @@ def run_drift_arm(ctx, arm, hold):
     started = time.monotonic()
     network.enable_lora(None)
     network.fault_output_calibration = None
+    norms = {k: v.detach().clone() for k, v in network.mlp_norms.state_dict().items()}
+    norms_hash = _state_digest(norms)
     base = ctx.array("fault_aware")
-    start_hash = tensor_hash(base.read())
+    plant = dt.DriftPlant(base, d, ctx.mapping or dt.Mapping(), drift=not arm.no_drift)
+    legacy = d.write_clock == "continues"
+    start_hash = tensor_hash(plant.read(None))
 
     def evaluate(seconds, step, kind="grid"):
-        q = base.read() if seconds is None else dt.drifted_weights(base, d, seconds)
-        metrics = ctx.evaluate(q)
+        metrics = ctx.evaluate(plant.read(seconds))
         point = {"arm": arm.label, "kind": kind, "age_seconds": seconds, "step": step,
                  "teacher_kl": metrics["teacher_kl"], "development": metrics,
-                 "bounds": None if seconds is None else dt.bound_counts(base, d, seconds)}
+                 "bounds": None if seconds is None or arm.no_drift else plant.bounds(seconds)}
         ctx.stage.store.append_metric({"stage": "drift_tuning_evaluation", **point})
         print(json.dumps({"arm": arm.label, "kind": kind, "age_seconds": seconds, "step": step,
                           "teacher_kl": metrics["teacher_kl"]}), flush=True)
         return point
 
-    row = {"label": arm.label, "method": arm.method, "learning_rate": arm.learning_rate, "rank": None,
-           "reserve_p": None, "initial_apparent_sha256": start_hash}
+    row = {"label": arm.label, "method": arm.method, "learning_rate": arm.learning_rate, "rank": arm.rank,
+           "reserve_p": arm.reserve_p, "initial_apparent_sha256": start_hash}
+    if arm.no_drift:
+        row["no_drift"] = True
+    no_writes = {"healthy_device_writes": 0, "device_writes": 0, "stuck_write_attempts": 0, "touched_devices": 0,
+                 "max_writes_per_device": 0, "out_of_range_devices": base.out_of_range()}
     if arm.method == "hold_fault_aware":
         grid = [evaluate(t, None) for t in d.evaluation_seconds]
-        if tensor_hash(base.read()) != start_hash:
+        if tensor_hash(plant.read(None)) != start_hash:
             raise RuntimeError("Evaluation changed the held deployment.")
-        row.update(grid=grid, cost={"healthy_device_writes": 0, "stuck_write_attempts": 0, "touched_devices": 0,
-                                    "max_writes_per_device": 0, "out_of_range_devices": base.out_of_range()})
+        row.update(grid=grid, cost=no_writes, digital_parameters=0)
     else:
-        acceptance, noise = ctx.lc.program_verify.acceptance_percent, ctx.lc.devices.noise_scale
-        writer = ThresholdedWriteAdam(base, learning_rate=arm.learning_rate, threshold_sigma=law["threshold_sigma"],
-                                      accumulate_updates=law["accumulate_updates"], acceptance_percent=acceptance,
-                                      noise_scale=noise, max_write_attempts_per_device=None)
-        baseline, baseline_writes = base.cost(), base.write_counts().clone()
+        writer = optimizer = scheduler = mask = None
+        parameters = []
+        if arm.method in ("onchip_noisy", "child_tuning_d"):
+            if arm.method == "child_tuning_d":
+                if ctx.fisher is None:
+                    t0 = time.monotonic()
+                    ctx.fisher = compute_fisher(ctx)
+                    ctx.fisher_seconds = time.monotonic() - t0
+                mask = ft.child_mask(ctx.fisher, ctx.layout, arm.reserve_p)
+            acceptance, noise = ctx.lc.program_verify.acceptance_percent, ctx.lc.devices.noise_scale
+            if legacy:
+                writer = ThresholdedWriteAdam(base, learning_rate=arm.learning_rate,
+                                              threshold_sigma=law["threshold_sigma"],
+                                              accumulate_updates=law["accumulate_updates"],
+                                              acceptance_percent=acceptance, noise_scale=noise,
+                                              max_write_attempts_per_device=None)
+                baseline, baseline_writes = base.cost(), base.write_counts().clone()
+            else:
+                if not law["accumulate_updates"]:
+                    raise ValueError("The reset_absorb learner accumulates its commands.")
+                writer = dt.GatedDriftAdam(plant, learning_rate=arm.learning_rate,
+                                           threshold_us=dt.gate_us(law["threshold_sigma"], noise, acceptance),
+                                           mask=mask)
+        else:
+            if arm.method == "calibration":
+                network.fault_output_calibration = ft.OutputCalibration(network)
+                parameters = list(network.fault_output_calibration.parameters())
+            elif arm.method == "layernorm":
+                parameters = list(network.mlp_norms.parameters())
+                for p in parameters:
+                    p.requires_grad_(True)
+            else:  # digital_lora
+                parameters = _lora(network, arm.rank, arm.learning_rate, cfg.lora_seed)
+            optimizer = torch.optim.Adam(parameters, lr=arm.learning_rate, betas=(0.9, 0.999), eps=1e-8)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, schedule["steps"])
+
+        def cost_now():
+            if writer is None:
+                return dict(no_writes)
+            return _cost(base, baseline, baseline_writes)[0] if legacy else plant.cost()
+
         generator = torch.Generator().manual_seed(schedule["order_seed"])
         steps, every = schedule["steps"], schedule["development_every_steps"]
         horizon = d.age(steps)
         grid_steps = {d.step_at(t): t for t in d.evaluation_seconds if 0 < t <= horizon}
+        project = writer is not None and not arm.no_drift
         grid, curve, projections, losses = [evaluate(0.0, 0)], [], [], []
         for step in range(steps):
             index = torch.randint(0, len(ctx.recovery), (schedule["batch"],), generator=generator)
             tokens, drawn = ctx.recovery[index].to(device), ctx.samples[index.to(device)]
             network.train()
-            q = dt.drifted_weights(base, d, d.age(step + 1)).requires_grad_(True)
+            age = d.age(step + 1)
+            q = plant.read(age, keep=writer is not None and not legacy)
+            if writer is not None:
+                q.requires_grad_(True)
+            else:
+                optimizer.zero_grad(set_to_none=True)
             loss = ft.sample_loss(network.forward_features(network.features(tokens), q), drawn)
             if not bool(torch.isfinite(loss)):
                 raise FloatingPointError(f"Nonfinite training loss in arm {arm.label}.")
             loss.backward()
-            writer.learning_rate = ft.cosine(arm.learning_rate, step, steps)
-            writer.step(q.grad)
+            if writer is None:
+                optimizer.step()
+                scheduler.step()
+                learning_rate = scheduler.get_last_lr()[0]
+            else:
+                writer.learning_rate = learning_rate = ft.cosine(arm.learning_rate, step, steps)
+                if legacy:
+                    writer.step(q.grad)
+                else:
+                    writer.step(q.grad, age)
             losses.append(float(loss.detach()))
             done = step + 1
             ctx.stage.store.append_metric({"stage": "drift_tuning_update", "arm": arm.label, "step": done,
                                            "age_seconds": d.age(done), "train_loss": losses[-1],
-                                           "learning_rate": writer.learning_rate})
+                                           "learning_rate": learning_rate})
             if done in grid_steps:
                 point = evaluate(grid_steps[done], done)
-                point["cost"] = _cost(base, baseline, baseline_writes)[0]
+                point["cost"] = cost_now()
                 grid.append(point)
                 curve.append(point)
             elif done % every == 0:
                 point = evaluate(d.age(done), done, "development")
-                point["cost"] = _cost(base, baseline, baseline_writes)[0]
+                point["cost"] = cost_now()
                 curve.append(point)
-            if done in d.projection_steps:
+            if project and done in d.projection_steps:
                 projections.append(evaluate(d.projection_seconds, done, "projection"))
         base.verify_permanence()
+        for p in parameters:
+            p.requires_grad_(False)
         grid += [evaluate(t, steps) for t in d.evaluation_seconds if t > horizon]
-        cost = _cost(base, baseline, baseline_writes)[0]
-        cost["writer"] = writer.diagnostics()
+        cost = cost_now()
+        if writer is not None:
+            cost["writer"] = writer.diagnostics()
+        if mask is not None:
+            writes = plant.weight_writes() if not legacy else base.write_counts() - baseline_writes
+            cost.update(mask_weights=int(mask.sum()), mask_sha256=tensor_hash(mask),
+                        writes_outside_mask=int(writes[~mask].sum()))
+            if cost["writes_outside_mask"]:
+                raise RuntimeError("Child-Tuning_D wrote outside its fixed mask.")
+        if writer is None and (tensor_hash(plant.read(None)) != start_hash or base.cost() != ctx.deployed_cost):
+            raise RuntimeError(f"The digital arm {arm.label} changed the base deployment.")
+        digital = sum(p.numel() for p in parameters)
         row.update(grid=grid, curve=curve, projections=projections, final_no_drift=evaluate(None, steps, "no_drift"),
                    train_loss_first10=sum(losses[:10]) / min(10, len(losses)),
-                   train_loss_last10=sum(losses[-10:]) / min(10, len(losses)), train_losses=losses, cost=cost)
-        if cost["device_writes"] == 0 and hold is not None:
-            mismatched = [p["age_seconds"] for p in grid if p["teacher_kl"] != hold[p["age_seconds"]]]
-            row["zero_write_replay"] = {"checked": True, "mismatched_ages": mismatched}
+                   train_loss_last10=sum(losses[-10:]) / min(10, len(losses)), train_losses=losses, cost=cost,
+                   digital_parameters=digital)
+        if arm.method == "layernorm":
+            row["layernorm_state_sha256"] = _state_digest({k: v.detach() for k, v in network.mlp_norms.state_dict().items()})
+        reference = refs.get("twin" if arm.no_drift else "hold")
+        if writer is not None and cost["device_writes"] == 0 and reference is not None:
+            mismatched = [p["age_seconds"] for p in grid if p["teacher_kl"] != reference[p["age_seconds"]]]
+            row["zero_write_replay"] = {"checked": True, "reference": "twin" if arm.no_drift else "hold",
+                                        "mismatched_ages": mismatched}
             if mismatched:
                 raise RuntimeError(f"A learner with no writes did not replay the hold arm: {mismatched}.")
         else:
@@ -487,9 +615,18 @@ def run_drift_arm(ctx, arm, hold):
     if ages != list(d.evaluation_seconds):
         raise RuntimeError(f"Arm {arm.label} grid coverage {ages} differs from the declared grid.")
     kl = [p["teacher_kl"] for p in row["grid"]]
+    last = row["grid"][-1]["bounds"]
     row.update(initial=row["grid"][0]["development"], final=row["grid"][-1]["development"],
-               mean_teacher_kl=dt.trapezoid_mean(ages, kl), final_apparent_sha256=tensor_hash(base.read()),
-               primary_state="held_apparent_drifted", seconds=time.monotonic() - started)
+               mean_teacher_kl=dt.trapezoid_mean(ages, kl), final_apparent_sha256=tensor_hash(plant.read(None)),
+               at_drift_min_fraction_final=None if last is None else last["at_drift_min_fraction"],
+               primary_state="held_apparent" if arm.no_drift else "held_apparent_drifted",
+               seconds=time.monotonic() - started)
+    network.enable_lora(None)
+    network.fault_output_calibration = None
+    network.mlp_norms.load_state_dict(norms)
+    network.mlp_norms.requires_grad_(False)
+    if _state_digest({k: v.detach() for k, v in network.mlp_norms.state_dict().items()}) != norms_hash:
+        raise RuntimeError("Expected the source LayerNorms restored after the arm.")
     return row
 
 
@@ -561,16 +698,43 @@ def run(stage):
     store.append_metric({"stage": "fault_tuning_deployed", "clean": clean,
                          "apparent_sha256": {k: v["apparent_sha256"] for k, v in ctx.deployed.items()}})
     rows = []
+    drift_records = None
     if cfg.drift is not None:
-        hold = None
-        for arm in sorted(cfg.arms, key=lambda a: a.method != "hold_fault_aware"):
-            row = run_drift_arm(ctx, arm, hold)
+        refs = {}
+        # The drifted hold first, then its drift-off twin, then the learners in declared order.
+        for arm in sorted(cfg.arms, key=lambda a: 2 if a.method != "hold_fault_aware" else int(a.no_drift)):
+            row = run_drift_arm(ctx, arm, refs)
             if arm.method == "hold_fault_aware":
-                hold = {p["age_seconds"]: p["teacher_kl"] for p in row["grid"]}
+                refs["twin" if arm.no_drift else "hold"] = {p["age_seconds"]: p["teacher_kl"] for p in row["grid"]}
             rows.append(row)
             atomic_write_json(stage.run_dir / "measurements.json", rows)
             store.append_metric({"stage": "drift_tuning_arm", "arm": arm.label,
                                  "mean_teacher_kl": row["mean_teacher_kl"], "seconds": row["seconds"]})
+        released = rows[0]["grid"][0]["teacher_kl"]
+        # Every arm starts from the one released deployment: equal release reads (A0, the twin, drift-off).
+        mismatched = [r["label"] for r in rows if r["grid"][0]["teacher_kl"] != released]
+        if mismatched:
+            raise RuntimeError(f"Arms {mismatched} do not start from the released deployment of A0.")
+        from methods.drift_tuning import Mapping
+        mapping = ctx.mapping or Mapping()
+        clean_mapped = mapping.clean(target)
+        drift_records = {
+            "mapping": None if mapping.spec is None else dict(mapping.spec), "span_us_per_unit_q": mapping.span,
+            "source_ideal_teacher_kl": clean["teacher_kl"],
+            "clean_mapped_readout_teacher_kl": ctx.evaluate(clean_mapped)["teacher_kl"],
+            "clean_mapped_readout_max_abs_error": float((clean_mapped - target).abs().max()),
+            "deployed_release_teacher_kl": released,
+            "per_arm": {r["label"]: {"mean_teacher_kl": r["mean_teacher_kl"],
+                                     "final_teacher_kl": r["final"]["teacher_kl"],
+                                     "device_writes": r["cost"].get("device_writes", 0),
+                                     "writes_per_device": r["cost"].get("writes_per_device", 0.0),
+                                     "fraction_devices_written": r["cost"].get("fraction_devices_written", 0.0),
+                                     "at_drift_min_fraction_final": r["at_drift_min_fraction_final"],
+                                     "digital_parameters": r["digital_parameters"],
+                                     "no_drift": bool(r.get("no_drift"))} for r in rows},
+        }
+        store.append_metric({"stage": "drift_tuning_records", **{k: v for k, v in drift_records.items()
+                                                                 if k != "per_arm"}})
     for arm in (cfg.arms if cfg.drift is None else ()):
         row, state = run_arm(ctx, arm)
         if state is not None:
@@ -603,7 +767,8 @@ def run(stage):
                                      "seconds": r["seconds"]} for r in rows},
                "deployment_seconds": deployment_seconds,
                **({"drift": {"settings": cfg.to_dict()["drift"],
-                             "mean_teacher_kl": {r["label"]: r["mean_teacher_kl"] for r in rows}}}
+                             "mean_teacher_kl": {r["label"]: r["mean_teacher_kl"] for r in rows},
+                             **({"records": drift_records} if cfg.drift.write_clock != "continues" else {})}}
                   if cfg.drift is not None else {}),
                "selection": "final endpoint; development teacher KL; no test cohort"}
     if cfg.evaluation_cohorts:

@@ -62,10 +62,33 @@ def finite(value):
     return type(value) in (float, int) and math.isfinite(value)
 
 
+def validate_drift_measurements(spec, rows):
+    """Rows of the ``drift`` block: native arm order, full grid coverage, finite KL, every update ran."""
+    order = sorted(spec['arms'], key=lambda a: 2 if a['method'] != 'hold_fault_aware' else int(bool(a.get('no_drift'))))
+    if [row.get('label') for row in rows] != [arm['label'] for arm in order]:
+        raise ValueError('Missing, duplicate or unexpected arms.')
+    ages, steps = spec['drift']['evaluation_seconds'], spec['schedule']['steps']
+    for arm, row in zip(order, rows):
+        grid, losses = row.get('grid'), row.get('train_losses', [])
+        if row.get('method') != arm['method']:
+            raise ValueError(f"Wrong method for arm {arm['label']}.")
+        if (not isinstance(grid, list) or [point.get('age_seconds') for point in grid] != ages
+                or not all(finite(point.get('teacher_kl')) for point in grid) or not finite(row.get('mean_teacher_kl'))
+                or row.get('final') != grid[-1].get('development')):
+            raise ValueError(f"Incomplete or nonfinite drift grid for arm {arm['label']}.")
+        if not isinstance(losses, list) or (len(losses) != (0 if arm['method'] == 'hold_fault_aware' else steps)
+                                            or not all(finite(loss) for loss in losses)):
+            raise ValueError(f"Incomplete training updates for arm {arm['label']}.")
+    if len({row['grid'][0]['teacher_kl'] for row in rows}) != 1:
+        raise ValueError('Arms do not start from one released deployment.')
+
+
 def validate_measurements(spec, rows, *, sequence_length=256):
     """Fail closed before publishing completion, including endpoint-only test scores."""
     if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
         raise ValueError('Expected native measurement rows.')
+    if 'drift' in spec:
+        return validate_drift_measurements(spec, rows)
     labels = [row.get('label') for row in rows]
     if (labels != [arm['label'] for arm in spec['arms']]
             or len(set(labels)) != len(labels)):

@@ -172,3 +172,48 @@ def test_main_does_not_publish_completion_for_missing_held_out(tmp_path, monkeyp
         worker.main()
     assert not (output / 'unit/complete.json').exists()
     assert 'held-out' in worker.read(output / 'unit/failed-test-job.json')['error']
+
+
+def drift_contract():
+    ages = [0.0, 60.0, 86400.0]
+    spec = {'arms': [{'label': 'A0', 'method': 'hold_fault_aware'},
+                     {'label': 'CT-nodrift', 'method': 'child_tuning_d', 'learning_rate': .001, 'reserve_p': .1,
+                      'no_drift': True},
+                     {'label': 'A0-twin', 'method': 'hold_fault_aware', 'no_drift': True},
+                     {'label': 'LN', 'method': 'layernorm', 'learning_rate': .003}],
+            'schedule': {'steps': 4}, 'drift': {'evaluation_seconds': ages}}
+
+    def row(label, method, kl, losses):
+        grid = [{'age_seconds': t, 'teacher_kl': .1 if t == 0 else kl, 'development': {'teacher_kl': kl, 't': t}}
+                for t in ages]
+        return {'label': label, 'method': method, 'grid': grid, 'final': grid[-1]['development'],
+                'mean_teacher_kl': kl, 'train_losses': losses}
+    rows = [row('A0', 'hold_fault_aware', .3, []), row('A0-twin', 'hold_fault_aware', .1, []),
+            row('CT-nodrift', 'child_tuning_d', .09, [1.] * 4), row('LN', 'layernorm', .2, [1.] * 4)]
+    return copy.deepcopy((spec, rows))
+
+
+def test_drift_rows_are_validated_in_native_order():
+    spec, rows = drift_contract()
+    worker.validate_measurements(spec, rows)
+
+
+@pytest.mark.parametrize('mutation', ['order', 'grid', 'nan', 'final', 'updates', 'hold_updates', 'release'])
+def test_drift_rows_fail_closed(mutation):
+    spec, rows = drift_contract()
+    if mutation == 'order':
+        rows[2], rows[3] = rows[3], rows[2]
+    elif mutation == 'grid':
+        rows[3]['grid'].pop(1)
+    elif mutation == 'nan':
+        rows[3]['grid'][1]['teacher_kl'] = float('nan')
+    elif mutation == 'final':
+        rows[3]['final'] = rows[3]['grid'][1]['development']
+    elif mutation == 'updates':
+        rows[2]['train_losses'] = [1.] * 3
+    elif mutation == 'hold_updates':
+        rows[0]['train_losses'] = [1.]
+    else:
+        rows[3]['grid'][0]['teacher_kl'] = .11
+    with pytest.raises(ValueError):
+        worker.validate_measurements(spec, rows)

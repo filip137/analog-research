@@ -26,6 +26,8 @@ EXPERIMENT_ID = "crossbar_lifecycle.v1"
 PROVENANCE_SCHEMA = "crossbar_lifecycle.provenance.v1"
 
 
+# Arms of fault_tuning under its drift block (methods.drift_tuning).
+DRIFT_TUNING_METHODS = ('hold_fault_aware', 'onchip_noisy', 'child_tuning_d', 'calibration', 'layernorm', 'digital_lora')
 STAGE_KINDS = ("prepare", "devices", "hwa", "deploy", "onchip", "retention", "compensate", "drift_recovery", "initial_programming", "fault_tuning")
 
 
@@ -201,9 +203,15 @@ def _cross_validate(lifecycle: Lifecycle) -> None:
             if case.kind != 'none' or case.rate_ppm != 0:
                 raise config_error('fault_tuning.drift', 'to run on the fault-free (0 %) case', lifecycle.defects.to_dict())
             methods = [a.method for a in tuning.arms]
-            if (methods.count('hold_fault_aware') != 1 or 'onchip_noisy' not in methods
-                    or not set(methods) <= {'hold_fault_aware', 'onchip_noisy'}):
-                raise config_error('fault_tuning.arms', 'under drift to be one hold_fault_aware arm and onchip_noisy learners', methods)
+            holds = [a.no_drift for a in tuning.arms if a.method == 'hold_fault_aware']
+            if (holds.count(False) != 1 or holds.count(True) > 1 or len(holds) == len(methods)
+                    or not set(methods) <= set(DRIFT_TUNING_METHODS)):
+                raise config_error('fault_tuning.arms', 'under drift to be one drifted hold_fault_aware arm, at most one '
+                                   f'drift-off twin and learners in {DRIFT_TUNING_METHODS}', methods)
+            if any(a.no_drift and a.method not in ('hold_fault_aware', 'onchip_noisy', 'child_tuning_d') for a in tuning.arms):
+                raise config_error('fault_tuning.arms', 'to switch drift off only for the hold twin and writing learners', methods)
+            if drift.write_clock == 'continues' and not set(methods) <= {'hold_fault_aware', 'onchip_noisy'}:
+                raise config_error('fault_tuning.arms', 'under write_clock continues to be the drift token-budget arms', methods)
             steps = tuning.schedule['steps']
             horizon = drift.age(steps)
             if any(0 < t <= horizon and drift.step_at(t) is None for t in drift.evaluation_seconds):

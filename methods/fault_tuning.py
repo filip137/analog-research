@@ -16,6 +16,8 @@ starts from the same deployed state and trains on the same recovery data:
   weights of each matrix; only those receive (noisy, thresholded) writes.
 - ``digital_lora``: a digital rank-r adapter (alpha = r) on every analog matrix;
   the physical state is held, zero writes.
+- ``layernorm`` (``drift`` only): the affine of the LayerNorm in front of each analog MLP,
+  trained digitally on the drifted held read (drift-regimes Path R arm A2); zero writes.
 - ``analog_lora``: rank-r A and B in extra CMO tiles (active/reference pairs,
   per-output-channel digital scale) with their own permanent defects (own fault
   groups and streams, same rate) and the same fault-aware P&V at initialization.
@@ -50,7 +52,8 @@ from hardware.mapping import MatrixSpec
 
 METHODS = ("hold_naive", "hold_fault_aware", "onchip_noisy", "onchip_noiseless", "child_tuning_d",
            "digital_lora", "analog_lora", "matched_noiseless", "calibration")
-TRAINS = METHODS[2:]
+DRIFT_ONLY_METHODS = ("layernorm",)  # arms of the drift block only (ebl.runtime.fault_tuning.run_drift_arm)
+TRAINS = METHODS[2:] + DRIFT_ONLY_METHODS
 WRITES = ("onchip_noisy", "onchip_noiseless", "child_tuning_d", "matched_noiseless")
 LORA = ("digital_lora", "analog_lora")
 _HEX = set("0123456789abcdef")
@@ -92,20 +95,27 @@ class Arm:
     learning_rate: float | None = None
     rank: int | None = None
     reserve_p: float | None = None
+    no_drift: bool = False  # drift block only: the arm reads the held state without the drift law
 
     def to_dict(self):
-        return {k: v for k, v in (("label", self.label), ("method", self.method),
-                                  ("learning_rate", self.learning_rate), ("rank", self.rank),
-                                  ("reserve_p", self.reserve_p)) if v is not None}
+        out = {k: v for k, v in (("label", self.label), ("method", self.method),
+                                 ("learning_rate", self.learning_rate), ("rank", self.rank),
+                                 ("reserve_p", self.reserve_p)) if v is not None}
+        if self.no_drift:
+            out["no_drift"] = True
+        return out
 
     @classmethod
     def parse(cls, raw):
-        if not isinstance(raw, dict) or raw.get("method") not in METHODS:
-            raise ValueError(f"Expected a fault-tuning arm method in {METHODS}.")
+        if not isinstance(raw, dict) or raw.get("method") not in METHODS + DRIFT_ONLY_METHODS:
+            raise ValueError(f"Expected a fault-tuning arm method in {METHODS + DRIFT_ONLY_METHODS}.")
         method = raw["method"]
         keys = {"label", "method"} | ({"learning_rate"} if method in TRAINS else set()) \
-            | ({"rank"} if method in LORA else set()) | ({"reserve_p"} if method == "child_tuning_d" else set())
+            | ({"rank"} if method in LORA else set()) | ({"reserve_p"} if method == "child_tuning_d" else set()) \
+            | ({"no_drift"} if "no_drift" in raw else set())
         _exact(raw, keys, f"arm {raw.get('label')!r}")
+        if "no_drift" in raw and raw["no_drift"] is not True:
+            raise ValueError("Expected no_drift to be true when declared.")
         label = raw["label"]
         if not isinstance(label, str) or not label or not all(c.isalnum() or c in "-_." for c in label):
             raise ValueError("Expected a plain arm label.")
@@ -115,7 +125,7 @@ class Arm:
         return cls(label, method,
                    _float(raw["learning_rate"], "learning_rate") if "learning_rate" in raw else None,
                    _int(raw["rank"], "rank", 1) if "rank" in raw else None,
-                   None if p is None else float(p))
+                   None if p is None else float(p), "no_drift" in raw)
 
 
 DATA_KEYS = ("corpus", "corpus_sha256", "split", "start", "sequences", "seed", "cohort_sha256")
@@ -151,8 +161,7 @@ class FaultTuning:
                 "deployment": None if self.deployment is None else dict(self.deployment),
                 "arms": [a.to_dict() for a in self.arms]}
         if self.drift is not None:
-            from dataclasses import asdict
-            out["drift"] = {k: list(v) if isinstance(v, tuple) else v for k, v in asdict(self.drift).items()}
+            out["drift"] = self.drift.to_dict()
         if self.evaluation_cohorts:
             out["evaluation_cohorts"] = [dict(c) for c in self.evaluation_cohorts]
         return out
@@ -178,6 +187,9 @@ class FaultTuning:
         _exact(raw, keys, "fault_tuning")
         if drift is not None and evaluation_cohorts:
             raise ValueError("Held-out evaluation_cohorts currently require fault tuning without drift.")
+        if drift is None and isinstance(raw.get("arms"), list) and any(
+                isinstance(a, dict) and ("no_drift" in a or a.get("method") == "layernorm") for a in raw["arms"]):
+            raise ValueError("layernorm and no_drift arms require the drift block.")
         rewrite = _exact(raw["fault_rewrite"], ("detection", "roles", "seed", "threshold_sigma"), "fault_rewrite")
         if rewrite["detection"] != "verify" or rewrite["roles"] != "pair":
             raise ValueError("Expected the verify-based pair rewrite.")

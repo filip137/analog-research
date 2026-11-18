@@ -164,6 +164,14 @@ class CmoArray:
         for child, piece in zip(self.children, self._slices(target)):
             child.program(piece, reference)
 
+    def program_conductances(self, target_us):
+        """Program every device to a conductance target (uS), shape (2, size), from each matrix's own stream."""
+
+        if target_us.shape != (2, self.size):
+            raise ValueError("Expected conductance targets of shape (2, size).")
+        for spec, child in zip(self.layout, self.children):
+            child.program_conductances(target_us[:, spec.offset : spec.offset + spec.size])
+
     def write(self, delta, noise_factor=1.0, roles=None):
         role_slices = [None] * len(self.children) if roles is None else self._slices(roles)
         for child, piece, role in zip(self.children, self._slices(delta), role_slices):

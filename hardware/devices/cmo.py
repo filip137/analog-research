@@ -178,6 +178,27 @@ class CmoMatrix:
         self.stuck_write_attempts += failed
 
     @torch.no_grad()
+    def program_conductances(self, target_us):
+        """Program both devices of every pair to conductance targets (uS), shape (2, size).
+
+        The same Gaussian endpoint law and stream as ``program`` (one draw per device, rows
+        active then reference), for mappings other than the standard pair (e.g. two-sided).
+        Not a seed-replayable deployment: its state is stored as tensors.
+        """
+
+        if (target_us.shape != (2, self.size) or not bool(torch.isfinite(target_us).all())
+                or bool((target_us < 0).any())):
+            raise ValueError("Expected finite nonnegative conductance targets of shape (2, size).")
+        self._deployment_replayable = False
+        drawn = self._draw(target_us.to(self.stuck))
+        self.g = torch.where(self.mask, self.stuck, drawn)
+        failed = int(self.mask.sum())
+        self.writes += ~self.mask[ACTIVE]
+        self.program_calls += 1
+        self.device_programs += self.mask.numel() - failed
+        self.stuck_write_attempts += failed
+
+    @torch.no_grad()
     def write(self, delta, noise_factor=1.0, roles=None):
         """G_a <- G_a + dG + f sigma(G_a + dG) xi on every active device with a nonzero update.
 
