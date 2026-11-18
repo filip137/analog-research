@@ -170,6 +170,21 @@ part of this commit.
 
 ## Handoff
 
-Not launched. Next: canaries (one per model at ×4), then ×4 fulls, LR-fallback check, then ×1
-and ×10, per exp-001's host plan and the 30 GPU-h cap shared with DRN. Monitor: the launching
-session; job handles go in the shared exp-001 note and issue #67.
+Both XB models passed native 5090 and V100 canaries. XB6 full ×4,
+Jean Zay 387978, completed all eight arms and used 2,523 s. XB12 full ×4
+is job 387963. Native XB6 JSON, measurements and validation are collected
+under `results/cmo-drift-recovery-20261118/jean-zay/xb6-m4/`.
+
+On XB6 the 24-h trapezoid-mean KL was 0.057628 for A0, 0.049467 CAL,
+0.050334 LN, 0.058437 CT, 0.079147 L1 and 0.045737 LoRA. The
+drift-free CT control reached 0.031654. Only L1 met the frozen 1-h LR
+fallback criterion. The two native lifecycles under
+`20261118-cmo-drift-recovery/fallback/` (commit 693eec0) run L1-low
+(0.001/3) and L1-high (0.003) with paired A0 and A0-twin. The full run
+uses 2,400 updates; the target canary uses 32 and validates execution.
+The V100 backend, worker, source receipt and input pins stay at fe55904.
+Compare against the original only after verifying the same initial apparent
+state, deployment/control grids and cohort. Select among the three rates
+by full 24-h mean KL, with the costs and all candidate results retained.
+Job IDs, live watch and the 30 GPU-h shared balance are maintained in
+[issue 67](https://github.com/filip137/on-chip-learning/issues/67).
