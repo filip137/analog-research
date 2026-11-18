@@ -141,13 +141,28 @@ def parse_config(raw):
             raise ConfigError('Fault tuning keeps the DRN 2-rho gate, bounded targets, no floor and no write cap.')
         if f.recovery_sequences%f.fisher_batch:
             raise ConfigError('Fisher batches must tile the recovery set.')
+        from methods.config.fault_tuning import DRIFT_ONLY
+        if getattr(c,'drift_tuning',None) is None and any(a.method in DRIFT_ONLY for a in f.arms):
+            raise ConfigError(f'Arm methods {DRIFT_ONLY} run only in the drift-tuning stage.')
     if getattr(c,'drift_tuning',None) is not None:
         d,f=c.drift_tuning,c.fault_tuning
         if f is None or c.deployment.fault_kind!='none' or c.deployment.fault_rate!=0:
             raise ConfigError('Drift tuning runs the fault-tuning stage on a fault-free deployment.')
         methods=[a.method for a in f.arms]
-        if methods.count('hold')!=1 or not set(methods)<={'hold','noisy'} or 'noisy' not in methods:
-            raise ConfigError('Drift tuning takes one hold (untreated) arm and noisy learner arms.')
+        off=set(d.off_labels)
+        if not off<={a.label for a in f.arms}:
+            raise ConfigError('Every drift_off_arms label must name a declared arm.')
+        if d.write_clock=='continues' and d.gate=='target_rho' and not off:
+            if methods.count('hold')!=1 or not set(methods)<={'hold','noisy'} or 'noisy' not in methods:
+                raise ConfigError('Drift tuning takes one hold (untreated) arm and noisy learner arms.')
+        else:
+            drifting=[a.method for a in f.arms if a.label not in off]
+            if drifting.count('hold')!=1 or len(drifting)<2:
+                raise ConfigError('Drift tuning takes one drifting hold arm (A0) and at least one drifting learner.')
+            if not set(methods)<={'hold','noisy','child_d','calibration','layernorm'}:
+                raise ConfigError('Drift tuning arms are hold, noisy, child_d, calibration and layernorm.')
+            if any(a.method not in ('hold','noisy','child_d') for a in f.arms if a.label in off):
+                raise ConfigError('Drift-off arms are hold (A0-twin) or physical learners.')
         horizon=d.age(f.steps)
         if any(t>0 and t<=horizon and d.step_at(t) is None for t in d.evaluation_seconds):
             raise ConfigError('Every evaluation age inside the learning window must be a learner update age.')

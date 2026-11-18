@@ -8,8 +8,11 @@ against the full FP32 teacher.
 from dataclasses import dataclass
 import math
 
-METHODS = ('naive_hold', 'hold', 'noisy', 'noiseless', 'child_d', 'lora', 'matched_noiseless', 'calibration')
-LEARNING = ('noisy', 'noiseless', 'child_d', 'lora', 'matched_noiseless', 'calibration')
+METHODS = ('naive_hold', 'hold', 'noisy', 'noiseless', 'child_d', 'lora', 'matched_noiseless', 'calibration',
+           'layernorm')
+LEARNING = ('noisy', 'noiseless', 'child_d', 'lora', 'matched_noiseless', 'calibration', 'layernorm')
+# Methods run only by the drift-tuning stage (``ebl.runtime.opt_cmo_drn.drift_tuning``).
+DRIFT_ONLY = ('layernorm',)
 
 
 def _digest(value, name):

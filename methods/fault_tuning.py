@@ -133,7 +133,8 @@ class MatchedNoiselessPort(RecoveryWritePort):
 class PhysicalArm:
     """Per-device Adam write commands from held-state gradients; noisy, noiseless or masked."""
 
-    def __init__(self, model, bank, method, learning_rate, steps, masks=None, threshold_sigma=2.0):
+    def __init__(self, model, bank, method, learning_rate, steps, masks=None, threshold_sigma=2.0, *,
+                 gate='target_rho', port_factory=None):
         self.model, self.bank, self.method = model, bank, method
         self.masters = model.parameter_groups()[0]
         model.requires_grad_(False)
@@ -141,14 +142,19 @@ class PhysicalArm:
             u.requires_grad_(True)
         schedule = ('cosine_to_zero', 0, steps)
         noise = 0. if method == 'noiseless' else 1.
+        if port_factory is not None and method not in ('noisy', 'child_d'):
+            raise ValueError('Only the noisy thresholded learners take a custom write port.')
         self.ports = ([MatchedNoiselessPort(a, 0.0, target_bounds='gmin_gmax') for a in bank.arrays]
                       if method == 'matched_noiseless' else
+                      [port_factory(k, a) for k, a in enumerate(bank.arrays)] if port_factory is not None else
                       [RecoveryWritePort(a, noise, target_bounds='gmin_gmax') for a in bank.arrays])
+        if gate != 'target_rho' and method not in ('noisy', 'child_d'):
+            raise ValueError('Only the noisy thresholded learners take a non-default write gate.')
         if method == 'noiseless':
             self.writers = [DirectWriteAdam(p, learning_rate=learning_rate, schedule=schedule) for p in self.ports]
         elif method in ('noisy', 'child_d', 'matched_noiseless'):
             self.writers = [ThresholdedBoundedWriteAdam(p, learning_rate=learning_rate, threshold_sigma=threshold_sigma,
-                                                        schedule=schedule) for p in self.ports]
+                                                        schedule=schedule, gate=gate) for p in self.ports]
         else:
             raise ValueError(f'Unknown physical arm {method}.')
         if (masks is None) != (method != 'child_d'):
@@ -206,11 +212,12 @@ class LoraArm:
                                           eps=1e-8, foreach=False)
         self.schedule = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, steps)
 
-    def step(self, tokens, samples, microbatch, device):
+    def step(self, tokens, samples, microbatch, device, transform=None):
         self.model.train()
         self.optimizer.zero_grad(set_to_none=True)
         rate = self.optimizer.param_groups[0]['lr']
-        loss = backward_batch(self.model, self.bank.view(self.model), tokens, samples, microbatch, device)
+        loss = backward_batch(self.model, self.bank.view(self.model, transform=transform), tokens, samples,
+                              microbatch, device)
         norm = math.sqrt(sum(float(p.grad.square().sum()) for p in self.adapters.parameters()))
         self.optimizer.step()
         self.schedule.step()
@@ -258,3 +265,34 @@ class CalibrationArm(LoraArm):
         self.optimizer = torch.optim.Adam(self.adapters.parameters(), lr=learning_rate,
                                           betas=(0.9, 0.999), eps=1e-8, foreach=False)
         self.schedule = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, steps)
+
+
+def analog_layer_norms(model):
+    """The LayerNorm in front of each DRN MLP (drift-regimes A3 placement)."""
+    return [model.digital.layers[model.start + k].final_layer_norm for k in range(len(model.blocks))]
+
+
+class LayerNormArm(LoraArm):
+    """Fit only the affine of the LayerNorm in front of each DRN MLP; never write devices.
+
+    The adapted parameters are the model's own LayerNorm weights and biases (no parameter is
+    added); ``close`` restores their deployed values so the next arm starts unchanged.
+    """
+
+    def __init__(self, model, bank, learning_rate, steps):
+        self.model, self.bank = model, bank
+        model.requires_grad_(False)
+        parameters = [p for norm in analog_layer_norms(model) for p in norm.parameters()]
+        self.saved = [p.detach().clone() for p in parameters]
+        self.adapters = nn.ParameterList(parameters)
+        for p in parameters:
+            p.requires_grad_(True)
+        self.optimizer = torch.optim.Adam(parameters, lr=learning_rate, betas=(0.9, 0.999), eps=1e-8, foreach=False)
+        self.schedule = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, steps)
+
+    @torch.no_grad()
+    def close(self):
+        for p, saved in zip(self.adapters, self.saved):
+            p.requires_grad_(False)
+            p.copy_(saved)
+        self.model.eval()

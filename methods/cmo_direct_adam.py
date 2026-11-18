@@ -104,19 +104,37 @@ class ThresholdedBoundedWriteAdam(DirectWriteAdam):
     to the accumulated command; projection may reduce a boundary write. Issued
     commands are consumed even for stuck cells or projected no-ops. Unissued
     residuals are retained and never flushed at the final step.
+
+    ``gate='fixed_mid'`` replaces the target-conditioned rho by the port's fixed
+    nominal mid-range write standard deviation, so every device is written exactly
+    when |pending| >= 2 sigma(MID_US) (1.12 uS of physical conductance); the
+    default ``target_rho`` gate and its contract are unchanged.
     """
 
     state_names = (*DirectWriteAdam.state_names, 'pending')
+    gates = ('target_rho', 'fixed_mid')
 
-    def __init__(self, port, *, learning_rate, threshold_sigma=2.0, schedule=None):
+    def __init__(self, port, *, learning_rate, threshold_sigma=2.0, schedule=None, gate='target_rho'):
         super().__init__(port, learning_rate=learning_rate, schedule=schedule)
         if threshold_sigma != 2.0:
             raise ValueError('Expected the declared 2-rho noisy write threshold.')
+        if gate not in self.gates:
+            raise ValueError(f'Expected a write gate from {self.gates}.')
         self.threshold_sigma = float(threshold_sigma)
+        self.gate = gate
+        self.threshold_q = None
+        if gate == 'fixed_mid':
+            self.threshold_q = self.threshold_sigma * float(port.nominal_write_std_q())
+            if not math.isfinite(self.threshold_q) or self.threshold_q <= 0:
+                raise ValueError('Expected a positive finite nominal write threshold.')
         self.pending = torch.zeros_like(self.first)
 
     def contract(self):
         # Constant-LR contracts stay identical to checkpoints written before schedules existed.
+        if self.gate == 'fixed_mid':
+            return ['cmo_drn.bounded_thresholded_adam.v1', self.learning_rate, self.threshold_sigma,
+                    'nominal_midrange_write_std', self.threshold_q, 'command_before_projection', 'ge',
+                    *([] if self.schedule is None else [self.schedule])]
         return ['cmo_drn.bounded_thresholded_adam.v1', self.learning_rate,
                 self.threshold_sigma, 'bounded_target_write_std', 'command_before_projection', 'ge',
                 *([] if self.schedule is None else [self.schedule])]
@@ -126,10 +144,13 @@ class ThresholdedBoundedWriteAdam(DirectWriteAdam):
         self.pending.add_(self.adam_command(gradient))
         if not bool(torch.isfinite(self.pending).all()):
             raise FloatingPointError('Nonfinite accumulated physical write command.')
-        rho = self.port.write_noise_std_q(self.pending)
-        if rho.shape != self.pending.shape or not bool(torch.isfinite(rho).all() and (rho > 0).all()):
-            raise ValueError('Expected positive finite per-device pre-write noise standard deviations.')
-        requested = self.pending.abs() >= self.threshold_sigma * rho
+        if self.gate == 'fixed_mid':
+            requested = self.pending.abs() >= self.threshold_q
+        else:
+            rho = self.port.write_noise_std_q(self.pending)
+            if rho.shape != self.pending.shape or not bool(torch.isfinite(rho).all() and (rho > 0).all()):
+                raise ValueError('Expected positive finite per-device pre-write noise standard deviations.')
+            requested = self.pending.abs() >= self.threshold_sigma * rho
         issued = torch.where(requested, self.pending, 0.)
         attempted = self.port.write(issued)
         self.attempt_counts.add_(attempted)
@@ -137,7 +158,9 @@ class ThresholdedBoundedWriteAdam(DirectWriteAdam):
 
     def diagnostics(self):
         return {**super().diagnostics(), 'update_rule':'bounded_thresholded_adam',
-                'threshold_reference':'bounded_target_write_std', 'threshold_sigma':self.threshold_sigma,
+                'threshold_reference':('nominal_midrange_write_std' if self.gate == 'fixed_mid'
+                                       else 'bounded_target_write_std'), 'threshold_sigma':self.threshold_sigma,
+                **({} if self.gate == 'target_rho' else {'gate':self.gate, 'threshold_q':self.threshold_q}),
                 'threshold_comparison':'ge', 'threshold_applied_to':'command_before_projection',
                 'pending_nonzero':int((self.pending != 0).sum()),
                 'pending_rms_q':float(self.pending.square().mean().sqrt())}

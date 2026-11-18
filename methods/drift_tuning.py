@@ -12,6 +12,24 @@ arm and the draw does not depend on evaluation order or on earlier writes.
 Write semantics ``write_clock: continues`` (user, 16 November 2026): a recovery write
 shifts the held programmed value by its step (with the declared write noise) and does not
 restart the device's relaxation clock; every device keeps the clock started at release.
+
+Write semantics ``write_clock: reset_absorb`` (user, 18 November 2026, cmo-drift-recovery
+exp-001): each device carries the time t_w of its latest recovery write (0 = never written
+since release) and reads at absolute time t with tau = t - t_w,
+
+    G(t) = clip(G_held + M*m*L + M*(a*L + b)*Y_t, drift_min, drift_max),   L = max(ln tau, 0),
+
+with ``Y_t`` keyed exactly as above on the absolute read time, so a device that is never
+written reads bit-identically to the untreated arm. A write at time t first absorbs the
+drifted read at t (the draw the learner read for that update) into the held value, then
+applies the bounded noisy write from there, and sets t_w = t for the written devices only
+(``AbsorbWritePort``). A device read at its own write time (tau = 0) reads its held value.
+
+The optional ``write_gate`` / ``drift_off_arms`` fields (``CampaignDriftTuning``) select the
+gate of the thresholded writer (``target_rho``: the historical 2 rho at the bounded target;
+``fixed_mid``: the fixed 2 sigma(48.6 uS) = 1.12 uS of physical conductance) and name arms
+that run, and are evaluated, with drift switched off. Configs without them keep the exact
+historical resolved form.
 """
 from dataclasses import dataclass
 import hashlib
@@ -19,13 +37,16 @@ import math
 
 import torch
 
-from hardware.devices.cmo import G_MAX_US, HALF_RANGE_US, MID_US
+from hardware.devices.cmo import G_MAX_US, G_MIN_US, HALF_RANGE_US, MID_US, programming_sigma
+from methods.opt_recovery import RecoveryWritePort
 
 LAW = 'aihwkit_cmo_log_independent.v1'
 # aihwkit 1.1.0 ReRamCMONoiseModel decay_dict, uS per ln(seconds).
 AIHWKIT_MEAN_US = -0.08900206
 AIHWKIT_SPREAD_SLOPE_US = 0.04201137
 AIHWKIT_SPREAD_OFFSET_US = 0.41183342
+WRITE_CLOCKS = ('continues', 'reset_absorb')
+WRITE_GATES = ('target_rho', 'fixed_mid')
 
 
 def _number(value, name, positive=False):
@@ -55,10 +76,15 @@ class DriftTuning:
 
     @classmethod
     def parse(cls, raw):
-        if not isinstance(raw, dict) or set(raw) != set(cls.__dataclass_fields__):
-            raise ValueError(f'Expected exactly the drift_tuning fields {sorted(cls.__dataclass_fields__)}.')
-        if raw['law'] != LAW or raw['write_clock'] != 'continues':
-            raise ValueError(f'Expected law {LAW} with write_clock continues.')
+        base = set(DriftTuning.__dataclass_fields__)
+        extended = base | {'write_gate', 'drift_off_arms'}
+        if not isinstance(raw, dict) or set(raw) not in (base, extended):
+            raise ValueError(f'Expected exactly the drift_tuning fields {sorted(base)}, '
+                             'optionally with both write_gate and drift_off_arms.')
+        if raw['law'] != LAW or raw['write_clock'] not in WRITE_CLOCKS:
+            raise ValueError(f'Expected law {LAW} with write_clock in {WRITE_CLOCKS}.')
+        if set(raw) == base and raw['write_clock'] != 'continues':
+            raise ValueError('write_clock reset_absorb needs the explicit write_gate and drift_off_arms fields.')
         coefficients = tuple(_number(raw[k], k) for k in ('mean_us', 'spread_slope_us', 'spread_offset_us'))
         if coefficients != (AIHWKIT_MEAN_US, AIHWKIT_SPREAD_SLOPE_US, AIHWKIT_SPREAD_OFFSET_US):
             raise ValueError('Expected the aihwkit 1.1.0 CMO relaxation coefficients; scale them with multiplier.')
@@ -74,10 +100,26 @@ class DriftTuning:
         steps = raw['projection_steps']
         if not isinstance(steps, list) or any(type(s) is not int or s <= 0 for s in steps) or steps != sorted(set(steps)):
             raise ValueError('Expected increasing positive integer projection_steps.')
-        return cls(raw['law'], _number(raw['multiplier'], 'multiplier', True), *coefficients, low, high,
-                   raw['write_clock'], raw['draw_seed'], _number(raw['mapping_scale'], 'mapping_scale', True),
-                   _number(raw['update_seconds'], 'update_seconds', True), tuple(float(t) for t in grid),
-                   tuple(steps), _number(raw['projection_seconds'], 'projection_seconds', True))
+        values = (raw['law'], _number(raw['multiplier'], 'multiplier', True), *coefficients, low, high,
+                  raw['write_clock'], raw['draw_seed'], _number(raw['mapping_scale'], 'mapping_scale', True),
+                  _number(raw['update_seconds'], 'update_seconds', True), tuple(float(t) for t in grid),
+                  tuple(steps), _number(raw['projection_seconds'], 'projection_seconds', True))
+        if set(raw) == base:
+            return DriftTuning(*values)
+        if raw['write_gate'] not in WRITE_GATES:
+            raise ValueError(f'Expected drift_tuning.write_gate in {WRITE_GATES}.')
+        off = raw['drift_off_arms']
+        if not isinstance(off, list) or any(not isinstance(x, str) or not x for x in off) or len(set(off)) != len(off):
+            raise ValueError('Expected drift_tuning.drift_off_arms as a list of distinct arm labels.')
+        return CampaignDriftTuning(*values, raw['write_gate'], tuple(off))
+
+    @property
+    def gate(self):
+        return 'target_rho'
+
+    @property
+    def off_labels(self):
+        return ()
 
     def age(self, step):
         """Read age (s) of 1-based learner update ``step``; update 0 is release."""
@@ -89,6 +131,26 @@ class DriftTuning:
         return step if step > 0 and math.isclose(self.age(step), seconds, rel_tol=0, abs_tol=1e-9) else None
 
 
+@dataclass(frozen=True)
+class CampaignDriftTuning(DriftTuning):
+    """Drift tuning with an explicit write gate and drift-off arms (cmo-drift-recovery)."""
+    write_gate: str = 'target_rho'
+    drift_off_arms: tuple = ()
+
+    @property
+    def gate(self):
+        return self.write_gate
+
+    @property
+    def off_labels(self):
+        return self.drift_off_arms
+
+
+def milliseconds(seconds):
+    """Integer read/write time key in ms (the draw-key resolution)."""
+    return round(seconds * 1000)
+
+
 def draw_key(seed, index, seconds):
     """Counter key of the standard-normal draw of array ``index`` read at ``seconds``."""
     text = f'{seed}:{index}:{round(seconds * 1000)}'.encode()
@@ -96,8 +158,12 @@ def draw_key(seed, index, seconds):
 
 
 @torch.no_grad()
-def drifted(held, index, seconds, law):
-    """Read of the held programmed conductances (uS) at ``seconds`` after release."""
+def drifted(held, index, seconds, law, write_ms=None):
+    """Read of the held programmed conductances (uS) at ``seconds`` after release.
+
+    ``write_ms`` (``reset_absorb`` only) holds each device's latest write time in ms, 0 for a
+    device never written since release; such devices take exactly the historical expression.
+    """
     if seconds <= 0:
         return held
     log_t = max(math.log(seconds), 0.0)
@@ -106,19 +172,96 @@ def drifted(held, index, seconds, law):
     y = torch.randn(held.shape, generator=generator, device=held.device, dtype=held.dtype)
     m = law.multiplier
     shifted = held + m * law.mean_us * log_t + m * (law.spread_slope_us * log_t + law.spread_offset_us) * y
-    return shifted.clamp(law.drift_min_us, law.drift_max_us)
+    read = shifted.clamp(law.drift_min_us, law.drift_max_us)
+    if write_ms is None:
+        return read
+    if write_ms.shape != held.shape:
+        raise ValueError('Write-clock shape differs from the held array.')
+    written = write_ms > 0
+    if not bool(written.any()):
+        return read
+    tau_ms = milliseconds(seconds) - write_ms.to(torch.int64)
+    if bool((written & (tau_ms < 0)).any()):
+        raise ValueError('A read precedes the latest write of a device.')
+    log_tau = (tau_ms.to(torch.float64) / 1000).clamp_min(1.0).log().to(held.dtype)
+    own = (held + m * law.mean_us * log_tau + m * (law.spread_slope_us * log_tau + law.spread_offset_us) * y
+           ).clamp(law.drift_min_us, law.drift_max_us)
+    own = torch.where(tau_ms > 0, own, held)  # Read at its own write time: no relaxation yet.
+    return torch.where(written, own, read)
 
 
-def transform(law, seconds):
+class WriteClock:
+    """Per-device latest recovery write time (ms after release; 0 = not written since release)."""
+
+    def __init__(self, bank):
+        self.write_ms = [torch.zeros(a.held.shape, dtype=torch.int32, device=a.held.device) for a in bank.arrays]
+
+    def reset_devices(self):
+        return sum(int((w > 0).sum()) for w in self.write_ms)
+
+    def summary(self):
+        written = [w[w > 0].double() for w in self.write_ms]
+        count = sum(int(w.numel()) for w in written)
+        return {'reset_devices': count,
+                'mean_last_write_seconds': (sum(float(w.sum()) for w in written) / count / 1000) if count else None,
+                'max_last_write_seconds': max((float(w.max()) / 1000 for w in written if w.numel()), default=None)}
+
+
+def transform(law, seconds, clock=None):
     """``CmoDrnBank.view`` transform reading every array at ``seconds``."""
-    return lambda index, held: drifted(held, index, seconds, law)
+    if clock is None:
+        return lambda index, held: drifted(held, index, seconds, law)
+    return lambda index, held: drifted(held, index, seconds, law, clock.write_ms[index])
+
+
+class AbsorbWritePort(RecoveryWritePort):
+    """Bounded noisy recovery write under ``write_clock: reset_absorb``.
+
+    Before writing at read time ``seconds`` the selected devices take their drifted read at
+    that time (same key, same draw as the learner's read of that update) as the held value;
+    the plant then applies the existing bounded write (target clamp G_MIN..G_MAX, CMO write
+    noise at the target) from there, and the written devices restart their clock. Projected
+    no-ops and stuck devices keep their held value and clock.
+    """
+
+    def __init__(self, array, noise_factor, *, law, index, clock, target_bounds='gmin_gmax'):
+        super().__init__(array, noise_factor, target_bounds=target_bounds)
+        if target_bounds != 'gmin_gmax':
+            raise ValueError('Absorbing drift writes use the bounded G_MIN..G_MAX target law.')
+        self.law, self.index, self.clock = law, index, clock
+        self.seconds = None
+
+    def drifted_read(self):
+        if self.seconds is None or self.seconds <= 0:
+            raise ValueError('An absorbing write needs a positive read time.')
+        return drifted(self.array.held, self.index, self.seconds, self.law, self.clock.write_ms[self.index])
+
+    def write_noise_std_q(self, command):
+        target = (self.drifted_read() + HALF_RANGE_US * command).clamp(G_MIN_US, G_MAX_US)
+        return self.array.noise_scale * self.noise_factor * programming_sigma(target, 2.) / HALF_RANGE_US
+
+    @torch.no_grad()
+    def write(self, command):
+        array = self.array
+        selected = (command != 0) & ~array._mask
+        original = array.held
+        if bool(selected.any()):
+            array.held = torch.where(selected, self.drifted_read(), original)
+        attempted = super().write(command)
+        noop = selected & ~attempted
+        if bool(noop.any()):
+            array.held = torch.where(noop, original, array.held)
+        written = attempted & ~array._mask
+        if bool(written.any()):
+            self.clock.write_ms[self.index][written] = milliseconds(self.seconds)
+        return attempted
 
 
 @torch.no_grad()
-def bound_counts(bank, law, seconds):
+def bound_counts(bank, law, seconds, clock=None):
     low = high = total = 0
     for k, array in enumerate(bank.arrays):
-        values = drifted(array.held, k, seconds, law)
+        values = drifted(array.held, k, seconds, law, None if clock is None else clock.write_ms[k])
         low += int((values <= law.drift_min_us).sum())
         high += int((values >= law.drift_max_us).sum())
         total += values.numel()
