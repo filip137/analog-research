@@ -1,6 +1,6 @@
 # Mapping × faults on DRN6/DRN12 (evaluation only)
 
-State: implemented, CPU-tested; canary pending on fifi. Branch `drn/20261119-mapping-faults`.
+State: **complete** (25/25 cells verified on fifi, 19 Nov 2026); reviewed against the declared rule below. Branch `drn/20261119-mapping-faults`.
 Authorization: user, 19 November 2026 (issue #33 of filip137/on-chip-learning); DRN share
 of the joint 4 GPU-h budget is at most 1.5 RTX-5090 GPU-h including canaries and retries;
 host fifi only (riri runs the #67 exp-002 queue).
@@ -68,3 +68,46 @@ bash $S/campaigns/pilots/20261119-mapping-faults/run_lab.sh $S $R/runs-v1 $R/inp
 - Remaining cells: tmux `mf33-cells` on fifi from 13:55 CET, DRN6 (11 + check cell, limit
   900 s per call) then DRN12 (12, limit 1,200 s). Logs `launch/drn6-v1.log`, `launch/drn12-v1.log`
   (`rc=` line at the end). Owner: the executing agent, to completion.
+
+Completion: all 24 cells plus the check cell finished rc 0 (DRN6 13:55–14:10, DRN12
+14:10–14:33 CET). Every bundle `complete valid=True` under `runs inspect --verify-artifacts
+--require-complete` and `verify_cell` verified. GPU time 0.64 RTX-5090 h (canary 74 s + 37.4 min).
+Compact copies (no checkpoints) and `cells.csv`/`cells.json` (per-layer denominators):
+`results/mapping-faults-20261119/fifi/`; deployed.pt files stay on fifi under `runs-v1/`.
+
+## Evidence
+
+Checks: every base cell replays the paper-grid map-271002 cell exactly (naive and FA dev,
+WikiText-test and generated KL; held hashes identical to riri DRN6 and fifi DRN12 paper
+deployments). Check cell `drn6-ratio3-r00-271001`: mapped targets 0.0527338775, FA release
+0.0530200587 = CMO exp-001 riri (0.05273388 / 0.05302006); saturation 0.212 %.
+
+Fault-aware WikiText-test KL (naive in brackets); 0 % row is also the clean deployed KL.
+
+| Model | Rate | base | ratio2 | ratio3 |
+| --- | --- | --- | --- | --- |
+| DRN6 | 0 % | 0.0472 | 0.0484 | 0.0523 |
+| DRN6 | 1 % | 0.0686 (1.83) | 0.0539 (0.128) | 0.0551 (0.073) |
+| DRN6 | 3 % | 0.1857 (4.76) | 0.0772 (0.435) | 0.0646 (0.128) |
+| DRN6 | 5 % | 0.3875 (5.19) | 0.1155 (0.982) | 0.0782 (0.197) |
+| DRN12 | 0 % | 0.1920 | 0.2215 | 0.2792 |
+| DRN12 | 1 % | 0.2137 (4.81) | 0.2265 (0.399) | 0.2854 (0.327) |
+| DRN12 | 3 % | 0.4465 (5.41) | 0.2557 (1.98) | 0.3008 (0.509) |
+| DRN12 | 5 % | 1.1044 (5.50) | 0.3201 (4.50) | 0.3278 (0.848) |
+
+Median over layers of the per-layer median |Δdh|/dh (FA vs mapped targets) at 3 %: DRN6
+0.183 / 0.062 / 0.022, DRN12 0.190 / 0.066 / 0.024 (base / ratio2 / ratio3); 5 %: 0.30 / 0.10
+/ 0.036 and 0.31 / 0.11 / 0.040. The naive state changes denominators about half as much as
+the FA state (the partner rewrite adds load). Clean mapped-target dev KL: DRN6 0.0477 /
+0.0490 / 0.0527, DRN12 0.1981 / 0.2298 / 0.2883. Device statistics per cell are in `cells.csv`.
+
+## Review (declared rule: lowest FA KL at 3 % and 5 % among mappings whose 0 % KL ≤ 1.10 × base)
+
+- DRN6: ratio2 is admissible (0 % +2.6 %) and cuts fault damage (x % − 0 %) at 3 %/5 % from
+  0.139/0.340 to 0.029/0.067. Ratio3 is lower still (damage 0.012/0.026) but its 0 % KL is
+  +10.8 % (+10.9 % on the 271001 check), just outside the 10 % band, so the rule selects ratio2.
+- DRN12: ratio2 (+15.4 %) and ratio3 (+45.4 %) both fail the 0 % criterion, so the rule keeps
+  base, although ratio2 is far better at 3 % (0.256 vs 0.447) and 5 % (0.320 vs 1.104).
+- Frozen expectation (ratio3 cuts damage several-fold; ratio2 between; denominator change
+  shrinks accordingly) holds on both models. The 0 % cost grows with depth because the HWA
+  sources were trained for base (no retraining). The user decides the rerun mapping.

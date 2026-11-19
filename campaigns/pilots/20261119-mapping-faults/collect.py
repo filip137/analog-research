@@ -1,7 +1,7 @@
 """Tabulate collected mapping-faults cells (compact copies of the native bundles).
 
     python collect.py COLLECTED_ROOT   # <root>/<cell>/{deploy,tune}/... -> cells.csv, cells.json
-Each cell directory holds deploy/deployment_report.json and tune/summary.json (plus the
+Each cell directory holds the deploy and tune run directories without checkpoints (the
 native result/manifest files and cell-verified.json), copied after the on-host checks.
 """
 import csv
@@ -11,8 +11,8 @@ import sys
 
 
 def row(cell_dir):
-    report = json.loads((cell_dir / 'deploy/deployment_report.json').read_text())
-    summary = json.loads((cell_dir / 'tune/summary.json').read_text())
+    report = json.loads((cell_dir / 'deploy/artifacts/deployment_report.json').read_text())
+    summary = json.loads((cell_dir / 'tune/artifacts/summary.json').read_text())
     i, r = summary['identity'], report['report']
     model, mapping, rate, seed = cell_dir.name.split('-')
     out = {'cell': cell_dir.name, 'model': model, 'mapping': mapping, 'scale': i['mapping']['scale'],
@@ -43,7 +43,7 @@ def row(cell_dir):
 
 def main(root):
     root = Path(root)
-    rows = [row(d) for d in sorted(root.iterdir()) if (d / 'tune/summary.json').is_file()]
+    rows = [row(d) for d in sorted(root.iterdir()) if (d / 'tune/artifacts/summary.json').is_file()]
     order = {'base': 0, 'ratio2': 1, 'ratio3': 2}
     rows.sort(key=lambda x: (x['model'] != 'drn6', x['map'], order[x['mapping']], x['rate_pct']))
     (root / 'cells.json').write_text(json.dumps(rows, indent=1) + '\n')
