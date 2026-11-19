@@ -22,6 +22,7 @@ module load pytorch-gpu/py3/2.5.0
 module load git/2.53.0
 export EBL_CORPUS_ROOT="$BASE/inputs/corpora"
 export OMP_NUM_THREADS=8 MKL_NUM_THREADS=8
+export PYTHONPATH="$SRC"
 cd "$SRC"
 echo "host=$(hostname) job=$SLURM_JOB_ID start=$(date -Is) commit=$(git rev-parse HEAD) id=$ID args=$*"
 mkdir -p "$BASE/bench"
