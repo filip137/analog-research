@@ -89,3 +89,18 @@ from the exp-001 ×1 lifecycles (only `drift.multiplier` 1 differs). HWA two-sid
 from exp-001 jobs 395739 / 395727 after inspection: same source commit `fe55904` as the ×4 runs the
 canary replayed bit for bit, deployment hashes and A0-twin grids identical to exp-001 ×4. Budget
 0.3 V100 GPU-h; one job per cell.
+
+Ran on commit `1c6f607` (main, pushed): Jean Zay jobs 453965 (XB6, 6:32) and 453967 (XB12, 8:09),
+COMPLETED, no retries, 0.24 V100 GPU-h. Bundles complete/valid (`results/nohwa-drift-20261119/inspect-m1.txt`);
+deployment hashes and A0-twin grids equal the ×4 no-HWA two-sided cells.
+
+| Model | Source | A0 | A0-twin | CAL | Damage | Clip 5 µS / 150 µS (24 h) |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| XB6 | HWA (exp-001 395739) | 0.04428 | 0.04311 | 0.03702 | 0.00117 | 0.00021 / 0 |
+| XB6 | no-HWA | 0.01682 | 0.00070 | 0.01500 | 0.01611 | 0.00021 / 0 |
+| XB12 | HWA (exp-001 395727) | 0.20563 | 0.20411 | 0.15441 | 0.00152 | 0.00021 / 0 |
+| XB12 | no-HWA | 0.03716 | 0.00145 | 0.03121 | 0.03572 | 0.00021 / 0 |
+
+At ×1, no-HWA two-sided beats HWA two-sided on 24-h mean KL on both depths (XB6 2.6×, XB12 5.5×),
+despite 14–24× larger drift damage; its A0 grid rises monotonically and is still climbing at 24 h
+(XB6 0.019, XB12 0.040). One realization.
