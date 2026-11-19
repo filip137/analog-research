@@ -24,6 +24,9 @@ from ebl.schema.opt_cmo_drn import EXPERIMENT_ID
 from methods import fault_tuning as ft
 from networks.opt.data import blocks, load_corpus
 from networks.opt.physical import CmoDrnBank
+from networks.opt.mapping import programming_layout
+from hardware.devices.cmo import HALF_RANGE_US, MID_US
+from methods.programming.cmo import apply_mapping
 
 
 def plain_hash(value):
@@ -141,6 +144,19 @@ def _store(request, extra):
     return store
 
 
+@torch.no_grad()
+def restored_mapping_check(model, physical, mapping):
+    """The reapplied mapping must reproduce the saved targets and bias currents exactly."""
+    scales = [float(b.current_scale) for b in model.blocks]
+    if physical.get('mapping') != mapping or physical.get('current_scales') != scales:
+        raise ValueError('Reapplied deployment mapping differs from the saved deployment (scale or bias current).')
+    _, masters, _ = programming_layout(model)
+    cells = physical['bank']['cells']
+    if len(cells) != len(masters) or not all(
+            torch.equal(cell['target'], (MID_US + HALF_RANGE_US * u).detach().cpu()) for cell, u in zip(cells, masters)):
+        raise ValueError('Reapplied deployment mapping differs from the saved programmed targets.')
+
+
 def run(request):
     c = request.spec
     s = c.fault_tuning
@@ -187,10 +203,24 @@ def run(request):
             raise TimeoutError('Fault-tuning wall-time budget reached; completed arms are recorded.')
 
     try:
+        mapped = {}
+        if c.deployment.mapped:
+            # Clean references on the development cohort (view None reads the model targets):
+            # the source's ideal weights, then the remapped targets without programming error.
+            clean = {'source_ideal': runtime.evaluate(model, teacher, development, device, None,
+                                                      s.evaluation_microbatch)}
+            mapping = apply_mapping(model, c.deployment.mapping_scale)
+            clean['mapped_targets'] = runtime.evaluate(model, teacher, development, device, None,
+                                                       s.evaluation_microbatch)
+            restored_mapping_check(model, physical, mapping)
+            mapped = {'mapping': mapping, 'current_scales': physical['current_scales'],
+                      'clean_reference': {k: v['teacher_kl'] for k, v in clean.items()}}
+            for label, metrics in clean.items():
+                store.append_metric({'event': 'fault_tuning_clean_reference', 'label': label, 'development': metrics})
         identity = {'deployed_sha256': deployed_sha, 'source_weights_sha256': source_sha,
                     'deployment': physical['deployment'], 'start_held_hashes': physical['start_held_hashes'],
                     'recovery_sha256': s.recovery_sha256, 'development_sha256': s.development_sha256,
-                    'samples_sha256': s.samples_sha256, 'programming': physical['programming']}
+                    'samples_sha256': s.samples_sha256, 'programming': physical['programming'], **mapped}
         store.append_metric({'event': 'fault_tuning_start', **identity,
                              'device_name': torch.cuda.get_device_name(device) if str(device).startswith('cuda') else 'cpu'})
         order = ft.batch_indices(s.steps, s.batch, len(recovery), s.order_seed)

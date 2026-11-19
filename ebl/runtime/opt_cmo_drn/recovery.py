@@ -10,7 +10,7 @@ from torch.nn import functional as F
 
 from ebl.runtime.store import atomic_write_json, content_hash, sha256_file
 from networks.opt.data import cohorts, blocks, load_corpus, TRANSFER_TESTS
-from methods.programming.cmo import program_rewritten
+from methods.programming.cmo import apply_mapping, deployment_report, program_rewritten
 from networks.opt.physical import CmoDrnBank
 from ebl.schema.opt_cmo_drn import compatible_config_hashes, resume_config_hashes
 from methods.cmo_thresholded_adam import ThresholdedWriteAdam
@@ -89,8 +89,12 @@ def run_physical(request):
             if getattr(request,'device_state',None) is not None:
                 raise ValueError('Deployment creates a physical state; it does not accept one.')
             d=c.deployment
+            # An explicit mapping remaps targets and bias current before programming and faults
+            # (remap -> program -> faults -> verify/partner rewrite); legacy deployments skip it.
+            mapping=apply_mapping(model,d.mapping_scale) if d.mapped else None
             view,receipt,state=program_rewritten(model,d.assignment_seed,d.fault_kind,d.fault_rate,capture_state=True)
             del view
+            report=deployment_report(state,model.settings,model.start) if d.mapped else None
             bank=CmoDrnBank(state,c.device)
             del state
             raw=runtime.evaluate(model,teacher,dev,c.device,bank.view(model,raw=True),c.training.microbatch)
@@ -99,13 +103,24 @@ def run_physical(request):
                    'source_contract':source['contract'],'deployment':asdict(d),'cohorts':cohort,
                    'bank':bank.state_dict(),'raw_development':raw,'development':canonical,
                    'start_held_hashes':bank.held_hashes(),'programming':receipt}
+            extra={}
+            if d.mapped:
+                extra={'mapping':mapping,'current_scales':[float(b.current_scale) for b in model.blocks]}
+                saved.update(extra)
             path=store.run_dir/'checkpoints/deployed.pt'
             runtime.save(path,saved)
+            artifacts=[store.artifact_record(path,kind='device_state')]
+            if report is not None:
+                report_path=store.run_dir/'artifacts/deployment_report.json'
+                report_path.parent.mkdir(parents=True,exist_ok=True)
+                atomic_write_json(report_path,{'deployment':asdict(d),**extra,'report':report})
+                artifacts.append(store.artifact_record(report_path,kind='deployment_report'))
+                extra['report']=report
             store.append_metric({'event':'deployment','raw_development':raw,'development':canonical,
-                                 'costs':bank.costs(),'start_held_hashes':saved['start_held_hashes']})
+                                 'costs':bank.costs(),'start_held_hashes':saved['start_held_hashes'],**extra})
             store.complete(metrics={'raw_development':raw,'development':canonical,'programming':receipt,
-                                    'costs':bank.costs(),'start_held_hashes':saved['start_held_hashes']},
-                           artifacts=[store.artifact_record(path,kind='device_state')])
+                                    'costs':bank.costs(),'start_held_hashes':saved['start_held_hashes'],**extra},
+                           artifacts=artifacts)
             return 0
 
         r=c.recovery

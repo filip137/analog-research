@@ -28,7 +28,7 @@ from methods.config.opt import Training
 from methods.config.opt import Selection
 
 
-from hardware.deployment_config import Deployment
+from hardware.deployment_config import Deployment, MappedDeployment
 
 
 from methods.config.opt import Recovery
@@ -93,6 +93,13 @@ def _parse(cls,raw,path):
                 from methods.maintenance.config import DriftRecovery
                 try: value=DriftRecovery.parse(value)
                 except ValueError as error: raise ConfigError(str(error)) from error
+        elif issubclass(cls,Config) and key=='deployment' and isinstance(value,Mapping) and 'mapping_scale' in value:
+            # Explicit deployment remap; legacy deployments keep their resolved identity.
+            value=_parse(MappedDeployment,value,f'{path}.{key}')
+            scale=float(value.mapping_scale)
+            value=MappedDeployment(**{**asdict(value),'mapping_scale':scale})
+            if not 1<=scale<=88.2/9.:
+                raise ConfigError(f'Expected deployment.mapping_scale in [1, 9.8]. Provided value: {scale!r}.')
         elif issubclass(cls,Config) and key=='retention':
             if value is not None:
                 from ebl.schema.retention import Retention
@@ -144,6 +151,9 @@ def parse_config(raw):
         from methods.config.fault_tuning import DRIFT_ONLY
         if getattr(c,'drift_tuning',None) is None and any(a.method in DRIFT_ONLY for a in f.arms):
             raise ConfigError(f'Arm methods {DRIFT_ONLY} run only in the drift-tuning stage.')
+    if c.deployment.mapped and (c.stage not in ('deploy','fault_tuning') or getattr(c,'drift_tuning',None) is not None):
+        raise ConfigError('An explicit deployment mapping_scale is applied only by the deploy and fault_tuning '
+                          'stages; drift tuning declares its own drift_tuning.mapping_scale.')
     if getattr(c,'drift_tuning',None) is not None:
         d,f=c.drift_tuning,c.fault_tuning
         if f is None or c.deployment.fault_kind!='none' or c.deployment.fault_rate!=0:

@@ -73,3 +73,73 @@ def program_rewritten(model,assignment,kind='none',rate=0.0,noise_scale=1.0,*,ca
     if capture_state:
         return pairs,receipt,{'schema':'opt_cmo_drn.bank.v1','receipt':receipt,'cells':states}
     return pairs,receipt
+
+
+@torch.no_grad()
+def apply_mapping(model,scale):
+    """Deployment remap G' = min(scale G, G_max) and bias current x scale, before programming.
+
+    Scale 1 leaves the model untouched, so it programs today's targets bit for bit; other
+    scales use the drift-tuning ``remap`` (CMO exp-001 ratio2/ratio3) unchanged.
+    """
+    if scale!=1:
+        from methods.drift_tuning import remap
+        return remap(model,scale)
+    saturated=total=0
+    for block in model.blocks:
+        for u in (block.u1,block.u2):
+            saturated+=int(((MID_US+HALF_RANGE_US*u.double())>G_MAX_US).sum())
+            total+=u.numel()
+    return {'scale':1.0,'saturated_devices':saturated,'devices':total,'saturated_fraction':saturated/total}
+
+
+def _quantiles(rel):
+    rel=rel.flatten().double()
+    return {'median':float(torch.quantile(rel,.5)),'p95':float(torch.quantile(rel,.95)),
+            'max':float(rel.max()),'nodes':rel.numel()}
+
+
+@torch.no_grad()
+def deployment_report(state,settings,start):
+    """Device statistics and per-node solver-denominator change of a captured deployment.
+
+    Denominators dh, do come from ``coefficients`` on the mapped targets (no programming
+    error) and on the held fault-aware state (primary) and the naive state before the partner
+    rewrite (secondary). Reports per decoder layer the median, 95th percentile and maximum of
+    |d_state - d_target| / d_target over nodes. Analysis only; it never feeds the deployment.
+    """
+    cells=state['cells']
+    totals={'devices':0,'target_at_gmax':0,'target_at_or_below_gmin':0}
+    for label in ('held','raw'):
+        totals.update({f'{label}_at_or_above_gmax':0,f'{label}_at_or_below_gmin':0})
+    for cell in cells:
+        # Compare in the stored dtype: a float32 target clamped to G_max equals float32(88.2).
+        target,raw,held=(cell[k] for k in ('target','raw','held'))
+        totals['devices']+=target.numel()
+        totals['target_at_gmax']+=int((target>=G_MAX_US).sum())
+        totals['target_at_or_below_gmin']+=int((target<=G_MIN_US).sum())
+        for label,value in (('held',held),('raw',raw)):
+            totals[f'{label}_at_or_above_gmax']+=int((value>=G_MAX_US).sum())
+            totals[f'{label}_at_or_below_gmin']+=int((value<=G_MIN_US).sum())
+    devices=totals['devices']
+    fractions={k.replace('_at','_fraction_at',1):v/devices for k,v in totals.items() if k!='devices'}
+    matrices=state['receipt']['matrices']
+    receipt={k:sum(m[k] for m in matrices) for k in
+             ('faults','flagged','rewrite_attempts','stuck_rewrite_attempts','clipped_targets','node_loading_change_l1_us')}
+    layers=[]
+    for k in range(0,len(cells),2):
+        g={name:tuple(cells[k+i][name].double()/G_MAX_US for i in (0,1)) for name in ('target','held','raw')}
+        reference=coefficients(*g['target'],settings)
+        row={'layer':start+k//2,'matrices':[cells[k]['name'],cells[k+1]['name']]}
+        for name,label in (('held','fault_aware'),('raw','naive')):
+            for d,ref,new in zip(('dh','do'),reference,coefficients(*g[name],settings)):
+                row[f'{label}_{d}']=_quantiles((new-ref).abs()/ref)
+        layers.append(row)
+    summary={}
+    for label in ('fault_aware','naive'):
+        for d in ('dh','do'):
+            values=[r[f'{label}_{d}'] for r in layers]
+            summary[f'{label}_{d}']={'median_of_layer_medians':float(torch.tensor([v['median'] for v in values]).median()),
+                                     'max_layer_p95':max(v['p95'] for v in values)}
+    return {'schema':'opt_cmo_drn.deployment_report.v1','devices':devices,**totals,**fractions,'receipt':receipt,
+            'denominators':{'reference':'mapped_targets','summary':summary,'layers':layers}}
