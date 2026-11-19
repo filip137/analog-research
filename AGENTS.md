@@ -175,6 +175,14 @@ exact step: Y ← c·Y + √(1 − c²)·z,   c = (τ_prev/τ_next)^κ
   config.
 - Both modules are mirrored verbatim in `hwa/`; change the two copies together.
 
+## Recovery default
+
+For new DRN recovery runs, select global Child-Tuning-D at a fixed 1% reserve
+fraction across eligible programmable conductances. The matched CMO drift
+reference is [the full DRN6 ×4 config](examples/opt_cmo_drn/cmo_drift_recovery/full/drn6-ratio3-m4-global-p01.json).
+Specify the global mask scope and fraction explicitly in new configs.
+See the [shared recovery protocol](../on-chip-learning/shared/protocol.md#drn-recovery-default).
+
 ## Initialization
 
 - Every study must predeclare its initialization path and follow
