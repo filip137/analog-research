@@ -14,7 +14,8 @@ def row(cell_dir):
     report = json.loads((cell_dir / 'deploy/artifacts/deployment_report.json').read_text())
     summary = json.loads((cell_dir / 'tune/artifacts/summary.json').read_text())
     i, r = summary['identity'], report['report']
-    model, mapping, rate, seed = cell_dir.name.split('-')
+    parts = cell_dir.name.split('-')
+    model, mapping, rate, seed = parts[0], parts[-3], parts[-2], parts[-1]
     out = {'cell': cell_dir.name, 'model': model, 'mapping': mapping, 'scale': i['mapping']['scale'],
            'rate_pct': int(rate[1:]), 'map': int(seed),
            'source_ideal_dev': i['clean_reference']['source_ideal'],
