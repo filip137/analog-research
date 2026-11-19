@@ -36,6 +36,7 @@ lifecycle's P&V. Final arrays and test data are never used.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
 import math
 import time
@@ -50,6 +51,8 @@ import hardware.devices.cmo as reram_cmo
 import methods.programming.lifecycle as program_verify
 from hardware.config import ADDITIVE_GAUSSIAN
 from networks import family
+from networks.opt import attention_kernel as opt_attention_kernel
+from methods.config import HwaNumerics
 
 
 def selection_score(network, cache, lifecycle, populations, cases, device) -> dict:
@@ -145,6 +148,20 @@ def endpoint_sampler(lifecycle, arm, device_bundle, device, layout=None):
     return sample
 
 
+@contextmanager
+def update_numerics(numerics):
+    """TF32 matmuls and the attention kernel of the update loop; FP32 is restored afterwards."""
+
+    previous = (torch.backends.cuda.matmul.allow_tf32, torch.backends.cudnn.allow_tf32)
+    tf32 = numerics.matmul == "tf32"
+    torch.backends.cuda.matmul.allow_tf32 = torch.backends.cudnn.allow_tf32 = tf32
+    try:
+        with opt_attention_kernel(numerics.attention):
+            yield
+    finally:
+        torch.backends.cuda.matmul.allow_tf32, torch.backends.cudnn.allow_tf32 = previous
+
+
 def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, store, device) -> dict:
     """Return the selected source state and its fit record for one HWA arm."""
 
@@ -161,7 +178,9 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
     if arm.scope == "model":
         network.enable_digital(True)
         groups.append((arm.digital_learning_rate, network.digital_parameters()))
-    optimizer = torch.optim.Adam([{"params": params, "lr": lr, "base_lr": lr} for lr, params in groups])
+    numerics = hwa.numerics or HwaNumerics()
+    fused = {"fused": True} if numerics.fused_adam else {}
+    optimizer = torch.optim.Adam([{"params": params, "lr": lr, "base_lr": lr} for lr, params in groups], **fused)
     sample = endpoint_sampler(lifecycle, arm, device_bundle, device, layout=network.layout)
     rate_generator = torch.Generator().manual_seed(hwa.seed + 20000)
     rates = arm.corruption.rates_ppm if arm.corruption else ()
@@ -201,40 +220,41 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
             else:
                 order = torch.randperm(examples, generator=data_rng, device=device)
             network.train()
-            for batch, begin in enumerate(range(0, per_epoch, hwa.batch_size)):
-                index = order[begin : begin + hwa.batch_size]
-                features, teacher_logits, labels = network_family.hwa_batch(
-                    inputs, index, data_rng, network, teacher, lifecycle
-                )
-                kind, rate = "open", 0.0
-                if arm.corruption:
-                    ppm = rates[int(torch.randint(len(rates), (), generator=rate_generator))]
-                    histogram[str(ppm)] += 1
-                    kind, rate = arm.corruption.kind, ppm / 1e6
-                q = sample(network.q, kind, rate)
-                optimizer.zero_grad(set_to_none=True)
-                logits = network.forward_features(features, q)
-                loss = network_family.objective(logits, teacher_logits, labels, hwa.objective)
-                if not bool(torch.isfinite(loss)):
-                    rejected = {"epoch": epoch, "batch": batch, "reason": "nonfinite HWA objective"}
-                    break
-                loss.backward()
-                if schedule is not None:
-                    for group in optimizer.param_groups:
-                        group["lr"] = group["base_lr"] * schedule.factor(global_step + 1)
-                optimizer.step()
-                global_step += 1
-                with torch.no_grad():
-                    network.q.clamp_(-1, 1)
-                if batch % 100 == 0 or (schedule is not None and global_step in schedule.boundary_steps()):
-                    progress = {} if schedule is None else {
-                        "global_step": global_step,
-                        "learning_rates": [group["lr"] for group in optimizer.param_groups],
-                    }
-                    store.append_metric(
-                        {"stage": "hwa", "arm": arm.arm_id, "epoch": epoch, "batch": batch,
-                         "loss": float(loss.detach()), **progress}
+            with update_numerics(numerics):
+                for batch, begin in enumerate(range(0, per_epoch, hwa.batch_size)):
+                    index = order[begin : begin + hwa.batch_size]
+                    features, teacher_logits, labels = network_family.hwa_batch(
+                        inputs, index, data_rng, network, teacher, lifecycle
                     )
+                    kind, rate = "open", 0.0
+                    if arm.corruption:
+                        ppm = rates[int(torch.randint(len(rates), (), generator=rate_generator))]
+                        histogram[str(ppm)] += 1
+                        kind, rate = arm.corruption.kind, ppm / 1e6
+                    q = sample(network.q, kind, rate)
+                    optimizer.zero_grad(set_to_none=True)
+                    logits = network.forward_features(features, q)
+                    loss = network_family.objective(logits, teacher_logits, labels, hwa.objective)
+                    if not bool(torch.isfinite(loss)):
+                        rejected = {"epoch": epoch, "batch": batch, "reason": "nonfinite HWA objective"}
+                        break
+                    loss.backward()
+                    if schedule is not None:
+                        for group in optimizer.param_groups:
+                            group["lr"] = group["base_lr"] * schedule.factor(global_step + 1)
+                    optimizer.step()
+                    global_step += 1
+                    with torch.no_grad():
+                        network.q.clamp_(-1, 1)
+                    if batch % 100 == 0 or (schedule is not None and global_step in schedule.boundary_steps()):
+                        progress = {} if schedule is None else {
+                            "global_step": global_step,
+                            "learning_rates": [group["lr"] for group in optimizer.param_groups],
+                        }
+                        store.append_metric(
+                            {"stage": "hwa", "arm": arm.arm_id, "epoch": epoch, "batch": batch,
+                             "loss": float(loss.detach()), **progress}
+                        )
             if rejected:
                 break
             if any(not bool(torch.isfinite(p).all()) for p in network.parameters()):

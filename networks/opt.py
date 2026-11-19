@@ -19,6 +19,7 @@ entropy and perplexity are token-weighted over exactly those positions.
 from __future__ import annotations
 
 import copy
+from contextlib import contextmanager
 from dataclasses import dataclass
 import math
 import os
@@ -86,18 +87,38 @@ class Attention(nn.Module):
         self.v_proj = nn.Linear(hidden, hidden)
         self.out_proj = nn.Linear(hidden, hidden)
 
+    # "explicit" (the reference) or "sdpa"; set only through ``attention_kernel``.
+    kernel = "explicit"
+
     def forward(self, x):
         b, t, d = x.shape
 
         def heads(value):
             return value.view(b, t, self.heads, self.head_dim).transpose(1, 2)
 
+        if Attention.kernel == "sdpa":
+            q, k, v = heads(self.q_proj(x)), heads(self.k_proj(x)), heads(self.v_proj(x))
+            out = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+            return self.out_proj(out.transpose(1, 2).reshape(b, t, d))
         q = heads(self.q_proj(x) * self.head_dim**-0.5)
         k, v = heads(self.k_proj(x)), heads(self.v_proj(x))
         scores = q @ k.transpose(-1, -2)
         causal = torch.ones(t, t, dtype=torch.bool, device=x.device).triu(1)
         weights = scores.masked_fill(causal, float("-inf")).softmax(-1)
         return self.out_proj((weights @ v).transpose(1, 2).reshape(b, t, d))
+
+
+@contextmanager
+def attention_kernel(kernel: str):
+    """Use ``kernel`` for every OPT attention inside the block, then restore it."""
+
+    if kernel not in ("explicit", "sdpa"):
+        raise ValueError(f"Expected an attention kernel in ('explicit', 'sdpa'). Provided value: {kernel!r}.")
+    previous, Attention.kernel = Attention.kernel, kernel
+    try:
+        yield
+    finally:
+        Attention.kernel = previous
 
 
 class DecoderLayer(nn.Module):

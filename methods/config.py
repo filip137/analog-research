@@ -154,6 +154,39 @@ def _hwa_arm(raw: Any, path: str, technology: Technology) -> HwaArm:
     )
 
 
+HWA_MATMUL_PRECISIONS = ("fp32", "tf32")
+HWA_ATTENTION_KERNELS = ("explicit", "sdpa")
+
+
+@dataclass(frozen=True)
+class HwaNumerics:
+    """Speed settings of the HWA update loop only.
+
+    They apply from the minibatch's teacher pass through the optimizer step.
+    Selection, the stored clean metric, deployment and every evaluation keep
+    FP32 matmuls and the explicit attention. ``tf32`` enables TensorFloat-32
+    matmuls (10-bit mantissa products, FP32 accumulation and storage);
+    ``sdpa`` uses PyTorch's fused causal attention; ``fused_adam`` the fused
+    Adam kernel. Omitted, the loop is unchanged (historical identities).
+    """
+
+    matmul: str = "fp32"
+    attention: str = "explicit"
+    fused_adam: bool = False
+
+    def to_dict(self) -> dict:
+        return {"matmul": self.matmul, "attention": self.attention, "fused_adam": self.fused_adam}
+
+
+def _hwa_numerics(raw: Any) -> HwaNumerics:
+    raw = _object(raw, "hwa.numerics", ("matmul", "attention", "fused_adam"))
+    return HwaNumerics(
+        matmul=_choice(raw["matmul"], "hwa.numerics.matmul", HWA_MATMUL_PRECISIONS),
+        attention=_choice(raw["attention"], "hwa.numerics.attention", HWA_ATTENTION_KERNELS),
+        fused_adam=_boolean(raw["fused_adam"], "hwa.numerics.fused_adam"),
+    )
+
+
 @dataclass(frozen=True)
 class HwaLrSchedule:
     """A fixed optimizer-update budget; update numbers are one-based."""
@@ -239,6 +272,8 @@ class Hwa:
     sequences_per_epoch: Optional[int] = None
     # Omitted for historical epoch schedules, preserving their source identities.
     lr_schedule: Optional[HwaLrSchedule] = None
+    # Omitted: FP32 matmuls, explicit attention and the default Adam (historical identities).
+    numerics: Optional[HwaNumerics] = None
 
     def arm(self, arm_id: str) -> HwaArm:
         for arm in self.arms:
@@ -255,10 +290,12 @@ class Hwa:
             noise.update(noise_std=self.noise_std, noise_scaling=self.noise_scaling)
         stream = {} if self.sequences_per_epoch is None else {"sequences_per_epoch": self.sequences_per_epoch}
         schedule = {} if self.lr_schedule is None else {"lr_schedule": self.lr_schedule.to_dict()}
+        numerics = {} if self.numerics is None else {"numerics": self.numerics.to_dict()}
         return {
             **noise,
             **stream,
             **schedule,
+            **numerics,
             "objective": self.objective,
             "optimizer": self.optimizer,
             "learning_rate": self.learning_rate,
@@ -300,6 +337,8 @@ def _hwa(raw: Any, technology: str) -> Hwa:
         keys += ("sequences_per_epoch",)
     if isinstance(raw, Mapping) and "lr_schedule" in raw:
         keys += ("lr_schedule",)
+    if isinstance(raw, Mapping) and "numerics" in raw:
+        keys += ("numerics",)
     raw = _object(raw, "hwa", keys)
     selection = _object(raw["selection"], "hwa.selection", ("every_epochs", "extension_epochs"))
     epochs = _integer(raw["epochs"], "hwa.epochs", minimum=1)
@@ -324,6 +363,8 @@ def _hwa(raw: Any, technology: str) -> Hwa:
         extra["sequences_per_epoch"] = _integer(raw["sequences_per_epoch"], "hwa.sequences_per_epoch", minimum=1)
     if "lr_schedule" in raw:
         extra["lr_schedule"] = _hwa_lr_schedule(raw["lr_schedule"])
+    if "numerics" in raw:
+        extra["numerics"] = _hwa_numerics(raw["numerics"])
     return Hwa(
         noise_model=_choice(raw["noise_model"], "hwa.noise_model", (noise_model,)),
         objective=_choice(raw["objective"], "hwa.objective", HWA_OBJECTIVES),
