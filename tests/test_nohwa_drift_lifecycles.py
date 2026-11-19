@@ -15,18 +15,20 @@ PRETRAINED = {"xb6": "3442d7d2b4137c4126b2501a54d27a594b1ccbddc171b39d7329e2e4fd
 
 def test_cells_change_only_arms_mapping_and_source_of_cmo_exp001():
     paths = sorted(CELLS.glob("*.json"))
-    assert len(paths) == 7
+    assert len(paths) == 9
     for path in paths:
         doc = json.loads(path.read_text())
-        _, _, _, model, source, mapping = doc["lifecycle_id"].removesuffix("-replay").split("-")
-        ref = json.loads((EXP001 / f"cmo-drift-recovery-20261118-{model}-m4.json").read_text())
+        stem = doc["lifecycle_id"].removesuffix("-replay")
+        multiplier = 1 if stem.endswith("-m1") else 4
+        _, _, _, model, source, mapping = stem.removesuffix("-m1").split("-")
+        ref = json.loads((EXP001 / f"cmo-drift-recovery-20261118-{model}-m{multiplier}.json").read_text())
         lc = parse_lifecycle(doc)
         assert [s.kind for s in stage_selections(lc)] == ["prepare", "devices", "hwa", "fault_tuning"]
         ft = lc.fault_tuning
         assert [(a.label, a.method, a.learning_rate, a.no_drift) for a in ft.arms] == [
             ("A0", "hold_fault_aware", None, False), ("A0-twin", "hold_fault_aware", None, True),
             ("CAL", "calibration", 0.001, False)]
-        assert ft.drift.multiplier == 4.0 and (ft.drift.drift_min_us, ft.drift.drift_max_us) == (5.0, 150.0)
+        assert ft.drift.multiplier == float(multiplier) and (ft.drift.drift_min_us, ft.drift.drift_max_us) == (5.0, 150.0)
         assert ft.assignment_seed == 271001 and lc.defects.cases[0].rate_ppm == 0
         assert ft.mapping is None
         assert ft.drift.mapping == (None if mapping == "base" else ref["fault_tuning"]["drift"]["mapping"])

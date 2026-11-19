@@ -2,7 +2,7 @@
 
 Owning note: on-chip-learning campaigns/fault-recovery-paper/series/003-mapping-deployment/experiments/
 exp-002-nohwa-drn-and-drift.md (issue #33, user, 19 November 2026). Pilot note:
-campaigns/pilots/20261119-nohwa-drift.md.
+campaigns/pilots/20261119-nohwa-drift.md. Follow-up (b'): ``-m1`` cells at CMO x1 from the exp-001 x1 lifecycles.
 
 Each cell copies the CMO drift-recovery exp-001 x4 lifecycle of its depth
 (campaigns/pilots/20261118-cmo-drift-recovery/lifecycles/full/cmo-drift-recovery-20261118-<model>-m4.json:
@@ -32,8 +32,8 @@ QUESTION = {
 }
 
 
-def cell(model, source, mapping):
-    doc = json.loads((EXP001 / f"cmo-drift-recovery-20261118-{model}-m4.json").read_text())
+def cell(model, source, mapping, multiplier=4):
+    doc = json.loads((EXP001 / f"cmo-drift-recovery-20261118-{model}-m{multiplier}.json").read_text())
     ft = doc["fault_tuning"]
     ft["arms"] = [a for a in ft["arms"] if a["label"] in ARMS]
     if mapping == "base":
@@ -41,7 +41,7 @@ def cell(model, source, mapping):
     if source == "nohwa":
         doc["hwa"]["arms"] = [{"id": "pretrained", "method": "none"}]
         ft["source_sha256"] = PRETRAINED[model]
-    doc["lifecycle_id"] = f"nohwa-drift-20261119-{model}-{source}-{mapping}"
+    doc["lifecycle_id"] = f"nohwa-drift-20261119-{model}-{source}-{mapping}" + ("" if multiplier == 4 else f"-m{multiplier}")
     doc["question"] = dict(QUESTION)
     return doc
 
@@ -54,6 +54,13 @@ def main():
             path = OUT / f"{doc['lifecycle_id']}.json"
             path.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
             print(path)
+    # Follow-up (b'), user 20 November: no-HWA two-sided at CMO x1 (exp-001 x1 lifecycles; HWA x1
+    # controls reused from exp-001 jobs 395739 / 395727).
+    for model in ("xb6", "xb12"):
+        doc = cell(model, "nohwa", "two", multiplier=1)
+        path = OUT / f"{doc['lifecycle_id']}.json"
+        path.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
+        print(path)
     # Replay control (canary): the reused HWA two-sided cell, rerun on this pipeline with these arms;
     # its deployment hashes and A0 / A0-twin grids must equal CMO exp-001's (job 387978).
     doc = cell("xb6", "hwa", "two")

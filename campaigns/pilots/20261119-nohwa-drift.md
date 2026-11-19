@@ -81,3 +81,11 @@ loses its release advantage on total 24-h KL in every cell. Best per model is HW
 both sources. Caveats: one realization; the XB12 no-HWA two-sided A0 grid is erratic across ages
 (0.39–1.16, fresh draws per age), so its mean is noisy; under two-sided ~27–29 % of devices sit at
 the 5 µS clip at 24 h (the 9 µS floor devices drift down), none at 150 µS. The user decides.
+
+## Follow-up (b′): no-HWA two-sided at CMO ×1 (user, 20 November)
+
+Cells `nohwa-drift-20261119-{xb6,xb12}-nohwa-two-m1` = the part-(b) no-HWA two-sided cells built
+from the exp-001 ×1 lifecycles (only `drift.multiplier` 1 differs). HWA two-sided ×1 controls reused
+from exp-001 jobs 395739 / 395727 after inspection: same source commit `fe55904` as the ×4 runs the
+canary replayed bit for bit, deployment hashes and A0-twin grids identical to exp-001 ×4. Budget
+0.3 V100 GPU-h; one job per cell.
