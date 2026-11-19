@@ -193,3 +193,25 @@ def test_device_statistics_report_floors_faults_and_clipping():
     assert stats["target_at_floor_fraction"] < 0.01   # only q = -1 puts an active device at 9 uS
     assert stats["rewrite"]["clipped_targets"] == (stats["rewrite"]["clipped_targets_low"]
                                                    + stats["rewrite"]["clipped_targets_high"])
+
+
+def test_exp001_cells_change_only_the_declared_fields_of_the_paper_grid():
+    cells = sorted((ROOT / "campaigns/fault-recovery-paper/lifecycles/mapping-faults-20261119").glob("*-r0?.json"))
+    assert len(cells) == 32
+    for path in cells:
+        doc = json.loads(path.read_text())
+        _, _, model, source, mapping, rate = doc["lifecycle_id"].rsplit("-", 5)
+        grid = json.loads((PAPER / f"fault-paper-grid-20261116-{model}-{rate}-271002.json").read_text())
+        lc = parse_lifecycle(doc)
+        assert lc.fault_tuning.mapping == (REFERENCE if mapping == "base" else TWO_SIDED)
+        assert [a.method for a in lc.fault_tuning.arms] == ["hold_naive", "hold_fault_aware"]
+        f, g = dict(doc.pop("fault_tuning")), dict(grid.pop("fault_tuning"))
+        for key in ("arms", "analog_lora", "mapping", "source_sha256"):
+            f.pop(key), g.pop(key, None)
+        assert f == g
+        assert doc.pop("hwa")["arms"] == ([{"id": "pretrained", "method": "none"}] if source == "nohwa"
+                                          else grid["hwa"]["arms"])
+        grid.pop("hwa")
+        for key in ("lifecycle_id", "question"):
+            doc.pop(key), grid.pop(key)
+        assert doc == grid

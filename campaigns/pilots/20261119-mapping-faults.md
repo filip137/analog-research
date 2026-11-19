@@ -66,9 +66,31 @@ Controls: 0 % twin of every cell; base mapping replays the paper grid (canary be
   device statistics; schema accepts mapping + faults hold-only and rejects writers/adapters/drift
   combinations.
 
+## Inputs
+
+- Pretrained (no-HWA) sources: lifecycles `mapping-faults-20261119-{xb6,xb12}-pretrained-source`
+  (paper-grid r00 sections; only `prepare`, `devices`, `hwa__pretrained` run, local CPU, nom-cool-2,
+  bundles inspected complete/valid): XB6 `3442d7d2b4137c4126b2501a54d27a594b1ccbddc171b39d7329e2e4fd73a1b4`,
+  XB12 `480e1323aaed8a12036121d887f1aa38c3316b7cb39354ca14353cfc76c3abc8`; copies in
+  `results/mapping-faults-20261119/sources/pinned/` and on Jean Zay under
+  `$SCRATCH-root/mapping-faults-20261119/inputs/`. The stage's clean development KL is 1.1e-10.
+- All other pins: as the paper grid (std3 `86522e23…`, L12 `ed53b6cb…`, teacher `2d74da66…`, corpora,
+  teacher-sample file).
+
 ## Budget and execution
 
-See the handoff below.
+Lifecycles: `campaigns/fault-recovery-paper/lifecycles/mapping-faults-20261119/mapping-faults-20261119-<model>-<hwa|nohwa>-<base|two>-r<00|01|03|05>.json`
+(32; `describe`: stages prepare, devices, hwa (frozen source), fault_tuning; 28.3M / 56.6M analog weights).
+Launch: native Jean Zay path of the paper grid / CMO exp-001 (`stage_source.py`, `jz_setup_source.sh`,
+`jz_prepare.sh`, `jz_submit.sh`, `run.slurm` + `worker.py`), one manifest per model × source, several
+units per job joined by `+`. Expected per cell (paper-grid stage times on V100): prepare ~30 s,
+devices ~25 s, deployment 12 s (XB6) / 23 s (XB12), each hold 34 s / 45 s with both held-out cohorts:
+~3 min (XB6), ~4 min (XB12) → ~1.9 GPU-h for 32 cells including job start-up. Cap 2.5 V100 GPU-h.
+Canary first (one job): XB6 HWA base 3 % must reproduce paper-grid map 271002 FA hold
+(WikiText test 0.05494022420516201, dev 0.05614616473515829; naive WikiText 0.18999810510990667);
+XB6 HWA two-sided 0 % FA dev KL should lie near its clean mapped readout (≈ 0.043 per #66).
+Raw outputs on Jean Zay `/lustre/fsn1/projects/rech/umg/ucy17uy/mapping-faults-20261119/runs-v1/`;
+compact collection in `results/mapping-faults-20261119/`.
 
 ## Current execution and monitoring handoff
 
