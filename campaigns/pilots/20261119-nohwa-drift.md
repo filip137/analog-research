@@ -47,3 +47,11 @@ T = 4 perfect-diode DRN reproduces each ReLU MLP to ~0.1 % squared error, not ex
   global environment; the launcher refused (rc 75, nothing ran) until started with
   `env -u RUN_WATCH_ATTEMPT -u RUN_WATCH_WORKER_ROOT -u CUDA_VISIBLE_DEVICES`. The legacy GPU
   lock and the occupancy check still apply.
+- Units (tmux; logs under `~/analog-research/nohwa-drift-20261119/launch/`, runs under `runs-v1/`):
+  fifi `x2-f2` (`fifi-chain.sh`): DRN12 replay → 12 no-HWA fault cells → drift nohwa-ratio3,
+  nohwa-base, then hwa-base (cap raised to 2.7 GPU-h by the user, 19 Nov). riri `x2-r2`: DRN6
+  replay → 12 no-HWA fault cells → drift nohwa-ratio3. loulou `x2-l1` drift hwa-base (staged
+  `d506572`), then `x2-l2` drift nohwa-base.
+- Replays (32 updates) of the HWA ratio3 controls on their exp-001 hosts: deployment hashes,
+  clean references, A0 grid, A0 and twin means equal exp-001 exactly (DRN6 riri, DRN12 fifi);
+  the exp-001 full controls are reused.
