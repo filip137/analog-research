@@ -1,0 +1,89 @@
+{
+  "lifecycle": "campaigns/pilots/20261118-opt1p3b-port/opt1p3b-cmo-l24-probe.json",
+  "gpu": "NVIDIA A100-SXM4-80GB",
+  "torch": "2.5.0",
+  "timing": [
+    {
+      "variant": "fp32",
+      "steps": 5,
+      "seconds_per_update": 5.447698803409002,
+      "tokens_per_second": 1503.7542080839157,
+      "phase_seconds": {
+        "teacher": 1.2207635742187501,
+        "sample": 0.04163546981811524,
+        "forward": 1.2494729492187502,
+        "loss": 0.01620814094543457,
+        "backward": 2.8542341796875,
+        "step": 0.06073137969970703,
+        "clamp": 0.0038042624473571774
+      },
+      "peak_gpu_memory_bytes": 69810503680
+    },
+    {
+      "variant": "fp32+sdpa+fused",
+      "steps": 5,
+      "seconds_per_update": 5.210832655406557,
+      "tokens_per_second": 1572.1095920246642,
+      "phase_seconds": {
+        "teacher": 1.1650018798828126,
+        "sample": 0.04163601303100586,
+        "forward": 1.193670068359375,
+        "loss": 0.01620346946716309,
+        "backward": 2.76552197265625,
+        "step": 0.02421256332397461,
+        "clamp": 0.0038043328285217288
+      },
+      "peak_gpu_memory_bytes": 63391820800
+    },
+    {
+      "variant": "tf32",
+      "steps": 5,
+      "seconds_per_update": 1.4671921930043026,
+      "tokens_per_second": 5583.4539190299365,
+      "phase_seconds": {
+        "teacher": 0.23549896240234375,
+        "sample": 0.041937670898437494,
+        "forward": 0.2684761840820313,
+        "loss": 0.01616872940063476,
+        "backward": 0.8397883544921875,
+        "step": 0.06066787872314453,
+        "clamp": 0.003802585601806641
+      },
+      "peak_gpu_memory_bytes": 69810503680
+    },
+    {
+      "variant": "tf32+sdpa+fused",
+      "steps": 5,
+      "seconds_per_update": 1.328917474602349,
+      "tokens_per_second": 6164.415892304588,
+      "phase_seconds": {
+        "teacher": 0.20240479736328126,
+        "sample": 0.04198805084228516,
+        "forward": 0.2355516845703125,
+        "loss": 0.016164019393920898,
+        "backward": 0.8040517822265624,
+        "step": 0.02420458221435547,
+        "clamp": 0.0037965695858001706
+      },
+      "peak_gpu_memory_bytes": 63391820800
+    },
+    {
+      "variant": "bf16+sdpa+fused",
+      "steps": 5,
+      "seconds_per_update": 2.057563343597576,
+      "tokens_per_second": 3981.408409850741,
+      "phase_seconds": {
+        "teacher": 1.1644225341796877,
+        "sample": 0.041641811370849616,
+        "forward": 0.16081444091796876,
+        "loss": 0.018255961227416993,
+        "backward": 0.6435698974609375,
+        "step": 0.024180287551879884,
+        "clamp": 0.0038067520141601566
+      },
+      "peak_gpu_memory_bytes": 66801062912
+    }
+  ],
+  "gradients": {},
+  "trajectories": []
+}
