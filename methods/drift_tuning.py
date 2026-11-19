@@ -78,9 +78,9 @@ class DriftTuning:
     def parse(cls, raw):
         base = set(DriftTuning.__dataclass_fields__)
         extended = base | {'write_gate', 'drift_off_arms'}
-        if not isinstance(raw, dict) or set(raw) not in (base, extended):
+        if not isinstance(raw, dict) or set(raw) not in (base, extended, extended | {'child_mask_scope'}):
             raise ValueError(f'Expected exactly the drift_tuning fields {sorted(base)}, '
-                             'optionally with both write_gate and drift_off_arms.')
+                             'optionally with both write_gate and drift_off_arms, and child_mask_scope.')
         if raw['law'] != LAW or raw['write_clock'] not in WRITE_CLOCKS:
             raise ValueError(f'Expected law {LAW} with write_clock in {WRITE_CLOCKS}.')
         if set(raw) == base and raw['write_clock'] != 'continues':
@@ -111,6 +111,10 @@ class DriftTuning:
         off = raw['drift_off_arms']
         if not isinstance(off, list) or any(not isinstance(x, str) or not x for x in off) or len(set(off)) != len(off):
             raise ValueError('Expected drift_tuning.drift_off_arms as a list of distinct arm labels.')
+        if 'child_mask_scope' in raw:
+            if raw['child_mask_scope'] != 'global':
+                raise ValueError('Expected global child_mask_scope when selecting across arrays.')
+            return GlobalChildDriftTuning(*values, raw['write_gate'], tuple(off), 'global')
         return CampaignDriftTuning(*values, raw['write_gate'], tuple(off))
 
     @property
@@ -144,6 +148,11 @@ class CampaignDriftTuning(DriftTuning):
     @property
     def off_labels(self):
         return self.drift_off_arms
+
+
+@dataclass(frozen=True)
+class GlobalChildDriftTuning(CampaignDriftTuning):
+    child_mask_scope: str = 'global'
 
 
 def milliseconds(seconds):

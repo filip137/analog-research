@@ -94,6 +94,22 @@ def child_masks(fishers, fraction):
     return masks
 
 
+@torch.no_grad()
+def global_child_masks(fishers, fraction):
+    """Rank eligible devices jointly; break cutoff ties in array and flattened index order."""
+    scores = torch.cat([f.flatten() for f in fishers])
+    if not torch.isfinite(scores).all():
+        raise ValueError('Global Fisher scores must be finite.')
+    count = max(1, round(fraction * scores.numel()))
+    cutoff = torch.topk(scores, count, sorted=False).values.min()
+    mask = scores > cutoff
+    remaining = count - int(mask.sum())
+    ties = torch.nonzero(scores == cutoff).flatten()
+    mask[ties[:remaining]] = True
+    sizes = [f.numel() for f in fishers]
+    return [m.view_as(f) for m, f in zip(mask.split(sizes), fishers)]
+
+
 def fisher_scores(model, bank, tokens, samples, batch, microbatch, device, progress=None):
     """Child-Tuning_D Fisher: mean over the recovery batches of the squared batch gradient.
 

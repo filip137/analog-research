@@ -66,6 +66,13 @@ def verify(config_path, run_dir, source_pins=SOURCE_PINS):
     release = a0['grid'][0]['teacher_kl']
     a0_grid = {g['age_seconds']: g['teacher_kl'] for g in a0['grid']}
     fisher = s.get('child_d_fisher')
+    if d.get('child_mask_scope') == 'global':
+        if not fisher or fisher.get('scope') != 'global' or fisher['fraction'] != f['child_fraction']:
+            fail('Global Child-Tuning_D mask configuration mismatch.')
+        devices = sum(row['devices'] for row in fisher['arrays'])
+        selected = sum(row['selected'] for row in fisher['arrays'])
+        if selected != max(1, round(devices * f['child_fraction'])):
+            fail('Global Child-Tuning_D mask count differs from its reserve fraction.')
     for label, a in arms.items():
         method, drift = a['method'], label not in off
         if [g['age_seconds'] for g in a['grid']] != d['evaluation_seconds']:

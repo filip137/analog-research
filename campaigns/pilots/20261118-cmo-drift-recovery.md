@@ -148,3 +148,21 @@ fifi. Launchers are tmux `cmo67-drn6-m1` and `cmo67-drn12-m1`, PIDs
 The coordinator reserved 2 h for DRN6 and 3.5 h for DRN12 per multiplier;
 ×10 follows a fresh idle check on each required host. Cross-backend accounting
 and the callback handoff are in issue 67.
+
+## DRN6 ×4 global Child-Tuning-D reserve sweep, 19 November
+
+Keep chip 271001, the original held release state, full recovery cohort and Fisher batch estimator,
+ratio3 mapping, reset-absorb law, gate and 0.001 CT learning rate from exp-001. Pool the Fisher
+scores over the eligible programmable conductance parameters of every analog matrix. Select the
+top 1%, 5% or 10% globally (nearest integer, ties in flattened array order), and report the count
+and score allocation per matrix. Run one native unit per fraction, with A0, A0-twin, CT and
+CT-nodrift and their shared fixed mask. Pair to original CAL and per-matrix CT only after
+matching deployment, data, clean references and A0 grids. Compare 24-hour trapezoid-mean KL,
+distinct devices touched and total write attempts. The three native prefixes are
+`drn6-ratio3-m4-global-p01`, `drn6-ratio3-m4-global-p05` and `drn6-ratio3-m4-global-p10`.
+The 32-update canaries use the `-canary` suffix and 2,400-update full configs keep the prefix.
+Each uses the same native launcher and verifier as exp-001:
+
+```bash
+bash "$src/campaigns/pilots/20261118-cmo-drift-recovery/run_lab.sh" "$src" "$out" "$src/examples/opt_cmo_drn/cmo_drift_recovery/$kind/$unit.json" "$inputs" "$weights" "$teacher" "$limit_seconds"
+```

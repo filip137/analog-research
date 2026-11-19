@@ -10,8 +10,19 @@ py=/home/filip/miniconda3/envs/py312/bin/python
 uuid=$(nvidia-smi --query-gpu=uuid --format=csv,noheader | head -1)
 lock=$HOME/.cache/run-watch/shared-queue/gpus/$uuid.lock
 mkdir -p "$(dirname "$lock")"
-exec 9>>"$lock"
-flock -n 9 || { echo "GPU lock held"; exit 75; }
+# The queue supervisor passes its locked open file description through exec.
+# Reopening that same inode independently would block against our own supervisor.
+if [[ -n ${RUN_WATCH_ATTEMPT:-} ]]; then
+    [[ ${CUDA_VISIBLE_DEVICES:-} == "$uuid" ]] || { echo "Queue GPU mismatch"; exit 75; }
+    gpu_fd=
+    for fd in /proc/$$/fd/*; do
+        if [[ $fd -ef $lock ]]; then gpu_fd=${fd##*/}; break; fi
+    done
+    [[ -n $gpu_fd ]] || { echo "Missing inherited GPU lock"; exit 75; }
+else
+    exec {gpu_fd}>>"$lock"
+fi
+flock -xn "$gpu_fd" || { echo "GPU lock held"; exit 75; }
 if [ -n "$(nvidia-smi -i "$uuid" --query-compute-apps=pid --format=csv,noheader)" ]; then echo "GPU occupied"; exit 75; fi
 export CUDA_VISIBLE_DEVICES=$uuid OMP_NUM_THREADS=8 MKL_NUM_THREADS=8
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1

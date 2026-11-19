@@ -14,7 +14,7 @@ at equal ages see identical drift draws:
   listed in ``drift_off_arms`` is A0-twin: the released state read without drift.
 * ``noisy`` (L1) and ``child_d`` (Child-Tuning_D): the fault-tuning noisy physical learner
   (thresholded bounded Adam, cosine to zero over ``steps``), dense or restricted to the fixed
-  top-``child_fraction`` Fisher mask of each matrix, starting at release; update k reads at
+  top-``child_fraction`` Fisher mask (per matrix or globally), starting at release; update k reads at
   k * ``update_seconds``. The Fisher is the mean squared batch gradient over the recovery
   pool at the released (t = 0) state, computed once per run and shared by every child_d arm.
 * ``calibration`` (per-channel MLP output gain/shift) and ``layernorm`` (affine of the
@@ -215,12 +215,14 @@ def run(request):
                                               progress)
                     if bank.held_hashes() != start_hashes:
                         raise RuntimeError('Fisher pass changed the held deployment.')
-                    masks = ft.child_masks(scores, s.child_fraction)
+                    scope = getattr(d, 'child_mask_scope', 'per_matrix')
+                    select = ft.global_child_masks if scope == 'global' else ft.child_masks
+                    masks = select(scores, s.child_fraction)
                     fisher_record = {
-                        'fraction': s.child_fraction, 'fisher_batch': s.fisher_batch, 'state': 'released_t0',
+                        'scope': scope, 'fraction': s.child_fraction, 'fisher_batch': s.fisher_batch, 'state': 'released_t0',
                         'batches': len(recovery) // s.fisher_batch, 'seconds': time.monotonic() - fisher_started,
                         'arrays': [{'name': a.name, 'devices': m.numel(), 'selected': int(m.sum()),
-                                    'threshold': float(sc[m].min()), 'fisher_mean': float(sc.mean()),
+                                    'threshold': float(sc[m].min()) if m.any() else None, 'fisher_mean': float(sc.mean()),
                                     'fisher_selected_share': float(sc[m].sum() / sc.sum().clamp_min(1e-30))}
                                    for a, m, sc in zip(bank.arrays, masks, scores)],
                         'mask_sha256': plain_hash(torch.cat([m.flatten() for m in masks]))}

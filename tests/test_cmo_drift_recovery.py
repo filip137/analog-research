@@ -279,10 +279,21 @@ def test_invalid_campaign_configs_are_rejected():
         parse_config(fault)
 
 
-def test_stage_runs_every_arm_end_to_end_and_passes_verify_unit(cpu_threads, tmp_path, monkeypatch):
+def test_global_child_masks_rank_across_arrays_and_break_ties_by_index():
+    scores = [torch.tensor([3., 3., 2.]), torch.tensor([3., 1., 0.])]
+    low, high = [ft.global_child_masks(scores, p) for p in (1/3, 1/2)]
+    assert low[0].tolist() == [True, True, False] and not low[1].any()
+    assert high[0].tolist() == low[0].tolist() and high[1].tolist() == [True, False, False]
+
+
+@pytest.mark.parametrize('global_mask', [False, True])
+def test_stage_runs_every_arm_end_to_end_and_passes_verify_unit(cpu_threads, tmp_path, monkeypatch, global_mask):
     """Tiny CPU run of the native stage with the campaign arm set; then the bundle check."""
     raw = json.loads((CONFIGS / 'canary' / 'drn6-ratio3-m4-canary.json').read_text())
     f, d = raw['fault_tuning'], raw['drift_tuning']
+    if global_mask:
+        d['child_mask_scope'] = 'global'
+        f['child_fraction'] = 0.01
     f.update(recovery_sequences=16, fisher_batch=8, batch=2, microbatch=1, steps=6, development_every=3)
     for a in f['arms']:
         if a.get('method') in ('noisy', 'child_d'):
