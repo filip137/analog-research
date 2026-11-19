@@ -51,4 +51,20 @@ compact collection `results/mapping-faults-20261119/`. Storage ≈ 0.3–0.6 GB 
 
 ## Handoff
 
-Pending launch.
+Launch commit `8577b1b` (merged, pushed); pinned checkout
+`results/mapping-faults-20261119/source-8577b1b`; fifi staging `git archive` →
+`~/analog-research/mapping-faults-20261119/source-drn-8577b1b` with `source_snapshot.json`
+(5,112 files). Inputs `~/analog-research/mapping-faults-20261119/inputs` (paper-grid corpora,
+samples, DRN12 source symlinked; DRN6 source copied from riri; all hashes match the pins).
+
+```bash
+bash $S/campaigns/pilots/20261119-mapping-faults/run_lab.sh $S $R/runs-v1 $R/inputs $WEIGHTS $TEACHER $LIMIT CELL...
+```
+
+- Canary `drn6-base-r03-271002` (tmux `mf33-canary`, 13:53–13:55 CET): rc 0, both bundles
+  `complete valid=True`, `verify_cell` verified. Deployment held hashes equal the paper-grid
+  riri deployment bit for bit; naive/FA dev, WikiText-test and generated KL equal the paper
+  grid exactly (FA WikiText 0.18565395849884725). 75 s per DRN6 cell.
+- Remaining cells: tmux `mf33-cells` on fifi from 13:55 CET, DRN6 (11 + check cell, limit
+  900 s per call) then DRN12 (12, limit 1,200 s). Logs `launch/drn6-v1.log`, `launch/drn12-v1.log`
+  (`rc=` line at the end). Owner: the executing agent, to completion.
