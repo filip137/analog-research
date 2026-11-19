@@ -1,0 +1,140 @@
+{
+  "analog_layers": 6,
+  "cpu_threads": 8,
+  "data": {
+    "corpus": "opt125m-synthetic-50m",
+    "development_sequences": 256,
+    "mapping_sequences": 1,
+    "seed": 20261008,
+    "sequence_length": 256,
+    "sequences": 195226,
+    "sha256": "ce58085af0ae1add6415372a50bf20ba4238ee8cae5ee55093c83e6a9a36d984"
+  },
+  "deployment": {
+    "assignment_seed": 271002,
+    "fault_kind": "random",
+    "fault_rate": 0.03,
+    "mapping_scale": 2.0
+  },
+  "device": "cuda:0",
+  "experiment_id": "opt_cmo_drn_hwa.v1",
+  "fault_tuning": {
+    "arms": [
+      {
+        "label": "naive_hold",
+        "method": "naive_hold"
+      },
+      {
+        "label": "fault_aware_hold",
+        "method": "hold"
+      }
+    ],
+    "batch": 8,
+    "child_fraction": 0.1,
+    "corpus": "wikitext-2-raw-v1",
+    "corpus_sha256": "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01",
+    "development_every": 100,
+    "development_sequences": 64,
+    "development_sha256": "7411cf50b625e4c62f65d8e12bac538fd83c6dad3e4c74b29a9f2a6f5ad83191",
+    "development_split": "validation",
+    "development_start": 0,
+    "evaluation_cohorts": [
+      {
+        "cohort_sha256": "5b51c74afa1cf0b6b0cdccde19112db712ffa41a4f189d09f2b2bd1ab1362229",
+        "corpus": "wikitext-2-raw-v1",
+        "corpus_sha256": "33e958349a446c09be3768491db7ac98eea45e38b6b884c59eb970d8b2e50e01",
+        "name": "wikitext",
+        "sequences": 1024,
+        "split": "test",
+        "start": 0
+      },
+      {
+        "cohort_sha256": "bd00888a4b7df6ecd8e010a3d8705139f423b5bf1606c43fce68e543f3c62eed",
+        "corpus": "wikitext2-train-synthtest",
+        "corpus_sha256": "8e73b6b43aafb92b8b52e11cdd060d573331fae410350cf2427f3eeba640e224",
+        "name": "generated",
+        "sequences": 384,
+        "split": "test",
+        "start": 0
+      }
+    ],
+    "evaluation_microbatch": 1,
+    "fisher_batch": 8,
+    "lora_alpha": "rank",
+    "lora_seed": 20261113,
+    "microbatch": 1,
+    "order_seed": 20261104,
+    "recovery_seed": 20261104,
+    "recovery_sequences": 1024,
+    "recovery_sha256": "c919329dbe0d545d7614daf3d8f790881e944cd80ff53fff88fc19d9697f7762",
+    "recovery_split": "train",
+    "samples_count": 8,
+    "samples_file": "teacher-samples8-c919329d-df73ce66.pt",
+    "samples_seed": 20365833,
+    "samples_sha256": "df73ce6615be3cdd3005d2ca0b97c03131f9236ba481bc7250edde5ff66fb01a",
+    "schedule": "cosine_to_zero",
+    "sequence_length": 256,
+    "steps": 300
+  },
+  "initialization": "full_span_quad.v1",
+  "model": "facebook/opt-125m",
+  "recovery": {
+    "arm": "learning",
+    "calibration_lr": 0.0001,
+    "calibration_updates": 200,
+    "checkpoint_every": 128,
+    "conductance_floor": "none",
+    "development_every": 0,
+    "learning_rate": 0.0001,
+    "max_write_attempts": null,
+    "retain_final_optimizer": false,
+    "target_bounds": "gmin_gmax",
+    "threshold_sigma": 2.0,
+    "update_rule": "bounded_thresholded_adam",
+    "updates": 2048,
+    "write_noise_factor": 1.0
+  },
+  "schema_version": 1,
+  "selection": {
+    "assignment_seeds": [
+      211001,
+      211002
+    ],
+    "every_updates": 512,
+    "fault_kinds": [
+      "none",
+      "random"
+    ],
+    "random_rate": 0.03
+  },
+  "solver": {
+    "activation_checkpointing": true,
+    "current_amp": 0.1,
+    "gradient_iterations": 4,
+    "input_gain": 100.0,
+    "settling_iterations": 4,
+    "token_chunk_size": 256,
+    "voltage_amp": 5.0
+  },
+  "source_sha256": "b1bb87051da8e40b68369457b6a9c43504c32486f00daa435d4020ea94f98ee9",
+  "stage": "fault_tuning",
+  "teacher_sha256": "2d74da6615135c58cf3cf9ad4cb11e7c613ff9e55fe658a47ab83b6c8d1174a9",
+  "training": {
+    "arm": "std3",
+    "calibration_lr": 0.0003,
+    "checkpoint_every": 512,
+    "conductance_lr": 0.0003,
+    "digital_lr": 1e-05,
+    "effective_batch": 32,
+    "epochs": 5,
+    "max_updates": 0,
+    "max_wall_seconds": 6900,
+    "microbatch": 1,
+    "minimum_lr_factor": 0.2,
+    "recipe": "A",
+    "retention": "best_latest_final",
+    "schedule": "cosine",
+    "seed": 41,
+    "warmup_updates": 245
+  }
+}
