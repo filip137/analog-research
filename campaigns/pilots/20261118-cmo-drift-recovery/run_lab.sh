@@ -10,19 +10,23 @@ py=/home/filip/miniconda3/envs/py312/bin/python
 uuid=$(nvidia-smi --query-gpu=uuid --format=csv,noheader | head -1)
 lock=$HOME/.cache/run-watch/shared-queue/gpus/$uuid.lock
 mkdir -p "$(dirname "$lock")"
-# The queue supervisor passes its locked open file description through exec.
-# Reopening that same inode independently would block against our own supervisor.
+# Queue workers inherit a lock in worker_root; legacy launchers use the cache lock.
+# Reuse an inherited file description if the two paths resolve to one inode.
+queue_lock=
 if [[ -n ${RUN_WATCH_ATTEMPT:-} ]]; then
     [[ ${CUDA_VISIBLE_DEVICES:-} == "$uuid" ]] || { echo "Queue GPU mismatch"; exit 75; }
-    gpu_fd=
+    queue_lock=${RUN_WATCH_WORKER_ROOT:-$HOME/.local/state/run-watch/queue-workers}/gpus/$uuid.lock
+    queue_fd=
     for fd in /proc/$$/fd/*; do
-        if [[ $fd -ef $lock ]]; then gpu_fd=${fd##*/}; break; fi
+        if [[ $fd -ef $queue_lock ]]; then queue_fd=${fd##*/}; break; fi
     done
-    [[ -n $gpu_fd ]] || { echo "Missing inherited GPU lock"; exit 75; }
-else
-    exec {gpu_fd}>>"$lock"
+    [[ -n $queue_fd ]] || { echo "Missing inherited GPU lock"; exit 75; }
+    flock -xn "$queue_fd" || { echo "Queue GPU lock held"; exit 75; }
 fi
-flock -xn "$gpu_fd" || { echo "GPU lock held"; exit 75; }
+if [[ ! $lock -ef $queue_lock ]]; then
+    exec {legacy_fd}>>"$lock"
+    flock -xn "$legacy_fd" || { echo "Legacy GPU lock held"; exit 75; }
+fi
 if [ -n "$(nvidia-smi -i "$uuid" --query-compute-apps=pid --format=csv,noheader)" ]; then echo "GPU occupied"; exit 75; fi
 export CUDA_VISIBLE_DEVICES=$uuid OMP_NUM_THREADS=8 MKL_NUM_THREADS=8
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
