@@ -1,0 +1,136 @@
+{
+  "campaign_id": "opt1p3b-cmo-l12-probe",
+  "schema_version": 1,
+  "stages": [
+    {
+      "case_id": "shared",
+      "command": [
+        "/lustre/fshomisc/sup/hpe/pub/miniforge/24.9.0/envs/pytorch-gpu-2.5.0+py3.12.7/bin/python3.12",
+        "-m",
+        "ebl",
+        "train",
+        "--config",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/plan/stages/prepare.json",
+        "--output-dir",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/runs/opt1p3b-cmo-l12-probe/stages/shared/local/prepare/attempt-001/runs",
+        "--teacher-weights",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/inputs/opt-1.3b-3f5c25d0/pytorch_model.bin"
+      ],
+      "cwd": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828",
+      "error": null,
+      "fingerprint": "d931ef6e21e5bfaf36704611ff8b86b584b4062eae079fd1df614ba650636bc1",
+      "returncode": 0,
+      "run_result": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/runs/opt1p3b-cmo-l12-probe/stages/shared/local/prepare/attempt-001/runs/20261119T105320.023263Z-2d2f08e2-6ae2268f/result.json",
+      "run_result_sha256": "fc3970a646172c8a243f6222db29c7d827eb8c12a257c5186e310380a8f5a3e1",
+      "schema_version": 1,
+      "stage_id": "prepare",
+      "status": "complete",
+      "target_id": "local",
+      "target_source": {
+        "commit": "5fc5828e4d617420a84eca7c1a8d5684839b0bb5",
+        "dirty": false,
+        "dirty_hash": null
+      }
+    },
+    {
+      "case_id": "shared",
+      "command": [
+        "/lustre/fshomisc/sup/hpe/pub/miniforge/24.9.0/envs/pytorch-gpu-2.5.0+py3.12.7/bin/python3.12",
+        "-m",
+        "ebl",
+        "train",
+        "--config",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/plan/stages/devices.json",
+        "--output-dir",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/runs/opt1p3b-cmo-l12-probe/stages/shared/local/devices/attempt-001/runs",
+        "--teacher-weights",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/inputs/opt-1.3b-3f5c25d0/pytorch_model.bin"
+      ],
+      "cwd": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828",
+      "error": null,
+      "fingerprint": "f0dfbe838966f1a6925f27de72b37fdca49adab3d1f7930f76cbccdc2c08eb62",
+      "returncode": 0,
+      "run_result": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/runs/opt1p3b-cmo-l12-probe/stages/shared/local/devices/attempt-001/runs/20261119T105421.535659Z-b8418fa1-d87da2a2/result.json",
+      "run_result_sha256": "a212af7d985dd4679aab4145ba3b7eae21c89eaac36965c9322d39dc0a5af4a0",
+      "schema_version": 1,
+      "stage_id": "devices",
+      "status": "complete",
+      "target_id": "local",
+      "target_source": {
+        "commit": "5fc5828e4d617420a84eca7c1a8d5684839b0bb5",
+        "dirty": false,
+        "dirty_hash": null
+      }
+    },
+    {
+      "case_id": "standard_hwa_model_probe",
+      "command": [
+        "/lustre/fshomisc/sup/hpe/pub/miniforge/24.9.0/envs/pytorch-gpu-2.5.0+py3.12.7/bin/python3.12",
+        "-m",
+        "ebl",
+        "train",
+        "--config",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/plan/stages/hwa__standard_hwa_model_probe.json",
+        "--output-dir",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/runs/opt1p3b-cmo-l12-probe/stages/standard_hwa_model_probe/local/hwa__standard_hwa_model_probe/attempt-001/runs",
+        "--device-data",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/runs/opt1p3b-cmo-l12-probe/stages/shared/local/prepare/attempt-001/runs/20261119T105320.023263Z-2d2f08e2-6ae2268f/checkpoints/cache.pt",
+        "--device-model",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/runs/opt1p3b-cmo-l12-probe/stages/shared/local/devices/attempt-001/runs/20261119T105421.535659Z-b8418fa1-d87da2a2/checkpoints/devices.pt",
+        "--teacher-weights",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/inputs/opt-1.3b-3f5c25d0/pytorch_model.bin"
+      ],
+      "cwd": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828",
+      "error": null,
+      "fingerprint": "eec49e7602ddc6d6936c87d0101f7469646373b2af3dac5cf203d11307f858e5",
+      "returncode": 0,
+      "run_result": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/runs/opt1p3b-cmo-l12-probe/stages/standard_hwa_model_probe/local/hwa__standard_hwa_model_probe/attempt-001/runs/20261119T105452.752369Z-e7e269e9-dc5f71ed/result.json",
+      "run_result_sha256": "46166aed0a61bdee5f0e319f01647ce54adba36ba320d92cf0abd18dd099fca5",
+      "schema_version": 1,
+      "stage_id": "hwa__standard_hwa_model_probe",
+      "status": "complete",
+      "target_id": "local",
+      "target_source": {
+        "commit": "5fc5828e4d617420a84eca7c1a8d5684839b0bb5",
+        "dirty": false,
+        "dirty_hash": null
+      }
+    },
+    {
+      "case_id": "standard_hwa_model_probe__271001",
+      "command": [
+        "/lustre/fshomisc/sup/hpe/pub/miniforge/24.9.0/envs/pytorch-gpu-2.5.0+py3.12.7/bin/python3.12",
+        "-m",
+        "ebl",
+        "train",
+        "--config",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/plan/stages/deploy__standard_hwa_model_probe__271001.json",
+        "--output-dir",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/runs/opt1p3b-cmo-l12-probe/stages/standard_hwa_model_probe__271001/local/deploy__standard_hwa_model_probe__271001/attempt-001/runs",
+        "--device-data",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/runs/opt1p3b-cmo-l12-probe/stages/shared/local/prepare/attempt-001/runs/20261119T105320.023263Z-2d2f08e2-6ae2268f/checkpoints/cache.pt",
+        "--device-model",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/runs/opt1p3b-cmo-l12-probe/stages/shared/local/devices/attempt-001/runs/20261119T105421.535659Z-b8418fa1-d87da2a2/checkpoints/devices.pt",
+        "--teacher-weights",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/inputs/opt-1.3b-3f5c25d0/pytorch_model.bin",
+        "--weights",
+        "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/runs/opt1p3b-cmo-l12-probe/stages/standard_hwa_model_probe/local/hwa__standard_hwa_model_probe/attempt-001/runs/20261119T105452.752369Z-e7e269e9-dc5f71ed/checkpoints/source.pt"
+      ],
+      "cwd": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828",
+      "error": null,
+      "fingerprint": "cebfaf6e94a98aa0eaff39de11b3e732e84119b88c3ce9d72679aa22b4c4aa74",
+      "returncode": 0,
+      "run_result": "/lustre/fsn1/projects/rech/umg/ucy17uy/opt-cmo-exp1/hwa-5fc5828/results/lifecycles/opt1p3b-cmo-l12-probe/runs/opt1p3b-cmo-l12-probe/stages/standard_hwa_model_probe__271001/local/deploy__standard_hwa_model_probe__271001/attempt-001/runs/20261119T111141.655389Z-7c99cbfd-af18be35/result.json",
+      "run_result_sha256": "95a84c8bcf77dc6fb3ab5d4a53590522bd9443444fa686952369f8125ad883f3",
+      "schema_version": 1,
+      "stage_id": "deploy__standard_hwa_model_probe__271001",
+      "status": "complete",
+      "target_id": "local",
+      "target_source": {
+        "commit": "5fc5828e4d617420a84eca7c1a8d5684839b0bb5",
+        "dirty": false,
+        "dirty_hash": null
+      }
+    }
+  ]
+}
