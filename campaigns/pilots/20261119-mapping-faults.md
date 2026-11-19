@@ -94,4 +94,28 @@ compact collection in `results/mapping-faults-20261119/`.
 
 ## Current execution and monitoring handoff
 
-19 Nov: code committed; pretrained sources being produced locally (CPU). Nothing launched on Jean Zay.
+Owner: the executing agent (19 Nov). Launch commit `9a98ce4` (main, pushed); Jean Zay source
+`/lustre/fswork/projects/rech/umg/ucy17uy/mapping-faults-20261119/source-9a98ce4/hwa` (receipt
+`18367268…`, 2,542 files, 0 mismatches); launch dir `…/mapping-faults-20261119/launch-9a98ce4/`
+(manifests `manifest-{xb6,xb12}-{hwa,nohwa}.json`; worker = tracked copy); outputs
+`/lustre/fsn1/projects/rech/umg/ucy17uy/mapping-faults-20261119/runs-v1/<model>-<source>/<unit>/`
+(`complete.json` / `failed-<job>.json`). All 32 units planned and dry-run on the login node.
+
+| Job | Units | State |
+| --- | --- | --- |
+| 436970 (canary, 30 min cap) | xb6-hwa-base-r03, xb6-hwa-two-r00 | COMPLETED 6 min 09 s |
+| 437159 | xb6-hwa base r00/r01/r05, two r01/r03/r05 | submitted |
+| 437161 | xb6-nohwa (8) | submitted |
+| 437164 | xb12-hwa (8) | submitted |
+| 437167 | xb12-nohwa (8) | submitted |
+
+Canary (passed): XB6 HWA base 3 % replays paper-grid map 271002 bit for bit — naive and
+fault-aware apparent hashes, controller report (incl. plan hash), dev, WikiText-test and generated
+KL identical (FA WikiText 0.05494022420516201, naive 0.18999810510990667). XB6 HWA two-sided 0 %:
+FA dev KL 0.04318 vs clean mapped readout 0.04297 (= ideal 0.04297); 32 devices flagged (all false
+positives, Gaussian tails), 8 partner targets clipped low.
+
+Collection: `rsync` each `complete.json` run (without checkpoints) to
+`results/mapping-faults-20261119/bundles/<unit>/`, `python -m ebl runs inspect <bundle>
+--verify-artifacts --require-complete` on Jean Zay, then
+`python campaigns/fault-recovery-paper/collect_mapping_faults.py results/mapping-faults-20261119/collected …/table.csv …/table.json`.
