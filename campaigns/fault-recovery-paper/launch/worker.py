@@ -166,8 +166,13 @@ def main():
     spec = config_doc['fault_tuning']
     plan = root / 'plan'
     if args.prepare:
+        # The frozen source binds to the lifecycle's single HWA arm (standard_hwa_model, or pretrained
+        # for a no-HWA source), whose fault_tuning.source_sha256 pins the manifest's weights.
+        (arm,) = [a['id'] for a in config_doc['hwa']['arms']]
+        if spec['source_sha256'] != m['weights_sha256']:
+            raise ValueError('The lifecycle source differs from the manifest weights.')
         call(sys.executable, '-m', 'ebl', 'lifecycle', 'plan', config, '--teacher-weights', m['teacher'],
-             '--hwa-source', 'standard_hwa_model=' + m['weights'], '--output', plan,
+             '--hwa-source', f'{arm}={m["weights"]}', '--output', plan,
              '--device', 'cuda:0', '--cpu-threads', '10', '--python', sys.executable)
         call(sys.executable, '-m', 'ebl', 'campaign', 'run', '--manifest', plan / 'campaign.json',
              '--output-dir', root / 'runs', '--dry-run')

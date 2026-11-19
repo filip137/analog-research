@@ -62,7 +62,7 @@ class Context:
         self.case = self.lc.defects.cases[0]
         self.layout = list(self.network.layout)
         self.fisher = None
-        spec = None if self.cfg.drift is None else self.cfg.drift.mapping
+        spec = self.cfg.deployment_mapping()
         if spec is None:
             self.mapping, self.readout = None, lambda array: array.read()
         else:
@@ -93,6 +93,16 @@ class Context:
 
     def evaluate(self, q):
         return self.stage.family.evaluate(self.network, {"tokens": self.development}, self.device, q=q)
+
+
+def read(ctx, array):
+    """Normalized weights of the held base array through the deployment mapping's readout.
+
+    Every device-facing forward of the non-drift path reads through this: the standard pair
+    reads ``array.read()`` (bit for bit), a two-sided deployment ``(G0 - G1) / 79.2``.
+    """
+    readout = getattr(ctx, "readout", None)
+    return array.read() if readout is None else readout(array)
 
 
 def prepare_evaluation_cohorts(ctx):
@@ -153,7 +163,7 @@ def evaluate_held_out(ctx, arm, row, base, adapter=None):
     scores = []
     for spec, tokens in cohorts:
         started = time.monotonic()
-        score = ctx.stage.family.evaluate(ctx.network, {"tokens": tokens}, ctx.device, q=base.read())
+        score = ctx.stage.family.evaluate(ctx.network, {"tokens": tokens}, ctx.device, q=read(ctx, base))
         if any(isinstance(value, (float, int)) and not math.isfinite(value) for value in score.values()):
             raise FloatingPointError("Nonfinite held-out evaluation score.")
         after = {name: _physical_snapshot(array) for name, array in arrays.items()}
@@ -170,7 +180,7 @@ def evaluate_held_out(ctx, arm, row, base, adapter=None):
 
 
 def deploy_mapped(ctx, target):
-    """``deploy`` for a ``drift.mapping`` other than the standard pair (two-sided).
+    """``deploy`` for a mapping (``mapping`` or ``drift.mapping``) other than the standard pair (two-sided).
 
     Naive Gaussian-endpoint P&V of the mapped (2, size) conductance targets from each
     matrix's own stream, then the same verify-based pair rewrite with the mapping's expected
@@ -239,13 +249,61 @@ def deploy(ctx, target):
             "torch": str(torch.__version__)}
 
 
+@torch.no_grad()
+def device_statistics(ctx, target):
+    """Physical statistics of the deployed naive and fault-aware states (analysis side).
+
+    Fractions are of all physical devices (two per weight). ``target_*`` describe the mapped
+    conductance targets; ``below_floor``/``above_max`` count healthy devices whose unclamped
+    programmed conductance lies below 9 uS or above 88.2 uS; ``stuck`` counts permanent faults.
+    """
+    from hardware.devices.cmo import G_MAX_US, G_MIN_US
+    import methods.drift_tuning as dt
+    mapping = ctx.mapping or dt.Mapping()
+    expected = mapping.targets(target)
+    total = expected.numel()
+    tolerance = 1e-4
+    out = {"devices": total,
+           "target_at_floor_fraction": int((expected <= G_MIN_US + tolerance).sum()) / total,
+           "target_at_max_fraction": int((expected >= G_MAX_US - tolerance).sum()) / total}
+    del expected
+    for name in ("naive", "fault_aware"):
+        array = ctx.array(name)
+        g = torch.cat([child.g for child in array.children], 1)
+        mask, _ = devices.hidden_faults(array)
+        healthy = ~mask
+        q = read(ctx, array)
+        out[name] = {"stuck_fraction": int(mask.sum()) / total,
+                     "below_floor_fraction": int(((g < G_MIN_US) & healthy).sum()) / total,
+                     "above_max_fraction": int(((g > G_MAX_US) & healthy).sum()) / total,
+                     "apparent_residual_rms": float((q - target).square().mean().sqrt()),
+                     "apparent_max_abs_error": float((q - target).abs().max())}
+        del array, g, mask, healthy, q
+    report = ctx.deployed["fault_aware"]["report"]
+    out["rewrite"] = {**report["controller"], "analysis": report["analysis"], "cost": report["cost"],
+                      "out_of_range_devices": report["out_of_range_devices"]}
+    return out
+
+
+def deployment_records(ctx, target, clean):
+    """Clean references and device statistics of a declared (non-drift) deployment mapping."""
+    import methods.drift_tuning as dt
+    mapping = ctx.mapping or dt.Mapping()
+    clean_mapped = mapping.clean(target)
+    return {"mapping": None if mapping.spec is None else dict(mapping.spec), "span_us_per_unit_q": mapping.span,
+            "source_ideal_teacher_kl": clean["teacher_kl"],
+            "clean_mapped_readout_teacher_kl": ctx.evaluate(clean_mapped)["teacher_kl"],
+            "clean_mapped_readout_max_abs_error": float((clean_mapped - target).abs().max()),
+            "device_statistics": device_statistics(ctx, target)}
+
+
 def check_deployment(ctx, bundle, target):
     if (bundle.get("schema") != "fault_tuning.deployment.v1" or bundle["assignment_seed"] != ctx.seed
             or bundle["case"] != ctx.case.to_dict() or bundle["target_sha256"] != tensor_hash(target)):
         raise ValueError("Expected the pinned deployment of this source, assignment and defect case.")
     mapped = ctx.mapping is not None and ctx.mapping.kind != "reference"
     if bundle.get("mapping") != (dict(ctx.mapping.spec) if mapped else None):
-        raise ValueError("Expected a deployment of the declared drift mapping.")
+        raise ValueError("Expected a deployment of the declared mapping.")
     if (ctx.cfg.analog_lora is not None) != (bundle["adapter"] is not None):
         raise ValueError("Expected adapter tiles exactly when analog LoRA is declared.")
     if bundle["adapter"] is not None and (bundle["adapter"]["rank"] != ctx.cfg.analog_lora["rank"]
@@ -311,7 +369,7 @@ def run_arm(ctx, arm):
     network.enable_lora(None)
     network.fault_output_calibration = None
     base = ctx.array("naive" if arm.method == "hold_naive" else "fault_aware")
-    held = base.read()
+    held = read(ctx, base)
     initial = ctx.evaluate(held)
     row = {"label": arm.label, "method": arm.method, "learning_rate": arm.learning_rate, "rank": arm.rank,
            "reserve_p": arm.reserve_p, "initial_apparent_sha256": tensor_hash(held), "initial": initial}
@@ -369,7 +427,7 @@ def run_arm(ctx, arm):
         tokens, drawn = ctx.recovery[index].to(device), ctx.samples[index.to(device)]
         network.train()
         if arm.method in ft.WRITES:
-            q = base.read().requires_grad_(True)
+            q = read(ctx, base).requires_grad_(True)
         else:
             q = held
             if adapter is not None:
@@ -394,7 +452,7 @@ def run_arm(ctx, arm):
             if adapter is not None:
                 _set_adapter(network, adapter.read(), ctx.adapter_layout, ctx.a_scales, ctx.b_scales)
             point = {"step": step + 1, "train_loss": losses[-1],
-                     "development": ctx.evaluate(base.read() if arm.method in ft.WRITES else held)}
+                     "development": ctx.evaluate(read(ctx, base) if arm.method in ft.WRITES else held)}
             if writer is not None:
                 point["cost"] = _cost(tracked, baseline, baseline_writes)[0]
             curve.append(point)
@@ -420,7 +478,7 @@ def run_arm(ctx, arm):
         row["cost"] = {"healthy_device_writes": 0, "stuck_write_attempts": 0, "touched_devices": 0,
                        "max_writes_per_device": 0, "out_of_range_devices": base.out_of_range()}
     if arm.method == "calibration":
-        if tensor_hash(base.read()) != base_hash or base.cost() != ctx.deployed_cost:
+        if tensor_hash(read(ctx, base)) != base_hash or base.cost() != ctx.deployed_cost:
             raise RuntimeError("Calibration changed the base deployment.")
         correction = network.fault_output_calibration
         row["calibration_parameters"] = sum(p.numel() for p in correction.parameters())
@@ -428,7 +486,7 @@ def run_arm(ctx, arm):
                  "placement": "complete_mlp_output_before_residual",
                  "state": {k: v.detach().cpu().clone() for k, v in correction.state_dict().items()}}
     if arm.method in ft.LORA:
-        if tensor_hash(base.read()) != base_hash or base.cost() != ctx.deployed_cost:
+        if tensor_hash(read(ctx, base)) != base_hash or base.cost() != ctx.deployed_cost:
             raise RuntimeError("A LoRA arm changed the base deployment.")
         row["lora_parameters"] = sum(p.numel() for p in network.lora.parameters())
         state = {"lora": {k: v.detach().cpu().clone() for k, v in network.lora.state_dict().items()},
@@ -439,7 +497,7 @@ def run_arm(ctx, arm):
             state["final_adapter_apparent_sha256"] = tensor_hash(adapter.read())
             row["final_adapter_apparent_sha256"] = state["final_adapter_apparent_sha256"]
     evaluate_held_out(ctx, arm, row, base, adapter)
-    row.update(final_apparent_sha256=tensor_hash(base.read()), seconds=time.monotonic() - started)
+    row.update(final_apparent_sha256=tensor_hash(read(ctx, base)), seconds=time.monotonic() - started)
     network.enable_lora(None)
     network.fault_output_calibration = None
     return row, state
@@ -697,6 +755,10 @@ def run(stage):
     clean = ctx.evaluate(target)
     store.append_metric({"stage": "fault_tuning_deployed", "clean": clean,
                          "apparent_sha256": {k: v["apparent_sha256"] for k, v in ctx.deployed.items()}})
+    records = None
+    if cfg.mapping is not None:
+        records = deployment_records(ctx, target, clean)
+        store.append_metric({"stage": "fault_tuning_deployment_records", **records})
     rows = []
     drift_records = None
     if cfg.drift is not None:
@@ -766,6 +828,7 @@ def run(stage):
                                      "cost": {k: v for k, v in r["cost"].items() if k != "writer"},
                                      "seconds": r["seconds"]} for r in rows},
                "deployment_seconds": deployment_seconds,
+               **({"deployment_records": records} if records is not None else {}),
                **({"drift": {"settings": cfg.to_dict()["drift"],
                              "mean_teacher_kl": {r["label"]: r["mean_teacher_kl"] for r in rows},
                              **({"records": drift_records} if cfg.drift.write_clock != "continues" else {})}}

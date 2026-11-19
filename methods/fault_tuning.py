@@ -27,6 +27,12 @@ starts from the same deployed state and trains on the same recovery data:
   thresholded write law on the adapter devices only; the adapter output is added
   digitally (the digital-LoRA path of the network, alpha/r = 1).
 
+Deployment mapping: ``fault_tuning.mapping`` (no drift block; any fault rate) or ``drift.mapping``
+selects the weight-to-conductance mapping (``methods.drift_tuning.Mapping``). The standard pair
+is the default; ``two_sided`` deploys by naive P&V of the mapped conductance targets and the same
+verify-based pair rewrite, and every scoring path reads through the mapping's readout. Without
+drift a non-reference mapping supports only the two hold arms.
+
 Teacher samples are drawn in-job, or (``targets.file``) loaded from
 ``<EBL_CORPUS_ROOT>/<file>.pt`` -- a stored draw of the same procedure, needed because the CUDA
 draw is GPU-specific. Either way the raw-bytes tensor hash must equal ``targets.sha256``.
@@ -56,6 +62,7 @@ DRIFT_ONLY_METHODS = ("layernorm",)  # arms of the drift block only (ebl.runtime
 TRAINS = METHODS[2:] + DRIFT_ONLY_METHODS
 WRITES = ("onchip_noisy", "onchip_noiseless", "child_tuning_d", "matched_noiseless")
 LORA = ("digital_lora", "analog_lora")
+HOLDS = ("hold_naive", "hold_fault_aware")
 _HEX = set("0123456789abcdef")
 
 
@@ -148,6 +155,9 @@ class FaultTuning:
     arms: tuple
     drift: object = None  # methods.drift_tuning.DriftTuning; omitted when absent (older digests unchanged)
     evaluation_cohorts: tuple = ()
+    # Deployment weight-to-conductance mapping without a drift block (methods.drift_tuning.parse_mapping);
+    # omitted when absent (the standard pair, older digests unchanged). Under drift, use drift.mapping.
+    mapping: dict | None = None
 
     def to_dict(self):
         out = {"source_sha256": self.source_sha256, "assignment_seed": self.assignment_seed,
@@ -164,7 +174,15 @@ class FaultTuning:
             out["drift"] = self.drift.to_dict()
         if self.evaluation_cohorts:
             out["evaluation_cohorts"] = [dict(c) for c in self.evaluation_cohorts]
+        if self.mapping is not None:
+            out["mapping"] = dict(self.mapping)
         return out
+
+    def deployment_mapping(self):
+        """The declared mapping spec (``mapping`` or ``drift.mapping``), or None for the standard pair."""
+        if self.mapping is not None:
+            return self.mapping
+        return None if self.drift is None else self.drift.mapping
 
     def rewrite(self):
         from methods.config import FaultRewrite
@@ -177,6 +195,11 @@ class FaultTuning:
                 "schedule", "write_law", "fisher", "lora_seed", "analog_lora", "deployment", "arms")
         drift = None
         evaluation_cohorts = ()
+        mapping = None
+        if isinstance(raw, dict) and "mapping" in raw:
+            from methods.drift_tuning import parse_mapping
+            mapping = parse_mapping(raw["mapping"])
+            raw = {k: v for k, v in raw.items() if k != "mapping"}
         if isinstance(raw, dict) and "evaluation_cohorts" in raw:
             evaluation_cohorts = parse_evaluation_cohorts(raw["evaluation_cohorts"])
             raw = {k: v for k, v in raw.items() if k != "evaluation_cohorts"}
@@ -187,6 +210,8 @@ class FaultTuning:
         _exact(raw, keys, "fault_tuning")
         if drift is not None and evaluation_cohorts:
             raise ValueError("Held-out evaluation_cohorts currently require fault tuning without drift.")
+        if drift is not None and mapping is not None:
+            raise ValueError("Under drift the mapping is declared in drift.mapping, not fault_tuning.mapping.")
         if drift is None and isinstance(raw.get("arms"), list) and any(
                 isinstance(a, dict) and ("no_drift" in a or a.get("method") == "layernorm") for a in raw["arms"]):
             raise ValueError("layernorm and no_drift arms require the drift block.")
@@ -263,11 +288,16 @@ class FaultTuning:
         for a in arms:
             if a.method == "analog_lora" and (analog is None or analog["b_scale"] is None or a.rank != analog["rank"]):
                 raise ValueError("Expected an analog_lora section with a pinned B scale of the arm's rank.")
+        if mapping is not None and mapping["kind"] != "reference" and (
+                analog is not None or any(a.method not in HOLDS for a in arms)):
+            # Writers, adapters and the analog-LoRA tiles assume the standard pair's active-device law.
+            raise ValueError("Without drift a non-reference mapping supports only the hold arms "
+                             f"{HOLDS} and no analog_lora section.")
         return cls(_digest(raw["source_sha256"], "source_sha256"), _int(raw["assignment_seed"], "assignment_seed"),
                    dict(rewrite), data["recovery"], data["development"], dict(t), dict(s), dict(w), dict(f),
                    _int(raw["lora_seed"], "lora_seed"), None if analog is None else
                    {"rank": analog["rank"], "b_scale": None if analog["b_scale"] is None else dict(analog["b_scale"])},
-                   None if deployment is None else dict(deployment), arms, drift, evaluation_cohorts)
+                   None if deployment is None else dict(deployment), arms, drift, evaluation_cohorts, mapping)
 
 
 def parse_evaluation_cohorts(raw):

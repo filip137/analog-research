@@ -197,6 +197,9 @@ def fault_rewrite(array, target, lifecycle, rewrite, assignment_seed, *, control
         # Preserve the controller's original scan, before any rewrite or hidden-map analysis.
         controller_state["write_roles"] = verified_write_roles(flags)
     selected, targets, clipped = pair_rewrite_plan(flags, observed, target, rewrite.roles, span_us)
+    wanted = torch.stack((observed[cmo.REFERENCE] + target * span_us, observed[cmo.ACTIVE] - target * span_us))
+    clipped_low, clipped_high = int(((wanted < cmo.G_MIN_US) & selected).sum()), int(((wanted > cmo.G_MAX_US) & selected).sum())
+    del wanted
     plan = torch.cat((selected.flatten().to(target.dtype), torch.where(selected, targets, 0.0).flatten()))
     namespace = lifecycle.network.binding_namespace
     seeds = {m.name: binding_seed(rewrite.seed, namespace, f"rewrite/{assignment_seed}/{m.name}") for m in array.layout}
@@ -214,6 +217,8 @@ def fault_rewrite(array, target, lifecycle, rewrite, assignment_seed, *, control
             "programmed_active": int(selected[cmo.ACTIVE].sum()),
             "programmed_reference": int(selected[cmo.REFERENCE].sum()),
             "clipped_targets": clipped,
+            "clipped_targets_low": clipped_low,
+            "clipped_targets_high": clipped_high,
             "plan_sha256": tensor_hash(plan),
         },
         "stream_seeds": seeds,
