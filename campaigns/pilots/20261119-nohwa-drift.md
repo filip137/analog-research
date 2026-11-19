@@ -31,6 +31,19 @@ Launcher `run_lab.sh MODE …` (prepare | cell | drift) with the locks, input ch
 (`check_inputs.py`, `pins.json`), `runs inspect --verify-artifacts --require-complete` and
 `verify.py` (the exp-001 verifiers with this pilot's pins).
 
+Prepare (launch commit `d506572`): DRN6 on riri, mapped `48475a1f…a8e347`, clean synthetic-dev
+KL 0.00519 (per-layer relative squared readout error 2.6e-4–1.2e-3); DRN12 on fifi, mapped
+`47374e33…f97021c`, clean KL 0.02116 (1.8e-4–2.5e-3). Not ≈ 0 as on the crossbar (1e-10): the
+T = 4 perfect-diode DRN reproduces each ReLU MLP to ~0.1 % squared error, not exactly. Still
+9× (DRN6) below the HWA DRN6 source ideal on WikiText dev (0.0477). Copies in
+`results/nohwa-drift-20261119/sources/`.
+
 ## Handoff
 
-Pending launch.
+- Launch commits `d506572` (prepare, DRN6 HWA base drift on loulou) and the pins commit
+  (all other units), each merged and pushed; staged by `git archive` on fifi, riri, loulou
+  under `~/analog-research/nohwa-drift-20261119/source-drn-<sha>`.
+- Launch note: stale October tmux sessions on riri/loulou leave `RUN_WATCH_ATTEMPT` in the tmux
+  global environment; the launcher refused (rc 75, nothing ran) until started with
+  `env -u RUN_WATCH_ATTEMPT -u RUN_WATCH_WORKER_ROOT -u CUDA_VISIBLE_DEVICES`. The legacy GPU
+  lock and the occupancy check still apply.
