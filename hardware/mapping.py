@@ -25,4 +25,5 @@ DEVICES_PER_WEIGHT = {
     "single_cell_intrinsic_reference": 1,
     # CMO: an active device and a mid-range reference device per weight.
     "active_reference_pair": 2,
+    "two_sided": 2,
 }

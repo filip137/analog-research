@@ -235,7 +235,18 @@ def deploy(stage: Stage):
         identity = device_stage.array_identity(array, stage.technology)
         programming = program_verify.program(array, target, lifecycle)
         initial = onchip.evaluations(network, array, cache, lifecycle, device)
+        quality = {}
+        if lifecycle.deployment.source_evaluation and case.kind == "none":
+            from methods.drift_tuning import drifted_weights, source_quality_law
+            for multiplier in (1, 4):
+                law = source_quality_law(multiplier, seed)
+                aged = drifted_weights(array, law, 86400)
+                quality[str(multiplier)] = {"seconds": 86400, **vars(law), "scores": {
+                    key: evaluate(network, cache[key], device, q=aged)
+                    for key in (split, *data_stage.transfer_splits(lifecycle))}}
+                del aged
         cases[case.label] = {
+            **({"drift_quality": quality} if quality else {}),
             "case": case.to_dict(),
             "identity": identity,
             "programming": programming,
@@ -243,6 +254,7 @@ def deploy(stage: Stage):
             "array": device_stage.array_state(array, stage.technology),
         }
         summary[case.label] = {
+            **({"drift_quality": quality} if quality else {}),
             "case": case.to_dict(),
             "identity": identity,
             "programming": programming,

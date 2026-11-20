@@ -911,3 +911,25 @@ def test_onchip_recovery_holds_whole_model_digital_weights_and_reports_transfer_
     assert workflow_main(["collect", str(tmp_path / "runs"), "--output", str(collected)]) == 0
     collected_rows = json.loads((collected / "rows.json").read_text())
     assert collected_rows and all("final_transfer_other_teacher_kl" in r for r in collected_rows)
+
+
+def test_two_sided_source_deployment_reloads_and_scores_drift(cmo_inputs, tmp_path):
+    weights, digest = cmo_inputs
+    lc = small(**{
+        "data.corpus": {"name": "synthetic", "sha256": digest},
+        "data.sequence_length": 9, "data.max_examples": 8,
+        "deployment.scaling": "per_output_channel_absmax",
+        "deployment.encoding": "two_sided", "deployment.source_evaluation": "cmo_24h_x1_x4",
+        "hwa.batch_size": 4, "onchip": None,
+    })
+    results = run_lifecycle(lc, weights, tmp_path / "runs")
+    run, result = results["deploy__standard_hwa__271001"]
+    bundle = load(run / "checkpoints/deployment.pt")
+    net = deployment.build_network(tiny_teacher(), lc)
+    for case in lc.defects.cases:
+        array = program_verify.fresh(lc, net.layout, 271001, case, None, "cpu")
+        saved = bundle["cases"][case.label]
+        device_stage.load_array_state(array, saved["array"], "cmo", bundle["target"])
+        assert tensor_hash(array.read()) == saved["programming"]["apparent_sha256"]
+        torch.testing.assert_close(array.mapping.clean(bundle["target"]), bundle["target"])
+    assert set(result["metrics"]["cases"]["nominal"]["drift_quality"]) == {"1", "4"}

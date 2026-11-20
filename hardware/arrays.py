@@ -142,6 +142,7 @@ class CmoArray:
     """
 
     kind = "layered_cmo"
+    mapping = None
 
     def __init__(self, layout, dataset, endpoint_seed, acceptance, noise_scale, device, faults=None):
         self.layout = tuple(layout)
@@ -162,7 +163,10 @@ class CmoArray:
 
     def program(self, target, reference=True):
         for child, piece in zip(self.children, self._slices(target)):
-            child.program(piece, reference)
+            if self.mapping is None:
+                child.program(piece, reference)
+            else:
+                child.program_conductances(self.mapping.targets(piece))
 
     def program_conductances(self, target_us):
         """Program every device to a conductance target (uS), shape (2, size), from each matrix's own stream."""
@@ -178,6 +182,8 @@ class CmoArray:
             child.write(piece, noise_factor, roles=role)
 
     def read(self):
+        if self.mapping is not None:
+            return self.mapping.read_array(self)
         return torch.cat([child.read() for child in self.children])
 
     def read_devices(self):
@@ -230,9 +236,15 @@ class CmoArray:
         }
 
     def state_dict(self):
-        return {"kind": self.kind, "children": [child.state_dict() for child in self.children]}
+        state = {"kind": self.kind, "children": [child.state_dict() for child in self.children]}
+        if self.mapping is not None:
+            state["mapping"] = dict(self.mapping.spec)
+        return state
 
     def load_state_dict(self, state):
+        mapping = None if self.mapping is None else self.mapping.spec
+        if state.get("mapping") != mapping:
+            raise ValueError("CMO deployment mapping differs from the saved array.")
         if state.get("kind") != self.kind or len(state["children"]) != len(self.layout):
             raise ValueError("Expected the same layer-bound CMO array layout.")
         for child, value in zip(self.children, state["children"]):

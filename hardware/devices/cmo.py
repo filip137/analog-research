@@ -64,7 +64,7 @@ def to_weight(active, reference):
 ACTIVE, REFERENCE = 0, 1
 
 
-def corrupt_weights(q, generator, kind, rate):
+def corrupt_weights(q, generator, kind, rate, *, mapping=None):
     """Normalized weights read from pairs whose devices are stuck i.i.d. with probability ``rate``.
 
     Temporary HWA corruption, never a deployed fault map. A healthy active
@@ -79,6 +79,8 @@ def corrupt_weights(q, generator, kind, rate):
         stuck = G_MIN_US + (G_MAX_US - G_MIN_US) * torch.rand(shape, generator=generator, device=q.device)
     else:
         stuck = torch.full(shape, STUCK_US[kind], device=q.device)
+    if mapping is not None:
+        return mapping.readout(torch.where(mask, stuck, mapping.targets(q)))
     offset = (stuck - MID_US) / HALF_RANGE_US
     return torch.where(mask[ACTIVE], offset[ACTIVE], q) - torch.where(mask[REFERENCE], offset[REFERENCE], 0.0)
 

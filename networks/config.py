@@ -565,11 +565,13 @@ class Deployment:
     tile_size: int
     read_noise: float
     calibration: str
+    source_evaluation: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
             "scaling": self.scaling,
             "encoding": self.encoding,
+            **({"source_evaluation": self.source_evaluation} if self.source_evaluation else {}),
             "tile_size": self.tile_size,
             "read_noise": self.read_noise,
             "calibration": self.calibration,
@@ -577,10 +579,16 @@ class Deployment:
 
 
 def _deployment(raw: Any, technology: str) -> Deployment:
-    raw = _object(raw, "deployment", ("scaling", "encoding", "tile_size", "read_noise", "calibration"))
+    keys = ("scaling", "encoding", "tile_size", "read_noise", "calibration")
+    if isinstance(raw, Mapping) and "source_evaluation" in raw:
+        keys += ("source_evaluation",)
+    raw = _object(raw, "deployment", keys)
+    encodings = ("active_reference_pair", "two_sided") if technology == "cmo" else (TECHNOLOGIES[technology].encoding,)
     return Deployment(
+        source_evaluation=(_choice(raw["source_evaluation"], "deployment.source_evaluation", ("cmo_24h_x1_x4",))
+                           if "source_evaluation" in raw else None),
         scaling=_choice(raw["scaling"], "deployment.scaling", SCALINGS),
-        encoding=_choice(raw["encoding"], "deployment.encoding", (TECHNOLOGIES[technology].encoding,)),
+        encoding=_choice(raw["encoding"], "deployment.encoding", encodings),
         tile_size=_integer(raw["tile_size"], "deployment.tile_size", minimum=1),
         read_noise=_number(raw["read_noise"], "deployment.read_noise"),
         # The network family narrows the calibration scheme in _cross_validate.

@@ -168,6 +168,14 @@ class Lifecycle:
 def _cross_validate(lifecycle: Lifecycle) -> None:
     devices, data, network = lifecycle.devices, lifecycle.data, lifecycle.network
     family = network.family
+    if lifecycle.deployment.source_evaluation and (lifecycle.deployment.encoding != "two_sided"
+                                                  or data.evaluation != "test"):
+        raise config_error("deployment.source_evaluation", "two-sided CMO with held-out test cohorts", family)
+    if lifecycle.deployment.encoding == "two_sided":
+        if (family != OPT_FAMILY or lifecycle.deployment.scaling != "per_output_channel_absmax"
+                or lifecycle.onchip or network.analog_lora or any(getattr(lifecycle, key, None) for key in
+                ("initial_programming", "fault_tuning", "drift_recovery", "retention", "drift_compensation", "task"))):
+            raise config_error("deployment.encoding", "two-sided CMO OPT source training and deployment", "two_sided")
     initial = lifecycle.initial_programming
     if initial is not None:
         if (family != OPT_FAMILY or devices.technology != 'cmo' or lifecycle.onchip is not None

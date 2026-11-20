@@ -141,6 +141,10 @@ class DriftTuning:
         return step if step > 0 and math.isclose(self.age(step), seconds, rel_tol=0, abs_tol=1e-9) else None
 
 
+def two_sided_mapping():
+    return Mapping({"kind": "two_sided", "gain": {"rule": "unit"}, "margin_us": 0.0})
+
+
 class Mapping:
     """Weight-to-conductance mapping of a pair of devices per weight (see the module docstring)."""
 
@@ -218,7 +222,8 @@ def drifted_weights(array, law, seconds):
     parts = []
     for k, child in enumerate(array.children):
         g = drifted(child.g, k, seconds, law)
-        parts.append(to_weight(g[ACTIVE], g[REFERENCE]))
+        mapping = getattr(array, "mapping", None)
+        parts.append(mapping.readout(g) if mapping is not None else to_weight(g[ACTIVE], g[REFERENCE]))
     return torch.cat(parts)
 
 
@@ -399,3 +404,11 @@ def trapezoid_mean(seconds, values):
     """Linear-time average over [seconds[0], seconds[-1]] (drift-regimes endpoint convention)."""
     total = sum((t1 - t0) * (v0 + v1) / 2 for t0, t1, v0, v1 in zip(seconds, seconds[1:], values, values[1:]))
     return total / (seconds[-1] - seconds[0])
+
+
+def source_quality_law(multiplier, assignment):
+    """Frozen untreated CMO source check at 24 hours. Pair draws across sources on each assignment."""
+    from types import SimpleNamespace
+    return SimpleNamespace(law=LAW, multiplier=multiplier, draw_seed=391103 + assignment - 271001,
+                           mean_us=AIHWKIT_MEAN_US, spread_slope_us=AIHWKIT_SPREAD_SLOPE_US,
+                           spread_offset_us=AIHWKIT_SPREAD_OFFSET_US, drift_min_us=5.0, drift_max_us=150.0)

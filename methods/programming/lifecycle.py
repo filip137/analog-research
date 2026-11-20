@@ -48,6 +48,9 @@ from hardware.config import FAILURE_KINDS
 def configure(array, lifecycle, assignment_seed):
     """Attach the declared relaxation law to a fresh, unprogrammed array."""
 
+    if lifecycle.deployment.encoding == "two_sided":
+        from methods.drift_tuning import two_sided_mapping
+        array.mapping = two_sided_mapping()
     relaxation = lifecycle.program_verify.relaxation
     if relaxation.model == "none":
         return array

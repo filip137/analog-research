@@ -127,13 +127,18 @@ def endpoint_sampler(lifecycle, arm, device_bundle, device, layout=None):
         if per_channel and layout is None:
             raise ValueError("Expected the analog layout for output-channel noise scaling.")
 
+        mapping = None
+        if lifecycle.deployment.encoding == "two_sided":
+            from methods.drift_tuning import two_sided_mapping
+            mapping = two_sided_mapping()
+
         def sample(q, kind, rate):
             with torch.no_grad():
                 value = q.detach()
                 scale = channel_abs_max(value, layout) if per_channel else 1.0
                 noisy = value + sigma * scale * torch.randn(q.shape, generator=generator, device=q.device)
                 if rate:
-                    noisy = reram_cmo.corrupt_weights(noisy, generator, kind, rate)
+                    noisy = reram_cmo.corrupt_weights(noisy, generator, kind, rate, mapping=mapping)
             return q + (noisy - q).detach()
 
         return sample
@@ -216,7 +221,9 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
                     group["lr"] = group["base_lr"] * hwa.lr_factor(epoch)
             data_rng = torch.Generator(device=device).manual_seed(data.data_seed + epoch)
             if streamed:
-                order = stream_order(examples, per_epoch, epoch, data.data_seed, device)
+                # Match the native DRN CPU permutation for paired two-sided sources.
+                order_device = "cpu" if lifecycle.deployment.encoding == "two_sided" else device
+                order = stream_order(examples, per_epoch, epoch, data.data_seed, order_device).to(device)
             else:
                 order = torch.randperm(examples, generator=data_rng, device=device)
             network.train()
@@ -268,6 +275,11 @@ def train_source(*, lifecycle, arm, network, teacher, cache, device_bundle, stor
             item = {"epoch": epoch, "elapsed_seconds": time.monotonic() - started, **score}
             if schedule is not None:
                 item.update(global_step=global_step, learning_rates=[group["lr"] for group in optimizer.param_groups])
+            if epoch == 0 and lifecycle.deployment.encoding == "two_sided":
+                from methods.drift_tuning import two_sided_mapping
+                item["ideal"] = network_family.evaluate(network, cache["development"], device)
+                item["mapped_target"] = network_family.evaluate(network, cache["development"], device,
+                    q=two_sided_mapping().clean(network.q.detach()))
             history.append(item)
             store.append_metric({"stage": "hwa_selection", "arm": arm.arm_id, **item})
             print(json.dumps({"arm": arm.arm_id, "epoch": epoch, "teacher_kl": score["teacher_kl"]}), flush=True)
