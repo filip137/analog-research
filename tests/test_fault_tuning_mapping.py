@@ -63,10 +63,10 @@ def test_schema_rejects_writers_adapters_and_drift_with_a_non_reference_mapping(
 
     doc = hold_only(TWO_SIDED)
     doc["fault_tuning"]["arms"].append({"label": "noisy", "learning_rate": 0.001, "method": "onchip_noisy"})
-    rejected(doc)
+    assert parse_lifecycle(doc).fault_tuning.arms[-1].method == "onchip_noisy"
     doc = hold_only(TWO_SIDED)
     doc["fault_tuning"]["arms"].append({"label": "dlora", "learning_rate": 0.001, "method": "digital_lora", "rank": 4})
-    rejected(doc)
+    assert parse_lifecycle(doc).fault_tuning.arms[-1].method == "digital_lora"
     doc = json.loads(GRID.read_text())
     doc["fault_tuning"]["mapping"] = TWO_SIDED
     rejected(doc)  # analog LoRA tiles and writing arms
@@ -116,6 +116,26 @@ def context(mapping, rate_ppm=30000, noise_scale=1.0):
 
 def rows(ctx):
     return [runtime.run_arm(ctx, ft.Arm(a["label"], a["method"]))[0] for a in HOLDS]
+
+
+def test_stationary_mapped_pulse_preserves_a_stuck_leg_at_a_sign_crossing():
+    ctx, _, _, _ = context(TWO_SIDED, noise_scale=0.0)
+    array = ctx.array("fault_aware")
+    child = array.children[0]
+    child.g[:, 0] = torch.tensor([30.0, 9.0])
+    child.mask[:, 0] = torch.tensor([True, False])
+    child.stuck[0, 0] = 30.0
+    plant = dt.DriftPlant(array, None, ctx.mapping, drift=False)
+    held = plant.read(None, keep=True)
+    step = torch.zeros_like(held)
+    step[0] = -0.5
+    plant.write(step, None)
+    assert child.g[0, 0] == 30.0
+    assert child.g[1, 0] > 9.0
+    assert plant.cost()["healthy_device_writes"] == plant.cost()["touched_devices"] == 1
+    assert plant.cost()["stuck_write_attempts"] == 1
+    assert plant.weight_writes().sum() == 1
+    array.verify_permanence()
 
 
 def strip_seconds(row):

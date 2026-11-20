@@ -196,6 +196,24 @@ def main():
         rows = read(run / 'measurements.json')
         validate_measurements(spec, rows, sequence_length=config_doc['data']['sequence_length'])
         summary = read(run / 'summary.json')
+        if m.get('mapped_fault_recovery'):
+            apparent = summary['apparent_sha256']['fault_aware']
+            if any(row['initial_apparent_sha256'] != apparent for row in rows):
+                raise ValueError('Arm did not start from the shared mapped deployment.')
+            for row in rows:
+                if row['method'] in ('calibration', 'digital_lora', 'hold_fault_aware'):
+                    if row['final_apparent_sha256'] != apparent or row['cost'].get('healthy_device_writes', 0):
+                        raise ValueError('A zero-write arm changed the mapped deployment.')
+                elif row['cost']['writer']['threshold_reference'] != 'nominal_midrange_conductance':
+                    raise ValueError('Physical arm did not use the fixed conductance gate.')
+                if row['method'] == 'child_tuning_d' and row['cost']['writes_outside_mask']:
+                    raise ValueError('Child-Tuning wrote outside the fixed mask.')
+            reference = m.get('mapped_hold_reference', {}).get(args.unit)
+            if reference:
+                score = next(p['scores']['teacher_kl'] for p in rows[0]['held_out'] if p['name'] == 'wikitext')
+                if apparent != reference['apparent_sha256'] or not math.isclose(
+                        score, reference['wikitext_kl'], abs_tol=1e-6, rel_tol=0):
+                    raise ValueError('3% mapped hold replay differs from the documented reference.')
         write(root / 'complete.json', {'schema': 'fault_tuning.unit.complete.v1', 'unit': args.unit, 'run': str(run),
               'arms': {r['label']: r['final']['teacher_kl'] for r in rows},
               'samples_sha256': summary['samples_sha256'], 'apparent_sha256': summary['apparent_sha256'],

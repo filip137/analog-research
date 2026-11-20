@@ -249,11 +249,14 @@ class DriftPlant:
     """
 
     def __init__(self, array, law, mapping, drift=True):
+        if drift and law is None:
+            raise ValueError('Drift requires a law.')
         self.array, self.law, self.mapping, self.drift = array, law, mapping, bool(drift)
         self.write_seconds = [None] * len(array.children)
         self.written = [None] * len(array.children)
         self.counts = [None] * len(array.children)
         self.device_writes = 0
+        self.stuck_write_attempts = 0
         self.crossing_updates = 0
         self._last = None
 
@@ -303,7 +306,7 @@ class DriftPlant:
     @torch.no_grad()
     def write(self, issued, seconds):
         """reset_absorb: held <- drifted read at ``seconds`` + step + sigma(G) xi; t_w <- seconds (written only)."""
-        if self.law.write_clock != 'reset_absorb':
+        if self.law is not None and self.law.write_clock != 'reset_absorb':
             raise RuntimeError('Plant writes implement reset_absorb only.')
         if self._last is None or self._last[0] != seconds:
             raise RuntimeError('Expected a write at the age of the learner read it follows.')
@@ -311,18 +314,22 @@ class DriftPlant:
             dq = issued[spec.offset:spec.offset + spec.size]
             if not bool((dq != 0).any()):
                 continue
-            requested, written, crossings = self._requests(self._last[1][k], dq)
+            requested, selected, crossings = self._requests(self._last[1][k], dq)
+            blocked = selected & child.mask
+            written = selected & ~child.mask
             noise = torch.randn(requested.shape, device=requested.device, generator=child.generator)
             drawn = requested + child.noise_scale * programming_sigma(requested, child.acceptance) * noise
             child.g = torch.where(written, drawn, child.g)
             child._deployment_replayable = False
-            if self.written[k] is None:
-                self.written[k] = torch.zeros_like(written)
-                self.write_seconds[k] = torch.zeros_like(child.g)
+            if self.counts[k] is None:
                 self.counts[k] = torch.zeros(written.shape, dtype=torch.int32, device=written.device)
-            self.written[k] |= written
-            self.write_seconds[k] = torch.where(written, torch.full_like(child.g, float(seconds)),
-                                                self.write_seconds[k])
+            if self.law is not None:
+                if self.written[k] is None:
+                    self.written[k] = torch.zeros_like(written)
+                    self.write_seconds[k] = torch.zeros_like(child.g)
+                self.written[k] |= written
+                self.write_seconds[k] = torch.where(written, torch.full_like(child.g, float(seconds)),
+                                                    self.write_seconds[k])
             self.counts[k] += written
             n = int(written.sum())
             child.writes += written[ACTIVE]
@@ -330,6 +337,9 @@ class DriftPlant:
                 child.reference_writes = torch.zeros_like(child.writes)
             child.reference_writes += written[REFERENCE]
             child.device_writes += n
+            blocked_count = int(blocked.sum())
+            child.stuck_write_attempts += blocked_count
+            self.stuck_write_attempts += blocked_count
             self.device_writes += n
             self.crossing_updates += crossings
         self._last = None
@@ -341,10 +351,10 @@ class DriftPlant:
 
     def cost(self):
         devices = 2 * self.array.size
-        touched = sum(0 if w is None else int(w.sum()) for w in self.written)
+        touched = sum(int((counts > 0).sum()) for counts in self.counts if counts is not None)
         most = max([0] + [int(c.max()) for c in self.counts if c is not None])
         return {'device_writes': self.device_writes, 'healthy_device_writes': self.device_writes,
-                'stuck_write_attempts': 0, 'touched_devices': touched, 'max_writes_per_device': most,
+                'stuck_write_attempts': self.stuck_write_attempts, 'touched_devices': touched, 'max_writes_per_device': most,
                 'devices': devices, 'writes_per_device': self.device_writes / devices,
                 'fraction_devices_written': touched / devices, 'crossing_updates': self.crossing_updates,
                 'out_of_range_devices': self.array.out_of_range()}

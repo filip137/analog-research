@@ -31,7 +31,7 @@ Deployment mapping: ``fault_tuning.mapping`` (no drift block; any fault rate) or
 selects the weight-to-conductance mapping (``methods.drift_tuning.Mapping``). The standard pair
 is the default; ``two_sided`` deploys by naive P&V of the mapped conductance targets and the same
 verify-based pair rewrite, and every scoring path reads through the mapping's readout. Without
-drift a non-reference mapping supports only the two hold arms.
+drift a non-reference mapping supports holds, calibration, digital LoRA and noisy physical learning.
 
 Teacher samples are drawn in-job, or (``targets.file``) loaded from
 ``<EBL_CORPUS_ROOT>/<file>.pt`` -- a stored draw of the same procedure, needed because the CUDA
@@ -63,6 +63,7 @@ TRAINS = METHODS[2:] + DRIFT_ONLY_METHODS
 WRITES = ("onchip_noisy", "onchip_noiseless", "child_tuning_d", "matched_noiseless")
 LORA = ("digital_lora", "analog_lora")
 HOLDS = ("hold_naive", "hold_fault_aware")
+MAPPED_METHODS = HOLDS + ("calibration", "digital_lora", "onchip_noisy", "child_tuning_d")
 _HEX = set("0123456789abcdef")
 
 
@@ -289,10 +290,8 @@ class FaultTuning:
             if a.method == "analog_lora" and (analog is None or analog["b_scale"] is None or a.rank != analog["rank"]):
                 raise ValueError("Expected an analog_lora section with a pinned B scale of the arm's rank.")
         if mapping is not None and mapping["kind"] != "reference" and (
-                analog is not None or any(a.method not in HOLDS for a in arms)):
-            # Writers, adapters and the analog-LoRA tiles assume the standard pair's active-device law.
-            raise ValueError("Without drift a non-reference mapping supports only the hold arms "
-                             f"{HOLDS} and no analog_lora section.")
+                analog is not None or any(a.method not in MAPPED_METHODS for a in arms)):
+            raise ValueError(f"Without drift a non-reference mapping supports {MAPPED_METHODS} and no analog_lora.")
         return cls(_digest(raw["source_sha256"], "source_sha256"), _int(raw["assignment_seed"], "assignment_seed"),
                    dict(rewrite), data["recovery"], data["development"], dict(t), dict(s), dict(w), dict(f),
                    _int(raw["lora_seed"], "lora_seed"), None if analog is None else

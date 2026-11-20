@@ -363,6 +363,8 @@ def _cost(array, baseline, baseline_writes):
 
 
 def run_arm(ctx, arm):
+    from methods.drift_tuning import DriftPlant, GatedDriftAdam, gate_us
+
     network, cfg, device = ctx.network, ctx.cfg, ctx.device
     schedule, law = cfg.schedule, cfg.write_law
     started = time.monotonic()
@@ -382,7 +384,15 @@ def run_arm(ctx, arm):
         return row, None
     acceptance, noise = ctx.lc.program_verify.acceptance_percent, ctx.lc.devices.noise_scale
 
+    mapping = getattr(ctx, "mapping", None)
+    mapped_plant = None
+
     def thresholded(array, mask=None, write_noise_scale=None):
+        nonlocal mapped_plant
+        if mapping is not None and mapping.kind != "reference":
+            mapped_plant = DriftPlant(array, None, mapping, drift=False)
+            return GatedDriftAdam(mapped_plant, learning_rate=arm.learning_rate,
+                                  threshold_us=gate_us(law["threshold_sigma"], noise, acceptance), mask=mask)
         return ThresholdedWriteAdam(array, learning_rate=arm.learning_rate, threshold_sigma=law["threshold_sigma"],
                                     accumulate_updates=law["accumulate_updates"], acceptance_percent=acceptance,
                                     noise_scale=noise, max_write_attempts_per_device=None, write_mask=mask,
@@ -427,7 +437,7 @@ def run_arm(ctx, arm):
         tokens, drawn = ctx.recovery[index].to(device), ctx.samples[index.to(device)]
         network.train()
         if arm.method in ft.WRITES:
-            q = read(ctx, base).requires_grad_(True)
+            q = (read(ctx, base) if mapped_plant is None else mapped_plant.read(None, keep=True)).requires_grad_(True)
         else:
             q = held
             if adapter is not None:
@@ -446,7 +456,10 @@ def run_arm(ctx, arm):
             scheduler.step()
         else:
             writer.learning_rate = ft.cosine(arm.learning_rate, step, steps)
-            writer.step(q.grad if adapter is None else _adapter_gradient(network, ctx.a_scales, ctx.b_scales))
+            if mapped_plant is None:
+                writer.step(q.grad if adapter is None else _adapter_gradient(network, ctx.a_scales, ctx.b_scales))
+            else:
+                writer.step(q.grad, None)
         losses.append(float(loss.detach()))
         if (step + 1) % every == 0 or step + 1 == steps:
             if adapter is not None:
@@ -454,7 +467,8 @@ def run_arm(ctx, arm):
             point = {"step": step + 1, "train_loss": losses[-1],
                      "development": ctx.evaluate(read(ctx, base) if arm.method in ft.WRITES else held)}
             if writer is not None:
-                point["cost"] = _cost(tracked, baseline, baseline_writes)[0]
+                point["cost"] = (_cost(tracked, baseline, baseline_writes)[0]
+                                 if mapped_plant is None else mapped_plant.cost())
             curve.append(point)
             ctx.stage.store.append_metric({"stage": "fault_tuning_development", "arm": arm.label, **point})
             print(json.dumps({"arm": arm.label, "step": step + 1,
@@ -465,8 +479,12 @@ def run_arm(ctx, arm):
                train_loss_last10=sum(losses[-10:]) / 10, train_losses=losses)
     state = None
     if writer is not None:
-        cost, writes = _cost(tracked, baseline, baseline_writes)
-        if isinstance(writer, ThresholdedWriteAdam):
+        if mapped_plant is None:
+            cost, writes = _cost(tracked, baseline, baseline_writes)
+        else:
+            cost = mapped_plant.cost()
+            writes = mapped_plant.weight_writes() if mask is not None else None
+        if isinstance(writer, (ThresholdedWriteAdam, GatedDriftAdam)):
             cost["writer"] = writer.diagnostics()
         if mask is not None:
             cost.update(mask_weights=int(mask.sum()), mask_sha256=tensor_hash(mask),
