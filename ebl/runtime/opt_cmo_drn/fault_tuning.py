@@ -221,6 +221,8 @@ def run(request):
                     'deployment': physical['deployment'], 'start_held_hashes': physical['start_held_hashes'],
                     'recovery_sha256': s.recovery_sha256, 'development_sha256': s.development_sha256,
                     'samples_sha256': s.samples_sha256, 'programming': physical['programming'], **mapped}
+        if s.write_gate == 'fixed_mid' or s.child_mask_scope == 'global':
+            identity.update(write_gate=s.write_gate, child_mask_scope=s.child_mask_scope)
         store.append_metric({'event': 'fault_tuning_start', **identity,
                              'device_name': torch.cuda.get_device_name(device) if str(device).startswith('cuda') else 'cpu'})
         order = ft.batch_indices(s.steps, s.batch, len(recovery), s.order_seed)
@@ -258,7 +260,11 @@ def run(request):
                                               progress)
                     if bank.held_hashes() != physical['start_held_hashes']:
                         raise RuntimeError('Fisher pass changed the held deployment.')
-                    masks = ft.child_masks(scores, s.child_fraction)
+                    if s.child_mask_scope == 'global':
+                        eligible = [~array._mask for array in bank.arrays]
+                        masks = ft.global_child_masks(scores, s.child_fraction, eligible=eligible)
+                    else:
+                        masks = ft.child_masks(scores, s.child_fraction)
                     mask_path = store.run_dir / 'artifacts/child_d_masks.pt'
                     mask_path.parent.mkdir(parents=True, exist_ok=True)
                     fisher_record = {
@@ -266,10 +272,14 @@ def run(request):
                         'batches': len(recovery) // s.fisher_batch, 'seconds': time.monotonic() - fisher_started,
                         'arrays': [{'name': a.name, 'devices': m.numel(), 'selected': int(m.sum()),
                                     'stuck_selected': int((m & a._mask).sum()),
-                                    'threshold': float(sc[m].min()), 'fisher_mean': float(sc.mean()),
+                                    'threshold': float(sc[m].min()) if m.any() else None,
+                                    'fisher_mean': float(sc.mean()),
                                     'fisher_selected_share': float(sc[m].sum() / sc.sum().clamp_min(1e-30))}
                                    for a, m, sc in zip(bank.arrays, masks, scores)],
                         'mask_sha256': plain_hash(torch.cat([m.flatten() for m in masks]))}
+                    if s.child_mask_scope == 'global':
+                        fisher_record.update(scope='global', eligible_devices=sum(int(m.sum()) for m in eligible))
+                        del eligible
                     runtime.save(mask_path, {'schema': 'opt_cmo_drn.child_d_masks.v1', **fisher_record,
                                              'deployed_sha256': deployed_sha,
                                              'masks': [_pack(m) for m in masks],
@@ -283,7 +293,8 @@ def run(request):
                     learner = ft.LoraArm(model, bank, arm.learning_rate, s.steps, arm.rank, s.lora_seed)
                 else:
                     learner = ft.PhysicalArm(model, bank, arm.method, arm.learning_rate, s.steps,
-                                             masks if arm.method == 'child_d' else None, c.recovery.threshold_sigma)
+                                             masks if arm.method == 'child_d' else None, c.recovery.threshold_sigma,
+                                             gate=s.write_gate if arm.method in ('noisy', 'child_d') else 'target_rho')
                 curve = [{'step': 0, 'teacher_kl': start_metrics['teacher_kl']}]
                 losses = []
                 for step, index in enumerate(order, start=1):
@@ -329,14 +340,28 @@ def run(request):
                         raise RuntimeError('Digital correction changed the held physical state.')
                 else:
                     row.update(learner.write_report())
+                    if s.write_gate == 'fixed_mid':
+                        row['distinct_devices_written'] = sum(
+                            int(((writer.attempt_counts > 0) & ~array._mask).sum())
+                            for writer, array in zip(learner.writers, bank.arrays))
+                        for array in bank.arrays:
+                            array.check()
                     if arm.method == 'child_d':
                         row['mask_sha256'] = fisher_record['mask_sha256']
+                        if s.child_mask_scope == 'global':
+                            row['writes_outside_mask'] = sum(int(writer.attempt_counts[~mask].sum())
+                                                             for writer, mask in zip(learner.writers, masks))
+                            if row['writes_outside_mask'] or any(
+                                    saved['stuck_selected'] for saved in fisher_record['arrays']):
+                                raise RuntimeError('Global Child-Tuning selected a stuck device or wrote outside its mask.')
                 if held_out_cohorts:
                     row['held_out'] = score_held_out(model, teacher, bank, held_out_cohorts, s, device, store, arm.label)
                 learner.close()
                 del learner
             if held_out_cohorts and arm.method in ('naive_hold', 'hold'):
                 row['held_out'] = score_held_out(model, teacher, bank, held_out_cohorts, s, device, store, arm.label)
+            if s.write_gate == 'fixed_mid' or s.child_mask_scope == 'global':
+                row['initial_held_hashes'] = physical['start_held_hashes']
             row.update(final_held_hashes=bank.held_hashes(), seconds=time.monotonic() - arm_started,
                        primary_state='held_apparent')
             path = store.run_dir / f'artifacts/arm-{arm.label}.json'

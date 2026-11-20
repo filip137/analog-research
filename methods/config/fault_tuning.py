@@ -115,11 +115,20 @@ class FaultTuning:
     def evaluation_cohorts(self):
         return ()
 
+    @property
+    def write_gate(self):
+        return 'target_rho'
+
+    @property
+    def child_mask_scope(self):
+        return 'per_matrix'
+
     @classmethod
     def parse(cls, raw):
         required = set(FaultTuning.__dataclass_fields__)
-        if not isinstance(raw, dict) or not required <= set(raw) <= required | {'evaluation_cohorts'}:
-            raise ValueError(f'Expected fault-tuning fields {sorted(required)} and optional evaluation_cohorts.')
+        optional = {'evaluation_cohorts', 'write_gate', 'child_mask_scope'}
+        if not isinstance(raw, dict) or not required <= set(raw) <= required | optional:
+            raise ValueError(f'Expected fault-tuning fields {sorted(required)} and optional {sorted(optional)}.')
         v = dict(raw)
         for name in ('corpus_sha256', 'recovery_sha256', 'samples_sha256', 'development_sha256'):
             _digest(v[name], name)
@@ -156,6 +165,13 @@ class FaultTuning:
             v['evaluation_cohorts'] = tuple(EvaluationCohort.parse(x) for x in entries)
             if len({x.name for x in v['evaluation_cohorts']}) != len(entries):
                 raise ValueError('Expected unique evaluation cohort names.')
+        if 'write_gate' in v or 'child_mask_scope' in v:
+            if v.get('write_gate') not in ('target_rho', 'fixed_mid'):
+                raise ValueError('Expected write_gate target_rho or fixed_mid.')
+            if v.get('child_mask_scope') not in ('per_matrix', 'global'):
+                raise ValueError('Expected child_mask_scope per_matrix or global.')
+            return ConfiguredFaultTuning(**v)
+        if 'evaluation_cohorts' in v:
             return EvaluatedFaultTuning(**v)
         return cls(**v)
 
@@ -164,3 +180,9 @@ class FaultTuning:
 class EvaluatedFaultTuning(FaultTuning):
     # Keep legacy asdict/config identities unchanged when the optional field is absent.
     evaluation_cohorts: tuple = ()
+
+
+@dataclass(frozen=True)
+class ConfiguredFaultTuning(EvaluatedFaultTuning):
+    write_gate: str = 'target_rho'
+    child_mask_scope: str = 'per_matrix'

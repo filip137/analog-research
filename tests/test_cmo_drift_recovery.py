@@ -279,6 +279,13 @@ def test_invalid_campaign_configs_are_rejected():
         parse_config(fault)
 
 
+def test_global_child_masks_skip_ineligible_devices_and_use_the_eligible_denominator():
+    scores = [torch.tensor([9.0, 4.0, 3.0, 8.0]), torch.tensor([3.0, 2.0])]
+    eligible = [torch.tensor([False, True, True, False]), torch.tensor([True, True])]
+    masks = ft.global_child_masks(scores, 0.3, eligible=eligible)
+    assert [m.tolist() for m in masks] == [[False, True, False, False], [False, False]]
+
+
 def test_global_child_masks_rank_across_arrays_and_break_ties_by_index():
     scores = [torch.tensor([3., 3., 2.]), torch.tensor([3., 1., 0.])]
     low, high = [ft.global_child_masks(scores, p) for p in (1/3, 1/2)]

@@ -15,6 +15,8 @@ import sys
 
 SOURCE_PINS = {6: 'dfb9f22fa6a922952aeddd2f1c8f29b4a40e129fe0d2296f8343decbc309bcb9',
                12: '6805b62950743838de89ed356cbaf5e92a98710cf87c3f7b11093be89c4a8a1a'}
+RECOVERY_HOLD_KL = {(6, 3): 0.06456173050637339, (12, 2): 0.255741274356842,
+                    (12, 3): 0.30084083502491316}
 
 
 def fail(message):
@@ -71,10 +73,38 @@ def verify(deploy_config, tune_config, deploy_run, tune_run):
     if [(a['label'], a['method']) for a in arms] != [(a['label'], a['method']) for a in tc['fault_tuning']['arms']]:
         fail('Arms differ from the config.')
     cohorts = tc['fault_tuning']['evaluation_cohorts']
+    settings = tc['fault_tuning']
+    matched_recovery = settings.get('write_gate') == 'fixed_mid'
+    if matched_recovery:
+        if i['write_gate'] != 'fixed_mid' or i['child_mask_scope'] != 'global':
+            fail('Recovery did not use the declared gate and mask.')
+        for key in ('recovery_sha256', 'development_sha256', 'samples_sha256'):
+            if i[key] != settings[key]:
+                fail(f'Recovery identity mismatch for {key}.')
+        masks = s['child_d_fisher']
+        selected = sum(x['selected'] for x in masks['arrays'])
+        if selected != round(0.01 * (r['devices'] - r['receipt']['faults'])):
+            fail('Incorrect global mask population.')
+        if rate == 0.03 and tc['deployment']['assignment_seed'] == 271002:
+            observed = arms[0]['held_out']['wikitext']['metrics']['teacher_kl']
+            expected = RECOVERY_HOLD_KL[tc['analog_layers'], scale]
+            if not math.isclose(observed, expected, abs_tol=1e-6, rel_tol=0):
+                fail(f'3% mapped hold replay differs: {observed} vs {expected}.')
     for a in arms:
         finite(a['development']['teacher_kl'], 'dev KL')
-        if a['costs']['write_attempts'] != 0:
-            fail('A hold arm wrote devices.')
+        if a['method'] in ('naive_hold', 'hold', 'calibration', 'lora'):
+            if a['costs']['write_attempts'] != 0:
+                fail('A zero-write arm wrote devices.')
+        if matched_recovery:
+            if a['initial_held_hashes'] != i['start_held_hashes']:
+                fail('Arm did not start from the shared deployment.')
+            if a['method'] not in ('hold', 'naive_hold'):
+                if a['updates'] != settings['steps'] or a['curve'][-1]['step'] != settings['steps']:
+                    fail('Incomplete training arm.')
+                for point in a['curve']:
+                    finite(point['teacher_kl'], 'training curve KL')
+            if a['method'] == 'child_d' and a['writes_outside_mask'] != 0:
+                fail('Child-Tuning wrote outside its mask.')
         if set(a['held_out']) != {c['name'] for c in cohorts}:
             fail('Missing held-out cohorts.')
         for c in cohorts:

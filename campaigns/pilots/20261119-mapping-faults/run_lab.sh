@@ -1,13 +1,14 @@
 #!/bin/bash
 # Lab (RTX 5090) mapping-faults cells (on-chip-learning #33, series 003 exp-001), evaluation only.
 # run_lab.sh SOURCE OUTPUT CORPUS_DIR WEIGHTS TEACHER LIMIT_SECONDS CELL [CELL ...]
-# Per cell: native deploy (`ebl train`, stage deploy), inspect, native hold-only fault_tuning on
+# Per cell: native deploy (`ebl train`, stage deploy), inspect, native fault_tuning on
 # that deployed.pt, inspect, verify_cell.py. Same GPU locks, occupancy refusal and source/input
 # hash checks as the 20261118 cmo-drift-recovery run_lab.sh. Never overwrites an attempt.
 set -euo pipefail
 src=$1; out=$2; corpora=$3; weights=$4; teacher=$5; limit=$6; shift 6
 py=/home/filip/miniconda3/envs/py312/bin/python
 pilot=$src/campaigns/pilots/20261119-mapping-faults
+configs=${OPT_DRN_MAPPING_CONFIGS:-$src/examples/opt_cmo_drn/mapping_faults}
 uuid=$(nvidia-smi --query-gpu=uuid --format=csv,noheader | head -1)
 lock=$HOME/.cache/run-watch/shared-queue/gpus/$uuid.lock
 mkdir -p "$(dirname "$lock")"
@@ -35,8 +36,8 @@ cd "$src"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 mkdir -p "$out"
 for cell in "$@"; do
-    dep=$src/examples/opt_cmo_drn/mapping_faults/$cell-deploy.json
-    tune=$src/examples/opt_cmo_drn/mapping_faults/$cell.json
+    dep=$configs/$cell-deploy.json
+    tune=$configs/$cell.json
     # Exact trained DRN source for this depth, teacher and staged source files.
     $py - "$tune" "$weights" "$src/source_snapshot.json" "$teacher" <<'CHECK'
 import hashlib,json,sys

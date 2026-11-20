@@ -95,12 +95,19 @@ def child_masks(fishers, fraction):
 
 
 @torch.no_grad()
-def global_child_masks(fishers, fraction):
+def global_child_masks(fishers, fraction, *, eligible=None):
     """Rank eligible devices jointly; break cutoff ties in array and flattened index order."""
     scores = torch.cat([f.flatten() for f in fishers])
     if not torch.isfinite(scores).all():
         raise ValueError('Global Fisher scores must be finite.')
-    count = max(1, round(fraction * scores.numel()))
+    population = scores.numel()
+    if eligible is not None:
+        candidates = torch.cat([mask.flatten() for mask in eligible])
+        population = int(candidates.sum())
+        if population == 0:
+            raise ValueError('Global Fisher selection requires at least one eligible device.')
+        scores.masked_fill_(~candidates, -torch.inf)
+    count = max(1, round(fraction * population))
     cutoff = torch.topk(scores, count, sorted=False).values.min()
     mask = scores > cutoff
     remaining = count - int(mask.sum())
