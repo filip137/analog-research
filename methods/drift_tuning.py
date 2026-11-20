@@ -300,3 +300,11 @@ def trapezoid_mean(seconds, values):
     """Linear-time average over [seconds[0], seconds[-1]] (drift-regimes endpoint convention)."""
     total = sum((t1 - t0) * (v0 + v1) / 2 for t0, t1, v0, v1 in zip(seconds, seconds[1:], values, values[1:]))
     return total / (seconds[-1] - seconds[0])
+
+
+def source_quality_law(multiplier, assignment):
+    """Frozen untreated CMO source check at 24 hours. Pair draws across sources on each assignment."""
+    from types import SimpleNamespace
+    return SimpleNamespace(law=LAW, multiplier=multiplier, draw_seed=391103 + assignment - 271001,
+                           mean_us=AIHWKIT_MEAN_US, spread_slope_us=AIHWKIT_SPREAD_SLOPE_US,
+                           spread_offset_us=AIHWKIT_SPREAD_OFFSET_US, drift_min_us=5.0, drift_max_us=150.0)

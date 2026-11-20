@@ -20,11 +20,11 @@ def pinned_load(path,digest):
     return torch.load(path,map_location='cpu',weights_only=True)
 
 
-def load_corpus(name,digest):
+def load_corpus(name,digest,model='facebook/opt-125m'):
     root=os.environ.get('EBL_CORPUS_ROOT')
     if not root: raise ValueError('Expected EBL_CORPUS_ROOT for explicit pinned token corpora.')
     payload=pinned_load(Path(root)/f'{name}.pt',digest)
-    if payload.get('schema')!='crossbar_lifecycle.token_corpus.v1' or payload.get('model')!='facebook/opt-125m':
+    if payload.get('schema')!='crossbar_lifecycle.token_corpus.v1' or payload.get('model')!=model:
         raise ValueError('Expected pinned OPT token corpus schema.')
     for value in payload['splits'].values():
         if value.dtype!=torch.int64 or value.ndim!=1 or len(value)==0 or value.min()<0 or value.max()>=50272:
@@ -40,7 +40,7 @@ def blocks(stream,length,count):
 
 def cohorts(config):
     d=config.data
-    splits=load_corpus(d.corpus,d.sha256)
+    splits=load_corpus(d.corpus,d.sha256,config.model)
     available=len(splits['train'])//d.sequence_length
     train=blocks(splits['train'],d.sequence_length,available)
     order=torch.randperm(available,generator=torch.Generator().manual_seed(d.seed))

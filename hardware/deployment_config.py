@@ -30,3 +30,8 @@ class MappedDeployment(Deployment):
     @property
     def mapped(self):
         return True
+
+
+@dataclass(frozen=True)
+class SourceEvaluationDeployment(Deployment):
+    source_evaluation: str = 'cmo_24h_x1_x4'

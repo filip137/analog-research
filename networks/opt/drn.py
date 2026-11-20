@@ -185,9 +185,9 @@ class OptDrn(nn.Module):
 
 
     @torch.no_grad()
-    def clamp_masters(self):
+    def clamp_masters(self, lower=-1):
         for u in self.parameter_groups()[0]:
-            u.clamp_(-1,1)
+            u.clamp_(lower,1)
 
     @torch.no_grad()
     def diagnostics(self,tokens,view=None):

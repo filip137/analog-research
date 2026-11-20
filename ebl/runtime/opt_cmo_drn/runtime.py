@@ -27,7 +27,7 @@ from methods.core.engine import ExperimentComponents, train_epoch, GradientsRead
 from methods.core.guards import FiniteGradientGuard
 
 MODEL=OptConfig(50272,768,12,12,3072,2048)
-ROOT=Path(__file__).resolve().parents[2]
+ROOT=Path(__file__).resolve().parents[3]
 
 
 def configure_runtime(config):
@@ -53,7 +53,8 @@ def cpu_state(model):
 
 
 def teacher_model(path,config):
-    return from_hugging_face(pinned_load(path,config.teacher_sha256),MODEL).eval().requires_grad_(False)
+    shape = OptConfig(50272,2048,24,32,8192,2048) if config.model == 'facebook/opt-1.3b' else MODEL
+    return from_hugging_face(pinned_load(path,config.teacher_sha256),shape).eval().requires_grad_(False)
 
 
 def from_mapped(teacher,config,payload):
@@ -207,10 +208,20 @@ def run_train(request):
     try:
         if c.stage=='prepare':
             if request.resume: raise ValueError('Mapping preparation does not support optimizer resume.')
-            payload=pinned_load(request.weights,c.source_sha256)
-            if payload.get('context',{}).get('teacher_sha256')!=c.teacher_sha256:
-                raise ValueError('CMO initialization source names a different teacher.')
-            source=reconstruct_source(teacher,payload,c.analog_layers)
+            if c.initialization == 'pretrained_ratio3_quad.v1':
+                if Path(request.weights).resolve() != Path(request.teacher_weights).resolve():
+                    raise ValueError('Direct initialization requires the pinned teacher as --weights.')
+                source = SourceDecoder(teacher.config)
+                source.load_state_dict(teacher.state_dict())
+                source.start = len(source.layers) - c.analog_layers
+                source.register_buffer('gains', torch.ones(2*c.analog_layers))
+                source.eval().requires_grad_(False)
+            else:
+                payload=pinned_load(request.weights,c.source_sha256)
+                if payload.get('context',{}).get('teacher_sha256')!=c.teacher_sha256:
+                    raise ValueError('CMO initialization source names a different teacher.')
+                source=reconstruct_source(teacher,payload,c.analog_layers)
+                del payload
             model=OptDrn(source,DrnSettings(**asdict(c.solver))).to(c.device)
             source=source.to(c.device)
             def mapping_progress(row):
@@ -218,7 +229,12 @@ def run_train(request):
                 if time.monotonic()-started>c.training.max_wall_seconds:
                     raise TimeoutError('Mapping readiness exceeded its wall-time allowance.')
             report=fit_mapping(model,source,train[:c.data.mapping_sequences].to(c.device),progress=mapping_progress)
-            del source,payload
+            del source
+            if c.initialization == 'pretrained_ratio3_quad.v1':
+                from methods.programming.cmo import apply_mapping
+                teacher = teacher.to(c.device)
+                report = {'layers': report, 'ideal_development': evaluate(model, teacher, dev, c.device, microbatch=c.training.microbatch)}
+                report['ratio3'] = apply_mapping(model, 3.0)
             teacher=teacher.to(c.device)
             metrics={'mapping':report,'clean_development':evaluate(model,teacher,dev,c.device,microbatch=c.training.microbatch),
                      'cohorts':cohort_identity,'physical_devices':sum(p.numel() for p in model.parameter_groups()[0]),
@@ -271,7 +287,10 @@ def run_train(request):
             best={'teacher_kl':scored['teacher_kl'],'step':0}
             save(store.run_dir/'checkpoints/best.pt',weights_payload(model,c,selection=best))
         while step<total:
-            order=torch.randperm(len(train),generator=torch.Generator().manual_seed(c.data.seed+epoch))
+            seed = c.data.seed + epoch
+            if c.initialization == 'pretrained_ratio3_quad.v1':
+                seed += 1_000_000
+            order=torch.randperm(len(train),generator=torch.Generator().manual_seed(seed))
             epoch_batches=math.ceil(len(train)/c.training.effective_batch)
             while cursor<epoch_batches and step<total:
                 if time.monotonic()-started>=c.training.max_wall_seconds:
@@ -290,7 +309,7 @@ def run_train(request):
                 store.append_metric({'event':'update','step':step,'epoch':epoch,'cursor':cursor,'lr_factor':factor,
                                      'update_seconds':time.monotonic()-before,'elapsed_seconds':time.monotonic()-started,
                                      'peak_memory_bytes':torch.cuda.max_memory_allocated() if str(c.device).startswith('cuda') else 0,**core.last})
-                if step%c.selection.every_updates==0 or cursor==epoch_batches or step==total:
+                if step%c.selection.every_updates==0 or (cursor==epoch_batches and c.model=='facebook/opt-125m') or step==total:
                     scored=score()
                     if scored['teacher_kl']<best['teacher_kl']:
                         best={'teacher_kl':scored['teacher_kl'],'step':step}
@@ -341,6 +360,8 @@ def run_validate(request):
     store=_store(request)
     try:
         results={}
+        if c.model == 'facebook/opt-1.3b':
+            raise ValueError('Use the source_evaluation deploy stage to score 1.3B on held-out arrays.')
         for label,name,digest,count in TRANSFER_TESTS:
             tokens=blocks(load_corpus(name,digest)['test'],c.data.sequence_length,count)
             results[label]={'clean':evaluate(model,teacher,tokens,c.device,microbatch=c.training.microbatch),

@@ -93,6 +93,9 @@ def _parse(cls,raw,path):
                 from methods.maintenance.config import DriftRecovery
                 try: value=DriftRecovery.parse(value)
                 except ValueError as error: raise ConfigError(str(error)) from error
+        elif issubclass(cls,Config) and key=='deployment' and isinstance(value,Mapping) and 'source_evaluation' in value:
+            from hardware.deployment_config import SourceEvaluationDeployment
+            value = _parse(SourceEvaluationDeployment, value, f'{path}.{key}')
         elif issubclass(cls,Config) and key=='deployment' and isinstance(value,Mapping) and 'mapping_scale' in value:
             # Explicit deployment remap; legacy deployments keep their resolved identity.
             value=_parse(MappedDeployment,value,f'{path}.{key}')
@@ -191,9 +194,18 @@ def parse_config(raw):
             raise ConfigError('Scalar drift currently requires a nominal fault-free deployment.')
         if c.retention.power_law.development_sequences>c.data.development_sequences:
             raise ConfigError('Drift cohort exceeds the declared development cohort.')
-    if c.model!='facebook/opt-125m' or c.analog_layers not in ANALOG_DEPTHS:
+    if hasattr(c.deployment,'source_evaluation') and (c.model!='facebook/opt-1.3b' or c.stage!='deploy'
+            or c.deployment.source_evaluation!='cmo_24h_x1_x4' or c.deployment.assignment_seed in c.selection.assignment_seeds):
+        raise ConfigError('Source quality requires a held-out 1.3B deployment and the declared CMO protocol.')
+    if c.model == 'facebook/opt-1.3b':
+        if (c.analog_layers not in (12, 24) or c.initialization != 'pretrained_ratio3_quad.v1'
+                or c.source_sha256 != c.teacher_sha256
+                or c.teacher_sha256 != 'cf7d5c970d6ddbd3b03009b397c0422e147edd5c8020d47a8d2fac0b11a3b08d'
+                or c.deployment.mapped or c.stage not in ('prepare', 'hwa', 'deploy')):
+            raise ConfigError('OPT-1.3B requires its pinned pretrained teacher, native ratio3 initialization and L12/L24.')
+    elif c.model!='facebook/opt-125m' or c.analog_layers not in ANALOG_DEPTHS:
         raise ConfigError('Expected OPT-125M with six or twelve DRN MLPs.')
-    if c.initialization!='full_span_quad.v1':
+    elif c.initialization!='full_span_quad.v1':
         raise ConfigError('Expected the assigned full-span four-device initialization.')
     for digest in (c.teacher_sha256,c.source_sha256,c.data.sha256):
         if len(digest)!=64 or any(x not in '0123456789abcdef' for x in digest):
@@ -276,6 +288,8 @@ def parse_config(raw):
 
 
 def resolve_config(config,mode):
+    if mode == RunMode.VALIDATE and config.model == 'facebook/opt-1.3b':
+        raise ConfigError('Evaluate OPT-1.3B sources with the held-out deploy stage.')
     if mode==RunMode.VALIDATE and config.stage not in ('hwa','recover'):
         raise ConfigError('Expected hwa/recover configuration for validation.')
     return config

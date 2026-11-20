@@ -11,7 +11,7 @@ from ebl.schema.opt_cmo_drn import parse_config
 from ebl.execution.schema import CampaignSpec
 
 
-def build_plan(config,teacher,source,output,python,worktree,reuse=None):
+def build_plan(config,teacher,source,output,python,worktree,reuse=None,source_deployments=None):
     from ebl.lifecycle.study import inspect_run
     from networks.opt.data import pinned_load
     config=parse_config(config)
@@ -34,7 +34,7 @@ def build_plan(config,teacher,source,output,python,worktree,reuse=None):
                   'initialization':config.initialization,'solver':asdict(config.solver)}
         old=parse_config(json.loads((run/'config.resolved.json').read_text()))
         mapping_data=('corpus','sha256','sequences','sequence_length','seed','mapping_sequences')
-        if payload['contract']!=expected or any(getattr(old.data,k)!=getattr(config.data,k) for k in mapping_data):
+        if old.analog_layers!=config.analog_layers or old.model!=config.model or payload['contract']!=expected or any(getattr(old.data,k)!=getattr(config.data,k) for k in mapping_data):
             raise ValueError('Mapped artifact dependencies differ from the requested lifecycle.')
         upstream={'path':str(path)}
     else:
@@ -45,9 +45,33 @@ def build_plan(config,teacher,source,output,python,worktree,reuse=None):
     stages.append({'id':'hwa','case_id':config.training.arm,'target':'local','command':'train','config':'hwa.json',
                    'depends_on':[] if reuse else ['prepare'],
                    'inputs':{'teacher_weights':{'path':str(teacher)},'weights':upstream}})
+    if source_deployments:
+        if config.model != 'facebook/opt-1.3b' or config.training.retention != 'best_latest_final':
+            raise ValueError('Source deployments require a mapped OPT-1.3B run retaining best weights.')
+        from hardware.deployment_config import Deployment, SourceEvaluationDeployment
+        held_out = source_deployments == 'held-out'
+        assignments = (271002, 271003, 271004) if held_out else (271001,)
+        sources = {'hwa': {'stage': 'hwa', 'artifact_kind': 'best_weights'}}
+        if held_out:
+            sources['pretrained'] = upstream
+        for name, weights in sources.items():
+            for seed in assignments:
+                for rate in (0, 3):
+                    key = f'deploy-{name}-{seed}-r{rate}'
+                    cls = SourceEvaluationDeployment if held_out else Deployment
+                    physical = cls(assignment_seed=seed, fault_kind='random' if rate else 'none', fault_rate=rate/100)
+                    doc = asdict(replace(config, stage='deploy', deployment=physical))
+                    parse_config(doc)
+                    files[key+'.json'] = doc
+                    stages.append({'id': key, 'case_id': key, 'target': 'local', 'command': 'train',
+                                   'config': key+'.json', 'depends_on': [weights['stage']] if 'stage' in weights else [],
+                                   'inputs': {'teacher_weights': {'path': str(teacher)}, 'weights': weights}})
     manifest={'schema_version':1,'campaign_id':f'opt-cmo-drn-{config.training.arm}',
               'targets':[{'id':'local','worktree':str(Path(worktree).resolve()),'python':str(Path(python).resolve())}],
               'stages':stages}
+    if config.model == 'facebook/opt-1.3b':
+        from ebl.runtime.store import content_hash
+        manifest['campaign_id'] = f'opt13b-drn-l{config.analog_layers}-{content_hash([asdict(config),source_deployments])[:12]}'
     CampaignSpec.parse(manifest,base_dir=output)
     files['campaign.json']=manifest
     for name,value in files.items():
@@ -95,12 +119,13 @@ def main(argv=None):
     p=sub.add_parser('plan');p.add_argument('config',type=Path)
     for name in ('teacher-weights','source','output'):p.add_argument('--'+name,type=Path,required=True)
     p.add_argument('--reuse',type=Path)
+    p.add_argument('--source-deployments', choices=('canary','held-out'))
     p.add_argument('--python',type=Path,default=Path(sys.executable))
     p.add_argument('--worktree',type=Path,default=Path(__file__).resolve().parents[1])
     p=sub.add_parser('collect');p.add_argument('runs',nargs='+',type=Path);p.add_argument('--output',type=Path,required=True)
     args=parser.parse_args(argv)
     if args.command=='plan':
-        build_plan(json.loads(args.config.read_text()),args.teacher_weights,args.source,args.output,args.python,args.worktree,args.reuse)
+        build_plan(json.loads(args.config.read_text()),args.teacher_weights,args.source,args.output,args.python,args.worktree,args.reuse,args.source_deployments)
         print(args.output/'campaign.json')
     else:
         report=collect(args.runs);atomic_write_json(args.output,report)

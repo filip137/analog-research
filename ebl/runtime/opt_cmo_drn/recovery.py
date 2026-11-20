@@ -94,7 +94,11 @@ def run_physical(request):
             mapping=apply_mapping(model,d.mapping_scale) if d.mapped else None
             view,receipt,state=program_rewritten(model,d.assignment_seed,d.fault_kind,d.fault_rate,capture_state=True)
             del view
-            report=deployment_report(state,model.settings,model.start) if d.mapped else None
+            ratio_source = c.initialization == 'pretrained_ratio3_quad.v1'
+            report=deployment_report(state,model.settings,model.start) if d.mapped or ratio_source else None
+            if ratio_source:
+                report['mapped_error_rms_us'] = [float((cell['held'] - cell['target']).square().mean().sqrt())
+                                                 for cell in state['cells']]
             bank=CmoDrnBank(state,c.device)
             del state
             raw=runtime.evaluate(model,teacher,dev,c.device,bank.view(model,raw=True),c.training.microbatch)
@@ -104,6 +108,23 @@ def run_physical(request):
                    'bank':bank.state_dict(),'raw_development':raw,'development':canonical,
                    'start_held_hashes':bank.held_hashes(),'programming':receipt}
             extra={}
+            if getattr(d, 'source_evaluation', None):
+                from methods.drift_tuning import drifted, source_quality_law
+                tests = (('generated', c.data.corpus, c.data.sha256, 384),
+                         ('wikitext', 'wikitext-2-raw-v1-opt1p3b',
+                          '15345cfac6d21630d320e2a5c98fed62da63e80ec547a719c94bdd0c13936aba', 1024))
+                cohorts_test = {label: blocks(load_corpus(name, digest, c.model)['test'], c.data.sequence_length, count)
+                                for label, name, digest, count in tests}
+                def scores(view):
+                    return {label: runtime.evaluate(model, teacher, tokens, c.device, view, c.training.microbatch)
+                            for label, tokens in cohorts_test.items()}
+                extra['held_out'] = {'clean': scores(None), 'programmed': scores(bank.view(model))}
+                if d.fault_kind == 'none':
+                    for multiplier in (1, 4):
+                        law = source_quality_law(multiplier, d.assignment_seed)
+                        view = bank.view(model, transform=lambda k, g: drifted(g, k, 86400, law))
+                        extra['held_out'][f'x{multiplier}'] = {'seconds': 86400, **vars(law), 'scores': scores(view)}
+                        del view
             if d.mapped:
                 extra={'mapping':mapping,'current_scales':[float(b.current_scale) for b in model.blocks]}
                 saved.update(extra)

@@ -367,3 +367,43 @@ def test_all_twelve_blocks_receive_gradients():
     model(torch.tensor([[1,2,3,4],[4,3,2,1]])).square().mean().backward()
     for b in model.blocks:
         assert b.u1.grad.abs().sum()>0 and b.u2.grad.abs().sum()>0
+
+
+def test_pretrained_ratio3_source_survives_training_and_load(tmp_path, monkeypatch):
+    from ebl.runtime.opt_cmo_drn import runtime
+    from ebl.runtime.store import sha256_file
+    import json
+
+    _, teacher = tiny_model()
+    path = tmp_path / 'teacher.pt'
+    torch.save(teacher.state_dict(), path)
+    c = replace(Config(), model='facebook/opt-1.3b', initialization='pretrained_ratio3_quad.v1',
+                stage='prepare', teacher_sha256=sha256_file(path), source_sha256=sha256_file(path),
+                training=replace(Training(), effective_batch=2, max_updates=1, checkpoint_every=1))
+    tokens = torch.tensor([[1,2,3,4],[4,3,2,1]])
+    monkeypatch.setattr(runtime, 'teacher_model', lambda *args: copy.deepcopy(teacher))
+    monkeypatch.setattr(runtime, 'cohorts', lambda c: (tokens, tokens, {}))
+    req = SimpleNamespace(spec=c, teacher_weights=path, weights=path, resume=None, output_dir=tmp_path/'prepare', command=('test',))
+    assert runtime.run_train(req) == 0
+    mapped = next(req.output_dir.glob('*/checkpoints/mapped.pt'))
+    payload = torch.load(mapped, weights_only=True)
+    assert payload['mapping']['ratio3']['scale'] == 3.0
+    restored = runtime.from_mapped(teacher, c, payload)
+    assert torch.equal(restored.blocks[0].current_scale, payload['model']['blocks.0.current_scale'])
+    req.weights = mapped
+    req.spec = replace(c, stage='hwa')
+    req.output_dir = tmp_path/'hwa'
+    assert runtime.run_train(req) == 0
+    from ebl.runtime.opt_cmo_drn import recovery
+    monkeypatch.setattr(recovery, 'cohorts', runtime.cohorts)
+    req.weights = next(req.output_dir.glob('*/checkpoints/best.pt'))
+    from hardware.deployment_config import SourceEvaluationDeployment
+    monkeypatch.setattr(recovery, 'load_corpus', lambda *args: {'test': tokens.flatten()})
+    monkeypatch.setattr(recovery, 'blocks', lambda *args: tokens)
+    req.spec = replace(c, stage='deploy', deployment=SourceEvaluationDeployment(fault_kind='none', fault_rate=0))
+    req.output_dir = tmp_path/'deploy'
+    assert runtime.run_train(req) == 0
+    deployment = torch.load(next(req.output_dir.glob('*/checkpoints/deployed.pt')), weights_only=True)
+    assert deployment['source_contract']['initialization'] == 'pretrained_ratio3_quad.v1'
+    result = json.loads(next(req.output_dir.glob('*/result.json')).read_text())
+    assert set(result['metrics']['held_out']) == {'clean', 'programmed', 'x1', 'x4'}

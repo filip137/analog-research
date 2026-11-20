@@ -53,7 +53,11 @@ class CoreStep:
         if self.config.training.recipe=='B':
             torch.nn.utils.clip_grad_norm_(self.model.parameters(),1.0,error_if_nonfinite=True)
         self.optimizer.step()
-        self.model.clamp_masters()
+        if self.config.initialization == 'pretrained_ratio3_quad.v1':
+            from hardware.devices.cmo import G_MIN_US, MID_US, HALF_RANGE_US
+            self.model.clamp_masters((3*G_MIN_US - MID_US) / HALF_RANGE_US)
+        else:
+            self.model.clamp_masters()
 
     def components(self):
         return ExperimentComponents(self,self,self,self.parameters,self,self,clamp_after_update=False)
