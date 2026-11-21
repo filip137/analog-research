@@ -57,3 +57,26 @@ of the original stored conductances with the pre-rounded FP32 reciprocal of
 simulations use their native two-sided mapping. The native sparse run saves
 both fixed masks bit-packed by leg/global logical index for every trained view,
 with physical-tile/flat-index tie breaking and separate training/storage costs.
+
+### Live handoff, 21 November 2026
+
+Frozen runner `04c8f6f` on both hosts. Final regression suite 752 passed,
+5 skipped. Latest canary (v4) ran all seven routes and four controls on both
+RTX 5090s. The branch/case used the archived V100 hold only for replay and a
+new RTX draw for the learner checks. The verified original held-state hashes
+were exact. Measured versus published WikiText KL was 0.05706044280646 vs
+0.05706044211984 at L6 and 0.21380882420961 vs 0.21380882339150 at L12.
+Every sparse route had zero outside-mask write attempts, and the native bundles
+contain hash-verified packed masks for all three views.
+
+The XB6 `trex` lane (PID 538401) started its full HellaSwag 1% pair. XB12
+`loulou` (PID 1383741) started its full BoolQ 10% pair. Both use the run root
+above. Their first native canary receipts are
+`runs/xb6-hellaswag-r03-canary-v4/complete.json` and
+`runs/xb12-hellaswag-r03-canary-v4/complete.json` on the respective hosts.
+The current receipt and budget surface are `lane-status.json`, `lane.pid` and
+`lane.log`. Reconcile `remaining_coverage` at the cap. The shared study owner
+supervises both lanes and collects compact verified results on the coordinator.
+The 4-step canaries exercised sparse upload; at the declared learning rate no
+online update reached the gate in four steps. The real runs test the accumulated
+online writer under the complete 128-step schedule.
