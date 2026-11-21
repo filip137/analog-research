@@ -103,9 +103,19 @@ def drift_control_reference(summary, rows):
     fields = ('assignment_seed', 'case', 'source_sha256', 'recovery_cohort_sha256',
               'development_cohort_sha256', 'samples_sha256', 'apparent_sha256', 'deployment_reports',
               'deployment_gpu', 'deployment_torch')
+    identity = {name: summary[name] for name in fields}
+    reports = identity['deployment_reports']
+    aware = reports['fault_aware']
+    controller = dict(aware['controller'])
+    low_key, high_key = 'clipped_targets_low', 'clipped_targets_high'
+    if low_key in controller or high_key in controller:
+        counts = [controller.pop(key, None) for key in (low_key, high_key)]
+        if not all(type(n) is int and n >= 0 for n in counts) or sum(counts) != controller['clipped_targets']:
+            raise ValueError('Clipped-target diagnostics do not reconcile with the original total.')
+        identity['deployment_reports'] = {**reports, 'fault_aware': {**aware, 'controller': controller}}
     records = summary['drift']['records']
     return {
-        'identity': {name: summary[name] for name in fields},
+        'identity': identity,
         'clean_reference': {name: records[name] for name in ('mapping', 'source_ideal_teacher_kl',
                             'clean_mapped_readout_teacher_kl', 'deployed_release_teacher_kl')},
         'controls': {

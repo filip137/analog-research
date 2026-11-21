@@ -39,3 +39,15 @@ and twelve or twenty-four analog matrices. There is no new HWA training.
 - CPU gate: 66 focused tests passed. The workflow suite in a separate process
   passed 694 tests with five skips. Native lifecycle check and describe passed
   for all eight configs. Shell syntax and Python compilation passed.
+
+The initial V100 canaries, Slurm 554400 and 554401, completed native runs and
+mask audits. The final historical control assertion rejected the new
+`clipped_targets_low` and `clipped_targets_high` report fields. The exact
+deployment, data and grids all matched. The historical clipped-target totals
+were 9 (XB6) and 21 (XB12), entirely on the low side. The comparison now checks
+that the new counts are nonnegative integers summing to the historical total
+before comparing the remaining report exactly. The failed jobs charged 345
+and 418 seconds respectively. Rerun both live gates on the new worker at
+12 minutes each. Keep 12,900 seconds reserved for the six full jobs; the
+first charges plus both ceilings total 15,103 seconds of the 15,480-second
+HWA budget.

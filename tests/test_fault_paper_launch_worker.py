@@ -222,6 +222,29 @@ def test_global_drift_child_requires_exact_masks_and_no_writes_outside(mutation)
         worker.validate_measurements(spec, rows)
 
 
+def test_drift_control_reconciles_clipping_diagnostics_without_weakening_identity():
+    summary = dict.fromkeys(('assignment_seed', 'case', 'source_sha256', 'recovery_cohort_sha256',
+                            'development_cohort_sha256', 'samples_sha256', 'apparent_sha256',
+                            'deployment_gpu', 'deployment_torch'))
+    summary['drift'] = {'records': dict.fromkeys(('mapping', 'source_ideal_teacher_kl',
+                                               'clean_mapped_readout_teacher_kl', 'deployed_release_teacher_kl'))}
+    controller = {'clipped_targets': 9, 'flagged_active': 12}
+    summary['deployment_reports'] = {'fault_aware': {'controller': controller}}
+    _, rows = drift_contract()
+    for row in rows:
+        row['initial_apparent_sha256'] = '0' * 64
+    reference = copy.deepcopy(worker.drift_control_reference(summary, rows))
+    controller.update(clipped_targets_low=8, clipped_targets_high=1)
+    assert worker.drift_control_reference(summary, rows) == reference
+    assert 'clipped_targets_low' in controller
+    controller['flagged_active'] += 1
+    assert worker.drift_control_reference(summary, rows) != reference
+    for high in (None, True, -1, 2):
+        controller['clipped_targets_high'] = high
+        with pytest.raises(ValueError, match='do not reconcile'):
+            worker.drift_control_reference(summary, rows)
+
+
 @pytest.mark.parametrize('mutation', ['order', 'grid', 'nan', 'final', 'updates', 'hold_updates', 'release'])
 def test_drift_rows_fail_closed(mutation):
     spec, rows = drift_contract()
