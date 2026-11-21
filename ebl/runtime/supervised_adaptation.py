@@ -17,6 +17,14 @@ from methods.task_adaptation import backward_batch, evaluate
 from ebl.runtime import fault_tuning as fault
 
 
+def archived_v100_readout(children, span):
+    """V100 scalar division used a pre-rounded FP32 reciprocal. Require the archive's exact q hash."""
+    def read(child):
+        g = child["g"]
+        return (g[0] - g[1]) * g.new_tensor(span).reciprocal()
+    return torch.cat([read(child) for child in children])
+
+
 def calibrate(network, target_q, measured_q, tokens, device):
     """Layerwise least-squares correction of block outputs on the same local input."""
     result = OutputCalibration(network).requires_grad_(False)
@@ -82,6 +90,7 @@ class Cell:
         if self.spec["phase"] != "evaluation":
             self.proxy = Snapshot(ctx, target, self.cal_tokens, self.spec["proxy_seed"])
         self.cached_masks = {}
+        self.mask_files = []
 
     def reset(self, view):
         self.net.enable_lora(None)
@@ -113,8 +122,19 @@ class Cell:
                 scores += grad.square() * (len(ids) / self.spec["fisher_items"])
             eligible = (torch.ones(2, q.numel(), device=self.device, dtype=torch.bool) if view == "clean"
                         else ~(self.chip if view == "chip" else self.proxy).flags)
-            masks = nested_masks(scores, eligible, self.net.layout, (.01, .10), self.ctx.mapping.span)
+            masks = nested_masks(scores, eligible, self.net.layout, (.01, .10), self.ctx.mapping.span, self.ctx.lc.deployment.tile_size)
             self.cached_masks[view] = {k: v.cpu() for k, v in masks.items()}
+            mask_path = self.ctx.stage.run_dir / "checkpoints" / f"physical-masks-{view}.pt"
+            # Bit-packing keeps both full masks, their physical index convention and nesting auditable.
+            import numpy as np
+            payload = {"schema": "physical-child.masks.v1", "view": view, "shape": list(eligible.shape),
+                       "eligible": int(eligible.sum()), "fisher_items": self.spec["fisher_items"], "batch": 8,
+                       "index_order": "physical_leg_then_global_logical_weight", "bitorder": "little",
+                       "masks": {str(k): {"sha256": tensor_hash(v), "selected": int(v.sum()),
+                                 "bits": torch.from_numpy(np.packbits(v.numpy(), bitorder="little"))}
+                                 for k, v in self.cached_masks[view].items()}}
+            save(mask_path, payload)
+            self.mask_files.append((f"physical_masks_{view}", mask_path))
         return self.cached_masks[view]
 
     @torch.no_grad()
@@ -226,13 +246,15 @@ class Cell:
             result = {"kind": "lora", "state": clone_cpu(self.net.lora.state_dict())}
         if writer:
             result.update(chip_q=self.ctx.mapping.readout(current), cost=writer.cost())
-        return result, {"steps": len(losses), "first": losses[0], "last": losses[-1],
+        result["training"] = {"steps": len(losses), "first": losses[0], "last": losses[-1],
                         "examples": len(losses) * self.task["order"].shape[1],
                         "optimizer_moment_bytes": sum(2 * p.numel() * p.element_size() for p in params),
                         "fisher_items": self.spec["fisher_items"] if child else 0, "fisher_batch": 8 if child else 0,
                         "selected_devices": int(mask.sum()) if child else 0,
                         "mask_bytes": mask.numel() * mask.element_size() if child else 0,
                         "accumulator_bytes": delta.numel() * delta.element_size() if child and online else 0}
+
+        return result, result["training"]
 
     def deploy(self, trained, policy="clip"):
         """Apply an independently trained model on the calibrated physical recipient."""
@@ -345,7 +367,7 @@ def run_supervised(ctx, target):
         archive = load(fault.pinned_path(spec["historical"]))
         fault.check_deployment(ctx, archive, target)
         state = archive["states"]["fault_aware"]
-        q = torch.cat([ctx.mapping.readout(x["g"].to(ctx.device)) for x in state["state"]["children"]])
+        q = archived_v100_readout(state["state"]["children"], ctx.mapping.span).to(ctx.device)
         q_sha = tensor_hash(q)
         if q_sha != state["apparent_sha256"]:
             raise ValueError("The historical apparent state differs from its archive.")
@@ -376,12 +398,12 @@ def run_supervised(ctx, target):
             model, _ = cell.train(route, winner["rate"], winner["view"])
         q, cost = cell.deploy(model, winner["policy"])
         scores = cell.score(q, split, retention=True)
-        out["scores"][route] = {"scores": scores, "cost": cost, "seconds": time.monotonic()-before}
+        out["scores"][route] = {"scores": scores, "cost": {**cost, "training": model["training"]}, "seconds": time.monotonic()-before}
         out["selections"][route] = {k: v for k, v in winner.items() if k != "transfer"}
         atomic_write_json(results_path, out)
         cell.event(route=route, complete=True, final=quality(scores), seconds=out["scores"][route]["seconds"])
         del model, q
-    paths = [("fault_tuning_measurements", results_path)]
+    paths = [("fault_tuning_measurements", results_path), *cell.mask_files]
     if phase == "development":
         path = stage.run_dir / "checkpoints" / "selection.pt"
         save(path, {"schema": "supervised.selection.v1", "identity": identity, "development_assignment": ctx.seed,

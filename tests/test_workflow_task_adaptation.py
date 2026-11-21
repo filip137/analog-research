@@ -17,7 +17,7 @@ from tests.test_workflow_opt import tiny_teacher
 
 
 def test_nested_physical_masks_ties_across_arrays():
-    layout = [NS(offset=0, size=4), NS(offset=4, size=2)]
+    layout = [NS(offset=0, size=4, shape=(2,2)), NS(offset=4, size=2, shape=(1,2))]
     scores = torch.tensor([.7, .8, .2, .1, .8, .3])
     eligible = torch.ones(2, 6, dtype=torch.bool)
     eligible[0, 1] = False
@@ -76,3 +76,9 @@ def test_native_supervised_routes_and_costs(tmp_path, monkeypatch):
         assert rows[key]["cost"]["out_of_mask_attempts"] == 0
         assert rows[key]["cost"]["successful_device_writes"] > 0
     assert rows["offline_lora"]["cost"]["successful_device_writes"] == 0
+    assert {p.name for p in (tmp_path / "checkpoints").glob("physical-masks-*.pt")} == {
+        "physical-masks-chip.pt", "physical-masks-proxy.pt", "physical-masks-clean.pt"}
+    from ebl.runtime.supervised_adaptation import archived_v100_readout
+    held = [{"g": torch.tensor([[52., 87.3], [24.8, 85.2]], dtype=torch.float32)}]
+    expected = (held[0]["g"][0] - held[0]["g"][1]) * torch.tensor(79.2).reciprocal()
+    assert torch.equal(archived_v100_readout(held, 79.2), expected)

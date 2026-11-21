@@ -1,6 +1,7 @@
 """Global sparse fine-tuning in individual physical conductance coordinates on a two-sided crossbar."""
 from __future__ import annotations
 
+import math
 import torch
 
 from core.seeds import binding_seed
@@ -9,7 +10,7 @@ from hardware.devices import cmo
 from methods.programming.lifecycle import detect_stuck_devices, pair_rewrite_plan
 
 
-def nested_masks(logical_fisher, eligible, layout, fractions, span):
+def nested_masks(logical_fisher, eligible, layout, fractions, span, tile_size=256):
     """Two-sided dL/dG legs have opposite signs and identical squared gradients."""
     if eligible.shape != (2, logical_fisher.numel()) or eligible.dtype != torch.bool:
         raise ValueError("Invalid controller eligibility map.")
@@ -28,7 +29,26 @@ def nested_masks(logical_fisher, eligible, layout, fractions, span):
         cutoff = scores.topk(k, sorted=False).values.min()
         chosen = scores > cutoff
         ties = torch.nonzero(scores == cutoff).flatten()
-        chosen[ties[:k - int(chosen.sum())]] = True
+        need = k - int(chosen.sum())
+        if 0 < need < len(ties):
+            # Native physical_arrays order is matrix, output tile, input tile, split-half,
+            # then role and flattened weight. Only exact cutoff ties need sorting.
+            sorted_ties = []
+            offset = 0
+            for m in layout:
+                local = ties[(ties >= offset) & (ties < offset + 2 * m.size)] - offset
+                if local.numel():
+                    cols = m.shape[1]
+                    weight = local % m.size
+                    row, col = weight // cols, weight % cols
+                    tile = (row // tile_size) * math.ceil(cols / tile_size) + col // tile_size
+                    width = (cols - (col // tile_size) * tile_size).clamp_max(tile_size)
+                    part = (col % tile_size >= (width + 1) // 2).long()
+                    keys = (tile * 2 + part) * (2 * m.size) + local
+                    sorted_ties.append(local[keys.argsort()] + offset)
+                offset += 2 * m.size
+            ties = torch.cat(sorted_ties)
+        chosen[ties[:need]] = True
         per_matrix = chosen.split([m.size * 2 for m in layout])
         mask = torch.cat([m.reshape(2, -1) for m in per_matrix], 1)
         if int(mask.sum()) != k or (mask & ~eligible).any():

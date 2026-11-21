@@ -49,3 +49,11 @@ WikiText scorer at its native batch size. The independently drawn RTX state
 remains the deployment for the supervised canary, with its separate hash.
 Use `launch/task_lane.py` for the budgeted sequential screen, with XB6
 HellaSwag 1% and XB12 BoolQ 10% first, each followed by its 0% twin.
+
+The archived V100 readout also depends on scalar-division rounding. CPU replay
+of the original stored conductances with the pre-rounded FP32 reciprocal of
+79.2 reproduces the published hashes for both depths exactly (980be1f8…,
+7c96f4b7…). The archived decoder uses this arithmetic and the contemporary
+simulations use their native two-sided mapping. The native sparse run saves
+both fixed masks bit-packed by leg/global logical index for every trained view,
+with physical-tile/flat-index tie breaking and separate training/storage costs.
