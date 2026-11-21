@@ -33,7 +33,7 @@ if __name__ == "__main__":
     p.add_argument("--depth", type=int, choices=(12, 24), required=True)
     p.add_argument("--phase", choices=("canary", "screen", "production"), required=True)
     p.add_argument("--factor", type=float, choices=(0.01, 0.1, 1, 3, 9), required=True)
-    p.add_argument("--stage", choices=("prepare", "hwa", "deploy"), required=True)
+    p.add_argument("--stage", choices=("prepare", "hwa", "deploy", "hwa_precision_benchmark"), required=True)
     p.add_argument("--assignment", type=int, choices=(271001,271002,271003,271004), default=271001)
     p.add_argument("--fault-rate", type=float, choices=(0,0.03), default=0)
     p.add_argument("--corpus-sha256", required=True, help="File digest from shared corpus generation")

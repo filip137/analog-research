@@ -24,7 +24,8 @@ def lr_factor(step,total,config):
 
 class CoreStep:
     """Adapt effective token batches to the repository's authoritative engine."""
-    def __init__(self,model,teacher,optimizer,config,generator):
+    def __init__(self,model,teacher,optimizer,config,generator, *, loss_scale=1.0):
+        self.loss_scale = loss_scale
         self.model,self.teacher,self.optimizer,self.config,self.generator=model,teacher,optimizer,config,generator
         self.offload_moment = (config.model == "facebook/opt-1.3b" and config.analog_layers == 24
                                and next(model.parameters()).is_cuda)
@@ -56,8 +57,14 @@ class CoreStep:
             out=self.model(tokens,view)
             loss=F.kl_div(out.flatten(0,1).log_softmax(-1),reference.flatten(0,1).softmax(-1),reduction='batchmean')
             if not bool(torch.isfinite(loss)): raise FloatingPointError('Nonfinite training KL.')
-            (loss*(len(tokens)/len(self.inputs))).backward()
+            objective = loss*(len(tokens)/len(self.inputs))
+            if self.loss_scale != 1:
+                objective = objective * self.loss_scale
+            objective.backward()
             loss_sum+=float(loss.detach())*len(tokens)/len(self.inputs)
+        if self.loss_scale != 1:
+            for parameter in self.parameters:
+                parameter.state.grad.div_(self.loss_scale)
         self.last={'teacher_kl':loss_sum,'projected_surrogate_cells':projected,'sequences':len(self.inputs)}
         return tuple(p.state.grad for p in self.parameters)
 

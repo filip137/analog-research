@@ -18,6 +18,9 @@ def build_plan(config,teacher,source,output,python,worktree,reuse=None,source_de
     teacher=Path(teacher).resolve();source=Path(source).resolve();output=Path(output).resolve()
     if sha256_file(teacher)!=config.teacher_sha256 or sha256_file(source)!=config.source_sha256:
         raise ValueError('Expected the exact pinned teacher and std3 initialization inputs.')
+    benchmark = config.stage == 'hwa_precision_benchmark'
+    if benchmark and (not reuse or source_deployments):
+        raise ValueError('Precision benchmarking requires a verified mapped bundle and no deployments.')
     files={}
     stages=[]
     upstream={'stage':'prepare','artifact_kind':'mapped_weights'}
@@ -29,7 +32,13 @@ def build_plan(config,teacher,source,output,python,worktree,reuse=None,source_de
             raise ValueError('Expected a complete hash-verified reuse bundle.')
         matches=[a for a in result['artifacts'] if a['kind']=='mapped_weights']
         if len(matches)!=1: raise ValueError('Expected exactly one mapped artifact in reuse bundle.')
-        path=run/matches[0]['path'];payload=pinned_load(path,matches[0]['sha256'])
+        path=run/matches[0]['path']
+        if benchmark:
+            import torch
+            # inspect_run above verified the artifact. Only read metadata on the login node.
+            payload=torch.load(path,map_location='cpu',weights_only=True,mmap=True)
+        else:
+            payload=pinned_load(path,matches[0]['sha256'])
         expected={'teacher_sha256':config.teacher_sha256,'source_sha256':config.source_sha256,
                   'initialization':config.initialization,'solver':asdict(config.solver)}
         old=parse_config(json.loads((run/'config.resolved.json').read_text()))
@@ -41,7 +50,7 @@ def build_plan(config,teacher,source,output,python,worktree,reuse=None,source_de
         files['prepare.json']=asdict(replace(config,stage='prepare'))
         stages.append({'id':'prepare','case_id':'prepare','target':'local','command':'train','config':'prepare.json',
                        'inputs':{'teacher_weights':{'path':str(teacher)},'weights':{'path':str(source)}}})
-    files['hwa.json']=asdict(replace(config,stage='hwa'))
+    files['hwa.json']=asdict(config if benchmark else replace(config,stage='hwa'))
     stages.append({'id':'hwa','case_id':config.training.arm,'target':'local','command':'train','config':'hwa.json',
                    'depends_on':[] if reuse else ['prepare'],
                    'inputs':{'teacher_weights':{'path':str(teacher)},'weights':upstream}})

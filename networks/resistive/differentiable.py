@@ -38,9 +38,14 @@ def coefficients(g1, g2, settings):
     return dh, do
 
 
+def rail_product(voltage, conductance):
+    # In the FP16 timing arm only conductance matmuls use half inputs.
+    return (voltage.to(conductance.dtype) @ conductance).to(voltage.dtype)
+
+
 def sweep(drive, output, g2, dh, do, settings):
-    hidden = diode((drive + settings.current_amp * (output @ g2.T)) / dh)
-    output = settings.voltage_amp * (hidden @ g2) / do
+    hidden = diode((drive + settings.current_amp * rail_product(output, g2.T)) / dh)
+    output = settings.voltage_amp * rail_product(hidden, g2) / do
     return hidden, output
 
 
@@ -50,13 +55,16 @@ class DifferentiableDrn(nn.Module):
     def __init__(self, settings=DrnSettings()):
         super().__init__()
         self.settings = settings
+        self.fp16_update_products = False
 
     def _solve(self, x, g1, g2, hidden_current, input_multiplier, output_multiplier):
         s = self.settings
         dh, do = coefficients(g1, g2, s)
         rails = torch.cat((x, -x), dim=-1) * s.input_gain * input_multiplier
         # Signed digital bias currents bypass the input gain calibration.
-        drive = rails @ g1 + hidden_current
+        if self.fp16_update_products and self.training:
+            g1, g2 = g1.half(), g2.half()
+        drive = rail_product(rails, g1) + hidden_current
         output = x.new_zeros((x.shape[0], g2.shape[1]))
         with torch.no_grad():
             for _ in range(s.settling_iterations):

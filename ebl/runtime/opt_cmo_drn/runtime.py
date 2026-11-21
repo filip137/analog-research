@@ -188,6 +188,9 @@ def run_train(request):
     if c.stage=='retention':
         from ebl.runtime.opt_cmo_drn.retention import run
         return run(request)
+    if c.stage=='hwa_precision_benchmark':
+        from ebl.runtime.opt_cmo_drn.precision_benchmark import run
+        return run(request)
     if c.stage=='recovery_benchmark':
         from ebl.runtime.opt_cmo_drn.microbatch_benchmark import run_benchmark
         return run_benchmark(request)

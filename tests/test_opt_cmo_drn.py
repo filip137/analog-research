@@ -447,3 +447,21 @@ def test_cuda_offloaded_adam_matches_resident_adam_after_two_updates():
         results.append([p.detach().cpu() for p in student.parameters()])
     for resident, offloaded in zip(*results):
         torch.testing.assert_close(resident, offloaded, rtol=0, atol=0)
+
+
+def test_precision_benchmark_half_products_preserve_fp32_state_and_eval():
+    model, teacher = tiny_model(checkpointing=True)
+    tokens = torch.tensor([[1, 2, 3, 4]])
+    model.eval()
+    expected = model(tokens)
+    for block in model.blocks:
+        block.solver.fp16_update_products = True
+    torch.testing.assert_close(model(tokens), expected, rtol=0, atol=0)
+    model.train()
+    config = replace(Config(), training=replace(Training(), effective_batch=1, microbatch=1))
+    core = CoreStep(model, teacher, make_optimizer(model, config), config,
+                    torch.Generator().manual_seed(7), loss_scale=128)
+    core.set_input(tokens)
+    grads = core.compute_gradient()
+    assert all(g.dtype == torch.float32 and torch.isfinite(g).all() for g in grads)
+    core.step()
