@@ -199,7 +199,7 @@ def _cross_validate(lifecycle: Lifecycle) -> None:
                 or lifecycle.deployment.encoding != 'active_reference_pair'
                 or lifecycle.program_verify.method != 'gaussian_endpoint'):
             raise config_error('fault_tuning', 'to use the OPT CMO pair mapping without other recovery branches or read noise', tuning.to_dict())
-        if tuning.assignment_seed not in devices.assignment_seeds:
+        if not hasattr(tuning, "task_adaptation") and tuning.assignment_seed not in devices.assignment_seeds:
             raise config_error('fault_tuning.assignment_seed', 'to select a declared assignment', tuning.assignment_seed)
         if len(lifecycle.defects.cases) != 1 or lifecycle.defects.persistence != 'permanent':
             raise config_error('fault_tuning', 'to declare exactly one permanent defect case', lifecycle.defects.to_dict())
@@ -559,7 +559,11 @@ def _selection(raw: Any, lifecycle: Lifecycle) -> StageSelection:
         if seed is not None:
             raise config_error("stage.array_seed", "to be null for an HWA stage", seed)
         return StageSelection(kind, arm)
-    if type(seed) is not int or seed not in lifecycle.devices.assignment_seeds:
+    assignment_seeds = lifecycle.devices.assignment_seeds
+    if kind == "fault_tuning" and hasattr(lifecycle.fault_tuning, "task_adaptation"):
+        # Downstream chips have separate identities from the immutable upstream HWA source recipe.
+        assignment_seeds = (lifecycle.fault_tuning.assignment_seed,)
+    if type(seed) is not int or seed not in assignment_seeds:
         raise config_error("stage.array_seed", "to name a declared assignment seed", seed)
     if kind in ("retention", "compensate") and (lifecycle.retention is None or seed not in lifecycle.retention.assignment_seeds):
         raise config_error("stage", "to select a declared retention assignment", raw)

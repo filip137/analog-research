@@ -56,11 +56,17 @@ def test_native_supervised_routes_and_costs(tmp_path, monkeypatch):
     doc = hold_only(TWO_SIDED)
     cfg = doc["fault_tuning"]
     doc["fault_tuning"] = {k: cfg[k] for k in ("source_sha256", "assignment_seed", "mapping", "fault_rewrite")}
+    # The source retains its complete historical devices section with disjoint new recipient identities.
+    new_seed = 99910
+    assert new_seed not in doc["devices"]["assignment_seeds"]
+    doc["fault_tuning"]["assignment_seed"] = new_seed
     doc["fault_tuning"]["task_adaptation"] = spec
     lc = parse_lifecycle(doc)
     assert parse_lifecycle(lc.to_dict()).digest() == lc.digest()
+    from ebl.schema.lifecycle import _selection
+    assert _selection({"kind": "fault_tuning", "hwa_arm": lc.hwa.arms[0].arm_id, "array_seed": new_seed}, lc).array_seed == new_seed
     net = OptMlpSuffix(tiny_teacher(), 2, 8, "per_output_channel_absmax", "model").requires_grad_(False)
-    stage = NS(lifecycle=lc, network=net, device=torch.device("cpu"), selection=NS(array_seed=cfg["assignment_seed"]),
+    stage = NS(lifecycle=lc, network=net, device=torch.device("cpu"), selection=NS(array_seed=new_seed),
                store=NS(append_metric=lambda obj: None), run_dir=tmp_path)
     result, _ = run_supervised(Context(stage), net.q.detach().clone())
     assert set(result["scores"]) == set(ROUTES) | {"ideal","mapped","hold","calibration"}

@@ -54,7 +54,6 @@ def main():
                          "evidence_class": "exploratory_model_based"},
                fault_tuning={k: old[k] for k in ("source_sha256", "mapping", "fault_rewrite")})
     doc["fault_tuning"].update(assignment_seed=seed, task_adaptation=t)
-    doc["devices"]["assignment_seeds"] = [seed]
     config = specdir / "lifecycle.json"
     write(config, doc)
     synth = doc["data"]["corpus"]
