@@ -7,6 +7,7 @@ WikiText test 1,024, generated 384), source, teacher and solver are the paper-gr
 One extra check case, ``drn6-ratio3-r00-271001``, replays the CMO exp-001 DRN6 ratio3
 deployment (map 271001, 0 %) to reproduce its mapped-target and release KL.
 """
+import argparse
 import json
 from pathlib import Path
 import sys
@@ -41,10 +42,22 @@ def cases():
 
 
 def main():
-    TARGET.mkdir(parents=True, exist_ok=True)
-    for cell, (model, mapping, rate, assignment) in cases():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output', type=Path, default=TARGET)
+    parser.add_argument('--assignment', type=int)
+    parser.add_argument('--model', choices=('drn6','drn12'))
+    parser.add_argument('--rate', choices=RATES)
+    parser.add_argument('--mapping', choices=tuple(MAPPINGS))
+    args = parser.parse_args()
+    selected = (args.model, args.mapping, args.rate, args.assignment)
+    if any(v is not None for v in selected) and not all(v is not None for v in selected):
+        parser.error('An explicit case requires model, mapping, rate and assignment.')
+    requested = ([(f'{args.model}-{args.mapping}-r{args.rate}-{args.assignment}', selected)]
+                 if args.assignment is not None else cases())
+    args.output.mkdir(parents=True, exist_ok=True)
+    for cell, (model, mapping, rate, assignment) in requested:
         for stage, suffix in (('deploy', '-deploy'), ('tune', '')):
-            out = TARGET / f'{cell}{suffix}.json'
+            out = args.output / f'{cell}{suffix}.json'
             out.write_text(json.dumps(build(model, mapping, rate, stage, assignment), indent=2, sort_keys=True) + '\n')
             print(out)
 

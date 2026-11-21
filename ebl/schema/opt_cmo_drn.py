@@ -71,6 +71,32 @@ class ExecutionConfig(Config):
 
 
 @dataclass(frozen=True)
+class TaskAdaptation:
+    task: str = 'pubmed'
+    task_sha256: str = ''
+    wiki_sha256: str = ''
+    # A run performs exactly one of ranking, fitting, receiving, local training, or controls.
+    action: str = 'controls'
+    method: str = 'lora'
+    information: str = 'recipient'
+    fraction: float = 0.01
+    lr: float = 0.001
+    steps: int = 128
+    seed: int = 41
+    microbatch: int = 2
+    eval_microbatch: int = 4
+    split: str = 'development'
+    limit: int = 0
+    fisher_items: int = 1024
+    calibration_items: int = 64
+
+
+@dataclass(frozen=True)
+class TaskConfig(Config):
+    task_adaptation: TaskAdaptation = TaskAdaptation()
+
+
+@dataclass(frozen=True)
 class FaultTuningConfig(Config):
     """The fault-paper screen's own stage; a subclass keeps every older config digest unchanged."""
     fault_tuning: object=None
@@ -145,7 +171,8 @@ def _parse(cls,raw,path):
 
 def parse_config(raw):
     mapping=isinstance(raw,Mapping)
-    c=_parse(DriftTuningConfig if mapping and 'drift_tuning' in raw else
+    c=_parse(TaskConfig if mapping and 'task_adaptation' in raw else
+             DriftTuningConfig if mapping and 'drift_tuning' in raw else
              FaultTuningConfig if mapping and 'fault_tuning' in raw else
              ExecutionConfig if mapping and 'hwa_execution' in raw else Config,raw,'config')
     if isinstance(c, ExecutionConfig):
@@ -153,8 +180,27 @@ def parse_config(raw):
         if (execution.microbatch < 1 or execution.microbatch > c.training.effective_batch
                 or execution.token_chunk_size < 1):
             raise ConfigError('Invalid HWA update microbatch or token chunk size.')
-    if c.experiment_id!=EXPERIMENT_ID or c.schema_version!=1 or c.stage not in ('prepare','hwa','deploy','recover','recovery_benchmark','hwa_precision_benchmark','hwa_tf32_benchmark','hwa_speed_benchmark','retention','drift_recovery','fault_tuning'):
+    if c.experiment_id!=EXPERIMENT_ID or c.schema_version!=1 or c.stage not in ('prepare','hwa','deploy','recover','recovery_benchmark','hwa_precision_benchmark','hwa_tf32_benchmark','hwa_speed_benchmark','retention','drift_recovery','fault_tuning','task_adaptation'):
         raise ConfigError('Expected opt_cmo_drn_hwa.v1 schema 1 and a supported stage.')
+    if (c.stage == 'task_adaptation') != isinstance(c, TaskConfig):
+        raise ConfigError('Task adaptation requires its own stage and settings.')
+    if isinstance(c, TaskConfig):
+        t = c.task_adaptation
+        if (not c.deployment.mapped or c.deployment.mapping_scale != 3
+                or (c.deployment.fault_kind, c.deployment.fault_rate) not in (('none', 0.), ('random', .03))):
+            raise ConfigError('Task adaptation requires a ratio3 fault-free or random 3% deployment.')
+        if (t.task not in ('hellaswag', 'boolq', 'pubmed') or t.split not in ('development', 'test')
+                or t.method not in ('lora', 'child', 'full') or t.fraction not in (.01, .10)
+                or t.action not in ('rank', 'fit', 'receive', 'learn', 'controls')
+                or t.information not in ('clean', 'proxy', 'recipient')
+                or (t.action == 'fit' and t.information == 'recipient')
+                or (t.action in ('learn', 'receive', 'controls') and t.information != 'recipient')
+                or (t.action == 'learn' and t.method == 'full')
+                or (t.action == 'rank' and t.method != 'child')
+                or min(t.microbatch, t.eval_microbatch, t.lr, t.steps, t.fisher_items, t.calibration_items) <= 0
+                or t.steps > 128 or t.limit < 0 or t.fisher_items > 1024 or t.calibration_items > 64
+                or any(len(h) != 64 or set(h) - set('0123456789abcdef') for h in (t.task_sha256, t.wiki_sha256))):
+            raise ConfigError('Invalid task adaptation settings or missing pinned input.')
     if (c.stage=='retention') != (c.retention is not None):
         raise ConfigError('The retention stage requires its explicit settings; other stages omit them.')
     if (c.stage=='drift_recovery') != (c.drift_recovery is not None):
@@ -174,7 +220,7 @@ def parse_config(raw):
         from methods.config.fault_tuning import DRIFT_ONLY
         if getattr(c,'drift_tuning',None) is None and any(a.method in DRIFT_ONLY for a in f.arms):
             raise ConfigError(f'Arm methods {DRIFT_ONLY} run only in the drift-tuning stage.')
-    if c.deployment.mapped and (c.stage not in ('deploy','fault_tuning') or getattr(c,'drift_tuning',None) is not None):
+    if c.deployment.mapped and (c.stage not in ('deploy','fault_tuning','task_adaptation') or getattr(c,'drift_tuning',None) is not None):
         raise ConfigError('An explicit deployment mapping_scale is applied only by the deploy and fault_tuning '
                           'stages; drift tuning declares its own drift_tuning.mapping_scale.')
     if getattr(c,'drift_tuning',None) is not None:

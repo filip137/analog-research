@@ -176,6 +176,9 @@ def _store(request):
 
 def run_train(request):
     c=request.spec
+    if c.stage == 'task_adaptation':
+        from ebl.runtime.opt_cmo_drn.task_adaptation import run
+        return run(request)
     if c.stage=='fault_tuning' and getattr(c,'drift_tuning',None) is not None:
         from ebl.runtime.opt_cmo_drn.drift_tuning import run
         return run(request)

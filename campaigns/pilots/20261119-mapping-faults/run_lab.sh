@@ -9,28 +9,7 @@ src=$1; out=$2; corpora=$3; weights=$4; teacher=$5; limit=$6; shift 6
 py=/home/filip/miniconda3/envs/py312/bin/python
 pilot=$src/campaigns/pilots/20261119-mapping-faults
 configs=${OPT_DRN_MAPPING_CONFIGS:-$src/examples/opt_cmo_drn/mapping_faults}
-uuid=$(nvidia-smi --query-gpu=uuid --format=csv,noheader | head -1)
-lock=$HOME/.cache/run-watch/shared-queue/gpus/$uuid.lock
-mkdir -p "$(dirname "$lock")"
-queue_lock=
-if [[ -n ${RUN_WATCH_ATTEMPT:-} ]]; then
-    [[ ${CUDA_VISIBLE_DEVICES:-} == "$uuid" ]] || { echo "Queue GPU mismatch"; exit 75; }
-    queue_lock=${RUN_WATCH_WORKER_ROOT:-$HOME/.local/state/run-watch/queue-workers}/gpus/$uuid.lock
-    queue_fd=
-    for fd in /proc/$$/fd/*; do
-        if [[ $fd -ef $queue_lock ]]; then queue_fd=${fd##*/}; break; fi
-    done
-    [[ -n $queue_fd ]] || { echo "Missing inherited GPU lock"; exit 75; }
-    flock -xn "$queue_fd" || { echo "Queue GPU lock held"; exit 75; }
-fi
-if [[ ! $lock -ef $queue_lock ]]; then
-    exec {legacy_fd}>>"$lock"
-    flock -xn "$legacy_fd" || { echo "Legacy GPU lock held"; exit 75; }
-fi
-if [ -n "$(nvidia-smi -i "$uuid" --query-compute-apps=pid --format=csv,noheader)" ]; then echo "GPU occupied"; exit 75; fi
-export CUDA_VISIBLE_DEVICES=$uuid OMP_NUM_THREADS=8 MKL_NUM_THREADS=8
-export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
-export CUBLAS_WORKSPACE_CONFIG=:4096:8
+. "$pilot/gpu_env.sh"
 export OPT_DRN_SOURCE_SNAPSHOT=$src/source_snapshot.json EBL_CORPUS_ROOT=$corpora OPT_DRN_RUN_ID=run
 cd "$src"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader

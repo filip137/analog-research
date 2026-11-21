@@ -68,6 +68,8 @@ class TrainRequest:
     teacher_weights: Optional[Path] = None
     deployment: Optional[Path] = None
     device_state: Optional[Path] = None
+    task_fit: Optional[Path] = None
+    task_masks: Optional[Path] = None
 
 
 @dataclass(frozen=True)
@@ -221,6 +223,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     train.add_argument("--device-state", type=Path,
                        help="explicit saved CMO DRN physical state for matched recovery")
+
+    train.add_argument("--task-fit", type=Path, help="offline OPT DRN task fit to deploy")
+    train.add_argument("--task-masks", type=Path, help="frozen OPT DRN task Fisher ranking")
 
     linspace = commands.add_parser(
         "linspace",
@@ -592,7 +597,7 @@ def _protocol_payload(
                     else (["--weights", "--resume"] if opt_drn_only else ["--weights", "--base-weights", "--resume"])
                 ),
                 "optional_input_options": (
-                    (["--device-state"] if opt_drn_only else [])
+                    (["--device-state", "--task-fit", "--task-masks"] if opt_drn_only else [])
                     if reset_only or opt_drn_only
                     else [
                         "--device-data",
@@ -603,6 +608,9 @@ def _protocol_payload(
                         ),
                         "--teacher-weights",
                         "--deployment",
+                        *(["--device-state", "--task-fit", "--task-masks"] if any(
+                            d.experiment_id == "opt_cmo_drn_hwa.v1" for d in definitions
+                        ) else []),
                     ]
                 ),
             },
@@ -1006,6 +1014,8 @@ def _dispatch(
             args.config,
             RunMode.TRAIN,
         )
+        if (args.task_fit or args.task_masks) and getattr(spec, "stage", None) != "task_adaptation":
+            raise CliUsageError("Task fits and masks belong to the OPT DRN task adaptation stage.")
         request = TrainRequest(
             definition=definition,
             spec=spec,
@@ -1020,6 +1030,8 @@ def _dispatch(
             teacher_weights=args.teacher_weights,
             deployment=args.deployment,
             device_state=args.device_state,
+            task_fit=args.task_fit,
+            task_masks=args.task_masks,
         )
         return _handler_result(
             _require_handler(handlers.train, "train"),
