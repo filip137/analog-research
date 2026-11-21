@@ -51,12 +51,19 @@ def test_offline_fit_deploys_on_real_bank(cpu_threads,method):
     view = bank.view(model)
     calibration = s7.output_calibration(model,view,tokens,'cpu',1)
     calibration.attach(model)
+    before_calibration = {k:t.clone() for k,t in calibration.state_dict().items()}
     masks = [torch.zeros_like(p,dtype=torch.bool) for p in model.parameter_groups()[0]] if method=='child' else None
     if masks:
         for m in masks:
             m.flatten()[::7] = True
     ad, _ = s7.train(model,bank,lambda:s7.proxy_view(model,bank),bundle,s,masks,False,lambda *_:None)
     fit = s7.export_fit(model,method,ad,masks)
+    assert all(torch.equal(t,before_calibration[k]) for k,t in calibration.state_dict().items())
+    if method == 'full':
+        assert fit['model'].keys() == receiver.state_dict().keys()
+        for name in ('digital.embed_tokens.weight','digital.layers.0.self_attn.q_proj.weight',
+                     'digital.layers.0.fc1.weight','digital.final_layer_norm.weight','blocks.0.u2'):
+            assert not torch.equal(fit['model'][name],receiver.state_dict()[name]), name
     if ad: ad.detach_hooks()
     calibration.detach_hooks()
     initial = [a.held.clone() for a in bank.arrays]
