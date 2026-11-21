@@ -328,7 +328,7 @@ def _cross_validate(lifecycle: Lifecycle) -> None:
             raise config_error("task", f"to be absent; {family} defines no labelled task", task.to_dict())
         if retention is not None or lifecycle.recovery_views is not None:
             raise config_error("task", "to be absent with retention, compensation or recovery views", task.to_dict())
-    if lifecycle.question.primary_metric in TASK_PRIMARY_METRICS and task is None:
+    if lifecycle.question.primary_metric in TASK_PRIMARY_METRICS and task is None and not hasattr(tuning, "task_adaptation"):
         raise config_error("question.primary_metric", "to name a task metric only with a declared task",
                            lifecycle.question.primary_metric)
     if lifecycle.question.primary_metric not in PRIMARY_METRICS[family]:

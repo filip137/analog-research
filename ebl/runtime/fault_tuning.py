@@ -40,6 +40,9 @@ def pinned_path(entry) -> Path:
 
 def pinned_inputs(lifecycle) -> list[dict]:
     cfg = lifecycle.fault_tuning
+    if hasattr(cfg, "task_adaptation"):
+        return [{"role": f"task_adaptation.{name}", "path": str(pinned_path(pin)), "sha256": pin["sha256"]}
+                for name in ("task", "retention", "selection") if (pin := cfg.task_adaptation[name]) is not None]
     entries = [("fault_deployment", cfg.deployment)]
     if cfg.analog_lora is not None:
         entries.append(("analog_lora_b_scale", cfg.analog_lora["b_scale"]))
@@ -723,6 +726,9 @@ def run(stage):
     target = network.q.detach().clone()
     ctx = Context(stage)
     store = stage.store
+    if hasattr(cfg, "task_adaptation"):
+        from ebl.runtime.supervised_adaptation import run_supervised
+        return run_supervised(ctx, target)
     started = time.monotonic()
     ctx.recovery = ft.cohort(lc, cfg.recovery)
     ctx.development = ft.cohort(lc, cfg.development)

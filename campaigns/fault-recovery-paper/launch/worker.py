@@ -138,6 +138,42 @@ def validate_measurements(spec, rows, *, sequence_length=256):
                 raise ValueError(f"Held-out scoring changed state: {cohort['name']}.")
 
 
+def validate_task(spec, rows, historical=None):
+    tuning = spec["task_adaptation"]
+    if rows.get("schema") != "fault_tuning.supervised.v1" or rows.get("phase") != tuning["phase"]:
+        raise ValueError("Invalid supervised result schema or phase.")
+    scores = rows["scores"]
+    controls = {"ideal", "mapped", "hold", "calibration"}
+    if set(scores) != controls | set(tuning["routes"]) or set(rows["selections"]) != set(tuning["routes"]):
+        raise ValueError("Incomplete task adaptation routes.")
+    for route, row in scores.items():
+        scoreset = row["scores"]
+        primary = scoreset["target"].get("accuracy_percent", scoreset["target"].get("nll"))
+        retention = scoreset["retention"]
+        if not all(finite(x) for x in (primary, retention["nll"], retention["teacher_kl"])):
+            raise ValueError(f"Invalid supervised endpoint for {route}.")
+        cost = row["cost"]
+        if route in controls or route.endswith("lora"):
+            if cost["attempted_device_writes"]:
+                raise ValueError(f"Zero-write arm {route} attempted writes.")
+        elif cost["out_of_mask_attempts"] != 0:
+            raise ValueError(f"{route} attempted out-of-mask writes.")
+    if tuning["phase"] != "evaluation":
+        for route in tuning["routes"]:
+            candidates = [r for r in rows["trials"] if r["route"] == route]
+            expected = (1 if tuning["phase"] == "canary" else 3) * (2 if route.startswith("offline") else 1)
+            expected *= 2 if route == "offline_full" else 1
+            if len(candidates) != expected or any(r["train"]["steps"] != tuning["steps"] for r in candidates):
+                raise ValueError(f"Incomplete supervised development grid for {route}.")
+    if historical:
+        score = rows["historical_wikitext_hold"]
+        if (score["examples"] != 1024 or rows["deployment"]["q_sha256"] != historical["apparent"]
+                or not math.isclose(score["teacher_kl"], historical["teacher_kl"], abs_tol=historical["atol"], rel_tol=0)):
+            raise ValueError(f"Historical mapped hold replay mismatch: {score}, {rows['deployment']['q_sha256']}.")
+    return {r: v["scores"]["target"].get("accuracy_percent", v["scores"]["target"].get("nll"))
+            for r, v in scores.items()}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('manifest', type=Path)
@@ -162,6 +198,8 @@ def main():
     root = Path(m['output']) / args.unit
     root.mkdir(parents=True, exist_ok=True)
     config = source / m['units'][args.unit]
+    if m.get("config_sha256") and digest(config) != m["config_sha256"]:
+        raise ValueError("Pinned lifecycle has changed.")
     config_doc = read(config)
     spec = config_doc['fault_tuning']
     plan = root / 'plan'
@@ -194,6 +232,13 @@ def main():
         run = complete[-1].parent
         call(sys.executable, '-m', 'ebl', 'runs', 'inspect', run, '--verify-artifacts', '--require-complete')
         rows = read(run / 'measurements.json')
+        if "task_adaptation" in spec:
+            scores = validate_task(spec, rows, m.get("historical"))
+            write(root / "complete.json", {"schema": "fault_tuning.supervised.unit.v1", "unit": args.unit,
+                  "run": str(run), "arms": scores, "source_sha256": digest(receipt),
+                  "manifest_sha256": digest(args.manifest), "measurements_sha256": digest(run / "measurements.json"),
+                  "completed": time.time()})
+            return
         validate_measurements(spec, rows, sequence_length=config_doc['data']['sequence_length'])
         summary = read(run / 'summary.json')
         if m.get('mapped_fault_recovery'):

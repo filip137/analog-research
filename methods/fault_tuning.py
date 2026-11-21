@@ -192,6 +192,9 @@ class FaultTuning:
 
     @classmethod
     def parse(cls, raw):
+        if isinstance(raw, dict) and "task_adaptation" in raw:
+            from methods.task_tuning_config import TaskTuning
+            return TaskTuning.parse(raw)
         keys = ("source_sha256", "assignment_seed", "fault_rewrite", "recovery", "development", "targets",
                 "schedule", "write_law", "fisher", "lora_seed", "analog_lora", "deployment", "arms")
         drift = None
