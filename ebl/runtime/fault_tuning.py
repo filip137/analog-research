@@ -580,7 +580,10 @@ def run_drift_arm(ctx, arm, refs):
                     t0 = time.monotonic()
                     ctx.fisher = compute_fisher(ctx)
                     ctx.fisher_seconds = time.monotonic() - t0
-                mask = ft.child_mask(ctx.fisher, ctx.layout, arm.reserve_p)
+                if arm.child_mask_scope == "global":
+                    mask = ft.global_child_mask(ctx.fisher, arm.reserve_p)
+                else:
+                    mask = ft.child_mask(ctx.fisher, ctx.layout, arm.reserve_p)
             acceptance, noise = ctx.lc.program_verify.acceptance_percent, ctx.lc.devices.noise_scale
             if legacy:
                 writer = ThresholdedWriteAdam(base, learning_rate=arm.learning_rate,
@@ -672,6 +675,13 @@ def run_drift_arm(ctx, arm, refs):
                         writes_outside_mask=int(writes[~mask].sum()))
             if cost["writes_outside_mask"]:
                 raise RuntimeError("Child-Tuning_D wrote outside its fixed mask.")
+            if arm.child_mask_scope == "global":
+                cost["child_mask_scope"] = arm.child_mask_scope
+                cost["mask_arrays"] = [
+                    {"name": spec.name, "weights": spec.size,
+                     "selected": int(mask[spec.offset:spec.offset + spec.size].sum())}
+                    for spec in ctx.layout
+                ]
         if writer is None and (tensor_hash(plant.read(None)) != start_hash or base.cost() != ctx.deployed_cost):
             raise RuntimeError(f"The digital arm {arm.label} changed the base deployment.")
         digital = sum(p.numel() for p in parameters)

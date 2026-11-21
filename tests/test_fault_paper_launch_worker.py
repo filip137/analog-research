@@ -198,6 +198,30 @@ def test_drift_rows_are_validated_in_native_order():
     worker.validate_measurements(spec, rows)
 
 
+@pytest.mark.parametrize('mutation', [None, 'mask-hash', 'size', 'out-of-mask'])
+def test_global_drift_child_requires_exact_masks_and_no_writes_outside(mutation):
+    spec, rows = drift_contract()
+    arm = spec['arms'][1]
+    arm['child_mask_scope'] = 'global'
+    spec['arms'].append({**arm, 'label': 'CT'})
+    spec['arms'][-1].pop('no_drift')
+    rows[2].update(reserve_p=.1, cost={
+        'child_mask_scope': 'global', 'mask_sha256': 'a' * 64, 'mask_weights': 3,
+        'mask_arrays': [{'name': 'layer1', 'weights': 15, 'selected': 0},
+                        {'name': 'layer2', 'weights': 15, 'selected': 3}],
+        'devices': 60, 'writes_outside_mask': 0,
+    })
+    rows.append({**copy.deepcopy(rows[2]), 'label': 'CT'})
+    if mutation is None:
+        worker.validate_measurements(spec, rows)
+        return
+    field, value = {'mask-hash': ('mask_sha256', 'b' * 64), 'size': ('mask_weights', 4),
+                    'out-of-mask': ('writes_outside_mask', 1)}[mutation]
+    rows[-1]['cost'][field] = value
+    with pytest.raises(ValueError, match='Global Child-Tuning mask mismatch'):
+        worker.validate_measurements(spec, rows)
+
+
 @pytest.mark.parametrize('mutation', ['order', 'grid', 'nan', 'final', 'updates', 'hold_updates', 'release'])
 def test_drift_rows_fail_closed(mutation):
     spec, rows = drift_contract()

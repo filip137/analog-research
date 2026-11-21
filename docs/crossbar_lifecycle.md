@@ -894,6 +894,15 @@ Never add a per-study runtime or bypass the stages for one experiment.
 
 ### Custom drift recovery execution
 
+Within `fault_tuning.drift`, a `child_tuning_d` arm can declare
+`child_mask_scope: "global"` to rank logical weight indices across all analog
+matrices by the release-state Fisher scores. `reserve_p` rounds once across
+the pooled population, and cutoff ties follow flat layout order. The mask is
+fixed throughout recovery. Both physical legs of a selected logical weight
+remain available to the existing two-sided writer. The arm reports its mask
+hash, selected counts by matrix and writes outside the mask, which must be
+zero. Without this field, the historical per-matrix selection is unchanged.
+
 The optional `drift_recovery` branch uses the shared writable custom drift engine
 and a frozen HWA source. `curve_validation_sequences` optionally selects a fixed
 prefix for trajectory measurements while the full `validation_sequences` cohort

@@ -68,6 +68,7 @@ def validate_drift_measurements(spec, rows):
     if [row.get('label') for row in rows] != [arm['label'] for arm in order]:
         raise ValueError('Missing, duplicate or unexpected arms.')
     ages, steps = spec['drift']['evaluation_seconds'], spec['schedule']['steps']
+    global_masks = {}
     for arm, row in zip(order, rows):
         grid, losses = row.get('grid'), row.get('train_losses', [])
         if row.get('method') != arm['method']:
@@ -79,8 +80,40 @@ def validate_drift_measurements(spec, rows):
         if not isinstance(losses, list) or (len(losses) != (0 if arm['method'] == 'hold_fault_aware' else steps)
                                             or not all(finite(loss) for loss in losses)):
             raise ValueError(f"Incomplete training updates for arm {arm['label']}.")
+        if arm.get('child_mask_scope') == 'global':
+            cost, fraction = row['cost'], arm['reserve_p']
+            arrays = cost['mask_arrays']
+            mask = cost['mask_sha256']
+            if (row.get('reserve_p') != fraction or cost.get('child_mask_scope') != 'global'
+                    or cost.get('writes_outside_mask') != 0 or not arrays
+                    or not isinstance(mask, str) or len(mask) != 64
+                    or len({a['name'] for a in arrays}) != len(arrays)
+                    or any(not 0 <= a['selected'] <= a['weights'] for a in arrays)
+                    or sum(a['weights'] for a in arrays) * 2 != cost['devices']
+                    or sum(a['selected'] for a in arrays) != cost['mask_weights']
+                    or cost['mask_weights'] != max(1, round(fraction * (cost['devices'] // 2)))
+                    or global_masks.setdefault(fraction, mask) != mask):
+                raise ValueError(f"Global Child-Tuning mask mismatch for arm {arm['label']}.")
     if len({row['grid'][0]['teacher_kl'] for row in rows}) != 1:
         raise ValueError('Arms do not start from one released deployment.')
+
+
+def drift_control_reference(summary, rows):
+    """Matched identities and exact untreated and release-twin grids."""
+    fields = ('assignment_seed', 'case', 'source_sha256', 'recovery_cohort_sha256',
+              'development_cohort_sha256', 'samples_sha256', 'apparent_sha256', 'deployment_reports',
+              'deployment_gpu', 'deployment_torch')
+    records = summary['drift']['records']
+    return {
+        'identity': {name: summary[name] for name in fields},
+        'clean_reference': {name: records[name] for name in ('mapping', 'source_ideal_teacher_kl',
+                            'clean_mapped_readout_teacher_kl', 'deployed_release_teacher_kl')},
+        'controls': {
+            row['label']: {'initial_apparent_sha256': row['initial_apparent_sha256'],
+                           'grid': [[p['age_seconds'], p['teacher_kl']] for p in row['grid']]}
+            for row in rows if row['method'] == 'hold_fault_aware'
+        },
+    }
 
 
 def validate_measurements(spec, rows, *, sequence_length=256):
@@ -241,6 +274,9 @@ def main():
             return
         validate_measurements(spec, rows, sequence_length=config_doc['data']['sequence_length'])
         summary = read(run / 'summary.json')
+        matched_controls = m.get('matched_drift_control', {}).get(args.unit)
+        if matched_controls is not None and drift_control_reference(summary, rows) != matched_controls:
+            raise ValueError('Deployment identities or untreated controls differ from the original drift run.')
         if m.get('mapped_fault_recovery'):
             apparent = summary['apparent_sha256']['fault_aware']
             if any(row['initial_apparent_sha256'] != apparent for row in rows):
@@ -263,6 +299,7 @@ def main():
               'arms': {r['label']: r['final']['teacher_kl'] for r in rows},
               'samples_sha256': summary['samples_sha256'], 'apparent_sha256': summary['apparent_sha256'],
               'gpu': summary['gpu'], 'source_sha256': digest(receipt), 'manifest_sha256': digest(args.manifest),
+              **({'matched_drift_control': True} if matched_controls is not None else {}),
               'completed': time.time()})
     except BaseException as error:
         write(root / f'failed-{job}.json', {'error': repr(error), 'time': time.time()})

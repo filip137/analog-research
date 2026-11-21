@@ -104,11 +104,13 @@ class Arm:
     rank: int | None = None
     reserve_p: float | None = None
     no_drift: bool = False  # drift block only: the arm reads the held state without the drift law
+    child_mask_scope: str | None = None  # absent retains historical per-matrix ranking
 
     def to_dict(self):
         out = {k: v for k, v in (("label", self.label), ("method", self.method),
                                  ("learning_rate", self.learning_rate), ("rank", self.rank),
-                                 ("reserve_p", self.reserve_p)) if v is not None}
+                                 ("reserve_p", self.reserve_p),
+                                 ("child_mask_scope", self.child_mask_scope)) if v is not None}
         if self.no_drift:
             out["no_drift"] = True
         return out
@@ -120,7 +122,8 @@ class Arm:
         method = raw["method"]
         keys = {"label", "method"} | ({"learning_rate"} if method in TRAINS else set()) \
             | ({"rank"} if method in LORA else set()) | ({"reserve_p"} if method == "child_tuning_d" else set()) \
-            | ({"no_drift"} if "no_drift" in raw else set())
+            | ({"no_drift"} if "no_drift" in raw else set()) \
+            | ({"child_mask_scope"} if method == "child_tuning_d" and "child_mask_scope" in raw else set())
         _exact(raw, keys, f"arm {raw.get('label')!r}")
         if "no_drift" in raw and raw["no_drift"] is not True:
             raise ValueError("Expected no_drift to be true when declared.")
@@ -128,12 +131,14 @@ class Arm:
         if not isinstance(label, str) or not label or not all(c.isalnum() or c in "-_." for c in label):
             raise ValueError("Expected a plain arm label.")
         p = raw.get("reserve_p")
-        if p is not None and not (type(p) in (int, float) and 0 < p < 1):
+        if method == "child_tuning_d" and not (type(p) in (int, float) and 0 < p < 1):
             raise ValueError("Expected 0 < reserve_p < 1.")
+        if "child_mask_scope" in raw and raw["child_mask_scope"] != "global":
+            raise ValueError("Expected global child_mask_scope when ranking across matrices.")
         return cls(label, method,
                    _float(raw["learning_rate"], "learning_rate") if "learning_rate" in raw else None,
                    _int(raw["rank"], "rank", 1) if "rank" in raw else None,
-                   None if p is None else float(p), "no_drift" in raw)
+                   None if p is None else float(p), "no_drift" in raw, raw.get("child_mask_scope"))
 
 
 DATA_KEYS = ("corpus", "corpus_sha256", "split", "start", "sequences", "seed", "cohort_sha256")
@@ -217,8 +222,9 @@ class FaultTuning:
         if drift is not None and mapping is not None:
             raise ValueError("Under drift the mapping is declared in drift.mapping, not fault_tuning.mapping.")
         if drift is None and isinstance(raw.get("arms"), list) and any(
-                isinstance(a, dict) and ("no_drift" in a or a.get("method") == "layernorm") for a in raw["arms"]):
-            raise ValueError("layernorm and no_drift arms require the drift block.")
+                isinstance(a, dict) and ("no_drift" in a or "child_mask_scope" in a or a.get("method") == "layernorm")
+                for a in raw["arms"]):
+            raise ValueError("layernorm, no_drift and child_mask_scope require the drift block.")
         rewrite = _exact(raw["fault_rewrite"], ("detection", "roles", "seed", "threshold_sigma"), "fault_rewrite")
         if rewrite["detection"] != "verify" or rewrite["roles"] != "pair":
             raise ValueError("Expected the verify-based pair rewrite.")
@@ -421,6 +427,19 @@ def child_mask(fisher, layout, reserve_p):
         part = fisher[spec.offset:spec.offset + spec.size]
         k = max(1, int(round(reserve_p * spec.size)))
         mask[spec.offset + part.topk(k).indices] = True
+    return mask
+
+
+def global_child_mask(fisher, reserve_p):
+    """Rank all logical weights together, breaking cutoff ties in flat layout order."""
+    if fisher.numel() == 0 or not torch.isfinite(fisher).all():
+        raise ValueError("Global Child-Tuning requires a nonempty set of finite Fisher scores.")
+    count = max(1, round(reserve_p * fisher.numel()))
+    cutoff = fisher.topk(count, sorted=False).values.min()
+    mask = fisher > cutoff
+    remaining = count - int(mask.sum())
+    ties = torch.nonzero(fisher == cutoff, as_tuple=True)[0]
+    mask[ties[:remaining]] = True
     return mask
 
 

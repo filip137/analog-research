@@ -8,6 +8,7 @@ import torch
 
 import hardware.arrays as devices
 import methods.drift_tuning as dt
+import methods.fault_tuning as ft
 import methods.programming.lifecycle as program_verify
 from ebl.schema.lifecycle import parse_lifecycle, stage_selections
 from hardware.config import _defects
@@ -337,3 +338,32 @@ def test_invalid_drift_arm_sets_are_rejected():
         doc["fault_tuning"]["arms"].append(arm)
         with pytest.raises(Exception):
             parse_lifecycle(doc)
+
+
+def test_global_child_mask_pools_scores_and_breaks_ties_in_layout_order():
+    fisher = torch.tensor([1., 0., 0., 0., 5., 5., 5., 5., 6., 9.])
+    selected = ft.global_child_mask(fisher, 0.3)
+    smaller = ft.global_child_mask(fisher, 0.1)
+    assert selected.nonzero().flatten().tolist() == [4, 8, 9]
+    assert smaller.nonzero().flatten().tolist() == [9]
+    assert not (smaller & ~selected).any()
+    with pytest.raises(ValueError, match="finite Fisher"):
+        ft.global_child_mask(torch.tensor([float("nan")]), 0.1)
+
+
+def test_global_child_lifecycle_opt_in_preserves_legacy_serialization():
+    raw = json.loads(FULL.read_text())
+    original = parse_lifecycle(raw).to_dict()["fault_tuning"]["arms"]
+    assert "child_mask_scope" not in next(a for a in original if a["label"] == "CT")
+    assert "child_mask_scope" not in next(a for a in original if a["label"] == "CT-nodrift")
+    for arm in raw["fault_tuning"]["arms"]:
+        if arm["method"] == "child_tuning_d":
+            arm["child_mask_scope"] = "global"
+    parsed = parse_lifecycle(raw)
+    assert [a.child_mask_scope for a in parsed.fault_tuning.arms if a.method == "child_tuning_d"] == [
+        "global", "global"
+    ]
+    assert parse_lifecycle(parsed.to_dict()).digest() == parsed.digest()
+    raw["fault_tuning"]["arms"][0]["child_mask_scope"] = "global"
+    with pytest.raises(Exception, match="Expected exactly"):
+        parse_lifecycle(raw)
