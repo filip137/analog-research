@@ -167,7 +167,7 @@ def validate_task(spec, rows, historical=None):
                 raise ValueError(f"Incomplete supervised development grid for {route}.")
     if historical:
         score = rows["historical_wikitext_hold"]
-        if (score["examples"] != 1024 or rows["deployment"]["q_sha256"] != historical["apparent"]
+        if (score["examples"] != 1024 or score["q_sha256"] != historical["apparent"]
                 or not math.isclose(score["teacher_kl"], historical["teacher_kl"], abs_tol=historical["atol"], rel_tol=0)):
             raise ValueError(f"Historical mapped hold replay mismatch: {score}, {rows['deployment']['q_sha256']}.")
     return {r: v["scores"]["target"].get("accuracy_percent", v["scores"]["target"].get("nll"))

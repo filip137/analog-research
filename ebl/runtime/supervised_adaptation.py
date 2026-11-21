@@ -338,13 +338,21 @@ def run_supervised(ctx, target):
         del package
     else:
         selections = {}
-    if phase == "canary" and ctx.seed == 271002:
+    if spec.get("historical"):
+        # Replay the archived V100 physical tensors. A CUDA seed recipe generates a different
+        # endpoint draw across accelerator models, even with the same assignment and noise law.
         cell.reset("ideal")
-        # The reference score is on the original 1024 WikiText test blocks, even for a short task canary.
-        cell.net.eval()
-        reference = evaluate(lambda t: cell.net(t, cell.chip.q), cell.retention["splits"]["test"], cell.device,
-                             spec["microbatch"], teacher_fn=lambda t: cell.net.teacher(t)[:, :-1])
-        out["historical_wikitext_hold"] = reference
+        archive = load(fault.pinned_path(spec["historical"]))
+        fault.check_deployment(ctx, archive, target)
+        state = archive["states"]["fault_aware"]
+        q = torch.cat([ctx.mapping.readout(x["g"].to(ctx.device)) for x in state["state"]["children"]])
+        q_sha = tensor_hash(q)
+        if q_sha != state["apparent_sha256"]:
+            raise ValueError("The historical apparent state differs from its archive.")
+        historical = ctx.stage.family.evaluate(cell.net, cell.retention["splits"]["test"], ctx.device, q=q)
+        out["historical_wikitext_hold"] = {**historical, "examples": historical["sequences"], "q_sha256": q_sha,
+                                          "archive": spec["historical"], "original_gpu": archive["gpu"]}
+        del archive, state, q
     for key in ("ideal", "mapped", "hold", "calibration"):
         q = cell.reset("ideal" if key == "ideal" else "clean" if key == "mapped" else "chip")
         if key == "hold":

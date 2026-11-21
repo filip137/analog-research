@@ -30,12 +30,15 @@ class TaskTuning:
         if rule != {"seed": 241016, "roles": "pair", "detection": "verify", "threshold_sigma": 5.0}:
             raise ValueError("Expected nominal fault-aware verify and partner rewrite.")
         spec = raw["task_adaptation"]
-        ft._exact(spec, ("task", "retention", "phase", "selection", "proxy_seed", "seed", "rates",
+        optional = ("historical",) if "historical" in spec else ()
+        ft._exact(spec, (*optional, "task", "retention", "phase", "selection", "proxy_seed", "seed", "rates",
                          "steps", "fisher_items", "microbatch", "eval_limit", "routes"), "task_adaptation")
         phase = spec["phase"]
         if phase not in ("canary", "development", "evaluation"):
             raise ValueError("Unknown task adaptation phase.")
-        for name in ("task", "retention", "selection"):
+        if optional and phase != "canary":
+            raise ValueError("Historical replay inputs are reserved for the readiness canary.")
+        for name in ("task", "retention", "selection", *optional):
             pin = spec[name]
             if pin is None and name == "selection" and phase != "evaluation":
                 continue

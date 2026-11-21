@@ -47,6 +47,10 @@ def main():
                    "child": .001, "full": .0003 if args.task == "pubmed" else .00003},
          "steps": 4 if canary else 128, "fisher_items": 32 if canary else 1024,
          "microbatch": 4, "eval_limit": 8 if canary else None}
+    if canary and args.rate == 3:
+        archive_digest = ("5a548e5a1a3d1244771897389787593ed1aeed22234a63a6ccb58c53119eb6a3" if args.depth == 6
+                          else "e81cbfd2fae7320d3e7a79d3420f0a9cd70e9471e2d8bcf903286b12b3b3adad")
+        t["historical"] = {"name": f"v100-xb{args.depth}-271002", "sha256": archive_digest}
     doc.update(lifecycle_id="s7-" + unit,
                question={"text": "Does adapting on the actual faulty device improve the matched task score?",
                          "decision": "Compare paired routes at 3% and their nominal twins on disjoint chips.",

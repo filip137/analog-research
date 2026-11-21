@@ -42,7 +42,7 @@ def pinned_inputs(lifecycle) -> list[dict]:
     cfg = lifecycle.fault_tuning
     if hasattr(cfg, "task_adaptation"):
         return [{"role": f"task_adaptation.{name}", "path": str(pinned_path(pin)), "sha256": pin["sha256"]}
-                for name in ("task", "retention", "selection") if (pin := cfg.task_adaptation[name]) is not None]
+                for name in ("task", "retention", "selection", "historical") if (pin := cfg.task_adaptation.get(name)) is not None]
     entries = [("fault_deployment", cfg.deployment)]
     if cfg.analog_lora is not None:
         entries.append(("analog_lora_b_scale", cfg.analog_lora["b_scale"]))

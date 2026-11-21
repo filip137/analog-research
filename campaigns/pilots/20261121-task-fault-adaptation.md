@@ -37,3 +37,15 @@ the terminal receipt. XB owner checks at five-minute cadence with a hard cap of
 three charged hours per host. Source task calibration is frozen. Fisher logical
 batch 8, Child cosine schedule over 128 steps with no warmup or gradient clipping.
 All runtime comparisons are approximate simulated operations.
+
+First native RTX canary stopped on upstream HWA provenance before training
+(14.88 s XB6, 13.02 s XB12). The source recipe now stays immutable and the
+supervised stage declares its downstream chip. Source 463d5bb completed all
+seven learner paths and four controls in the next canary. Regenerating the
+historical V100 with an RTX CUDA seed produced different held tensors, as the
+native allocator documents for different GPU architectures. The historical
+gate now restores the hash-pinned V100 state and calls the original full
+WikiText scorer at its native batch size. The independently drawn RTX state
+remains the deployment for the supervised canary, with its separate hash.
+Use `launch/task_lane.py` for the budgeted sequential screen, with XB6
+HellaSwag 1% and XB12 BoolQ 10% first, each followed by its 0% twin.
