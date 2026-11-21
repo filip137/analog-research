@@ -16,7 +16,7 @@ def review(run, output, require_all):
     model,rate,task,phase = aggregate['campaign_id'].split('-')
     if phase not in ('canary','development','confirm'):
         raise ValueError('Unrecognized phase.')
-    summaries, fits = {}, {}
+    summaries, fits, reusable = {}, {}, {}
     for stage in aggregate['stages']:
         name = stage['stage_id']
         if stage['status'] != 'complete':
@@ -28,6 +28,10 @@ def review(run, output, require_all):
         artifacts = {x['kind']:path.parent/x['path'] for x in result['artifacts']}
         row = json.loads(artifacts['task_summary'].read_text())
         summaries[name] = row
+        if name=='controls' or name.startswith('rank-'):
+            key = 'task_summary' if name=='controls' else 'task_masks'
+            artifact = artifacts[key]
+            reusable[name] = {'path':str(artifact),'sha256':sha256_file(artifact)}
         if 'task_fit' in artifacts:
             fits[name] = str(artifacts['task_fit'])
         settings = row['settings']
@@ -44,7 +48,7 @@ def review(run, output, require_all):
                 raise ValueError(f'Child mask or live write validation failed: {name}.')
     if len({r['bank_sha256'] for r in summaries.values() if 'endpoint' in r}) != 1:
         raise ValueError('Endpoints used different recipients.')
-    result = {'scope':{'model':model,'rate':rate,'task':task},'phase':phase,'completed':len(summaries)}
+    result = {'scope':{'model':model,'rate':rate,'task':task},'phase':phase,'completed':len(summaries),'reusable':reusable}
     if phase=='development':
         winners = {}
         for route in ROUTES:

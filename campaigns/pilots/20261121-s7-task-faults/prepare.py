@@ -68,11 +68,23 @@ def prepare(a):
                        'depends_on':dependencies,'inputs':inputs})
         return label
 
-    add('controls','controls')
+    reused = json.loads(a.reuse.read_text()) if a.reuse else {}
+    if reused and (reused['scope'] != scope or reused['phase'] != a.phase):
+        raise ValueError('Cached controls/rankings must match this model, fault rate, task and phase.')
+    cached = reused.get('reusable', {})
+    def existing(name):
+        if name not in cached:
+            return None
+        artifact = Path(cached[name]['path'])
+        if sha256_file(artifact) != cached[name]['sha256']:
+            raise ValueError(f'Cached stage changed: {name}.')
+        return artifact
+    if existing('controls') is None:
+        add('controls','controls')
     ranks = {}
     def rank(info):
         if info not in ranks:
-            ranks[info] = add('rank-'+info,'rank','child',info)
+            ranks[info] = existing('rank-'+info) or add('rank-'+info,'rank','child',info)
         return ranks[info]
 
     for method,fraction in METHODS:
@@ -126,5 +138,6 @@ if __name__ == '__main__':
     p.add_argument('--microbatch',type=int,default=1)
     p.add_argument('--eval-microbatch',type=int,default=1)
     p.add_argument('--selection',type=Path)
+    p.add_argument('--reuse',type=Path,help='Reviewed controls and fixed masks from this phase and recipient.')
     p.add_argument('--route',choices=ROUTES,action='append',help='Budgeted subset to materialize for this launch.')
     prepare(p.parse_args())

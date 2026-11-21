@@ -9,5 +9,5 @@ export EBL_CORPUS_ROOT=$corpora OPT_DRN_RUN_ID=run
 cd "$src"
 nvidia-smi --query-gpu=name,uuid,memory.total --format=csv,noheader
 # EBL's worktree preflight fingerprints this exact commit and rejects dirty sources.
-timeout --signal=TERM --kill-after=15s "${limit}s" "$py" -m ebl campaign run \
+exec timeout --signal=TERM --kill-after=15s "${limit}s" "$py" -m ebl campaign run \
     --manifest "$manifest" --output-dir "$out" --fail-fast "$@"
