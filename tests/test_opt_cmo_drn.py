@@ -407,3 +407,43 @@ def test_pretrained_ratio3_source_survives_training_and_load(tmp_path, monkeypat
     assert deployment['source_contract']['initialization'] == 'pretrained_ratio3_quad.v1'
     result = json.loads(next(req.output_dir.glob('*/result.json')).read_text())
     assert set(result['metrics']['held_out']) == {'clean', 'programmed', 'x1', 'x4'}
+
+
+def test_held_conductance_alias_matches_normalized_master_gradient():
+    from hardware.devices.cmo import G_MAX_US, HALF_RANGE_US, MID_US
+    model, _ = tiny_model()
+    block = model.blocks[0]
+    held_pair = tuple(torch.rand_like(u) for u in (block.u1, block.u2))
+    for u, held, actual in zip((block.u1, block.u2), held_pair, block.conductances(held_pair)):
+        master = (MID_US + HALF_RANGE_US*u)/G_MAX_US
+        reference = held + (master - master.detach())
+        assert actual.data_ptr() == held.data_ptr()
+        torch.testing.assert_close(actual, reference, rtol=0, atol=0)
+        upstream = torch.randn_like(actual)
+        expected, = torch.autograd.grad(reference, u, upstream)
+        observed, = torch.autograd.grad(actual, u, upstream)
+        torch.testing.assert_close(observed, expected, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA for host/device transfers")
+def test_cuda_offloaded_adam_matches_resident_adam_after_two_updates():
+    model, teacher = tiny_model(checkpointing=True)
+    teacher = teacher.cuda()
+    config = replace(Config(), device='cuda:0', training=replace(Training(), effective_batch=2, microbatch=1))
+    tokens = torch.tensor([[1, 2, 3, 4], [4, 3, 2, 1]])
+    results = []
+    for offload in (False, True):
+        student = copy.deepcopy(model).cuda()
+        optimizer = make_optimizer(student, config)
+        core = CoreStep(student, teacher, optimizer, config, torch.Generator(device='cuda').manual_seed(9))
+        core.offload_moment = offload
+        for update in range(2):
+            core.set_input(tokens)
+            core.compute_gradient()
+            if update and offload:
+                assert all(optimizer.state[u]['exp_avg'].device.type == 'cpu'
+                           for u in optimizer.param_groups[0]['params'])
+            core.step()
+        results.append([p.detach().cpu() for p in student.parameters()])
+    for resident, offloaded in zip(*results):
+        torch.testing.assert_close(resident, offloaded, rtol=0, atol=0)

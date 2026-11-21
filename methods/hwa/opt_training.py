@@ -26,7 +26,17 @@ class CoreStep:
     """Adapt effective token batches to the repository's authoritative engine."""
     def __init__(self,model,teacher,optimizer,config,generator):
         self.model,self.teacher,self.optimizer,self.config,self.generator=model,teacher,optimizer,config,generator
+        self.offload_moment = (config.model == "facebook/opt-1.3b" and config.analog_layers == 24
+                               and next(model.parameters()).is_cuda)
         self.parameters=tuple(SimpleNamespace(state=p) for p in model.parameters())
+
+    def _move_first_moments(self, to_host):
+        # The conductance Adam first moments alone occupy 12 GiB at L24.
+        # Keep them off GPU during accumulation, restoring them for native Adam.
+        for master in self.optimizer.param_groups[0]["params"]:
+            state = self.optimizer.state.get(master)
+            if state and "exp_avg" in state:
+                state["exp_avg"] = state["exp_avg"].to("cpu" if to_host else master.device)
 
     def set_input(self,inputs,reset=False): self.inputs=inputs
     def set_target(self,targets): pass
@@ -35,6 +45,8 @@ class CoreStep:
     def compute_gradient(self):
         self.model.train()
         self.optimizer.zero_grad(set_to_none=True)
+        if self.offload_moment:
+            self._move_first_moments(to_host=True)
         t=self.config.training
         view,projected=hardware_view(self.model,0.03 if t.arm=='std3' else 0.0,self.generator)
         loss_sum=0.0
@@ -52,6 +64,8 @@ class CoreStep:
     def step(self):
         if self.config.training.recipe=='B':
             torch.nn.utils.clip_grad_norm_(self.model.parameters(),1.0,error_if_nonfinite=True)
+        if self.offload_moment:
+            self._move_first_moments(to_host=False)
         self.optimizer.step()
         if self.config.initialization == 'pretrained_ratio3_quad.v1':
             from hardware.devices.cmo import G_MIN_US, MID_US, HALF_RANGE_US

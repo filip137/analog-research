@@ -79,6 +79,19 @@ def lift(weight, paired=False):
     return torch.cat((torch.cat((p,n),1),torch.cat((n,p),1)),0)
 
 
+class _HeldConductance(torch.autograd.Function):
+    """Read the held device tensor directly, with the normalized master's STE."""
+
+    @staticmethod
+    def forward(ctx, master, held):
+        return held
+
+    @staticmethod
+    def backward(ctx, grad):
+        # Match the divide and multiply in the master normalization, in order.
+        return (grad / G_MAX_US) * HALF_RANGE_US, grad
+
+
 class DrnMlp(nn.Module):
     def __init__(self, fc1, fc2, gains, settings):
         super().__init__()
@@ -104,12 +117,9 @@ class DrnMlp(nn.Module):
         self.readout_scale.fill_(1)
 
     def conductances(self, view=None):
-        masters = tuple((MID_US + HALF_RANGE_US*u)/G_MAX_US for u in (self.u1,self.u2))
         if view is None:
-            return masters
-        # A fresh graph for each microbatch; the detached view is held across
-        # the effective batch and all activation-checkpoint recomputation.
-        return tuple(held + (m-m.detach()) for m,held in zip(masters,view))
+            return tuple((MID_US + HALF_RANGE_US*u)/G_MAX_US for u in (self.u1,self.u2))
+        return tuple(_HeldConductance.apply(u, held) for u, held in zip((self.u1,self.u2),view))
 
     def analog(self, x, view=None):
         """Read-out MLP output before the digital fc2 bias."""

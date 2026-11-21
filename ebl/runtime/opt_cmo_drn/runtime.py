@@ -309,6 +309,8 @@ def run_train(request):
                 store.append_metric({'event':'update','step':step,'epoch':epoch,'cursor':cursor,'lr_factor':factor,
                                      'update_seconds':time.monotonic()-before,'elapsed_seconds':time.monotonic()-started,
                                      'peak_memory_bytes':torch.cuda.max_memory_allocated() if str(c.device).startswith('cuda') else 0,**core.last})
+                if core.offload_moment:
+                    optimizer.zero_grad(set_to_none=True)
                 if step%c.selection.every_updates==0 or (cursor==epoch_batches and c.model=='facebook/opt-125m') or step==total:
                     scored=score()
                     if scored['teacher_kl']<best['teacher_kl']:
