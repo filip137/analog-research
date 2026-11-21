@@ -56,8 +56,9 @@ class DifferentiableDrn(nn.Module):
         super().__init__()
         self.settings = settings
         self.fp16_update_products = False
+        self.update_execution = None
 
-    def _solve(self, x, g1, g2, hidden_current, input_multiplier, output_multiplier):
+    def _inputs(self, x, g1, g2, hidden_current, input_multiplier):
         s = self.settings
         dh, do = coefficients(g1, g2, s)
         rails = torch.cat((x, -x), dim=-1) * s.input_gain * input_multiplier
@@ -65,13 +66,35 @@ class DifferentiableDrn(nn.Module):
         if self.fp16_update_products and self.training:
             g1, g2 = g1.half(), g2.half()
         drive = rail_product(rails, g1) + hidden_current
+        return drive, g2, dh, do
+
+    def _solve(self, x, g1, g2, hidden_current, input_multiplier, output_multiplier):
+        s = self.settings
+        args = (x, g1, g2, hidden_current, input_multiplier)
+        execution = self.update_execution if self.training else None
+        split_checkpoint = (execution and execution.checkpoint_gradient_only and
+                            s.activation_checkpointing and torch.is_grad_enabled())
+        with torch.set_grad_enabled(torch.is_grad_enabled() and not split_checkpoint):
+            drive, product_g2, dh, do = self._inputs(*args)
         output = x.new_zeros((x.shape[0], g2.shape[1]))
+        skip_first = execution and execution.skip_zero_feedback and s.settling_iterations > 0
         with torch.no_grad():
-            for _ in range(s.settling_iterations):
-                _, output = sweep(drive, output, g2, dh, do, s)
-        if self.training and torch.is_grad_enabled():
+            if skip_first:
+                output = s.voltage_amp * rail_product(diode(drive / dh), product_g2) / do
+            for _ in range(int(bool(skip_first)), s.settling_iterations):
+                _, output = sweep(drive, output, product_g2, dh, do, s)
+
+        def continuation(output, drive, product_g2, dh, do):
             for _ in range(s.gradient_iterations):
-                _, output = sweep(drive, output, g2, dh, do, s)
+                _, output = sweep(drive, output, product_g2, dh, do, s)
+            return output
+
+        if split_checkpoint:
+            def from_settled(output, *args):
+                return continuation(output, *self._inputs(*args))
+            output = checkpoint(from_settled, output, *args, use_reentrant=False)
+        elif self.training and torch.is_grad_enabled():
+            output = continuation(output, drive, product_g2, dh, do)
         decoded = output[:, 0::2] - output[:, 1::2]
         return decoded * output_multiplier
 
@@ -80,8 +103,10 @@ class DifferentiableDrn(nn.Module):
         flat = x.reshape(-1, x.shape[-1])
         args = (g1, g2, hidden_current, input_multiplier, output_multiplier)
         pieces = []
-        for part in flat.split(s.token_chunk_size):
-            if self.training and torch.is_grad_enabled() and s.activation_checkpointing:
+        execution = self.update_execution if self.training else None
+        chunk_size = execution.token_chunk_size if execution else s.token_chunk_size
+        for part in flat.split(chunk_size):
+            if self.training and torch.is_grad_enabled() and s.activation_checkpointing and not (execution and execution.checkpoint_gradient_only):
                 pieces.append(checkpoint(self._solve, part, *args, use_reentrant=False))
             else:
                 pieces.append(self._solve(part, *args))

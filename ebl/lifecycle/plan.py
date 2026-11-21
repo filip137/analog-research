@@ -18,7 +18,7 @@ def build_plan(config,teacher,source,output,python,worktree,reuse=None,source_de
     teacher=Path(teacher).resolve();source=Path(source).resolve();output=Path(output).resolve()
     if sha256_file(teacher)!=config.teacher_sha256 or sha256_file(source)!=config.source_sha256:
         raise ValueError('Expected the exact pinned teacher and std3 initialization inputs.')
-    benchmark = config.stage in ('hwa_precision_benchmark','hwa_tf32_benchmark')
+    benchmark = config.stage in ('hwa_precision_benchmark','hwa_tf32_benchmark','hwa_speed_benchmark')
     if benchmark and (not reuse or source_deployments):
         raise ValueError('Precision benchmarking requires a verified mapped bundle and no deployments.')
     files={}
@@ -33,7 +33,7 @@ def build_plan(config,teacher,source,output,python,worktree,reuse=None,source_de
         matches=[a for a in result['artifacts'] if a['kind']=='mapped_weights']
         if len(matches)!=1: raise ValueError('Expected exactly one mapped artifact in reuse bundle.')
         path=run/matches[0]['path']
-        if benchmark:
+        if benchmark or hasattr(config,'hwa_execution'):
             import torch
             # inspect_run above verified the artifact. Only read metadata on the login node.
             payload=torch.load(path,map_location='cpu',weights_only=True,mmap=True)

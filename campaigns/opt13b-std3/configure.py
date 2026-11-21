@@ -33,12 +33,18 @@ if __name__ == "__main__":
     p.add_argument("--depth", type=int, choices=(12, 24), required=True)
     p.add_argument("--phase", choices=("canary", "screen", "production"), required=True)
     p.add_argument("--factor", type=float, choices=(0.01, 0.1, 1, 3, 9), required=True)
-    p.add_argument("--stage", choices=("prepare", "hwa", "deploy", "hwa_precision_benchmark", "hwa_tf32_benchmark"), required=True)
+    p.add_argument("--stage", choices=("prepare", "hwa", "deploy", "hwa_precision_benchmark", "hwa_tf32_benchmark", "hwa_speed_benchmark"), required=True)
     p.add_argument("--assignment", type=int, choices=(271001,271002,271003,271004), default=271001)
     p.add_argument("--fault-rate", type=float, choices=(0,0.03), default=0)
     p.add_argument("--corpus-sha256", required=True, help="File digest from shared corpus generation")
+    p.add_argument("--hwa-execution", type=Path, help="JSON update settings selected by the speed benchmark")
     p.add_argument("--output", required=True, type=Path)
     a = p.parse_args()
     doc = config(a.depth, a.phase, a.factor, a.corpus_sha256, a.stage, a.assignment, a.fault_rate)
+    if a.hwa_execution:
+        if a.stage != "hwa":
+            p.error("--hwa-execution requires --stage hwa")
+        doc["hwa_execution"] = json.loads(a.hwa_execution.read_text())
+        parse_config(doc)
     with a.output.open("x") as out:
         out.write(json.dumps(doc, indent=2) + "\n")

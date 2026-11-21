@@ -57,6 +57,20 @@ class Config:
 
 
 @dataclass(frozen=True)
+class UpdateExecution:
+    tf32: bool = True
+    checkpoint_gradient_only: bool = False
+    skip_zero_feedback: bool = False
+    microbatch: int = 1
+    token_chunk_size: int = 256
+
+
+@dataclass(frozen=True)
+class ExecutionConfig(Config):
+    hwa_execution: UpdateExecution = UpdateExecution()
+
+
+@dataclass(frozen=True)
 class FaultTuningConfig(Config):
     """The fault-paper screen's own stage; a subclass keeps every older config digest unchanged."""
     fault_tuning: object=None
@@ -132,8 +146,14 @@ def _parse(cls,raw,path):
 def parse_config(raw):
     mapping=isinstance(raw,Mapping)
     c=_parse(DriftTuningConfig if mapping and 'drift_tuning' in raw else
-             FaultTuningConfig if mapping and 'fault_tuning' in raw else Config,raw,'config')
-    if c.experiment_id!=EXPERIMENT_ID or c.schema_version!=1 or c.stage not in ('prepare','hwa','deploy','recover','recovery_benchmark','hwa_precision_benchmark','hwa_tf32_benchmark','retention','drift_recovery','fault_tuning'):
+             FaultTuningConfig if mapping and 'fault_tuning' in raw else
+             ExecutionConfig if mapping and 'hwa_execution' in raw else Config,raw,'config')
+    if isinstance(c, ExecutionConfig):
+        execution = c.hwa_execution
+        if (execution.microbatch < 1 or execution.microbatch > c.training.effective_batch
+                or execution.token_chunk_size < 1):
+            raise ConfigError('Invalid HWA update microbatch or token chunk size.')
+    if c.experiment_id!=EXPERIMENT_ID or c.schema_version!=1 or c.stage not in ('prepare','hwa','deploy','recover','recovery_benchmark','hwa_precision_benchmark','hwa_tf32_benchmark','hwa_speed_benchmark','retention','drift_recovery','fault_tuning'):
         raise ConfigError('Expected opt_cmo_drn_hwa.v1 schema 1 and a supported stage.')
     if (c.stage=='retention') != (c.retention is not None):
         raise ConfigError('The retention stage requires its explicit settings; other stages omit them.')
@@ -201,7 +221,7 @@ def parse_config(raw):
         if (c.analog_layers not in (12, 24) or c.initialization != 'pretrained_ratio3_quad.v1'
                 or c.source_sha256 != c.teacher_sha256
                 or c.teacher_sha256 != 'cf7d5c970d6ddbd3b03009b397c0422e147edd5c8020d47a8d2fac0b11a3b08d'
-                or c.deployment.mapped or c.stage not in ('prepare', 'hwa', 'deploy', 'hwa_precision_benchmark', 'hwa_tf32_benchmark')):
+                or c.deployment.mapped or c.stage not in ('prepare', 'hwa', 'deploy', 'hwa_precision_benchmark', 'hwa_tf32_benchmark','hwa_speed_benchmark')):
             raise ConfigError('OPT-1.3B requires its pinned pretrained teacher, native ratio3 initialization and L12/L24.')
     elif c.model!='facebook/opt-125m' or c.analog_layers not in ANALOG_DEPTHS:
         raise ConfigError('Expected OPT-125M with six or twelve DRN MLPs.')
@@ -280,7 +300,7 @@ def parse_config(raw):
     if c.recovery.extends_updates and (c.recovery.lr_schedule!='constant' or c.recovery.arm!='learning'
                                        or not 0<c.recovery.extends_updates<c.recovery.updates):
         raise ConfigError('A horizon extension needs constant-LR learning and 0 < extends_updates < updates.')
-    if c.stage in ('hwa_precision_benchmark','hwa_tf32_benchmark') and (c.analog_layers!=24 or c.model!='facebook/opt-1.3b' or c.training.max_updates!=4 or c.training.effective_batch!=32 or c.training.microbatch!=1 or c.training.arm!='std3' or not c.device.startswith('cuda')):
+    if c.stage in ('hwa_precision_benchmark','hwa_tf32_benchmark','hwa_speed_benchmark') and ((c.analog_layers!=24 and c.stage!='hwa_speed_benchmark') or c.model!='facebook/opt-1.3b' or c.training.max_updates!=4 or c.training.effective_batch!=32 or c.training.microbatch!=1 or c.training.arm!='std3' or not c.device.startswith('cuda')):
         raise ConfigError('Precision benchmark requires the four-update A100 L24 std3 canary recipe.')
     if c.stage=='recovery_benchmark' and (c.training.effective_batch!=32 or c.training.microbatch!=1
             or c.recovery.arm!='learning' or c.recovery.update_rule!='direct_adam'

@@ -1,10 +1,21 @@
 """OPT HWA update policy composed over the shared per-step engine."""
+from contextlib import contextmanager, nullcontext
 import math
 from types import SimpleNamespace
 import torch
 from torch.nn import functional as F
 from methods.core.engine import ExperimentComponents, GradientsReadyEvent
 from methods.hwa.opt import hardware_view
+
+
+@contextmanager
+def update_tf32(enabled):
+    previous = torch.backends.cuda.matmul.allow_tf32
+    try:
+        torch.backends.cuda.matmul.allow_tf32 = enabled
+        yield
+    finally:
+        torch.backends.cuda.matmul.allow_tf32 = previous
 
 
 def make_optimizer(model,config):
@@ -25,6 +36,10 @@ def lr_factor(step,total,config):
 class CoreStep:
     """Adapt effective token batches to the repository's authoritative engine."""
     def __init__(self,model,teacher,optimizer,config,generator, *, loss_scale=1.0):
+        self.execution = getattr(config, "hwa_execution", None)
+        if self.execution:
+            for block in model.blocks:
+                block.solver.update_execution = self.execution
         self.loss_scale = loss_scale
         self.model,self.teacher,self.optimizer,self.config,self.generator=model,teacher,optimizer,config,generator
         self.offload_moment = (config.model == "facebook/opt-1.3b" and config.analog_layers == 24
@@ -44,6 +59,10 @@ class CoreStep:
     def compute_equilibrium(self): pass
 
     def compute_gradient(self):
+        with update_tf32(self.execution.tf32) if self.execution else nullcontext():
+            return self._compute_gradient()
+
+    def _compute_gradient(self):
         self.model.train()
         self.optimizer.zero_grad(set_to_none=True)
         if self.offload_moment:
@@ -51,7 +70,7 @@ class CoreStep:
         t=self.config.training
         view,projected=hardware_view(self.model,0.03 if t.arm=='std3' else 0.0,self.generator)
         loss_sum=0.0
-        for tokens in self.inputs.split(t.microbatch):
+        for tokens in self.inputs.split(self.execution.microbatch if self.execution else t.microbatch):
             tokens=tokens.to(self.config.device)
             with torch.no_grad(): reference=self.teacher(tokens)[:,:-1]
             out=self.model(tokens,view)

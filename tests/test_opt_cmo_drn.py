@@ -475,3 +475,30 @@ def test_benchmark_tf32_restores_precision_after_update_failure():
             assert torch.backends.cuda.matmul.allow_tf32 != previous
             raise RuntimeError('failed update')
     assert torch.backends.cuda.matmul.allow_tf32 == previous
+
+@pytest.mark.parametrize("split,skip", [(True, False), (False, True), (True, True)])
+def test_checkpoint_from_settled_state_matches_full_replay(split, skip):
+    from ebl.schema.opt_cmo_drn import UpdateExecution
+    torch.manual_seed(41)
+    solver = DifferentiableDrn(DrnSettings(token_chunk_size=3))
+    tensors = [torch.rand(shape, dtype=torch.float64, requires_grad=True)
+               for shape in [(5,2), (4,6), (6,4), (6,), (), ()]]
+    def gradients():
+        out = solver(*tensors)
+        return (out, *torch.autograd.grad(out.square().sum(), tensors))
+    reference = gradients()
+    solver.update_execution = UpdateExecution(checkpoint_gradient_only=split,
+                                               skip_zero_feedback=skip, token_chunk_size=4)
+    for old, new in zip(reference, gradients()):
+        torch.testing.assert_close(new, old, rtol=1e-12, atol=1e-12)
+
+
+def test_execution_digest_preserves_old_configs_and_prevents_cross_mode_resume():
+    from dataclasses import asdict
+    from ebl.schema.opt_cmo_drn import compatible_config_hashes
+    old = parse_config({})
+    assert "hwa_execution" not in asdict(old)
+    new = parse_config({"hwa_execution": {"tf32": True}})
+    assert not compatible_config_hashes(old).intersection(compatible_config_hashes(new))
+    with pytest.raises(ValueError):
+        parse_config({"hwa_execution": {"microbatch": 0}})
