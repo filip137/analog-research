@@ -51,3 +51,37 @@ and 418 seconds respectively. Rerun both live gates on the new worker at
 12 minutes each. Keep 12,900 seconds reserved for the six full jobs; the
 first charges plus both ceilings total 15,103 seconds of the 15,480-second
 HWA budget.
+
+## Live V100 handoff
+
+The pinned backend checkpoint is `9319f9d554631e734afa0279d6b85c4cf20bb789`.
+Jean Zay staged and verified 2,583 source files. The launch directory is
+`$WORK/cmo-drift-recovery-global-child-20261121/launch-9319f9d`. Its
+`manifest-xb6.json` and `manifest-xb12.json` pin the source receipt, native
+configs and exact original controls. Output roots are
+`$SCRATCH/cmo-drift-recovery-global-child-20261121/runs-retry-v1/xb{6,12}`.
+The exact
+staged plans and Slurm test-only checks passed for all eight configs.
+
+The replacement canaries 554711 and 554712 passed on the original V100
+contract. Their 32 updates per arm produced nonzero writes within each mask
+and zero outside. XB6 selected 283,116 and 2,831,155 weights. XB12 selected
+566,231 and 5,662,310 weights. Both masked learners on a given fraction used
+the same mask as their drift-free controls. Untreated and release-twin
+trajectories match the original at all ten ages. The retries charged 337
+and 424 seconds. The combined canary charges are 1,524 seconds.
+
+| Platform | ×1 | ×4 | ×10 |
+| --- | ---: | ---: | ---: |
+| XB6 | 554883 | 554884 | 554885 |
+| XB12 | 554887 | 554888 | 554889 |
+
+The six full jobs reserve 12,900 seconds. Full reservations plus the charged
+gates total 4.006666667 GPU-h of the 4.3 GPU-h backend allocation. The shared
+study owns the cumulative ledger. The no-drift controls are trained once per
+model and fraction in the ×4 job. The native worker writes `complete.json`
+after artifact and control validation. The shared root retains the durable
+watch, job table, collected certificates and callback under
+`artifacts/cmo67-global-child-xb/`. Validate each completed native run again
+with `ebl runs inspect --verify-artifacts --require-complete`, confirm
+Slurm accounting and compare mask hashes across multipliers before analysis.
