@@ -18,7 +18,7 @@ def build_plan(config,teacher,source,output,python,worktree,reuse=None,source_de
     teacher=Path(teacher).resolve();source=Path(source).resolve();output=Path(output).resolve()
     if sha256_file(teacher)!=config.teacher_sha256 or sha256_file(source)!=config.source_sha256:
         raise ValueError('Expected the exact pinned teacher and std3 initialization inputs.')
-    benchmark = config.stage == 'hwa_precision_benchmark'
+    benchmark = config.stage in ('hwa_precision_benchmark','hwa_tf32_benchmark')
     if benchmark and (not reuse or source_deployments):
         raise ValueError('Precision benchmarking requires a verified mapped bundle and no deployments.')
     files={}

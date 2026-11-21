@@ -1,4 +1,5 @@
 """Matched four-update DRN HWA timing with FP32 or FP16 conductance matmuls."""
+from contextlib import contextmanager
 import statistics
 import time
 
@@ -12,7 +13,18 @@ from methods.hwa.opt_training import CoreStep, lr_factor, make_optimizer
 from networks.opt.data import cohorts
 
 
-def timed_arm(config, teacher, weights, train, development, fp16, store):
+@contextmanager
+def update_tf32(enabled):
+    previous = torch.backends.cuda.matmul.allow_tf32
+    try:
+        torch.backends.cuda.matmul.allow_tf32 = enabled
+        yield
+    finally:
+        torch.backends.cuda.matmul.allow_tf32 = previous
+
+
+def timed_arm(config, teacher, weights, train, development, mode, store):
+    fp16 = mode == "fp16_products"
     payload = torch.load(weights, map_location="cpu", weights_only=True, mmap=True)
     model = runtime.from_mapped(teacher, config, payload).to(config.device)
     del payload
@@ -32,7 +44,6 @@ def timed_arm(config, teacher, weights, train, development, fp16, store):
                     flat = param.grad.detach().flatten()
                     pieces.append(flat[::max(1, flat.numel() // 256)][:256].cpu())
                 samples[label] = torch.cat(pieces)
-    mode = "fp16_products" if fp16 else "fp32"
     seconds = []
     torch.cuda.reset_peak_memory_stats()
     for step, idx in enumerate(batches[:128].split(32)):
@@ -44,7 +55,8 @@ def timed_arm(config, teacher, weights, train, development, fp16, store):
         handlers = [guard, core.observe_gradients]
         if step == 0:
             handlers.append(sample_first)
-        train_epoch(core.components(), [(batch, batch)], start_global_step=step, event_handlers=handlers)
+        with update_tf32(mode == "tf32"):
+            train_epoch(core.components(), [(batch, batch)], start_global_step=step, event_handlers=handlers)
         torch.cuda.synchronize()
         seconds.append(time.monotonic() - start)
         store.append_metric(dict(event="precision_update", arm=mode, step=step+1,
@@ -69,17 +81,19 @@ def run(request):
     try:
         teacher = runtime.teacher_model(request.teacher_weights, c).to(c.device)
         train, dev, identity = cohorts(c)
-        fp32, reference = timed_arm(c, teacher, request.weights, train, dev, False, store)
-        fp16, trial = timed_arm(c, teacher, request.weights, train, dev, True, store)
+        fp32, reference = timed_arm(c, teacher, request.weights, train, dev, "fp32", store)
+        mode = "tf32" if c.stage == "hwa_tf32_benchmark" else "fp16_products"
+        candidate_arm, trial = timed_arm(c, teacher, request.weights, train, dev, mode, store)
         agreement = {}
         for name, ref in reference.items():
             candidate = trial[name].double()
             ref = ref.double()
             agreement[name] = dict(relative_l2=float((ref-candidate).norm()/ref.norm().clamp_min(1e-30)),
                                    cosine=float(torch.nn.functional.cosine_similarity(ref, candidate, dim=0)))
-        result = dict(fp32=fp32, fp16=fp16, matched_cohorts=identity,
+        result = dict(fp32=fp32, matched_cohorts=identity,
                       first_step_sampled_gradient_agreement=agreement,
-                      speedup=fp32["median_warm_seconds"]/fp16["median_warm_seconds"])
+                      speedup=fp32["median_warm_seconds"]/candidate_arm["median_warm_seconds"])
+        result["tf32" if mode == "tf32" else "fp16"] = candidate_arm
         report = store.run_dir / "artifacts/precision-benchmark.json"
         atomic_write_json(report, result)
         store.complete(metrics=result, artifacts=[store.artifact_record(report, kind="precision_benchmark")])

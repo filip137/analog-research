@@ -465,3 +465,13 @@ def test_precision_benchmark_half_products_preserve_fp32_state_and_eval():
     grads = core.compute_gradient()
     assert all(g.dtype == torch.float32 and torch.isfinite(g).all() for g in grads)
     core.step()
+
+
+def test_benchmark_tf32_restores_precision_after_update_failure():
+    from ebl.runtime.opt_cmo_drn.precision_benchmark import update_tf32
+    previous = torch.backends.cuda.matmul.allow_tf32
+    with pytest.raises(RuntimeError):
+        with update_tf32(not previous):
+            assert torch.backends.cuda.matmul.allow_tf32 != previous
+            raise RuntimeError('failed update')
+    assert torch.backends.cuda.matmul.allow_tf32 == previous
